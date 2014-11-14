@@ -1,0 +1,35 @@
+The TODO's here are for delphinusdnsd which is the successor of wildcarddnsd.
+Please see http://delphinusdns.centroid.eu for updates/news.
+
+For 1.0.0 release
+
+- TSIG (RFC 2845) support
+- partition the struct domain, so that we have selective sizes based on
+  what records exist.  This is a lot of work but will make records under 44KB
+  again.
+- DNSSEC (RFC 4034 / DNSKEY RR, DS RR, RRSIG RR, NSEC RR)
+- Notify needs to be rewritten for allowing notifies to different slaves.
+- A zone signer possibly written in ruby.
+
+
+Anything else would be nice but I have to put it on the backburner...
+
+* Slave AXFR would be nice (advanced)
+* HINFO support (junior devels) 
+* recursing and caching support rewrite (super advanced)
+* DNSSEC support (super advanced)
+* openbsd port support (for 5.0/5.1 perhaps?) (junior/intermediate)
+* recursing/caching todo's: (super advanced)
+
+	- add CNAME traversal so that www.yahoo.com would be listing both CNAME's and
+	the A RR.  While doing that it should check for CNAME loops.
+	- zone expiry in then DB database on a timely basis...
+	- retransmissions of queries in both IPv4 and IPv6
+	- a way to turn off IPv6 on hosts that have IPv6 disabled.
+	- a good debug why a lookup of solarscale.de flooded the nameserverservice.de
+	  nameservers until abort().
+	- error catchings if a server fails (SERVFAIL).
+	- pthread support
+
+* windows port (advanced)
+* Dynamic DNS support (advanced)

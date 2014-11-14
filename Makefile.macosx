@@ -1,0 +1,25 @@
+PROG=delphinusdnsd
+CC=gcc
+CFLAGS=-I/opt/local/include/db48 -L/opt/local/lib/db48 -D__APPLE_USE_RFC_3542=1 -DDEFAULT_PRIVILEGE='"nobody"'
+LDADD=-ldb -lssl -lcrypto -DDEFAULT_PRIVILEGE='"nobody"'
+YACC=bison
+
+build:
+	$(YACC) -y -d parse.y
+	mv -f y.tab.c parse.c
+	$(CC) $(CFLAGS) -c parse.c
+	$(CC) $(CFLAGS) -c additional.c
+	$(CC) $(CFLAGS) -c main.c
+	$(CC) $(CFLAGS) -c reply.c
+	$(CC) $(CFLAGS) -c region.c
+	$(CC) $(CFLAGS) -c wildcard.c
+	$(CC) $(CFLAGS) -c log.c
+	$(CC) $(CFLAGS) -c recurse.c
+	$(CC) $(CFLAGS) -c axfr.c
+	$(CC) $(CFLAGS) -c filter.c
+	$(CC) $(CFLAGS) -c ratelimit.c
+	$(CC) $(CFLAGS) -c whitelist.c
+	$(CC) $(CFLAGS) -o delphinusdnsd additional.o main.o parse.o reply.o region.o wildcard.o log.o recurse.o axfr.o filter.o ratelimit.o whitelist.o $(LDADD)
+
+clean:
+	rm -f *.o delphinusdnsd config.h Makefile

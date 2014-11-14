@@ -1,0 +1,214 @@
+$Id: README,v 1.1.1.1 2014/11/14 08:09:04 pjp Exp $
+
+1. README
+2. WHY DELPINUSDNS?
+3. INSTALL HINTS
+ 3.1 Linux
+ 3.2 FreeBSD
+ 3.3 OpenBSD
+ 3.4 NetBSD
+ 3.5 Mac OS X
+4. COMPATIBILITY
+5. EXAMPLES
+6. WHAT IT CAN'T DO
+
+1. README 
+---------
+
+Delphinusdns is a small authoritative nameserver.  It does not recurse nor 
+search.  This program is written to a BSD Style License.  Sleepycat's 
+BerkeleyDB is also used for the main in-memory database.
+
+2. WHY DELPHINUSDNS?
+-------------------
+
+DNS is simple.  Yet implementation of DNS servers is not so simple.
+Delphinusdns is written for research into the DNS system so that perhaps one
+day the author has a better understanding of it.  Comparing delphinusdns to
+other DNS implementations is not fair since many of those implementation
+fix Delphinusdns's faults on the Internet.  It is recommended that if this
+daemon is used on the Internet that logging be turned on to learn from it
+and the DNS system.  
+
+Use the tool "dig" that comes with bind9 to debug Delphinusdns.  If you like to 
+program, then you can fork Delphinusdns and make your own creation, or you
+can send patches to the author who may implement them into the code.
+
+
+3. INSTALL HINTS
+----------------
+
+To install, type sh ./configure on BSD and just ./configure on Linux.  This
+will copy the proper Makefile to ./Makefile.  Then you would type make, 
+followed by su'ing and make install.  Delphinusdnsd installs to /usr/local/sbin.
+
+By default installation the configuration file is not installed you need to
+do this manually.  Also by default the config file is specified as 
+/etc/delphinusdns.conf this can be changed by adding the -f option to 
+delphinusdnsd.
+
+A sample config file exists with the sources.  example7.conf was a real life
+config once. 
+
+3.1 Linux
+---------
+
+In Linux we rely on LibreSSL 2.1.1, you must download it (configure will 
+tell you from where in ./configure) and place it in the directory besides 
+delphinusdnsd root directory.  You do not have to install it but you have 
+to ./configure && make check at least.
+
+In Linux MINT you need to apt-get install build-essential.
+
+## configure the platform
+$ ./configure
+## this will install the development programs you'll need (as root)
+$ apt-get install bison cvs gcc libdb5.3-dev libssl-dev
+## add a privsep user with a chroot directory (option -m) (as root)
+$ useradd -m wdnsd
+## create the db directory (as root)
+$ mkdir -p /var/db/wdns 
+## make the program
+$ make
+## install the binary (as root)
+$ make install
+## done, create a config file and start delphinusdnsd
+
+
+3.2 FreeBSD
+-----------
+
+## configure the platform
+$ sh configure
+## this will install the development programs you'll need (as root)
+$ cd /usr/ports/databases/db5 && make install clean
+## add a privsep user with a chroot directory (as root)
+$ vipw
+## or
+$ adduser
+## create the db directory (as root)
+$ mkdir -p /var/db/wdns 
+## make the program
+$ make
+## install the binary (as root)
+$ make install
+## done, create a config file and start delphinusdnsd
+
+Jail users, if you get a:
+
+Aug 18 13:43:47 io delphinusdnsd[54350]: starting up
+Aug 18 13:43:47 io delphinusdnsd[54350]: dbenv->open failed: Function not implemented
+
+Similar message, that's probably because your jail must be allowing sysvipc.
+Set this:
+
+jail_example_parameters="allow.sysvipc=1"
+
+in your /etc/rc.conf and reboot the jail.
+
+
+3.3 OpenBSD
+-----------
+
+## configure the platform
+$ sh configure
+## this will install the development programs you'll need (as root)
+$ pkg_add db-4.6.21p0v0
+## add a privsep user with a chroot directory (as root)
+$ vipw
+## or
+$ adduser
+## create the db directory (as root)
+$ mkdir -p /var/db/wdns 
+## make the program
+$ make
+## install the binary (as root)
+$ make install
+## done, create a config file and start delphinusdnsd
+
+3.4 NetBSD
+----------
+
+The tests for this were done on NetBSD 6.1.5
+
+## configure the platform
+$ sh configure
+## the following will install the development programs you'll need (as root)
+$ cd /usr/pkgsrc/databases/db5 && make install
+## add a privsep user with a chroot directory (as root)
+$ useradd -m wdnsd
+## create the db directory (as root)
+$ mkdir -p /var/db/wdns 
+## make the program
+$ make
+## install the binary (as root)
+$ make install
+## done, create a config file and start delphinusdnsd
+
+3.5 Mac OS X
+------------
+
+## configure for Mac OS X
+$ sh configure
+## Installed berkeley db 4.8 through Mac Ports.
+$ sudo port install db48
+## The binary is made with nobody as the unprivileged user
+$ make
+## cp the binary into /usr/local/sbin/
+$ sudo cp delphinusdnsd /usr/local/sbin/
+## make the /var/db/wdns directory
+$ mkdir -p /var/db/wdns
+## done, create config file and start delphinusdnsd
+
+
+4. COMPATIBILITY
+----------------
+
+------------------+--------------------+---------------------+-------------+
+Operating System**| makes and compiles | responds to queries | Berkeley DB |
+------------------+--------------------+---------------------+-------------+
+FreeBSD 10        |        yes         |       yes           | version 5   |
+------------------+--------------------+---------------------+-------------+
+NetBSD 6.1.5      |        yes*        |       yes           | version 5   |
+------------------+--------------------+---------------------+-------------+
+OpenBSD 5.6       |        yes         |       yes           | version 4.6 |
+------------------+--------------------+---------------------+-------------+
+Linux 		  |        yes         |       yes           | version 5   |
+------------------+--------------------+---------------------+-------------+
+Mac OS X Yosemite |        yes         |       yes           | version 4.8 |
+with MacPorts     |                    |                     |		   |	
+------------------+--------------------+---------------------+-------------+
+Rasbian OS        |        yes ***     |       yes           | version 5   |
+------------------+--------------------+---------------------+-------------+
+
+* there was a period in time that NetBSD didn't compile
+** All Operating Systems require Berkeley DB 4.6 or higher.
+*** Raspbian OS (Raspberry Pi) only has support for Berkeley DB 5.0 or higher
+
+5. EXAMPLES
+-----------
+
+in the directory "examples" are a few examples from working configs.
+
+
+6. WHAT IT CAN'T DO
+-------------------
+
+* CNAME recursion.  When you look up www.yahoo.com you see this:
+
+;; ANSWER SECTION:
+www.yahoo.com.          58      IN      CNAME   fp.wg1.b.yahoo.com.
+fp.wg1.b.yahoo.com.     2802    IN      CNAME   eu-fp.wa1.b.yahoo.com.
+eu-fp.wa1.b.yahoo.com.  8       IN      A       87.248.122.122
+eu-fp.wa1.b.yahoo.com.  8       IN      A       87.248.112.181
+
+The recursive part of delphinusdnsd isn't able to recurse CNAME's and it 
+also doesn't have loop detection of CNAME's.  This means that some lookups
+will fail on a UNIX host using delphinusdnsd recursively, so it's useless
+this needs fixing and the fix isn't simple.
+
+* DNSSEC.  Signed zones are becoming more and more common on the Internet.
+Delphinusdnsd can't do DNSSEC yet, unfortunately.
+
+* Solaris.  Unless you port some functions to solaris it won't compile on
+there.

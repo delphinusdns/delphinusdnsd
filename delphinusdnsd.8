@@ -1,0 +1,132 @@
+.\" Copyright (c) 2005-2014 Peter J. Philipp
+.\" All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\" 3. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+.\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+.\" OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+.\" IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+.\" INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+.\" NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+.\" DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+.\" THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+.\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+.\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+.\"
+.Dd November 14, 2014
+.Dt DELPHINUSDNSD 8
+.Os 
+.Sh NAME
+.Nm delphinusdnsd
+.Nd the Wildcard DNS daemon
+.Sh SYNOPSIS
+.Nm delphinusdnsd
+.Op Fl b Ar address
+.Op Fl c Ar size
+.Op Fl d
+.Op Fl f Ar file
+.Op Fl i Ar interface
+.Op Fl l
+.Op Fl n Ar instances
+.Op Fl p Ar port
+.Op Fl r
+.Op Fl v
+.Sh DESCRIPTION
+.Nm
+is the daemon that runs Wildcard DNS.
+.Pp
+The options are as follows:
+.Pp
+.Bl -tag -width Ds
+.It Xo
+.Fl b
+.Ar address
+.Xc
+Adds an 
+.Ar address 
+that
+.Nm
+should 
+.Xr bind 2
+to.  This option can be repeated multiple times to add more. May
+not be used in conjunction with 
+.Fl i .
+.It Xo
+.Fl c
+.Ar size
+Specifies a size in bytes for the SYSV shared memory cache that DB4 is
+using.
+.It Xo
+.Fl d
+Turn on debug mode.  
+.Nm 
+does not fork into the background with this.  Messages are printed in the 
+foreground.
+.It Xo
+.Fl f
+.Ar file
+.Xc
+The configuration file to be used is found at 
+.Ar file .
+.It Xo
+.Fl i
+.Ar interface
+.Xc
+The particular
+.Ar interface 
+that 
+.Nm
+should listen on.  This option can be specified multiple times.  May not be
+used in conjunction with 
+.Fl b .
+.It Fl l
+Turn logging of queries on.
+.It Xo
+.Fl n
+.Ar instances
+is the number of instances plus one that should be forked for 
+.Nm .
+This may be good for multi-cpu/core boxes.
+.It Xo
+.Fl p
+.Ar port
+.Xc
+Specifies the 
+.Ar port
+that 
+.Nm 
+should listen on.  This can be useful when using 
+.Nm 
+with 
+.Xr pf 4 
+.It Xo
+.Fl r
+.Xc
+Go into recursive mode.  This is broken, please don't use.
+.It Xo
+.Fl v
+.Xc
+Be more verbose in debug mode.  This shows configfile parsing logic.
+.El
+.Sh FILES
+.Pa /etc/delphinusdns.conf
+.Sh SEE ALSO
+.Xr delphinusdns.conf 5 , 
+.Xr bind 2 , 
+.Xr fork 2 ,
+.Xr daemon 3 , 
+.Xr pf 4 
+.Sh AUTHORS
+This software was written by
+.An Peter J. Philipp Aq pjp@centroid.eu
+

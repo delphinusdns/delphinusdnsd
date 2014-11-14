@@ -1,0 +1,17 @@
+PROG=delphinusdnsd
+
+SRCS=main.c parse.y reply.c additional.c region.c wildcard.c recurse.c log.c axfr.c filter.c ratelimit.c whitelist.c
+
+#CFLAGS= -DDEBUG  -g -Wall
+CFLAGS= -Wall -g  -I/usr/local/include/db4
+LDFLAGS= -Wall -g -L/usr/local/lib/db4
+LDADD= -lcrypto -lssl -ldb
+
+OBJDIR=.
+BINDIR=/usr/local/sbin
+MANDIR=/usr/local/man/man
+
+MAN= delphinusdnsd.8
+MAN+= delphinusdns.conf.5
+
+.include <bsd.prog.mk>

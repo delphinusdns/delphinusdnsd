@@ -1,0 +1,54 @@
+Changes in RELEASE_1_0 from BETA_9
+
+- name change from wildcarddnsd to delphinusdnsd
+
+Changes in BETA_9 from BETA_8
+
+- we have replaced parse.c with parse.y
+- Linux now relies on the libressl 2.1.1 library, details in the configure
+- commandline options have been moved to configuration file options to coexist
+- options keyword in the configfile
+- SPF (RR 99) RFC 4408 support
+- fix a bug related to truncation
+- SSHFP (RR 44) RFC 4255 (+ RFC 6594) support
+- defineable ratelimit between 1 and 127 pps , see example8.conf for sample
+- EDNS0 (RFC 6891) get detected and replied upon
+- NAPTR (RFC 2915) support
+- Notify (RFC 1996) master-only support
+- underlying BerkeleyDB databases are now stored in /var/db/wdns/[pid]/* 
+  instead of /var/db/wdns, cleanup code for this was written as well.
+- filter and whitelist ip ranges
+- a wildcarddns.conf(5) manpage based on BNF similar to pf.conf(5) with 
+  reference from parse.y
+- we now log received bytes and sent bytes per query, log at the end of a
+  log message.
+
+
+Changes in BETA_8 from BETA_7
+
+- we have a non-forking debug mode now with verbosity flag
+- make W compile and run on the Raspberry Pi (great projects with this)
+
+Changes in BETA_7 from BETA_6
+
+- remote (sys)-logging feature with HMAC message verification
+- change to Berkeley DB 4.6+ on BSD hosts (Linux had it already)
+- allow numerous copies of wildcardnsd to pre-fork (-n flag)
+- AXFR master code (this allows a bind9 slave to work with wildcarddnsd)
+- fix an integer overrun in parse.c which prevented big endian hosts to
+  make use of ANY replies and AXFR
+- SRV RR support
+- left sourceforge.net around August 14, 2012
+- Mac OS X compiles now, but has not been tested with queries
+
+Changes in BETA_6 from BETA_5
+
+- Addition of the utterly broken recursive lookup code
+- conf file is at version 4 now
+- inclusion of a "root hints" entry in some example.conf's
+- "ANY" RR type replies
+- pidfiles written to /var/run
+- master process which can be HUP'ed for reloading the nameserver
+- compress_label fix from possible overflow
+- DNS TTL logging fix for OpenBSD
+- TCP filedescriptor fix (so -> tnp->so)

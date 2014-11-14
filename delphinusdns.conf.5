@@ -1,0 +1,249 @@
+.\" Copyright (c) 2014 Peter J. Philipp
+.\" All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\" 3. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+.\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+.\" OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+.\" IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+.\" INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+.\" NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+.\" DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+.\" THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+.\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+.\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+.\"
+.Dd November 14, 2014
+.Dt DELPHINUSDNS.CONF 5
+.Os 
+.Sh NAME
+.Nm delphinusdns.conf
+.Nd the delphinus DNS daemon configuration file
+.Sh DESCRIPTION
+The 
+.Xr delphinusdnsd 8
+has a default configfile it is called
+.Nm
+and it is found in /etc.  You may wonder why there is a missing d, so I ask
+you to look up 
+.Xr syslogd 8
+and
+.Xr syslog.conf 5
+which also drop the d in the config file.  This follows that name convention.
+.Sh EXAMPLES
+Here is a sample 
+.Nm
+file:
+.Bd -literal
+; sample config file that is in production.
+;
+version "6";
+options "cool stuff" {
+	interface "lo0";
+	interface "em0";
+
+	;bind 127.0.0.1;
+	;bind 192.168.34.4;
+
+	ratelimit-pps 6;
+
+	port 53;
+
+	;fork 2;
+	log;
+}
+
+axfrport "10053";
+
+axfr-for "these hosts" {
+	127.0.0.1;
+	::1;
+	192.168.0.0/16;
+}
+
+notify "these hosts" {
+	192.168.34.1;
+	192.168.35.1;
+	::1;
+}
+
+
+zone "centroid.eu" {
+	centroid.eu,soa,3600,uranus.centroid.eu.,pjp.solarscale.de.,2014051701,3600,1800,7200,3600
+	centroid.eu,ns,3600,proteus.solarscale.de.
+	centroid.eu,ns,3600,uranus.centroid.eu.
+	centroid.eu,ns,3600,dione.solarscale.de.
+	;
+	centroid.eu,a,3600,200.46.208.61
+	centroid.eu,a,3600,62.75.160.180
+	;
+	centroid.eu,SSHFP,3600,1,1,"9b3624f96a6766e73dc88505f945a564dee82e59"
+	centroid.eu,SSHFP,3600,1,2,"03310030886404f8f61d2e4dc445412788284ab04d0858bfa375eb80fc0d34f6"
+	centroid.eu,SSHFP,3600,2,1,"3de1bbae4de5ebd3571a169a50d6a5a4145dd7a9"
+	centroid.eu,SSHFP,3600,2,2,"bbd96ff7e7f629377d655d7fa9662502837b66cf9a2d24590df77acef66fe405"
+	centroid.eu,SSHFP,3600,3,1,"0ca455de4800c0f6c681e805e7bd86e511efb1fc"
+	centroid.eu,SSHFP,3600,3,2,"b330fd2288cf9e13c9ef68b1b0c0b20a10c16cc55f03cd3869cf1a49f06bed43"
+	;
+	centroid.eu,mx,3600,10,proteus.solarscale.de.
+	centroid.eu,aaaa,3600,2001:a60:f074::8
+	;
+	centroid.eu,spf,3600,"v=spf1 ip4:200.46.208.61 ~all"
+	; 
+	;
+	; NAPTR trial
+	centroid.eu,naptr,3600,10,10,"u","E2U+sip","!^.*$!sip:1234@sip.example.com!",centroid.eu
+	centroid.eu,naptr,3600,10,20,"u","E2U+sip","!^.*$!sip:1234@sip.example.com!",.
+
+	;
+	www.centroid.eu,a,3600,62.75.160.180
+	www.centroid.eu,a,3600,200.46.208.61
+	;
+	www.centroid.eu,aaaa,3600,2001:a60:f074::8
+	uranus.centroid.eu,a,3600,212.114.251.91
+	uranus.centroid.eu,aaaa,3600,2001:a60:f000:99::2
+	proteus.centroid.eu,a,3600,62.75.160.180
+	dione.centroid.eu,a,3600,200.46.208.61
+	rosalind.centroid.eu,aaaa,3600,2001:a60:f074::8
+	irc.centroid.eu,a,3600,212.114.251.91
+	irc.centroid.eu,aaaa,3600,2001:a60:f074::24
+	irc2.centroid.eu,a,3600,200.46.208.61
+	localhost.centroid.eu,a,3600,127.0.0.1
+	localhost.centroid.eu,aaaa,3600,::1
+	; the below are new delegations (NS) records
+	;delegation.centroid.eu,delegate,3600,ns1.server.com.
+	; glue record
+	;ns1.server.com.,a,3600,10.0.0.1
+	;delegation.centroid.eu,delegate,3600,ns2.server.com.
+	; glue record
+	;ns2.server.com.,a,3600,10.0.0.2
+}
+zone "ipv6.centroid.eu" {
+	ipv6.centroid.eu,soa,3600,uranus.centroid.eu.,pjp.solarscale.de.,1244725285,3600,1800,7200,3600
+	ipv6.centroid.eu,aaaa,3600,2001:a60:f074::8
+	www.ipv6.centroid.eu,aaaa,3600,2001:a60:f074::8
+}
+zone "ipv6.solarscale.de" {
+	ipv6.solarscale.de,soa,3600,proteus.solarscale.de.,pjp.solarscale.de.,1234896563,3600,1800,7200,3600
+	ipv6.solarscale.de,ns,3600,proteus.solarscale.de.
+	ipv6.solarscale.de,ns,3600,uranus.centroid.eu.
+	ipv6.solarscale.de,aaaa,3600,2001:a60:f074::8
+	www.ipv6.solarscale.de,aaaa,3600,2001:a60:f074::8
+}
+zone "reverse dns" {
+	0.4.7.0.f.0.6.a.0.1.0.0.2.ip6.arpa.,soa,3600,proteus.solarscale.de.,pjp.solarscale.de.,1234896562,3600,1800,7200,3600
+	1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.4.7.0.f.0.6.a.0.1.0.0.2.ip6.arpa.,ptr,3600,uranus.centroid.eu.
+	2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.4.7.0.f.0.6.a.0.1.0.0.2.ip6.arpa.,ptr,3600,setebos.centroid.eu.
+}
+
+zone "root hints" {
+	.,hint,3600000,A.ROOT-SERVERS.NET.
+	A.ROOT-SERVERS.NET.,a,3600000,198.41.0.4
+	A.ROOT-SERVERS.NET.,aaaa,3600000,2001:503:BA3E::2:30
+	.,hint,3600000,B.ROOT-SERVERS.NET.
+	B.ROOT-SERVERS.NET.,a,3600000,192.228.79.201
+	.,hint,3600000,C.ROOT-SERVERS.NET.
+	C.ROOT-SERVERS.NET.,a,3600000,192.33.4.12
+	.,hint,3600000,D.ROOT-SERVERS.NET.
+	D.ROOT-SERVERS.NET.,a,3600000,199.7.91.13
+	D.ROOT-SERVERS.NET.,aaaa,3600000,2001:500:2D::D
+	.,hint,3600000,E.ROOT-SERVERS.NET.
+	E.ROOT-SERVERS.NET.,a,3600000,192.203.230.10	
+	.,hint,3600000,F.ROOT-SERVERS.NET.
+	F.ROOT-SERVERS.NET.,a,3600000,192.5.5.241
+	F.ROOT-SERVERS.NET.,aaaa,3600000,2001:500:2f::f
+	.,hint,3600000,G.ROOT-SERVERS.NET.
+	G.ROOT-SERVERS.NET.,a,3600000,192.112.36.4
+	.,hint,3600000,H.ROOT-SERVERS.NET.
+	H.ROOT-SERVERS.NET.,a,3600000,128.63.2.53
+	H.ROOT-SERVERS.NET.,aaaa,3600000,2001:500:1::803f:235
+	.,hint,3600000,I.ROOT-SERVERS.NET.
+	I.ROOT-SERVERS.NET.,a,3600000,192.36.148.17
+	.,hint,3600000,J.ROOT-SERVERS.NET.
+	J.ROOT-SERVERS.NET.,a,3600000,192.58.128.30
+	J.ROOT-SERVERS.NET.,aaaa,3600000,2001:503:C27::2:30
+	.,hint,3600000,K.ROOT-SERVERS.NET.
+	K.ROOT-SERVERS.NET.,a,3600000,193.0.14.129
+	K.ROOT-SERVERS.NET.,aaaa,3600000,2001:7fd::1
+	.,hint,3600000,L.ROOT-SERVERS.NET.
+	L.ROOT-SERVERS.NET.,a,3600000,199.7.83.42
+	L.ROOT-SERVERS.NET.,aaaa,3600000,2001:500:3::42
+	.,hint,3600000,M.ROOT-SERVERS.NET.
+	M.ROOT-SERVERS.NET.,a,3600000,202.12.27.33
+	M.ROOT-SERVERS.NET.,aaaa,3600000,2001:dc3::35
+}
+
+.Ed
+.Sh GRAMMAR
+Syntax for 
+.Nm
+in BNF:
+.Bd -literal
+line = ( version | axfrport | include | zone | region | 
+	wof | axfr | notify | whitelist | filter | recurse | logging 
+        | comment | options )
+
+version = "version" ("number") semicolon
+
+axfrport = "axfrport" ("port number") semicolon
+
+include = "include" ("filename") semicolon
+
+zone = "zone" ("string") [ "{" zonedata "}" ]
+zonedata = { [hostname] [ "," dnstype] [ "," ttl ] ["," variablednsdata] }
+hostname = string
+dnstype = ( "a" | "aaaa" | "ptr" | "mx" | "soa" | "ns" | "sshfp" | "spf" | 
+		"naptr" | "txt" | "delegate" | "hint" )
+ttl = number
+
+region = "region" ("string") [ "{" cidrlist "}"
+
+cidrlist = { [ cidr-address ] semicolon ... }
+
+wof = "wildcard-only-for" ("string") [ "{" cidrlist "}" ]
+
+axfr = "axfr-for" ("string") [ "{" cidrlist "}" ]
+
+notify = "notify" ("string") [ "{" cidrlist "}" ]
+
+whitelist = "whitelist" ("string") [ "{" cidrlist "}" ]
+
+filter = "filter" ("string") [ "{" cidrlist "}" ]
+
+recurse = "recurse-for" ("string") [ "{" cidrlist "}" ]
+
+logging = "logging" ("string") [ "{" logstatements "}" ]
+logstatements = ( "logbind" | "logpasswd" | "logport" | "loghost" ) 
+logbind = "logbind" ("string") semicolon
+logpasswd = "logpasswd" ("string") semicolon
+logport = "logport" number semicolon
+loghost = "loghost" cidr-address semicolon
+
+comment = ( semicolon | pound ) line
+
+options = "options" ("string") [ "{" optionlist "}" ]
+optionlist = ( optrecurse | optinterface | optfork | optport | 
+		optratelimit | optbind )
+optrecurse = "recurse" semicolon 
+optinterface = "interface" ("string") semicolon
+optfork = "fork" number semicolon
+optratelimit = "ratelimit-pps" number semicolon
+optbind = "bind" cidr-address semicolon
+.Ed
+.Sh FILES
+.Pa /etc/delphinusdns.conf
+.Sh SEE ALSO
+.Xr delphinusdnsd 8
+.Sh AUTHORS
+This software and manual was written by
+.An Peter J. Philipp Aq pjp@centroid.eu
+
