@@ -1,4 +1,4 @@
-$Id: README,v 1.2 2014/11/14 08:19:40 pjp Exp $
+$Id: README,v 1.3 2014/11/14 08:43:11 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -65,9 +65,9 @@ $ ./configure
 ## this will install the development programs you'll need (as root)
 $ apt-get install bison cvs gcc libdb5.3-dev libssl-dev
 ## add a privsep user with a chroot directory (option -m) (as root)
-$ useradd -m wdnsd
+$ useradd -m _ddd
 ## create the db directory (as root)
-$ mkdir -p /var/db/wdns 
+$ mkdir -p /var/db/delphinusdns
 ## make the program
 $ make
 ## install the binary (as root)
@@ -82,12 +82,12 @@ $ make install
 $ sh configure
 ## this will install the development programs you'll need (as root)
 $ cd /usr/ports/databases/db5 && make install clean
-## add a privsep user with a chroot directory (as root)
+## add a privsep user (_ddd) with a chroot directory (as root)
 $ vipw
 ## or
 $ adduser
 ## create the db directory (as root)
-$ mkdir -p /var/db/wdns 
+$ mkdir -p /var/db/delphinusdns
 ## make the program
 $ make
 ## install the binary (as root)
@@ -114,12 +114,12 @@ in your /etc/rc.conf and reboot the jail.
 $ sh configure
 ## this will install the development programs you'll need (as root)
 $ pkg_add db-4.6.21p0v0
-## add a privsep user with a chroot directory (as root)
+## add a privsep user (_ddd) with a chroot directory (as root)
 $ vipw
 ## or
 $ adduser
 ## create the db directory (as root)
-$ mkdir -p /var/db/wdns 
+$ mkdir -p /var/db/delphinusdns
 ## make the program
 $ make
 ## install the binary (as root)
@@ -136,9 +136,9 @@ $ sh configure
 ## the following will install the development programs you'll need (as root)
 $ cd /usr/pkgsrc/databases/db5 && make install
 ## add a privsep user with a chroot directory (as root)
-$ useradd -m wdnsd
+$ useradd -m _ddd
 ## create the db directory (as root)
-$ mkdir -p /var/db/wdns 
+$ mkdir -p /var/db/delphinusdns
 ## make the program
 $ make
 ## install the binary (as root)
@@ -156,8 +156,8 @@ $ sudo port install db48
 $ make
 ## cp the binary into /usr/local/sbin/
 $ sudo cp delphinusdnsd /usr/local/sbin/
-## make the /var/db/wdns directory
-$ mkdir -p /var/db/wdns
+## make the /var/db/delphinusdns directory
+$ mkdir -p /var/db/delphinusdns
 ## done, create config file and start delphinusdnsd
 
 
