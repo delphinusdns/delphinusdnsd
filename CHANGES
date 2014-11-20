@@ -1,6 +1,7 @@
 Changes in RELEASE_1_0 from BETA_9
 
 - name change from wildcarddnsd to delphinusdnsd
+- fixed the long standing bug that assumed one time to live for all RRSETs in a domain name (ttl fix)
 
 Changes in BETA_9 from BETA_8
 
