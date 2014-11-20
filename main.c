@@ -172,7 +172,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.1.1.1 2014/11/14 08:09:04 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.2 2014/11/20 22:22:57 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -415,7 +415,9 @@ main(int argc, char *argv[])
 	/* end of setup_master code */
 		
 	init_wildcard();
+#if 0
 	init_recurse();
+#endif
 	init_region();
 	init_filter();
 	init_whitelist();
@@ -962,7 +964,9 @@ main(int argc, char *argv[])
 						}
 						close (sp[1]);	
 
+#if 0
 						recurseloop(sp[0], (int *)&raw, db);
+#endif
 						/* NOTREACHED */
 						break;
 
@@ -1023,7 +1027,9 @@ main(int argc, char *argv[])
 				}
 				close (sp[1]);	
 
+#if 0
 				recurseloop(sp[0], (int *)&raw, db);
+#endif
 				/* NOTREACHED */
 				break;
 
@@ -1048,7 +1054,9 @@ main(int argc, char *argv[])
 
 		cfg->ident[i] = strdup(ident[i]);
 	}
+#if 0
 	cfg->recurse = (rflag ? sp[1] : -1);
+#endif
 	cfg->log = lfd;
 
 
@@ -2787,10 +2795,12 @@ axfrentry:
 					if (whitelist) {
 						blacklist = find_whitelist((struct sockaddr_storage *)sin6, AF_INET6);
 					}
+#if 0
 					if (rflag) {
 						recursion = find_recurse((struct sockaddr_storage *)sin6, AF_INET6);
 						recurseheader(&rh, IPPROTO_UDP, (struct sockaddr_storage*)sin6, &sto, AF_INET6);
 					}
+#endif
 				} else if (from->sa_family == AF_INET) {
 					is_ipv6 = 0;
 					
@@ -2810,10 +2820,12 @@ axfrentry:
 						blacklist = find_whitelist((struct sockaddr_storage *)sin, AF_INET);
 					}
 
+#if 0
 					if (rflag) {
 						recursion = find_recurse((struct sockaddr_storage *)sin, AF_INET);
 						recurseheader(&rh, IPPROTO_UDP, (struct sockaddr_storage*)sin, &sto, AF_INET);
 					}
+#endif
 				} else {
 					dolog(LOG_INFO, "packet received on descriptor %u interface \"%s\" had weird address family (%u), drop\n", so, cfg->ident[i], from->sa_family);
 					goto drop;

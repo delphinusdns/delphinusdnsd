@@ -97,7 +97,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.1.1.1 2014/11/14 08:09:04 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.2 2014/11/20 22:22:57 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -130,6 +130,8 @@ int 		fill_spf(char *, char *, int, char *);
 int 		fill_sshfp(char *, char *, int, int, int, char *);
 int 		fill_srv(char *, char *, int, int, int, int, char *);
 int 		fill_txt(char *, char *, int, char *);
+int		fill_rrsig(char *, char *, int, char *, int, int, int, int, int, int, char *, char *);
+
 int             findeol(void);
 int 		get_ip(char *, int);
 char 		*get_prefixlen(char *, char *, int);
@@ -142,7 +144,7 @@ int             lungetc(int);
 int 		parse_file(DB *, char *);
 struct file     *pushfile(const char *, int);
 int             popfile(void);
-struct rrtab 	*rrlookup(struct rrtab *, char *);
+struct rrtab 	*rrlookup(char *);
 void 		set_record(struct domain *, char *, int);
 static int 	temp_inet_net_pton_ipv6(const char *, void *, size_t);
 int 		yyparse(void);
@@ -151,23 +153,27 @@ int 		yyparse(void);
 struct rrtab {
         char *name;
         u_int16_t type;
+	int16_t rrsig;
 } myrrtab[] =  { 
- { "a",         DNS_TYPE_A } ,
- { "soa",       DNS_TYPE_SOA },
- { "cname",     DNS_TYPE_CNAME },
- { "ptr",       DNS_TYPE_PTR },
- { "mx",        DNS_TYPE_MX },
- { "aaaa",      DNS_TYPE_AAAA },
- { "ns",        DNS_TYPE_NS },
- { "txt",       DNS_TYPE_TXT },
- { "hint",      DNS_TYPE_HINT }, 
- { "delegate",  DNS_TYPE_DELEGATE },
- { "balance",   DNS_TYPE_BALANCE }, 
- { "srv",       DNS_TYPE_SRV },
- { "spf",	DNS_TYPE_SPF },
- { "sshfp", 	DNS_TYPE_SSHFP },
- { "naptr", 	DNS_TYPE_NAPTR },
- { NULL, 0 },
+ { "a",         DNS_TYPE_A, 		INTERNAL_TYPE_A } ,
+ { "aaaa",      DNS_TYPE_AAAA,		INTERNAL_TYPE_AAAA },
+ { "balance",   DNS_TYPE_BALANCE, 	INTERNAL_TYPE_A }, 
+ { "cname",     DNS_TYPE_CNAME, 	INTERNAL_TYPE_CNAME },
+ { "delegate",  DNS_TYPE_DELEGATE, 	INTERNAL_TYPE_NS },
+ { "dnskey", 	DNS_TYPE_DNSKEY, 	INTERNAL_TYPE_DNSKEY },
+ { "ds", 	DNS_TYPE_DS, 		INTERNAL_TYPE_DS },
+ { "hint",      DNS_TYPE_HINT,		INTERNAL_TYPE_NS }, 
+ { "mx",        DNS_TYPE_MX, 		INTERNAL_TYPE_MX },
+ { "naptr", 	DNS_TYPE_NAPTR,		INTERNAL_TYPE_NAPTR },
+ { "ns",        DNS_TYPE_NS,		INTERNAL_TYPE_NS },
+ { "nsec", 	DNS_TYPE_NSEC, 		INTERNAL_TYPE_NSEC },
+ { "ptr",       DNS_TYPE_PTR,		INTERNAL_TYPE_PTR },
+ { "rrsig", 	DNS_TYPE_RRSIG, 	-1 },
+ { "soa",       DNS_TYPE_SOA, 		INTERNAL_TYPE_SOA },
+ { "spf",	DNS_TYPE_SPF,		INTERNAL_TYPE_SPF },
+ { "srv",       DNS_TYPE_SRV, 		INTERNAL_TYPE_SRV },
+ { "sshfp", 	DNS_TYPE_SSHFP,		INTERNAL_TYPE_SSHFP },
+ { "txt",       DNS_TYPE_TXT,		INTERNAL_TYPE_TXT },
 };
 
 
@@ -541,6 +547,28 @@ zonestatement:
 			free ($13);
 			free ($15);
 			free ($17);
+		}
+		|
+		STRING COMMA STRING COMMA NUMBER COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA STRING COMMA QUOTEDSTRING CRLF
+		{
+			if (strcasecmp($3, "rrsig") == 0) {
+				if (fill_rrsig($1, $3, $5, $7, $9, $11, $13, $15, $17, $19, $21, $23) < 0) {	
+					return -1;
+				}
+
+				if (debug)
+					printf(" %s RRSIG\n", $1);
+			} else {
+				if (debug)
+					printf("another rrsig like record I don't know?\n");
+				return (-1);
+			}
+
+			free ($1); 
+			free ($3);
+			free ($7);
+			free ($21);
+			free ($23);
 		}
 		| comment CRLF
 		;
@@ -1027,6 +1055,7 @@ recursestatement	:	ipcidr SEMICOLON CRLF
 						return (-1);
 					}
 
+#if 0
 					if (insert_recurse(dst, prefixlength) < 0) {
 						dolog(LOG_ERR, "insert_recurse, line %d\n", file->lineno);
 						return (-1);
@@ -1034,6 +1063,7 @@ recursestatement	:	ipcidr SEMICOLON CRLF
 	
 					if (debug)
 						printf("recurse inserted %s address\n", $1);
+#endif
 
 					free (dst);
 					free ($1);
@@ -1523,16 +1553,24 @@ get_string(char *buf, int n)
 	return (1);
 }
 
-struct rrtab * 
-rrlookup(struct rrtab *p, char *keyword)
-{
+/* probably Copyright 2012 Kenneth R Westerback <krw@openbsd.org> */
 
-	for (; p->name != NULL; p++) {
-		if (strcasecmp(p->name, keyword) == 0)
-			return (p);
-	}
+int
+kw_cmp(const void *k, const void *e)
+{
+        return (strcasecmp(k, ((const struct rrtab *)e)->name));
+}
+
+
+struct rrtab * 
+rrlookup(char *keyword)
+{
+	static struct rrtab *p; 
+
+	p = bsearch(keyword, myrrtab, sizeof(myrrtab)/sizeof(myrrtab[0]), 
+		sizeof(myrrtab[0]), kw_cmp);
 	
-	return (NULL);
+	return (p);
 }	
 
 struct tab *
@@ -1578,7 +1616,7 @@ check_rr(char *domainname, char *mytype, int itype, int *converted_namelen)
 	int i;
 	
 	
-	if ((rr = rrlookup(myrrtab, mytype)) == NULL) {
+	if ((rr = rrlookup(mytype)) == NULL) {
 		dolog(LOG_ERR, "error input line %d\n", file->lineno);
 		slave_shutdown();
 		exit(1);
@@ -1664,7 +1702,7 @@ fill_cname(char *name, char *type, int myttl, char *hostname)
 	memcpy(sdomain.zone, converted_name, converted_namelen);
 	sdomain.zonelen = converted_namelen;
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_CNAME] = myttl;
 
 	myname = dns_label(hostname, (int *)&len);	
 	if (myname == NULL) {
@@ -1724,7 +1762,7 @@ fill_ptr(char *name, char *type, int myttl, char *hostname)
 	memcpy(sdomain.zone, converted_name, converted_namelen);
 	sdomain.zonelen = converted_namelen;
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_PTR] = myttl;
 
 	myname = dns_label(hostname, (int *)&len);	
 	if (myname == NULL) {
@@ -1790,7 +1828,7 @@ fill_spf(char *name, char *type, int myttl, char *msg)
 	memcpy(sdomain.zone, converted_name, converted_namelen);
 	sdomain.zonelen = converted_namelen;
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_SPF] = myttl;
 
 	memcpy(&sdomain.spf, msg, len);
 	sdomain.spflen = len;
@@ -1801,6 +1839,78 @@ fill_spf(char *name, char *type, int myttl, char *msg)
 	
 	if (converted_name)
 		free (converted_name);
+	
+	return (0);
+
+}
+
+/* first dnssec RR! */
+
+int
+fill_rrsig(char *name, char *type, int myttl, char *typecovered, int algorithm, int labels, int original_ttl, int sig_expiration, int sig_inception, int keytag, char *signers_name, char *signature)
+{
+#if 0
+	struct domain sdomain;
+	int converted_namelen;
+	char *converted_name;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_RRSIG, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	memset(&sdomain, 0, sizeof(sdomain));
+	if (get_record(&sdomain, converted_name, converted_namelen) < 0) {
+		return (-1);
+	}
+
+#ifdef __linux__
+	strncpy((char *)sdomain.zonename, (char *)name, DNS_MAXNAME + 1);
+	sdomain.zonename[DNS_MAXNAME] = '\0';
+#else
+	strlcpy((char *)sdomain.zonename, (char *)name, DNS_MAXNAME + 1);
+#endif
+	memcpy(sdomain.zone, converted_name, converted_namelen);
+	sdomain.zonelen = converted_namelen;
+
+	sdomain.ttl[INTERNAL_TYPE_RRSIG] = myttl;
+
+	sdomain.naptr[sdomain.naptr_count].order = order;
+	sdomain.naptr[sdomain.naptr_count].preference = preference;
+
+	memcpy(&sdomain.naptr[sdomain.naptr_count].flags, flags, flagslen);
+	sdomain.naptr[sdomain.naptr_count].flagslen = flagslen;
+
+	memcpy(&sdomain.naptr[sdomain.naptr_count].services, services, serviceslen);
+	sdomain.naptr[sdomain.naptr_count].serviceslen = serviceslen;
+
+	memcpy(&sdomain.naptr[sdomain.naptr_count].regexp, regexp, regexplen);
+	sdomain.naptr[sdomain.naptr_count].regexplen = regexplen;
+
+	naptrname = check_rr(replacement, type, DNS_TYPE_NAPTR, &naptr_namelen);
+	if (naptrname == NULL) {
+		return -1;
+	}
+
+	memcpy(&sdomain.naptr[sdomain.naptr_count].replacement, naptrname, naptr_namelen);
+	sdomain.naptr[sdomain.naptr_count].replacementlen = naptr_namelen;
+	
+	sdomain.naptr_count++;
+
+	sdomain.flags |= DOMAIN_HAVE_NAPTR;
+
+	set_record(&sdomain, converted_name, converted_namelen);
+	
+	if (naptrname)
+		free (naptrname);
+
+	if (converted_name)
+		free (converted_name);
+#endif
 	
 	return (0);
 
@@ -1848,7 +1958,7 @@ fill_naptr(char *name, char *type, int myttl, int order, int preference, char *f
 	memcpy(sdomain.zone, converted_name, converted_namelen);
 	sdomain.zonelen = converted_namelen;
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_NAPTR] = myttl;
 
 	sdomain.naptr[sdomain.naptr_count].order = order;
 	sdomain.naptr[sdomain.naptr_count].preference = preference;
@@ -1922,7 +2032,7 @@ fill_txt(char *name, char *type, int myttl, char *msg)
 	memcpy(sdomain.zone, converted_name, converted_namelen);
 	sdomain.zonelen = converted_namelen;
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_TXT] = myttl;
 
 	memcpy(&sdomain.txt, msg, len);
 	sdomain.txtlen = len;
@@ -1976,7 +2086,7 @@ fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerp
 		return (-1);
 	}
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_SSHFP] = myttl;
 
 	sdomain.sshfp[sdomain.sshfp_count].algorithm = alg;
 	sdomain.sshfp[sdomain.sshfp_count].fptype = fptype;
@@ -2053,7 +2163,7 @@ fill_srv(char *name, char *type, int myttl, int priority, int weight, int port, 
 		return (-1);
 	}
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_SRV] = myttl;
 
 	sdomain.srv[sdomain.srv_count].priority = priority;
 	sdomain.srv[sdomain.srv_count].weight = weight;
@@ -2125,7 +2235,7 @@ fill_mx(char *name, char *type, int myttl, int priority, char *mxhost)
 		return (-1);
 	}
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_MX] = myttl;
 	sdomain.mx[sdomain.mx_count].preference = priority;
 
 	mxname = dns_label(mxhost, &len);
@@ -2189,7 +2299,7 @@ fill_balance(char *name, char *type, int myttl, char *a)
 		return (-1);
 	}
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_A] = myttl;
 	ia = (in_addr_t *)&sdomain.a[sdomain.a_count];
 
 	if ((*ia = inet_addr(a)) == INADDR_ANY) {
@@ -2254,7 +2364,7 @@ fill_a(char *name, char *type, int myttl, char *a)
 		return (-1);
 	}
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_A] = myttl;
 	ia = (in_addr_t *)&sdomain.a[sdomain.a_count];
 
 	if ((*ia = inet_addr(a)) == INADDR_ANY) {
@@ -2317,7 +2427,7 @@ fill_aaaa(char *name, char *type, int myttl, char *aaaa)
 		return (-1);
 	}
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_AAAA] = myttl;
 	ia6 = (struct in6_addr *)&sdomain.aaaa[sdomain.aaaa_count];
 	if (inet_pton(AF_INET6, (char *)aaaa, (char *)ia6) != 1) {
 		dolog(LOG_INFO, "AAAA \"%s\" unparseable line %d\n", aaaa, file->lineno);
@@ -2387,7 +2497,7 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 		return (-1);
 	}
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_NS] = myttl;
 
 	myname = dns_label(nameserver, (int *)&len);	
 	if (myname == NULL) {
@@ -2455,7 +2565,7 @@ fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int seria
 	memcpy(sdomain.zone, converted_name, converted_namelen);
 	sdomain.zonelen = converted_namelen;
 
-	sdomain.ttl = myttl;
+	sdomain.ttl[INTERNAL_TYPE_SOA] = myttl;
 
 	myname = dns_label(auth, (int *)&len);	
 	if (myname == NULL) {

@@ -37,7 +37,7 @@ int additional_ptr(char *, int, struct domain *, char *, int, int, int *);
 
 extern int compress_label(u_char *, int, int);
 
-static const char rcsid[] = "$Id: additional.c,v 1.1.1.1 2014/11/14 08:09:04 pjp Exp $";
+static const char rcsid[] = "$Id: additional.c,v 1.2 2014/11/20 22:22:57 pjp Exp $";
 
 
 /*
@@ -90,7 +90,7 @@ additional_a(char *name, int namelen, struct domain *sd, char *reply, int replyl
 		
 		answer->type = htons(DNS_TYPE_A);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(sd->ttl);
+		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_A]);
 
 		answer->rdlength = htons(sizeof(in_addr_t));
 
@@ -121,7 +121,7 @@ additional_a(char *name, int namelen, struct domain *sd, char *reply, int replyl
 		
 		answer->type = htons(DNS_TYPE_A);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(sd->ttl);
+		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_A]);
 
 		answer->rdlength = htons(sizeof(in_addr_t));
 
@@ -187,7 +187,7 @@ additional_aaaa(char *name, int namelen, struct domain *sd, char *reply, int rep
 		
 		answer->type = htons(DNS_TYPE_AAAA);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(sd->ttl);
+		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_AAAA]);
 
 		answer->rdlength = htons(sizeof(struct in6_addr));
 
@@ -219,7 +219,7 @@ additional_aaaa(char *name, int namelen, struct domain *sd, char *reply, int rep
 		
 		answer->type = htons(DNS_TYPE_AAAA);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(sd->ttl);
+		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_AAAA]);
 
 		answer->rdlength = htons(sizeof(struct in6_addr));
 
@@ -288,7 +288,7 @@ additional_mx(char *name, int namelen, struct domain *sd, char *reply, int reply
 		
 		answer->type = htons(DNS_TYPE_MX);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(sd->ttl);
+		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_MX]);
 		answer->mx_priority = htons(sd->mx[mx_count].preference);
 
 		offset += sizeof(struct answer);
@@ -338,7 +338,7 @@ additional_mx(char *name, int namelen, struct domain *sd, char *reply, int reply
 		
 		answer->type = htons(DNS_TYPE_A);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(sd->ttl);
+		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_A]);
 
 		offset += sizeof(struct answer);
 
@@ -412,7 +412,7 @@ additional_ptr(char *name, int namelen, struct domain *sd, char *reply, int repl
 	
 	answer->type = htons(DNS_TYPE_PTR);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(sd->ttl);
+	answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_PTR]);
 
 	offset += sizeof(struct answer);
 

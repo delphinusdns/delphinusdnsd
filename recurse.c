@@ -1,3 +1,4 @@
+#if 0
 /*
  * Copyright (c) 2010-2014 Peter J. Philipp
  * All rights reserved.
@@ -90,7 +91,7 @@ static struct recurseentry {
 } *rn2, *rnp;
 
 
-static const char rcsid[] = "$Id: recurse.c,v 1.1.1.1 2014/11/14 08:09:04 pjp Exp $";
+static const char rcsid[] = "$Id: recurse.c,v 1.2 2014/11/20 22:22:58 pjp Exp $";
 
 /*
  * INIT_RECURSE - initialize the recurse singly linked list
@@ -2214,3 +2215,4 @@ lookup_aaaa(DB *db, struct recurses *sr, struct ns *ns)
 
 	return (0);
 }
+#endif

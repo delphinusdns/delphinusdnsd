@@ -165,7 +165,11 @@ struct dns_question_hdr {
 #define DNS_TYPE_SRV	33		/* RFC 2782, page 8 */
 #define DNS_TYPE_NAPTR	35		/* RFC 2915, page 3 */
 #define DNS_TYPE_OPT	41		/* RFC 6891, page 7 */
+#define DNS_TYPE_DS	43		/* RFC 4034, section 5 */
 #define DNS_TYPE_SSHFP	44		/* RFC 4255 */
+#define DNS_TYPE_RRSIG	46		/* RFC 4034, section 3 */
+#define DNS_TYPE_NSEC	47		/* RFC 4034, section 4 */
+#define DNS_TYPE_DNSKEY	48		/* RFC 4034, section 2 */
 
 #define DNS_TYPE_SPF	99		/* RFC 4408 */
 

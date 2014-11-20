@@ -98,7 +98,7 @@ static struct notifyentry {
 } *notn2, *notnp;
 
 
-static const char rcsid[] = "$Id: axfr.c,v 1.1.1.1 2014/11/14 08:09:04 pjp Exp $";
+static const char rcsid[] = "$Id: axfr.c,v 1.2 2014/11/20 22:22:57 pjp Exp $";
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list
@@ -1013,7 +1013,7 @@ build_soa(DB *db, char *reply, int offset, struct domain *sd, struct question *q
 	answer->name[1] = 0x0c;
 	answer->type = htons(DNS_TYPE_SOA);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(sd->ttl);
+	answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_SOA]);
 
 	offset += 12;			/* up to rdata length */
 

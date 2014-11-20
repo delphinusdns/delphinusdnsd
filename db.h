@@ -40,6 +40,46 @@
 
 /* db stuff */
 
+struct dnskey {
+	u_int16_t flags;
+#define DNSKEY_ZONE_KEY			(1 << 7)
+#define DNSKEY_SECURE_ENTRY		(1 << 15)
+	u_int8_t protocol;		/* must be 3 */
+	u_int8_t algorithm;		/* would be 5, RFC 3110 */
+	char public_key[4096];
+	u_int16_t publickey_len;
+} __attribute__((packed)); 
+
+
+struct rrsig {
+	u_int16_t type_covered;
+	u_int8_t algorithm;	/* usually 5, RFC3110 */
+	u_int8_t labels;
+	u_int32_t original_ttl;
+	u_int32_t signature_expiration;
+	u_int32_t signature_inception;
+	u_int16_t key_tag;
+	char signers_name[DNS_MAXNAME];
+	u_int8_t signame_len;
+	char signature[4096];
+	u_int16_t signature_len;
+} __attribute__((packed)); 
+
+struct nsec {
+	char next_domain_name[DNS_MAXNAME];
+	u_int8_t ndn_len;	/* next domain name length */
+	u_int16_t bitmap[256];	/* XXX? */
+} __attribute__((packed));
+
+struct ds {
+	u_int16_t key_tag;
+	u_int8_t algorithm;
+	u_int8_t digest_type;
+	char digest[4096];
+	u_int16_t digestlen;
+} __attribute__((packed)); 
+
+
 struct soa {
 	char nsserver[DNS_MAXNAME];
 	u_int8_t nsserver_len;
@@ -111,7 +151,24 @@ struct domain {
 #define DOMAIN_HAVE_SSHFP	0x1000
 #define DOMAIN_HAVE_NAPTR	0x2000
 	struct soa soa;			/* start of authority */
-	u_int32_t ttl;			/* time to live */
+#define INTERNAL_TYPE_SOA	0
+#define INTERNAL_TYPE_A		1
+#define INTERNAL_TYPE_AAAA	2
+#define INTERNAL_TYPE_MX	3
+#define INTERNAL_TYPE_NS	4
+#define INTERNAL_TYPE_CNAME	5
+#define INTERNAL_TYPE_PTR	6
+#define INTERNAL_TYPE_TXT	7
+#define INTERNAL_TYPE_SPF	8
+#define INTERNAL_TYPE_SRV	9
+#define INTERNAL_TYPE_SSHFP	10
+#define INTERNAL_TYPE_NAPTR	11
+#define INTERNAL_TYPE_DNSKEY	12
+#define INTERNAL_TYPE_DS	13
+#define INTERNAL_TYPE_NSEC	14
+#define INTERNAL_TYPE_MAX	15
+	struct rrsig rrsig[INTERNAL_TYPE_MAX];	/* rrsig RR */
+	u_int32_t ttl[INTERNAL_TYPE_MAX];	/* time to lives */
 	time_t created;			/* time created, for dynamic zones */
 	in_addr_t a[RECORD_COUNT];	/* IP addresses */
 	u_int8_t region[RECORD_COUNT];	/* region of IP address */
@@ -143,6 +200,10 @@ struct domain {
 	int sshfp_count;			/* SSHFP RR count */
 	struct naptr naptr[RECORD_COUNT];	/* NAPTR RR, eek 20K! */
 	int naptr_count;
+	struct dnskey dnskey[RECORD_COUNT];	/* DNSKEY RR */
+	int dnskey_count;			/* count of DNSKEY */
+	struct nsec nsec;			/* NSEC RR */
+	struct ds ds;				/* DS RR */
 } __attribute__((packed));
 
 struct sreply {
