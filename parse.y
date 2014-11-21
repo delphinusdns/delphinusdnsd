@@ -99,7 +99,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.3 2014/11/21 09:04:41 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.4 2014/11/21 09:15:18 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -1958,6 +1958,7 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 	memcpy(sdomain.zone, converted_name, converted_namelen);
 	sdomain.zonelen = converted_namelen;
 
+	sdomain.ttl[INTERNAL_TYPE_RRSIG] = myttl;
 
 	if ((rr = rrlookup(typecovered)) == NULL) {
 		return (-1);
@@ -1970,7 +1971,6 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 		break;
 	}
 
-	sdomain.ttl[rr->internal_type] = myttl;
 		
 	sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].type_covered = rr->type;
 	sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].algorithm = algorithm;
