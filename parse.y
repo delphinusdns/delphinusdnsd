@@ -99,7 +99,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.4 2014/11/21 09:15:18 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.5 2014/11/21 19:34:31 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -134,6 +134,8 @@ int 		fill_srv(char *, char *, int, int, int, int, char *);
 int 		fill_txt(char *, char *, int, char *);
 int		fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
 int		fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int32_t, u_int32_t, u_int16_t, char *, char *);
+int 		fill_nsec(char *, char *, u_int32_t, char *, char *);
+int		fill_ds(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
 
 int             findeol(void);
 int 		get_ip(char *, int);
@@ -592,6 +594,47 @@ zonestatement:
 			free ($7);
 			free ($21);
 			free ($23);
+		}
+		|
+		STRING COMMA STRING COMMA NUMBER COMMA STRING COMMA QUOTEDSTRING CRLF
+		{
+			if (strcasecmp($3, "nsec") == 0) {
+				if (fill_nsec($1, $3, $5, $7, $9) < 0) {
+					return -1;
+				}
+
+				if (debug)
+					printf(" %s NSEC\n", $1);
+			} else {
+				if (debug)
+					printf("another nsec like record I don't know?\n");
+				return (-1);
+			}
+
+			free ($1); 
+			free ($3);
+			free ($7);
+			free ($9);
+		}
+		|
+		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING CRLF
+		{
+			if (strcasecmp($3, "ds") == 0) {
+				if (fill_ds($1, $3, $5, $7, $9, $11, $13) < 0) {
+					return -1;
+				}
+
+				if (debug)
+					printf(" %s DS\n", $1);
+			} else {
+				if (debug)
+					printf("another ds like record I don't know?\n");
+				return (-1);
+			}
+
+			free ($1); 
+			free ($3);
+			free ($13);
 		}
 		| comment CRLF
 		;
@@ -2011,6 +2054,120 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 	
 	if (signers_name2)
 		free (signers_name2);
+
+	if (converted_name)
+		free (converted_name);
+	
+	return (0);
+
+}
+
+int
+fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algorithm, u_int8_t digesttype, char *digest)
+{
+	struct domain sdomain;
+	int converted_namelen;
+	char *converted_name;
+	int i, ret;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_DS, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	memset(&sdomain, 0, sizeof(sdomain));
+	if (get_record(&sdomain, converted_name, converted_namelen) < 0) {
+		return (-1);
+	}
+
+#ifdef __linux__
+	strncpy((char *)sdomain.zonename, (char *)name, DNS_MAXNAME + 1);
+	sdomain.zonename[DNS_MAXNAME] = '\0';
+#else
+	strlcpy((char *)sdomain.zonename, (char *)name, DNS_MAXNAME + 1);
+#endif
+	memcpy(sdomain.zone, converted_name, converted_namelen);
+	sdomain.zonelen = converted_namelen;
+
+	sdomain.ttl[INTERNAL_TYPE_DS] = myttl;
+
+	sdomain.ds.key_tag = keytag;
+	sdomain.ds.algorithm = algorithm;
+	sdomain.ds.digest_type = digesttype; 
+	
+	ret = mybase64_decode(digest, sdomain.ds.digest, sizeof(sdomain.ds.digest));
+
+	if (ret < 0) 
+		return (-1);
+
+	sdomain.ds.digestlen = ret;
+		
+	sdomain.flags |= DOMAIN_HAVE_DS;
+
+	set_record(&sdomain, converted_name, converted_namelen);
+
+	if (converted_name)
+		free (converted_name);
+	
+	return (0);
+
+}
+
+int
+fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitmap)
+{
+	struct domain sdomain;
+	int converted_namelen, converted_domainnamelen;
+	char *converted_name, *converted_domainname;
+	int i;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_NSEC, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	memset(&sdomain, 0, sizeof(sdomain));
+	if (get_record(&sdomain, converted_name, converted_namelen) < 0) {
+		return (-1);
+	}
+
+#ifdef __linux__
+	strncpy((char *)sdomain.zonename, (char *)name, DNS_MAXNAME + 1);
+	sdomain.zonename[DNS_MAXNAME] = '\0';
+#else
+	strlcpy((char *)sdomain.zonename, (char *)name, DNS_MAXNAME + 1);
+#endif
+	memcpy(sdomain.zone, converted_name, converted_namelen);
+	sdomain.zonelen = converted_namelen;
+
+	sdomain.ttl[INTERNAL_TYPE_NSEC] = myttl;
+
+
+	for (i = 0; i < strlen(domainname); i++) {
+		domainname[i] = tolower((int)domainname[i]);
+	}
+
+	converted_domainname = check_rr(domainname, type, DNS_TYPE_NSEC, &converted_domainnamelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	memcpy(sdomain.nsec.next_domain_name, converted_domainname, converted_domainnamelen);
+	sdomain.nsec.ndn_len = converted_domainnamelen;
+
+	/* XXX create/manage bitmap */
+		
+	sdomain.flags |= DOMAIN_HAVE_NSEC;
+
+	set_record(&sdomain, converted_name, converted_namelen);
 
 	if (converted_name)
 		free (converted_name);
