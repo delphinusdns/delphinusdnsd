@@ -19,6 +19,7 @@ build:
 	$(CC) $(CFLAGS) -c filter.c
 	$(CC) $(CFLAGS) -c ratelimit.c
 	$(CC) $(CFLAGS) -c whitelist.c
+	$(CC) $(CFLAGS) -c base64.c
 	$(CC) $(CFLAGS) -o delphinusdnsd additional.o main.o parse.o reply.o region.o wildcard.o log.o recurse.o axfr.o filter.o ratelimit.o whitelist.o $(LDADD)
 
 clean:

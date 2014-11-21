@@ -37,6 +37,8 @@ extern int 	insert_recurse(char *, char *);
 extern int 	insert_whitelist(char *, char *);
 extern int 	insert_wildcard(char *, char *);
 extern void 	slave_shutdown(void);
+extern int 	mybase64_encode(u_char const *, size_t, char *, size_t);
+extern int 	mybase64_decode(char const *, u_char *, size_t);
 void 		yyerror(const char *);
 
 extern int whitelist;
@@ -97,7 +99,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.2 2014/11/20 22:22:57 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.3 2014/11/21 09:04:41 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -130,7 +132,8 @@ int 		fill_spf(char *, char *, int, char *);
 int 		fill_sshfp(char *, char *, int, int, int, char *);
 int 		fill_srv(char *, char *, int, int, int, int, char *);
 int 		fill_txt(char *, char *, int, char *);
-int		fill_rrsig(char *, char *, int, char *, int, int, int, int, int, int, char *, char *);
+int		fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
+int		fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int32_t, u_int32_t, u_int16_t, char *, char *);
 
 int             findeol(void);
 int 		get_ip(char *, int);
@@ -153,7 +156,7 @@ int 		yyparse(void);
 struct rrtab {
         char *name;
         u_int16_t type;
-	int16_t rrsig;
+	int16_t internal_type;
 } myrrtab[] =  { 
  { "a",         DNS_TYPE_A, 		INTERNAL_TYPE_A } ,
  { "aaaa",      DNS_TYPE_AAAA,		INTERNAL_TYPE_AAAA },
@@ -547,6 +550,26 @@ zonestatement:
 			free ($13);
 			free ($15);
 			free ($17);
+		}
+		|
+		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING CRLF
+		{
+			if (strcasecmp($3, "dnskey") == 0) {
+				if (fill_dnskey($1, $3, $5, $7, $9, $11, $13) < 0) {	
+					return -1;
+				}
+
+				if (debug)
+					printf(" %s DNSKEY\n", $1);
+			} else {
+				if (debug)
+					printf("another dnskey like record I don't know?\n");
+				return (-1);
+			}
+
+			free ($1); 
+			free ($3);
+			free ($13);
 		}
 		|
 		STRING COMMA STRING COMMA NUMBER COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA STRING COMMA QUOTEDSTRING CRLF
@@ -1844,15 +1867,73 @@ fill_spf(char *name, char *type, int myttl, char *msg)
 
 }
 
-/* first dnssec RR! */
-
-int
-fill_rrsig(char *name, char *type, int myttl, char *typecovered, int algorithm, int labels, int original_ttl, int sig_expiration, int sig_inception, int keytag, char *signers_name, char *signature)
+/* first two dnssec RRs! */
+int		
+fill_dnskey(char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t protocol, u_int8_t algorithm, char *pubkey)
 {
-#if 0
 	struct domain sdomain;
 	int converted_namelen;
 	char *converted_name;
+	int i, ret;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_DNSKEY, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	memset(&sdomain, 0, sizeof(sdomain));
+	if (get_record(&sdomain, converted_name, converted_namelen) < 0) {
+		return (-1);
+	}
+
+#ifdef __linux__
+	strncpy((char *)sdomain.zonename, (char *)name, DNS_MAXNAME + 1);
+	sdomain.zonename[DNS_MAXNAME] = '\0';
+#else
+	strlcpy((char *)sdomain.zonename, (char *)name, DNS_MAXNAME + 1);
+#endif
+	memcpy(sdomain.zone, converted_name, converted_namelen);
+	sdomain.zonelen = converted_namelen;
+
+	sdomain.ttl[INTERNAL_TYPE_DNSKEY] = myttl;
+
+	sdomain.dnskey[sdomain.dnskey_count].flags = flags;
+	sdomain.dnskey[sdomain.dnskey_count].protocol = protocol;
+	sdomain.dnskey[sdomain.dnskey_count].algorithm = algorithm;
+
+	/* feed our base64 key to the public key */
+	ret = mybase64_decode(pubkey, sdomain.dnskey[sdomain.dnskey_count].public_key, sizeof(sdomain.dnskey[sdomain.dnskey_count].public_key));
+
+	if (ret < 0) 
+		return (-1);
+
+	sdomain.dnskey[sdomain.dnskey_count].publickey_len = ret;
+	
+	sdomain.dnskey_count++;
+
+	sdomain.flags |= DOMAIN_HAVE_DNSKEY;
+
+	set_record(&sdomain, converted_name, converted_namelen);
+	
+	if (converted_name)
+		free (converted_name);
+	
+	return (0);
+
+}
+
+int
+fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t algorithm, u_int8_t labels, u_int32_t original_ttl, u_int32_t sig_expiration, u_int32_t sig_inception, u_int16_t keytag, char *signers_name, char *signature)
+{
+	struct domain sdomain;
+	int converted_namelen, signers_namelen;
+	char *converted_name, *signers_name2;
+	struct rrtab *rr;
+	int i, ret;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -1877,40 +1958,62 @@ fill_rrsig(char *name, char *type, int myttl, char *typecovered, int algorithm, 
 	memcpy(sdomain.zone, converted_name, converted_namelen);
 	sdomain.zonelen = converted_namelen;
 
-	sdomain.ttl[INTERNAL_TYPE_RRSIG] = myttl;
 
-	sdomain.naptr[sdomain.naptr_count].order = order;
-	sdomain.naptr[sdomain.naptr_count].preference = preference;
-
-	memcpy(&sdomain.naptr[sdomain.naptr_count].flags, flags, flagslen);
-	sdomain.naptr[sdomain.naptr_count].flagslen = flagslen;
-
-	memcpy(&sdomain.naptr[sdomain.naptr_count].services, services, serviceslen);
-	sdomain.naptr[sdomain.naptr_count].serviceslen = serviceslen;
-
-	memcpy(&sdomain.naptr[sdomain.naptr_count].regexp, regexp, regexplen);
-	sdomain.naptr[sdomain.naptr_count].regexplen = regexplen;
-
-	naptrname = check_rr(replacement, type, DNS_TYPE_NAPTR, &naptr_namelen);
-	if (naptrname == NULL) {
-		return -1;
+	if ((rr = rrlookup(typecovered)) == NULL) {
+		return (-1);
 	}
 
-	memcpy(&sdomain.naptr[sdomain.naptr_count].replacement, naptrname, naptr_namelen);
-	sdomain.naptr[sdomain.naptr_count].replacementlen = naptr_namelen;
-	
-	sdomain.naptr_count++;
+	switch (rr->type) {
+	case DNS_TYPE_RRSIG:
+		fprintf(stderr, "can't RRSIG an RRSIG!\n");
+		return (-1);
+		break;
+	}
 
-	sdomain.flags |= DOMAIN_HAVE_NAPTR;
+	sdomain.ttl[rr->internal_type] = myttl;
+		
+	sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].type_covered = rr->type;
+	sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].algorithm = algorithm;
+
+	if (sdomain.ttl[rr->internal_type] != original_ttl) {
+		return (-1);
+	}
+
+	sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].original_ttl = original_ttl;
+	sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].signature_expiration = sig_expiration;
+	sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].signature_inception = sig_inception;
+	sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].key_tag = keytag;
+
+	signers_name2 = check_rr(signers_name, type, DNS_TYPE_RRSIG, &signers_namelen);
+	if (signers_name2 == NULL) {
+		return (-1);
+	}
+
+	
+	memcpy(sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].signers_name, signers_name2, signers_namelen);
+	sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].signame_len = signers_namelen;
+
+	
+	/* feed our base64 key the signature */
+	ret = mybase64_decode(signature, sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].signature, sizeof(sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].signature));
+
+	if (ret < 0) 
+		return (-1);
+
+	sdomain.rrsig[rr->internal_type][sdomain.rrsig_count].signature_len = ret;
+	
+
+	sdomain.rrsig_count++;
+
+	sdomain.flags |= DOMAIN_HAVE_RRSIG;
 
 	set_record(&sdomain, converted_name, converted_namelen);
 	
-	if (naptrname)
-		free (naptrname);
+	if (signers_name2)
+		free (signers_name2);
 
 	if (converted_name)
 		free (converted_name);
-#endif
 	
 	return (0);
 

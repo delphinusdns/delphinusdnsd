@@ -1,6 +1,6 @@
 PROG=delphinusdnsd
 
-SRCS=main.c parse.y reply.c additional.c region.c wildcard.c recurse.c log.c axfr.c filter.c ratelimit.c whitelist.c
+SRCS=main.c parse.y reply.c additional.c region.c wildcard.c recurse.c log.c axfr.c filter.c ratelimit.c whitelist.c base64.c
 
 CFLAGS= -Wall -g -I/usr/pkg/include/db5/
 LDFLAGS= -Wall -g -L/usr/pkg/lib -R/usr/pkg/lib

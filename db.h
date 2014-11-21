@@ -38,6 +38,24 @@
 #define RECORD_COUNT	20
 #define NEGATIVE_CACHE_TIME	600	/* DNS & Bind 3rd edition page 35 */
 
+#define INTERNAL_TYPE_SOA	0
+#define INTERNAL_TYPE_A		1
+#define INTERNAL_TYPE_AAAA	2
+#define INTERNAL_TYPE_MX	3
+#define INTERNAL_TYPE_NS	4
+#define INTERNAL_TYPE_CNAME	5
+#define INTERNAL_TYPE_PTR	6
+#define INTERNAL_TYPE_TXT	7
+#define INTERNAL_TYPE_SPF	8
+#define INTERNAL_TYPE_SRV	9
+#define INTERNAL_TYPE_SSHFP	10
+#define INTERNAL_TYPE_NAPTR	11
+#define INTERNAL_TYPE_DNSKEY	12
+#define INTERNAL_TYPE_DS	13
+#define INTERNAL_TYPE_NSEC	14
+#define INTERNAL_TYPE_RRSIG	15
+#define INTERNAL_TYPE_MAX	16
+
 /* db stuff */
 
 struct dnskey {
@@ -150,24 +168,13 @@ struct domain {
 #define DOMAIN_HAVE_SPF		0x800
 #define DOMAIN_HAVE_SSHFP	0x1000
 #define DOMAIN_HAVE_NAPTR	0x2000
+#define DOMAIN_HAVE_DNSKEY	0x4000
+#define DOMAIN_HAVE_RRSIG	0x8000
+#define DOMAIN_HAVE_DS		0x10000
+#define DOMAIN_HAVE_NSEC	0x20000
 	struct soa soa;			/* start of authority */
-#define INTERNAL_TYPE_SOA	0
-#define INTERNAL_TYPE_A		1
-#define INTERNAL_TYPE_AAAA	2
-#define INTERNAL_TYPE_MX	3
-#define INTERNAL_TYPE_NS	4
-#define INTERNAL_TYPE_CNAME	5
-#define INTERNAL_TYPE_PTR	6
-#define INTERNAL_TYPE_TXT	7
-#define INTERNAL_TYPE_SPF	8
-#define INTERNAL_TYPE_SRV	9
-#define INTERNAL_TYPE_SSHFP	10
-#define INTERNAL_TYPE_NAPTR	11
-#define INTERNAL_TYPE_DNSKEY	12
-#define INTERNAL_TYPE_DS	13
-#define INTERNAL_TYPE_NSEC	14
-#define INTERNAL_TYPE_MAX	15
-	struct rrsig rrsig[INTERNAL_TYPE_MAX];	/* rrsig RR */
+	struct rrsig rrsig[INTERNAL_TYPE_MAX][RECORD_COUNT];	/* rrsig RR */
+	int rrsig_count;			/* RRSIG count */
 	u_int32_t ttl[INTERNAL_TYPE_MAX];	/* time to lives */
 	time_t created;			/* time created, for dynamic zones */
 	in_addr_t a[RECORD_COUNT];	/* IP addresses */

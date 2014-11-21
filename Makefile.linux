@@ -22,6 +22,7 @@ build:
 	$(CC) $(CFLAGS) -c filter.c
 	$(CC) $(CFLAGS) -c ratelimit.c
 	$(CC) $(CFLAGS) -c whitelist.c
+	$(CC) $(CFLAGS) -c base64.c
 	$(AR) -x libressllibcrypto.a libcompat_la-arc4random.o 
 	$(AR) -x libressllibcrypto.a libcompat_la-getentropy_linux.o
 	$(AR) -x libressllibcrypto.a libcompatnoopt_la-explicit_bzero.o
