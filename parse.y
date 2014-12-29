@@ -99,7 +99,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.5 2014/11/21 19:34:31 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.6 2014/12/29 11:26:10 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -2794,7 +2794,7 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 
 /* centroid.eu,soa,3600,uranus.centroid.eu.,pjp.solarscale.de.,1258740680,3600,1800,7200,3600 */
 int
-fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int serial, int retry, int refresh, int expire, int ttl)
+fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int serial, int refresh, int retry, int expire, int ttl)
 {
 	struct domain sdomain;
 	int len, converted_namelen;
