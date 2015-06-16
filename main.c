@@ -79,8 +79,10 @@ u_int16_t		check_qtype(struct domain *, u_int16_t, int, int *);
 char 			*dns_label(char *, int *);
 int			free_question(struct question *);
 char 			*get_dns_type(int dnstype);
-int			get_soa(DB *, struct question *, struct domain *, int);
-int			lookup_zone(DB *, struct question *, struct domain *, int *, char *, int);
+struct domain * 	get_soa(DB *, struct question *);
+struct domain * 	lookup_zone(DB *, struct question *, int *, int *, char *);
+int 			get_record_size(DB *, char *, int);
+void *			find_substruct(struct domain *, u_int16_t);
 void			mainloop(struct cfg *);
 void 			master_reload(int);
 void 			master_shutdown(int);
@@ -172,7 +174,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.2 2014/11/20 22:22:57 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.3 2015/06/16 20:00:06 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1672,167 +1674,87 @@ memcasecmp(u_char *b1, u_char *b2, int len)
  */
 
 
-int
-lookup_zone(DB *db, struct question *question, struct domain *sd, int *lzerrno, char *replystring, int wildcard)
+struct domain *
+lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, char *replystring)
 {
 
+	struct domain *sd;
+	struct domain_ns *nsd;
 	int plen, onemore = 0;
 	int ret = 0;
-	int returnval, error;
+	int error;
 	int w = 0;
+	int rs;
 
-	char *wildlookup = "*";
 	char *p;
 	
 	DBT key, data;
-
-	/*
-	 * if the asked domain name is foo.bar.baz.org then
-	 * lookup foo.bar.baz.org, bar.baz.org, baz.org,
-	 * org and if there is a match return that.
-	 */
 
 	p = question->hdr->name;
 	plen = question->hdr->namelen;
 	onemore = 0;
 
-	returnval = 0;
 
-	do {
+	rs = get_record_size(db, p, plen);
+	if (rs < 0) {
+		*lzerrno = ERR_DROP;
+		return (NULL);
+	}
+	if ((sd = (struct domain *)calloc(1, rs)) == NULL) {
+		*lzerrno = ERR_DROP; /* only free on ERR_DROP */
+		return (NULL);	
+	}
 
-		memset(&key, 0, sizeof(key));
-		memset(&data, 0, sizeof(data));
+	*returnval = 0;
 
-		key.data = (char *)p;
-		key.size = plen;
+	memset(&key, 0, sizeof(key));
+	memset(&data, 0, sizeof(data));
 
-		data.data = NULL;
-		data.size = 0;
+	key.data = (char *)p;
+	key.size = plen;
 
-                ret = db->get(db, NULL, &key, &data, 0);
+	data.data = (char *)sd;
+	data.size = rs;
 
-		if (ret != 0) {
-			if (! wildcard)
-				w = 1;
-			/* next label */
-			if (*p != 0) {
-				plen -= (*p + 1);
-				p = (p + (*p + 1));
-			} else if (*p == 0 && ! onemore) {
-				plen = 1;
-				onemore = 1;
-				continue;
-			}
-		} else {
-		/* we have a match check if the type has an answer, if not we leave */
-			if (data.size != sizeof(struct domain)) {
-				dolog(LOG_INFO, "btree db is damaged, drop\n");
-				*lzerrno = ERR_DROP;
-				return -1;
-			}
+	ret = db->get(db, NULL, &key, &data, 0);
 
-			memcpy((char *)sd, (char *)data.data, data.size);
-			snprintf(replystring, DNS_MAXNAME, "%s", sd->zonename);
+	if (data.size != rs) {
+		dolog(LOG_INFO, "btree db is damaged, drop\n");
+		free(sd);
+		*lzerrno = ERR_DROP;	/* free on ERR_DROP */
+		return (NULL);
+	}
 
-			/*
-			 * If we're not wildcarding and ns_type is 0, NXDOMAIN
-			 */
-			if (! wildcard)
-				if (w && sd->ns_type == 0) {	
-					*lzerrno = ERR_NXDOMAIN;
-					return -1;
-				}
-
-			/*
-			 * we're of ns_type > 0, return an NS record
-			 */
-
-			if (sd->ns_type > 0) {
-				returnval = DNS_TYPE_NS;
-				*lzerrno = ERR_NOERROR;
-				goto out;
-			}
-
-			/*
-			 * check if our record is dynamic (non-static)
-			 * if so, we'll hand it down to the recurse 
-			 * process later on...
-			 */
-
-			if (! (sd->flags & DOMAIN_STATIC_ZONE)) {
-				dolog(LOG_INFO, "non-static zone %s passed to recurse process\n", sd->zonename);
-				*lzerrno = ERR_NOERROR;
-				return (-1);
-			}
+	memcpy((char *)sd, (char *)data.data, data.size);
+	snprintf(replystring, DNS_MAXNAME, "%s", sd->zonename);
 
 
-			returnval = check_qtype(sd, ntohs(question->hdr->qtype), 0, &error);
-			if (returnval == 0) {
-				*lzerrno = ERR_NOERROR;
-				return (-1);
-			}
-
-			break;
+	if (sd->flags & DOMAIN_HAVE_NS) {
+		nsd = (struct domain_ns *)find_substruct(sd, INTERNAL_TYPE_NS);
+		if (w && nsd->ns_type == 0) {	
+			*lzerrno = ERR_NXDOMAIN;
+			return (NULL);
 		}
 
-
-	} while (*p != 0 && ret != 0); 
-
-	if (ret != 0) {
 		/*
-		 * somehow we managed to get here and wildcardding is off
-		 * return with NXDOMAIN
+		 * we're of ns_type > 0, return an NS record
 		 */
-		if (! wildcard) {
-			*lzerrno = ERR_NXDOMAIN;
-			return -1;
-		}
 
-		memset(&key, 0, sizeof(key));
-		memset(&data, 0, sizeof(data));
-
-		key.data = wildlookup;
-		key.size = 1;	
-
-                if ((ret = db->get(db, NULL, &key, &data, 0)) != 0) {
-			db->err(db, ret, "db->get");
-			dolog(LOG_INFO, "don't have wildcard answer\n");
-			*lzerrno = ERR_NXDOMAIN;
-			return -1;
-
-		}	
-		if (data.size != sizeof(struct domain)) {
-			dolog(LOG_INFO, "btree db is damaged, drop\n");
-			*lzerrno = ERR_DROP;
-			return -1;
-		}
-
-		memcpy((char *)sd, (char *)data.data, data.size);
-
-		if (sd->ns_type > 0) {
-			returnval = DNS_TYPE_NS;
+		if (nsd->ns_type > 0) {
+			*returnval = DNS_TYPE_NS;
+			*lzerrno = ERR_NOERROR;
 			goto out;
-		}	
-
-		returnval = check_qtype(sd, ntohs(question->hdr->qtype), 1, &error);
-		if (returnval == 0) {
-			switch (error) {
-			case -2:
-				*lzerrno = ERR_NXDOMAIN;
-				break;
-			case -1:
-				*lzerrno = ERR_NOERROR;
-				break;
-			}
-
-			return (-1);
 		}
+	}
 
-		snprintf(replystring, DNS_MAXNAME, "*");
-	} 
+	*returnval = check_qtype(sd, ntohs(question->hdr->qtype), 0, &error);
+	if (*returnval == 0) {
+		*lzerrno = ERR_NOERROR;
+		return (NULL);
+	}
 
 out:
-	return returnval;
+	return(sd);
 }
 
 /*
@@ -1880,11 +1802,15 @@ build_fake_question(char *name, int namelen, u_int16_t type)
  * GET_SOA - get authoritative soa for a particular domain
  */
 
-int
-get_soa(DB *db, struct question *question, struct domain *sd, int wildcard)
+struct domain *
+get_soa(DB *db, struct question *question)
 {
+	struct domain *sd;
+
 	int plen;
 	int ret = 0;
+	int wildcard = 0;
+	int rs;
 	
 	DBT key, data;
 
@@ -1895,6 +1821,15 @@ get_soa(DB *db, struct question *question, struct domain *sd, int wildcard)
 
 	do {
 
+		rs = get_record_size(db, p, plen);
+		if (rs < 0) {
+			return NULL;
+		}
+
+		if ((sd = calloc(1, rs)) == NULL) {
+			return NULL;
+		}
+
 		memset(&key, 0, sizeof(key));
 		memset(&data, 0, sizeof(data));
 
@@ -1902,40 +1837,43 @@ get_soa(DB *db, struct question *question, struct domain *sd, int wildcard)
 		key.size = plen;
 
 		data.data = NULL;
-		data.size = 0;
+		data.size = rs;
 
-                ret = db->get(db, NULL, &key, &data, 0);
+		ret = db->get(db, NULL, &key, &data, 0);
 		if (ret != 0) {
 			/*
 			 * If we're not wildcarding end the search here and
 			 * return with -1 
 			 */
-                        if (! wildcard) 
-                                return -1;
+			if (! wildcard) 
+				return (NULL);
 
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
+			free (sd);
 			continue;
 		}
 		
-		if (data.size != sizeof(struct domain)) {
+		if (data.size != rs) {
 			dolog(LOG_INFO, "btree db is damaged, drop\n");
-			return -1;
+			free(sd);
+			return (NULL);
 		}
 
 		memcpy((char *)sd, (char *)data.data, data.size);
 
 		if ((sd->flags & DOMAIN_HAVE_SOA) == DOMAIN_HAVE_SOA)  {
 			/* we'll take this one */
-			return 0;	
+			return (sd);	
 		} else {
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
 		} 
 
+		free(sd);
 	} while (*p);
 
-	return -1;
+	return (NULL);
 }
 
 /*
@@ -2027,7 +1965,8 @@ mainloop(struct cfg *cfg)
 
 	struct dns_header *dh;
 	struct question *question, *fakequestion;
-	struct domain sd0, sd1;
+	struct domain *sd0, *sd1;
+	struct domain_cname *csd;
 	
 	struct sreply sreply;
 	struct srecurseheader rh;
@@ -2336,7 +2275,7 @@ mainloop(struct cfg *cfg)
 				/* goto drop beyond this point should goto out instead */
 				fakequestion = NULL;
 
-				if ((type0 = lookup_zone(cfg->db, question, &sd0, &lzerrno, (char *)&replystring, wildcard)) < 0) {
+				if ((sd0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring)) == NULL) {
 	
 					switch (lzerrno) {
 					default:
@@ -2359,15 +2298,19 @@ mainloop(struct cfg *cfg)
 						 * lookup an authoritative soa
 						 */
 
-						memset(&sd0, 0, sizeof(sd0));
-						(void)get_soa(cfg->db, question, &sd0, wildcard);
+						if (sd0)
+							free(sd0);
 
-						build_reply(	&sreply, tnp->so, pbuf, len, 
-										question, from, fromlen, 
-										&sd0, NULL, tnp->region, istcp, 
-										tnp->wildcard, NULL, replybuf);
+						sd0 = get_soa(cfg->db, question);
+						if (sd0 != NULL) {
 
-						slen = reply_noerror(&sreply);
+								build_reply(	&sreply, tnp->so, pbuf, len, 
+												question, from, fromlen, 
+												sd0, NULL, tnp->region, istcp, 
+												tnp->wildcard, NULL, replybuf);
+
+								slen = reply_noerror(&sreply);
+						}
 						goto tcpout;
 
 					}
@@ -2386,24 +2329,29 @@ tcpnxdomain:
 					 * lookup an authoritative soa 
 					 */
 					
-					memset(&sd0, 0, sizeof(sd0));
-					(void)get_soa(cfg->db, question, &sd0, wildcard);
-			
-					build_reply(	&sreply, tnp->so, pbuf, len, question, 
-									from, fromlen, &sd0, NULL, 
-									tnp->region, istcp, tnp->wildcard, NULL,
-									replybuf);
+					if (sd0) 
+						free(sd0);
 
-					slen = reply_nxdomain(&sreply);
+					sd0 = get_soa(cfg->db, question);
+					if (sd0 != NULL) {
+			
+							build_reply(	&sreply, tnp->so, pbuf, len, question, 
+											from, fromlen, sd0, NULL, 
+											tnp->region, istcp, tnp->wildcard, NULL,
+											replybuf);
+
+							slen = reply_nxdomain(&sreply);
+					}
 					goto tcpout;
 				case DNS_TYPE_CNAME:
-					fakequestion = build_fake_question(sd0.cname, sd0.cnamelen, question->hdr->qtype);
+					csd = (struct domain_cname *)find_substruct(sd0, INTERNAL_TYPE_CNAME);
+					fakequestion = build_fake_question(csd->cname, csd->cnamelen, question->hdr->qtype);
 					if (fakequestion == NULL) {	
 						dolog(LOG_INFO, "fakequestion failed\n");
 						break;
 					}
 
-					type1 = lookup_zone(cfg->db, fakequestion, &sd1, &lzerrno, (char *)&fakereplystring, wildcard);
+					sd1 = lookup_zone(cfg->db, fakequestion, &type1, &lzerrno, (char *)&fakereplystring);
 					/* break CNAMES pointing to CNAMES */
 					if (type1 == DNS_TYPE_CNAME)
 						type1 = 0;
@@ -2437,13 +2385,13 @@ tcpnxdomain:
 				case DNS_TYPE_A:
 					if (type0 == DNS_TYPE_CNAME) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, 	\
-							fromlen, &sd0, ((type1 > 0) ? &sd1 : NULL), \
+							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
 							tnp->region, istcp, tnp->wildcard, NULL, replybuf);
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, tnp->so, pbuf, len, question, 
-									from, fromlen, &sd0, NULL, 
+									from, fromlen, sd0, NULL, 
 									tnp->region, istcp, tnp->wildcard, NULL,
 									replybuf);
 
@@ -2451,7 +2399,7 @@ tcpnxdomain:
 						break;
 					} else if (type0 == DNS_TYPE_A) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, &sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+							fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
 							NULL, replybuf);
 						slen = reply_a(&sreply, cfg->db);
 						break;		/* must break here */
@@ -2461,7 +2409,7 @@ tcpnxdomain:
 
 				case DNS_TYPE_ANY:
 					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, &sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
 						NULL, replybuf);
 
 					slen = reply_any(&sreply);
@@ -2471,19 +2419,19 @@ tcpnxdomain:
 					
 					if (type0 == DNS_TYPE_CNAME) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, &sd0, ((type1 > 0) ? &sd1 : NULL), \
+							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
 							tnp->region, istcp, tnp->wildcard, NULL, replybuf);
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 						break;
 					 } else if (type0 == DNS_TYPE_AAAA) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, 
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_aaaa(&sreply, cfg->db);
@@ -2495,14 +2443,14 @@ tcpnxdomain:
 					
 					if (type0 == DNS_TYPE_CNAME) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, &sd0, ((type1 > 0) ? &sd1 : NULL), \
+							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
 							tnp->region, istcp, tnp->wildcard, NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 
 					} else if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -2510,7 +2458,7 @@ tcpnxdomain:
 						break;
 					} else if (type0 == DNS_TYPE_MX) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_mx(&sreply, cfg->db);
@@ -2521,13 +2469,13 @@ tcpnxdomain:
 				case DNS_TYPE_SOA:
 					if (type0 == DNS_TYPE_SOA) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_soa(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -2537,7 +2485,7 @@ tcpnxdomain:
 				case DNS_TYPE_NS:
 					if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -2547,7 +2495,7 @@ tcpnxdomain:
 				case DNS_TYPE_SSHFP:
 					if (type0 == DNS_TYPE_SSHFP) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_sshfp(&sreply);
@@ -2558,7 +2506,7 @@ tcpnxdomain:
 				case DNS_TYPE_SRV:
 					if (type0 == DNS_TYPE_SRV) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_srv(&sreply, cfg->db);
@@ -2568,7 +2516,7 @@ tcpnxdomain:
 				case DNS_TYPE_NAPTR:
 					if (type0 == DNS_TYPE_NAPTR) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_naptr(&sreply, cfg->db);
@@ -2578,13 +2526,13 @@ tcpnxdomain:
 				case DNS_TYPE_CNAME:
 					if (type0 == DNS_TYPE_CNAME) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -2595,7 +2543,7 @@ tcpnxdomain:
 				case DNS_TYPE_PTR:
 					if (type0 == DNS_TYPE_CNAME) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, &sd0, ((type1 > 0) ? &sd1 : NULL) \
+							fromlen, sd0, ((type1 > 0) ? sd1 : NULL) \
 							, tnp->region, istcp, tnp->wildcard, NULL,
 							replybuf);
 
@@ -2604,7 +2552,7 @@ tcpnxdomain:
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -2613,7 +2561,7 @@ tcpnxdomain:
 					} else if (type0 == DNS_TYPE_PTR) {
 
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, 	
-								fromlen, &sd0, NULL, tnp->region, istcp, 
+								fromlen, sd0, NULL, tnp->region, istcp, 
 								tnp->wildcard, NULL, replybuf);
 
 						slen = reply_ptr(&sreply);
@@ -2625,7 +2573,7 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_TXT) {
 
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, &sd0, NULL, tnp->region, istcp, 
+							fromlen, sd0, NULL, tnp->region, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_txt(&sreply);
@@ -2636,7 +2584,7 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_SPF) {
 
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, &sd0, NULL, tnp->region, istcp, 	
+							fromlen, sd0, NULL, tnp->region, istcp, 	
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_spf(&sreply);
@@ -2656,7 +2604,7 @@ tcpnxdomain:
 					
 					if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, &sd0, NULL, aregion, istcp, 
+							fromlen, sd0, NULL, aregion, istcp, 
 							tnp->wildcard, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -2683,6 +2631,15 @@ tcpnxdomain:
 				}
 	
 				free_question(question);
+				
+				if (sd0) {
+					free(sd0);
+					sd0 = NULL;
+				}
+				if (sd1) {
+					free (sd1);
+					sd1 = NULL;
+				}
 
 			}	/* END ISSET */
 
@@ -2896,7 +2853,7 @@ axfrentry:
 				/* goto drop beyond this point should goto out instead */
 				fakequestion = NULL;
 
-				if ((type0 = lookup_zone(cfg->db, question, &sd0, &lzerrno, (char *)&replystring, wildcard)) < 0) {
+				if ((sd0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring)) != NULL) {
 					switch (lzerrno) {
 					default:
 						dolog(LOG_INFO, "invalid lzerrno! dropping\n");
@@ -2926,14 +2883,18 @@ axfrentry:
 							 * lookup an authoritative soa
 							 */
 
-							memset(&sd0, 0, sizeof(sd0));
-							(void)get_soa(cfg->db, question, &sd0, wildcard);
+							if (sd0)
+								free (sd0);
+						
+							sd0 = get_soa(cfg->db, question);
+							if (sd0 != NULL) {
 
-							build_reply(&sreply, so, buf, len, question, from, \
-								fromlen, &sd0, NULL, aregion, istcp, wildcard, 
-								NULL, replybuf);
+									build_reply(&sreply, so, buf, len, question, from, \
+										fromlen, sd0, NULL, aregion, istcp, wildcard, 
+										NULL, replybuf);
 
-							slen = reply_noerror(&sreply);
+									slen = reply_noerror(&sreply);
+							}
 							goto udpout;
 						} /* else rflag */
 					}
@@ -2961,24 +2922,28 @@ udpnxdomain:
 							 * lookup an authoritative soa 
 							 */
 					
-							memset(&sd0, 0, sizeof(sd0));
-							(void)get_soa(cfg->db, question, &sd0, wildcard);
-					
-							build_reply(&sreply, so, buf, len, question, from, \
-									fromlen, &sd0, NULL, aregion, istcp, \
-									wildcard, NULL, replybuf);
+							if (sd0)
+								free(sd0);
+	
+							sd0 = get_soa(cfg->db, question);
+							if (sd0 != NULL) {
+									build_reply(&sreply, so, buf, len, question, from, \
+											fromlen, sd0, NULL, aregion, istcp, \
+											wildcard, NULL, replybuf);
 
-							slen = reply_nxdomain(&sreply);
+									slen = reply_nxdomain(&sreply);
+							}
 							goto udpout;
 					} /* else rflag */
 				case DNS_TYPE_CNAME:
-					fakequestion = build_fake_question(sd0.cname, sd0.cnamelen, question->hdr->qtype);
+					csd = (struct domain_cname *)find_substruct(sd0, INTERNAL_TYPE_CNAME);
+					fakequestion = build_fake_question(csd->cname, csd->cnamelen, question->hdr->qtype);
 					if (fakequestion == NULL) {	
 						dolog(LOG_INFO, "fakequestion failed\n");
 						break;
 					}
 
-					type1 = lookup_zone(cfg->db, fakequestion, &sd1, &lzerrno, (char *)&fakereplystring, wildcard);
+					sd1 = lookup_zone(cfg->db, fakequestion, &type1, &lzerrno, (char *)&fakereplystring);
 					/* break CNAMES pointing to CNAMES */
 					if (type1 == DNS_TYPE_CNAME)
 						type1 = 0;
@@ -3013,14 +2978,14 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_CNAME) {
 
 						build_reply(&sreply, so, buf, len, question, from, 	\
-							fromlen, &sd0, ((type1 > 0) ? &sd1 : NULL), \
+							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
 							aregion, istcp, wildcard, NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3028,7 +2993,7 @@ udpnxdomain:
 					} else if (type0 == DNS_TYPE_A) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, 
+							fromlen, sd0, NULL, aregion, istcp, wildcard, 
 							NULL, replybuf);
 
 						slen = reply_a(&sreply, cfg->db);
@@ -3040,7 +3005,7 @@ udpnxdomain:
 				case DNS_TYPE_ANY:
 
 					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, &sd0, NULL, aregion, istcp, wildcard, NULL,
+						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
 						replybuf);
 
 					slen = reply_any(&sreply);
@@ -3051,14 +3016,14 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_CNAME) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, ((type1 > 0) ? &sd1 : NULL), \
+							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
 							aregion, istcp, wildcard, NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3066,7 +3031,7 @@ udpnxdomain:
 					 } else if (type0 == DNS_TYPE_AAAA) {
 
 						build_reply(&sreply, so, buf, len, question, from, 
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, 
+							fromlen, sd0, NULL, aregion, istcp, wildcard, 
 							NULL, replybuf);
 
 						slen = reply_aaaa(&sreply, cfg->db);
@@ -3079,21 +3044,21 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_CNAME) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, ((type1 > 0) ? &sd1 : NULL), \
+							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
 							aregion, istcp, wildcard, NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 	   				} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 						break;
 					} else if (type0 == DNS_TYPE_MX) {
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 						slen = reply_mx(&sreply, cfg->db);
 						break;		/* must break here */
@@ -3104,14 +3069,14 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_SOA) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_soa(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3122,7 +3087,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3132,7 +3097,7 @@ udpnxdomain:
 				case DNS_TYPE_SSHFP:
 					if (type0 == DNS_TYPE_SSHFP) {
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_sshfp(&sreply);
@@ -3144,7 +3109,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_SRV) {
 
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_srv(&sreply, cfg->db);
@@ -3155,7 +3120,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_NAPTR) {
 
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_naptr(&sreply, cfg->db);
@@ -3166,14 +3131,14 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_CNAME) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3185,14 +3150,14 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_CNAME) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, ((type1 > 0) ? &sd1 : NULL) \
+							fromlen, sd0, ((type1 > 0) ? sd1 : NULL) \
 							, aregion, istcp, wildcard, NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3200,7 +3165,7 @@ udpnxdomain:
 					} else if (type0 == DNS_TYPE_PTR) {
 
 						build_reply(&sreply, so, buf, len, question, from, 	
-								fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+								fromlen, sd0, NULL, aregion, istcp, wildcard, \
 								NULL, replybuf);
 
 						slen = reply_ptr(&sreply);
@@ -3211,7 +3176,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_TXT) {
 
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_txt(&sreply);
@@ -3221,7 +3186,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_SPF) {
 
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_spf(&sreply);
@@ -3239,7 +3204,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, &sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3271,6 +3236,15 @@ udpnxdomain:
 				}
 	
 				free_question(question);
+
+				if (sd0) {
+					free (sd0);
+					sd0 = NULL;
+				}
+				if (sd1) {
+					free (sd1);
+					sd1 = NULL;
+				}
 
 			}	/* END ISSET */
 
@@ -3691,4 +3665,126 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 	}
 
 	return (returnval);
+}
+
+int 
+get_record_size(DB *db, char *converted_name, int converted_namelen)
+{
+	struct domain *sdomain;
+	DBT key, data;
+
+	memset(&key, 0, sizeof(key));
+	memset(&data, 0, sizeof(data));
+
+	key.data = (char *)converted_name;
+	key.size = converted_namelen;
+
+	data.data = NULL;
+	data.size = sizeof(struct domain);
+
+	if (db->get(db, NULL, &key, &data, 0) == 0) {
+
+		if (data.size != sizeof(struct domain)) {
+			dolog(LOG_INFO, "damaged btree database\n");
+			return -1;
+		}
+
+		sdomain = (struct domain *)data.data;
+		return (sdomain->len);
+	} else {
+		if (debug)
+			dolog(LOG_INFO, "db->get: %s\n", strerror(errno));
+	}
+
+	return -1;
+}
+
+/* find a substruct in struct domain, first match wins */
+
+void *
+find_substruct(struct domain *ssd, u_int16_t type)
+{
+	struct domain_generic *sdg;
+	void *ptr;
+
+	switch (type) {
+	case INTERNAL_TYPE_SOA:
+		if (! (ssd->flags & DOMAIN_HAVE_SOA))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_A:
+		if (! (ssd->flags & DOMAIN_HAVE_A))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_AAAA:
+		if (! (ssd->flags & DOMAIN_HAVE_AAAA))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_MX:
+		if (! (ssd->flags & DOMAIN_HAVE_MX))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_NS:
+		if (! (ssd->flags & DOMAIN_HAVE_NS))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_CNAME:
+		if (! (ssd->flags & DOMAIN_HAVE_CNAME))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_PTR:
+		if (! (ssd->flags & DOMAIN_HAVE_PTR))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_TXT:
+		if (! (ssd->flags & DOMAIN_HAVE_TXT))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_SPF:
+		if (! (ssd->flags & DOMAIN_HAVE_SPF))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_SRV:
+		if (! (ssd->flags & DOMAIN_HAVE_SRV))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_SSHFP:
+		if (! (ssd->flags & DOMAIN_HAVE_SSHFP))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_NAPTR:
+		if (! (ssd->flags & DOMAIN_HAVE_NAPTR))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_DNSKEY:
+		if (! (ssd->flags & DOMAIN_HAVE_DNSKEY))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_DS:
+		if (! (ssd->flags & DOMAIN_HAVE_DS))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_NSEC:
+		if (! (ssd->flags & DOMAIN_HAVE_NSEC))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_RRSIG:
+		if (! (ssd->flags & DOMAIN_HAVE_RRSIG))
+			return NULL;
+		break;
+	default:
+		return NULL;
+		break;
+	}
+	
+	for (sdg = (struct domain_generic *)(ssd + sizeof(struct domain)); \
+		sdg <= (struct domain_generic *)(ssd + ssd->len); \
+		sdg += sdg->len) {
+		if (type == sdg->type) {
+			ptr = (void *)sdg;
+			return (ptr);
+		}
+	}
+
+	return NULL;
 }
