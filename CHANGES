@@ -2,6 +2,10 @@ Changes in RELEASE_1_0 from BETA_9
 
 - name change from wildcarddnsd to delphinusdnsd
 - fixed the long standing bug that assumed one time to live for all RRSETs in a domain name (ttl fix)
+- internal database has been changed in it's ABI
+- wildcarding is off for good (due to DNSSEC)
+- split-horizon for A records is gone, (may be added back one day)
+
 
 Changes in BETA_9 from BETA_8
 
