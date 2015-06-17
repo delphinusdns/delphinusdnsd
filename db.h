@@ -150,6 +150,7 @@ struct naptr {
 } __attribute__((packed));
 
 struct domain {
+	u_int16_t type;
 	u_int32_t len;
 	char zone[DNS_MAXNAME];		/* name of zone in dns name format */
 	int zonelen;			/* length of zone, above */
@@ -196,18 +197,18 @@ struct domain {
 
 struct domain_generic {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 } __attribute__((packed));
 
 struct domain_soa {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	struct soa soa;			/* start of authority */
 } __attribute__((packed));
 
 struct domain_rrsig {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	struct rrsig rrsig[INTERNAL_TYPE_MAX];	/* rrsig RR */
 	int rrsig_count;			/* RRSIG count */
 } __attribute__((packed));
@@ -215,7 +216,7 @@ struct domain_rrsig {
 
 struct domain_a {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	in_addr_t a[RECORD_COUNT];	/* IP addresses */
 	u_int8_t region[RECORD_COUNT];	/* region of IP address */
 	int a_ptr;			/* pointer to last used address */
@@ -224,7 +225,7 @@ struct domain_a {
 
 struct domain_aaaa {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	struct in6_addr	aaaa[RECORD_COUNT];	/* IPv6 addresses */
 	int aaaa_count;			/* IPv6 address count (max 10) */
 	int aaaa_ptr;			/* pointer to last used IPv6 address */
@@ -232,7 +233,7 @@ struct domain_aaaa {
 
 struct domain_mx {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	struct smx mx[RECORD_COUNT];	/* MX addresses */
 	int mx_count;			/* MX address count, max 10 */
 	int mx_ptr;			/* pointer to last used MX adddress */
@@ -240,7 +241,7 @@ struct domain_mx {
 
 struct domain_ns {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	struct ns ns[RECORD_COUNT];	/* NS resource records (max 10) */
 	int ns_count;			/* count of NS records, (max 10) */
 	int ns_ptr;			/* pointer to last used NS address */
@@ -251,69 +252,69 @@ struct domain_ns {
 
 struct domain_cname {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	char cname[DNS_MAXNAME];		/* CNAME RR */
 	int cnamelen;				/* len of CNAME */
 } __attribute__((packed));
 
 struct domain_ptr {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	char ptr[DNS_MAXNAME];			/* PTR RR */
 	int ptrlen;				/* len of PTR */
 } __attribute__((packed));
 
 struct domain_txt {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	char txt[DNS_MAXNAME];			/* TXT string */
 	int txtlen;				/* len of TXT */
 } __attribute__((packed));
 
 struct domain_spf {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	char spf[DNS_MAXNAME];			/* SPF string */
 	int spflen;				/* len of SPF */
 } __attribute__((packed));
 
 struct domain_srv {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	struct srv srv[RECORD_COUNT];		/* SRV resource record */
 	int srv_count;				/* count of SRV RR */
 } __attribute__((packed));
 
 struct domain_sshfp {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	struct sshfp sshfp[RECORD_COUNT];	/* SSHFP resource record */
 	int sshfp_count;			/* SSHFP RR count */
 } __attribute__((packed));
 
 struct domain_naptr {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	struct naptr naptr[RECORD_COUNT];	/* NAPTR RR, eek 20K! */
 	int naptr_count;
 } __attribute__((packed));
 
 struct domain_dnskey {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	struct dnskey dnskey[RECORD_COUNT];	/* DNSKEY RR */
 	int dnskey_count;			/* count of DNSKEY */
 } __attribute__((packed));
 
 struct domain_nsec {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	struct nsec nsec;			/* NSEC RR */
 } __attribute__((packed));
 
 struct domain_ds {
 	u_int16_t type;
-	u_int16_t len;
+	u_int32_t len;
 	struct ds ds;				/* DS RR */
 } __attribute__((packed));
 

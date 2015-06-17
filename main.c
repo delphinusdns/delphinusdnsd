@@ -174,7 +174,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.4 2015/06/17 06:47:27 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.5 2015/06/17 11:44:39 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -417,9 +417,6 @@ main(int argc, char *argv[])
 	/* end of setup_master code */
 		
 	init_wildcard();
-#if 0
-	init_recurse();
-#endif
 	init_region();
 	init_filter();
 	init_whitelist();
@@ -966,9 +963,6 @@ main(int argc, char *argv[])
 						}
 						close (sp[1]);	
 
-#if 0
-						recurseloop(sp[0], (int *)&raw, db);
-#endif
 						/* NOTREACHED */
 						break;
 
@@ -1029,9 +1023,6 @@ main(int argc, char *argv[])
 				}
 				close (sp[1]);	
 
-#if 0
-				recurseloop(sp[0], (int *)&raw, db);
-#endif
 				/* NOTREACHED */
 				break;
 
@@ -1056,9 +1047,6 @@ main(int argc, char *argv[])
 
 		cfg->ident[i] = strdup(ident[i]);
 	}
-#if 0
-	cfg->recurse = (rflag ? sp[1] : -1);
-#endif
 	cfg->log = lfd;
 
 
@@ -1698,10 +1686,12 @@ lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, cha
 	rs = get_record_size(db, p, plen);
 	if (rs < 0) {
 		*lzerrno = ERR_DROP;
+		*returnval = -1;
 		return (NULL);
 	}
 	if ((sd = (struct domain *)calloc(1, rs)) == NULL) {
 		*lzerrno = ERR_DROP; /* only free on ERR_DROP */
+		*returnval = -1;
 		return (NULL);	
 	}
 
@@ -1713,15 +1703,21 @@ lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, cha
 	key.data = (char *)p;
 	key.size = plen;
 
-	data.data = (char *)sd;
+	data.data = NULL;
 	data.size = rs;
 
 	ret = db->get(db, NULL, &key, &data, 0);
-
+	if (ret != 0) {
+		*lzerrno = ERR_NXDOMAIN;
+		*returnval = -1;
+		return (sd);
+	}
+	
 	if (data.size != rs) {
 		dolog(LOG_INFO, "btree db is damaged, drop\n");
 		free(sd);
 		*lzerrno = ERR_DROP;	/* free on ERR_DROP */
+		*returnval = -1;
 		return (NULL);
 	}
 
@@ -1733,7 +1729,8 @@ lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, cha
 		nsd = (struct domain_ns *)find_substruct(sd, INTERNAL_TYPE_NS);
 		if (w && nsd->ns_type == 0) {	
 			*lzerrno = ERR_NXDOMAIN;
-			return (NULL);
+			*returnval = -1;
+			return (sd);
 		}
 
 		/*
@@ -1750,7 +1747,8 @@ lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, cha
 	*returnval = check_qtype(sd, ntohs(question->hdr->qtype), 0, &error);
 	if (*returnval == 0) {
 		*lzerrno = ERR_NOERROR;
-		return (NULL);
+		*returnval = -1;
+		return (sd);
 	}
 
 out:
@@ -2275,7 +2273,8 @@ mainloop(struct cfg *cfg)
 				/* goto drop beyond this point should goto out instead */
 				fakequestion = NULL;
 
-				if ((sd0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring)) == NULL) {
+				sd0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring);
+				if (type0 < 0) {
 	
 					switch (lzerrno) {
 					default:
@@ -2328,11 +2327,6 @@ tcpnxdomain:
 					/* 
 					 * lookup an authoritative soa 
 					 */
-					
-					if (sd0) 
-						free(sd0);
-
-					sd0 = get_soa(cfg->db, question);
 					if (sd0 != NULL) {
 			
 							build_reply(	&sreply, tnp->so, pbuf, len, question, 
@@ -2752,12 +2746,6 @@ axfrentry:
 					if (whitelist) {
 						blacklist = find_whitelist((struct sockaddr_storage *)sin6, AF_INET6);
 					}
-#if 0
-					if (rflag) {
-						recursion = find_recurse((struct sockaddr_storage *)sin6, AF_INET6);
-						recurseheader(&rh, IPPROTO_UDP, (struct sockaddr_storage*)sin6, &sto, AF_INET6);
-					}
-#endif
 				} else if (from->sa_family == AF_INET) {
 					is_ipv6 = 0;
 					
@@ -2777,12 +2765,6 @@ axfrentry:
 						blacklist = find_whitelist((struct sockaddr_storage *)sin, AF_INET);
 					}
 
-#if 0
-					if (rflag) {
-						recursion = find_recurse((struct sockaddr_storage *)sin, AF_INET);
-						recurseheader(&rh, IPPROTO_UDP, (struct sockaddr_storage*)sin, &sto, AF_INET);
-					}
-#endif
 				} else {
 					dolog(LOG_INFO, "packet received on descriptor %u interface \"%s\" had weird address family (%u), drop\n", so, cfg->ident[i], from->sa_family);
 					goto drop;
@@ -2853,7 +2835,8 @@ axfrentry:
 				/* goto drop beyond this point should goto out instead */
 				fakequestion = NULL;
 
-				if ((sd0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring)) != NULL) {
+				sd0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring);
+				if (type0 < 0) {
 					switch (lzerrno) {
 					default:
 						dolog(LOG_INFO, "invalid lzerrno! dropping\n");
@@ -2903,38 +2886,24 @@ axfrentry:
 				switch (type0) {
 				case 0:
 udpnxdomain:
-					if (rflag && recursion) {
-							snprintf(replystring, DNS_MAXNAME, "RECURSE");
-							if (send(sp, (char *)&rh, sizeof(rh), 0) < 0) {
-								dolog(LOG_INFO, "send sp: %s\n", strerror(errno));
-							}
+						/*
+						 * lookup_zone could not find an RR for the
+						 * question at all -> nxdomain
+						 */
+						snprintf(replystring, DNS_MAXNAME, "NXDOMAIN");
 
-							goto udpout;
-					} else {
-
-							/*
-							 * lookup_zone could not find an RR for the
-							 * question at all -> nxdomain
-							 */
-							snprintf(replystring, DNS_MAXNAME, "NXDOMAIN");
-
-							/* 
-							 * lookup an authoritative soa 
-							 */
+						/* 
+						 * lookup an authoritative soa 
+						 */
 					
-							if (sd0)
-								free(sd0);
-	
-							sd0 = get_soa(cfg->db, question);
-							if (sd0 != NULL) {
-									build_reply(&sreply, so, buf, len, question, from, \
-											fromlen, sd0, NULL, aregion, istcp, \
-											wildcard, NULL, replybuf);
+						if (sd0 != NULL) {
+								build_reply(&sreply, so, buf, len, question, from, \
+								fromlen, sd0, NULL, aregion, istcp, \
+								wildcard, NULL, replybuf);
 
-									slen = reply_nxdomain(&sreply);
-							}
-							goto udpout;
-					} /* else rflag */
+								slen = reply_nxdomain(&sreply);
+						}
+						goto udpout;
 				case DNS_TYPE_CNAME:
 					csd = (struct domain_cname *)find_substruct(sd0, INTERNAL_TYPE_CNAME);
 					fakequestion = build_fake_question(csd->cname, csd->cnamelen, question->hdr->qtype);
@@ -3003,7 +2972,6 @@ udpnxdomain:
 					break;
 
 				case DNS_TYPE_ANY:
-
 					build_reply(&sreply, so, buf, len, question, from, \
 						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
 						replybuf);
@@ -3683,12 +3651,6 @@ get_record_size(DB *db, char *converted_name, int converted_namelen)
 	data.size = sizeof(struct domain);
 
 	if (db->get(db, NULL, &key, &data, 0) == 0) {
-
-		if (data.size != sizeof(struct domain)) {
-			dolog(LOG_INFO, "damaged btree database\n");
-			return -1;
-		}
-
 		sdomain = (struct domain *)data.data;
 		return (sdomain->len);
 	} else {
@@ -3696,7 +3658,7 @@ get_record_size(DB *db, char *converted_name, int converted_namelen)
 			dolog(LOG_INFO, "db->get: %s\n", strerror(errno));
 	}
 
-	return -1;
+	return sizeof(struct domain);
 }
 
 /* find a substruct in struct domain, first match wins */
@@ -3704,8 +3666,9 @@ get_record_size(DB *db, char *converted_name, int converted_namelen)
 void *
 find_substruct(struct domain *ssd, u_int16_t type)
 {
-	struct domain_generic *sdg;
-	void *ptr;
+	struct domain_generic *sdg = NULL;
+	void *ptr = NULL;
+	void *vssd = (void *)ssd;
 
 	switch (type) {
 	case INTERNAL_TYPE_SOA:
@@ -3777,11 +3740,11 @@ find_substruct(struct domain *ssd, u_int16_t type)
 		break;
 	}
 	
-	for (sdg = (struct domain_generic *)(ssd + sizeof(struct domain)); \
-		sdg <= (struct domain_generic *)(ssd + ssd->len); \
-		sdg += sdg->len) {
+	for (ptr = (void *)(vssd + sizeof(struct domain)); \
+		ptr <= (void *)(vssd + ssd->len); \
+		ptr += sdg->len) {
+		sdg = (struct domain_generic *)ptr;
 		if (type == sdg->type) {
-			ptr = (void *)sdg;
 			return (ptr);
 		}
 	}
