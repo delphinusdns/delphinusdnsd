@@ -28,7 +28,7 @@
 #ifndef _DB_H
 #define _DB_H
 
-#define CONFFILE "/etc/wildcarddns.conf"
+#define CONFFILE "/etc/delphinusdns.conf"
 #define DEFAULT_SOCKET 64
 
 #define ERR_DROP	0x1
