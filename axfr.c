@@ -100,7 +100,7 @@ static struct notifyentry {
 } *notn2, *notnp;
 
 
-static const char rcsid[] = "$Id: axfr.c,v 1.4 2015/06/17 12:18:53 pjp Exp $";
+static const char rcsid[] = "$Id: axfr.c,v 1.5 2015/06/17 12:55:47 pjp Exp $";
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list
@@ -1302,12 +1302,6 @@ gather_notifydomains(DB *db)
 	}
 
 	do {
-		if (data.size != sizeof(struct domain)) {
-			dolog(LOG_INFO, "btree db is damaged\n");
-			cursor->c_close(cursor);
-			return;
-		}
-
 		sd = (struct domain *)data.data;
 
 		if ((sd->flags & DOMAIN_HAVE_SOA) == DOMAIN_HAVE_SOA) {
