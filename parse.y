@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.9 2015/06/17 11:44:39 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.10 2015/06/17 12:40:05 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -1781,7 +1781,11 @@ fill_cname(char *name, char *type, int myttl, char *hostname)
 	ssd_cname = (struct domain_cname *) find_substruct(ssd, INTERNAL_TYPE_CNAME);
 	if (ssd_cname == NULL) {
 		rs += sizeof(struct domain_cname);	
+#ifdef __OpenBSD__
 		tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
 		if (tp == NULL)
 			return -1;
 		sdomain = tp;
@@ -1874,7 +1878,11 @@ fill_ptr(char *name, char *type, int myttl, char *hostname)
 	ssd_ptr = (struct domain_ptr *) find_substruct(ssd, INTERNAL_TYPE_PTR);
         if (ssd_ptr == NULL) {
                 rs += sizeof(struct domain_ptr);
+#ifdef __OpenBSD__
                 tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
                 if (tp == NULL)
                         return -1;
                 sdomain = tp;
@@ -1970,7 +1978,11 @@ fill_spf(char *name, char *type, int myttl, char *msg)
         ssd_spf = (struct domain_spf *) find_substruct(ssd, INTERNAL_TYPE_SPF);
         if (ssd_spf == NULL) {
                 rs += sizeof(struct domain_spf);
+#ifdef __OpenBSD__
                 tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
                 if (tp == NULL)
                         return -1;
                 sdomain = tp;
@@ -2048,7 +2060,11 @@ fill_dnskey(char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t p
         ssd_dnskey = (struct domain_dnskey *) find_substruct(ssd, INTERNAL_TYPE_DNSKEY);
         if (ssd_dnskey == NULL) {
                 rs += sizeof(struct domain_dnskey);
+#ifdef __OpenBSD__
                 tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
                 if (tp == NULL)
                         return -1;
                 sdomain = tp;
@@ -2147,7 +2163,11 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
         ssd_rrsig = (struct domain_rrsig *) find_rrsig_substruct(ssd, DNS_TYPE_RRSIG, rr->type);
         if (ssd_rrsig == NULL) {
                 rs += sizeof(struct domain_rrsig);
+#ifdef __OpenBSD__
                 tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
                 if (tp == NULL)
                         return -1;
                 sdomain = tp;
@@ -2254,7 +2274,11 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
         ssd_ds = (struct domain_ds *) find_substruct(ssd, INTERNAL_TYPE_DS);
         if (ssd_ds == NULL) {
                 rs += sizeof(struct domain_ds);
+#ifdef __OpenBSD__
                 tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
                 if (tp == NULL)
                         return -1;
                 sdomain = tp;
@@ -2356,7 +2380,11 @@ fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitma
 	ssd_nsec = (struct domain_nsec *)find_substruct(ssd, INTERNAL_TYPE_NSEC);
 	if (ssd_nsec == NULL) {
 		rs += sizeof(struct domain_nsec);
+#ifdef __OpenBSD__
 		tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
 		if (tp == NULL) {
 			dolog(LOG_INFO, "reallocarray failed\n");
 			free (sdomain);
@@ -2451,7 +2479,11 @@ fill_naptr(char *name, char *type, int myttl, int order, int preference, char *f
 	ssd_naptr = (struct domain_naptr *)find_substruct(ssd, INTERNAL_TYPE_NAPTR);
 	if (ssd_naptr == NULL) {
 		rs += sizeof(struct domain_naptr);
+#ifdef __OpenBSD__
 		tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
 		if (tp == NULL) 
 			return -1;
 	
@@ -2557,7 +2589,11 @@ fill_txt(char *name, char *type, int myttl, char *msg)
 	ssd_txt = (struct domain_txt *) find_substruct(ssd, INTERNAL_TYPE_TXT);
 	if (ssd_txt == NULL) {
 		rs += sizeof(struct domain_txt);
+#ifdef __OpenBSD__
 		tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
 		if (tp == NULL) {
 			free(sdomain);
 			return -1;
@@ -2638,7 +2674,11 @@ fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerp
 	ssd_sshfp = (struct domain_sshfp *)find_substruct(ssd, INTERNAL_TYPE_SSHFP);
 	if (ssd_sshfp == NULL) {
 		rs += sizeof(struct domain_sshfp);
+#ifdef __OpenBSD__
 		tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
 		if (tp == NULL) {
 			free (sdomain);
 			return -1;
@@ -2750,7 +2790,11 @@ fill_srv(char *name, char *type, int myttl, int priority, int weight, int port, 
 	ssd_srv = (struct domain_srv *)find_substruct(ssd, INTERNAL_TYPE_SRV);
 	if (ssd_srv == NULL) {
 		rs += sizeof(struct domain_srv);
+#ifdef __OpenBSD__
 		tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
 		if (tp == NULL) {
 			free (sdomain);
 			return -1;
@@ -2857,7 +2901,11 @@ fill_mx(char *name, char *type, int myttl, int priority, char *mxhost)
 	if (ssd_mx == NULL) {
 
 		rs += sizeof(struct domain_mx);
+#ifdef __OpenBSD__
 		tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
 		if (tp == NULL) {
 			free (sdomain);
 			return -1;
@@ -2953,7 +3001,11 @@ fill_a(char *name, char *type, int myttl, char *a)
 	ssd_a = (struct domain_a *)find_substruct(ssd, INTERNAL_TYPE_A);
 	if (ssd_a == NULL) {
 		rs += sizeof(struct domain_a);
+#ifdef __OpenBSD__
 		tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
 		if (tp == NULL) {
 			free (sdomain);
 			return -1;
@@ -3051,7 +3103,11 @@ fill_aaaa(char *name, char *type, int myttl, char *aaaa)
 	if (ssd_aaaa == NULL) {
 
 			rs += sizeof(struct domain_aaaa);	
+#ifdef __OpenBSD__
 			tp = reallocarray(sdomain, 1, rs);
+#else
+			tp = realloc(sdomain, rs);
+#endif
 			if (tp == NULL) {
 				free (sdomain);
 				return -1;
@@ -3156,7 +3212,11 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 	ssd_ns = (struct domain_ns *) find_substruct(ssd, INTERNAL_TYPE_NS);
 	if (ssd_ns == NULL) {
 			rs += sizeof(struct domain_ns);
+#ifdef __OpenBSD__
 			tp = reallocarray(sdomain, 1, rs);
+#else
+			tp = realloc(sdomain, rs);
+#endif
 			if (tp == NULL) {
 				free (sdomain);
 				return -1;
@@ -3273,7 +3333,11 @@ fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int seria
 	ssd_soa = (struct domain_soa *)find_substruct(ssd, INTERNAL_TYPE_SOA);
 	if (ssd_soa == NULL) {
 		rs += sizeof(struct domain_soa);
+#ifdef __OpenBSD__
 		tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
 		if (tp == NULL) {
 			if (debug)
 				dolog(LOG_DEBUG, "reallocarray failed %s\n", strerror(errno));
