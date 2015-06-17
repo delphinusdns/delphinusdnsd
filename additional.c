@@ -35,9 +35,11 @@ int additional_mx(char *, int, struct domain *, char *, int, int, int *);
 int additional_opt(struct question *, char *, int, int);
 int additional_ptr(char *, int, struct domain *, char *, int, int, int *);
 
-extern int compress_label(u_char *, int, int);
+extern int 		compress_label(u_char *, int, int);
+extern void *		find_substruct(struct domain *, u_int16_t);
 
-static const char rcsid[] = "$Id: additional.c,v 1.2 2014/11/20 22:22:57 pjp Exp $";
+
+static const char rcsid[] = "$Id: additional.c,v 1.3 2015/06/17 06:45:09 pjp Exp $";
 
 
 /*
@@ -60,8 +62,13 @@ additional_a(char *name, int namelen, struct domain *sd, char *reply, int replyl
 	} __attribute__((packed));
 
 	struct answer *answer;
+	struct domain_a *sda = NULL;
 
 	*retcount = 0;
+
+	if ((sda = (struct domain_a *)find_substruct(sd, INTERNAL_TYPE_A)) == NULL)
+		return -1;
+	
 
 	/*
 	 * We loop through our sd->a entries starting at the ptr offset
@@ -69,7 +76,7 @@ additional_a(char *name, int namelen, struct domain *sd, char *reply, int replyl
 	 * in the last loop.  This will shift answers based on a_ptr.
 	 */
 
-	for (a_count = sd->a_ptr; a_count < sd->a_count; a_count++) {
+	for (a_count = sda->a_ptr; a_count < sda->a_count; a_count++) {
 		rroffset = offset;
 		if ((offset + namelen) > replylen)
 			goto out;
@@ -94,13 +101,13 @@ additional_a(char *name, int namelen, struct domain *sd, char *reply, int replyl
 
 		answer->rdlength = htons(sizeof(in_addr_t));
 
-		memcpy((char *)&answer->rdata, (char *)&sd->a[a_count], sizeof(in_addr_t));
+		memcpy((char *)&answer->rdata, (char *)&sda->a[a_count], sizeof(in_addr_t));
 		offset += sizeof(struct answer);
 		(*retcount)++;
 
 	}
 
-	for (a_count = 0; a_count < sd->a_ptr; a_count++) {
+	for (a_count = 0; a_count < sda->a_ptr; a_count++) {
 		rroffset = offset;
 		if ((offset + namelen) > replylen)
 			goto out;
@@ -125,7 +132,7 @@ additional_a(char *name, int namelen, struct domain *sd, char *reply, int replyl
 
 		answer->rdlength = htons(sizeof(in_addr_t));
 
-		memcpy((char *)&answer->rdata, (char *)&sd->a[a_count], sizeof(in_addr_t));
+		memcpy((char *)&answer->rdata, (char *)&sda->a[a_count], sizeof(in_addr_t));
 		offset += sizeof(struct answer);
 		(*retcount)++;
 	}
@@ -156,8 +163,12 @@ additional_aaaa(char *name, int namelen, struct domain *sd, char *reply, int rep
 	} __attribute__((packed));
 
 	struct answer *answer;
+	struct domain_aaaa *sdaaaa = NULL;
 
 	*retcount = 0;
+
+	if ((sdaaaa = (struct domain_aaaa *)find_substruct(sd, INTERNAL_TYPE_AAAA)) == NULL)
+		return -1;
 
 	/*
 	 * We loop through our sd->aaaa entries starting at the ptr offset
@@ -165,7 +176,7 @@ additional_aaaa(char *name, int namelen, struct domain *sd, char *reply, int rep
 	 * in the last loop.  This will shift answers based on a_ptr.
 	 */
 
-	for (aaaa_count = sd->aaaa_ptr; aaaa_count < sd->aaaa_count; aaaa_count++) {
+	for (aaaa_count = sdaaaa->aaaa_ptr; aaaa_count < sdaaaa->aaaa_count; aaaa_count++) {
 		rroffset = offset;
 		if ((offset + namelen) > replylen)
 			goto out;
@@ -191,13 +202,13 @@ additional_aaaa(char *name, int namelen, struct domain *sd, char *reply, int rep
 
 		answer->rdlength = htons(sizeof(struct in6_addr));
 
-		memcpy((char *)&answer->rdata, (char *)&sd->aaaa[aaaa_count], sizeof(struct in6_addr));
+		memcpy((char *)&answer->rdata, (char *)&sdaaaa->aaaa[aaaa_count], sizeof(struct in6_addr));
 		offset += sizeof(struct answer);
 		(*retcount)++;
 
 	}
 
-	for (aaaa_count = 0; aaaa_count < sd->aaaa_ptr; aaaa_count++) {
+	for (aaaa_count = 0; aaaa_count < sdaaaa->aaaa_ptr; aaaa_count++) {
 		rroffset = offset;
 		if ((offset + namelen) > replylen)
 			goto out;
@@ -224,7 +235,7 @@ additional_aaaa(char *name, int namelen, struct domain *sd, char *reply, int rep
 		answer->rdlength = htons(sizeof(struct in6_addr));
 
 
-		memcpy((char *)&answer->rdata, (char *)&sd->aaaa[aaaa_count], sizeof(struct in6_addr));
+		memcpy((char *)&answer->rdata, (char *)&sdaaaa->aaaa[aaaa_count], sizeof(struct in6_addr));
 		offset += sizeof(struct answer);
 		(*retcount)++;
 	}
@@ -256,16 +267,20 @@ additional_mx(char *name, int namelen, struct domain *sd, char *reply, int reply
 	} __attribute__((packed));
 
 	struct answer *answer;
+	struct domain_mx *sdmx = NULL;
 
 	*retcount = 0;
 
+	if ((sdmx = (struct domain_mx *)find_substruct(sd, INTERNAL_TYPE_MX)) == NULL)
+		return -1;
+
 	/*
-	 * We loop through our sd->mx entries starting at the ptr offset
+	 * We loop through our sdmx->mx entries starting at the ptr offset
 	 * first in the first loop and at the beginning until the ptr
 	 * in the last loop.  This will shift answers based on mx_ptr.
 	 */
 
-	for (mx_count = sd->mx_ptr; mx_count < sd->mx_count; mx_count++) {
+	for (mx_count = sdmx->mx_ptr; mx_count < sdmx->mx_count; mx_count++) {
 		rroffset = offset;
 
 		if ((offset + namelen) > replylen)
@@ -289,32 +304,32 @@ additional_mx(char *name, int namelen, struct domain *sd, char *reply, int reply
 		answer->type = htons(DNS_TYPE_MX);
 		answer->class = htons(DNS_CLASS_IN);
 		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_MX]);
-		answer->mx_priority = htons(sd->mx[mx_count].preference);
+		answer->mx_priority = htons(sdmx->mx[mx_count].preference);
 
 		offset += sizeof(struct answer);
 
-		if ((offset + sd->mx[mx_count].exchangelen) > replylen) {
+		if ((offset + sdmx->mx[mx_count].exchangelen) > replylen) {
 			offset = rroffset;
 			goto out;
 		}
 
-		memcpy((char *)&reply[offset], (char *)sd->mx[mx_count].exchange, sd->mx[mx_count].exchangelen);
+		memcpy((char *)&reply[offset], (char *)sdmx->mx[mx_count].exchange, sdmx->mx[mx_count].exchangelen);
 
-		offset += sd->mx[mx_count].exchangelen; 
-		tmplen = compress_label((u_char*)reply, offset, sd->mx[mx_count].exchangelen);
+		offset += sdmx->mx[mx_count].exchangelen; 
+		tmplen = compress_label((u_char*)reply, offset, sdmx->mx[mx_count].exchangelen);
 		
 		if (tmplen != 0) {
-			answer->rdlength = htons((sd->mx[mx_count].exchangelen - (offset - tmplen)) + sizeof(u_int16_t));
+			answer->rdlength = htons((sdmx->mx[mx_count].exchangelen - (offset - tmplen)) + sizeof(u_int16_t));
 			offset = tmplen;
 		} else
-			answer->rdlength = htons(sd->mx[mx_count].exchangelen + sizeof(u_int16_t));
+			answer->rdlength = htons(sdmx->mx[mx_count].exchangelen + sizeof(u_int16_t));
 
 
 		(*retcount)++;
 
 	}
 
-	for (mx_count = 0; mx_count < sd->mx_ptr; mx_count++) {
+	for (mx_count = 0; mx_count < sdmx->mx_ptr; mx_count++) {
 		rroffset = offset;
 
 		if ((offset + namelen) > replylen)
@@ -342,22 +357,22 @@ additional_mx(char *name, int namelen, struct domain *sd, char *reply, int reply
 
 		offset += sizeof(struct answer);
 
-		if ((offset + sd->mx[mx_count].exchangelen) > replylen) {
+		if ((offset + sdmx->mx[mx_count].exchangelen) > replylen) {
 			offset = rroffset;
 			goto out;
 		}
 
-		memcpy((char *)&reply[offset], (char *)sd->mx[mx_count].exchange, sd->mx[mx_count].exchangelen);
+		memcpy((char *)&reply[offset], (char *)sdmx->mx[mx_count].exchange, sdmx->mx[mx_count].exchangelen);
 
-		offset += sd->mx[mx_count].exchangelen; 
-		tmplen = compress_label((u_char *)reply, offset, sd->mx[mx_count].exchangelen);
+		offset += sdmx->mx[mx_count].exchangelen; 
+		tmplen = compress_label((u_char *)reply, offset, sdmx->mx[mx_count].exchangelen);
 		
 		if (tmplen != 0) {
 
-			answer->rdlength = htons((sd->mx[mx_count].exchangelen - (offset - tmplen)) + sizeof(u_int16_t));
+			answer->rdlength = htons((sdmx->mx[mx_count].exchangelen - (offset - tmplen)) + sizeof(u_int16_t));
 			offset = tmplen;
 		} else
-			answer->rdlength = htons(sd->mx[mx_count].exchangelen + sizeof(u_int16_t));
+			answer->rdlength = htons(sdmx->mx[mx_count].exchangelen + sizeof(u_int16_t));
 
 		(*retcount)++;
 	}
@@ -388,9 +403,12 @@ additional_ptr(char *name, int namelen, struct domain *sd, char *reply, int repl
 	} __attribute__((packed));
 
 	struct answer *answer;
+	struct domain_ptr *sdptr = NULL;
 
 	*retcount = 0;
 
+	if ((sdptr = (struct domain_ptr *)find_substruct(sd, INTERNAL_TYPE_PTR)) == NULL)
+		return -1;
 
 	if ((offset + namelen) > replylen)
 		goto out;
@@ -416,21 +434,21 @@ additional_ptr(char *name, int namelen, struct domain *sd, char *reply, int repl
 
 	offset += sizeof(struct answer);
 
-	if ((offset + sd->ptrlen) > replylen) {
+	if ((offset + sdptr->ptrlen) > replylen) {
 		offset = rroffset;
 		goto out;
 	}
 
-	memcpy((char *)&reply[offset], (char *)sd->ptr, sd->ptrlen);
+	memcpy((char *)&reply[offset], (char *)sdptr->ptr, sdptr->ptrlen);
 
-	offset += sd->ptrlen;
-	tmplen = compress_label((u_char*)reply, offset, sd->ptrlen);
+	offset += sdptr->ptrlen;
+	tmplen = compress_label((u_char*)reply, offset, sdptr->ptrlen);
 		
 	if (tmplen != 0) {
-		answer->rdlength = htons(sd->ptrlen - (offset - tmplen));
+		answer->rdlength = htons(sdptr->ptrlen - (offset - tmplen));
 		offset = tmplen;
 	} else
-		answer->rdlength = htons(sd->ptrlen);
+		answer->rdlength = htons(sdptr->ptrlen);
 
 
 	(*retcount)++;

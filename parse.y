@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.7 2015/06/16 20:00:06 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.8 2015/06/17 06:45:10 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -1778,7 +1778,7 @@ fill_cname(char *name, char *type, int myttl, char *hostname)
 
 	ssd->ttl[INTERNAL_TYPE_CNAME] = myttl;
 
-	ssd_cname = (struct domain_cname *) find_substruct(ssd, DNS_TYPE_CNAME);
+	ssd_cname = (struct domain_cname *) find_substruct(ssd, INTERNAL_TYPE_CNAME);
 	if (ssd_cname == NULL) {
 		rs += sizeof(struct domain_cname);	
 		tp = reallocarray(sdomain, 1, rs);
@@ -1868,7 +1868,7 @@ fill_ptr(char *name, char *type, int myttl, char *hostname)
 
 	ssd->ttl[INTERNAL_TYPE_PTR] = myttl;
 
-	ssd_ptr = (struct domain_ptr *) find_substruct(ssd, DNS_TYPE_PTR);
+	ssd_ptr = (struct domain_ptr *) find_substruct(ssd, INTERNAL_TYPE_PTR);
         if (ssd_ptr == NULL) {
                 rs += sizeof(struct domain_ptr);
                 tp = reallocarray(sdomain, 1, rs);
@@ -1961,7 +1961,7 @@ fill_spf(char *name, char *type, int myttl, char *msg)
 
 	ssd->ttl[INTERNAL_TYPE_SPF] = myttl;
 
-        ssd_spf = (struct domain_spf *) find_substruct(ssd, DNS_TYPE_SPF);
+        ssd_spf = (struct domain_spf *) find_substruct(ssd, INTERNAL_TYPE_SPF);
         if (ssd_spf == NULL) {
                 rs += sizeof(struct domain_spf);
                 tp = reallocarray(sdomain, 1, rs);
@@ -2036,7 +2036,7 @@ fill_dnskey(char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t p
 
 	ssd->ttl[INTERNAL_TYPE_DNSKEY] = myttl;
 
-        ssd_dnskey = (struct domain_dnskey *) find_substruct(ssd, DNS_TYPE_DNSKEY);
+        ssd_dnskey = (struct domain_dnskey *) find_substruct(ssd, INTERNAL_TYPE_DNSKEY);
         if (ssd_dnskey == NULL) {
                 rs += sizeof(struct domain_dnskey);
                 tp = reallocarray(sdomain, 1, rs);
@@ -2236,7 +2236,7 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 
 	ssd->ttl[INTERNAL_TYPE_DS] = myttl;
 
-        ssd_ds = (struct domain_ds *) find_substruct(ssd, DNS_TYPE_DS);
+        ssd_ds = (struct domain_ds *) find_substruct(ssd, INTERNAL_TYPE_DS);
         if (ssd_ds == NULL) {
                 rs += sizeof(struct domain_ds);
                 tp = reallocarray(sdomain, 1, rs);
@@ -2328,7 +2328,7 @@ fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitma
 		return -1;
 	}
 
-	ssd_nsec = (struct domain_nsec *)find_substruct(ssd, DNS_TYPE_NSEC);
+	ssd_nsec = (struct domain_nsec *)find_substruct(ssd, INTERNAL_TYPE_NSEC);
 	if (ssd_nsec == NULL) {
 		rs += sizeof(struct domain_nsec);
 		tp = reallocarray(sdomain, 1, rs);
@@ -2419,7 +2419,7 @@ fill_naptr(char *name, char *type, int myttl, int order, int preference, char *f
 
 	ssd->ttl[INTERNAL_TYPE_NAPTR] = myttl;
 
-	ssd_naptr = (struct domain_naptr *)find_substruct(ssd, DNS_TYPE_NAPTR);
+	ssd_naptr = (struct domain_naptr *)find_substruct(ssd, INTERNAL_TYPE_NAPTR);
 	if (ssd_naptr == NULL) {
 		rs += sizeof(struct domain_naptr);
 		tp = reallocarray(sdomain, 1, rs);
@@ -2522,7 +2522,7 @@ fill_txt(char *name, char *type, int myttl, char *msg)
 
 	ssd->ttl[INTERNAL_TYPE_TXT] = myttl;
 
-	ssd_txt = (struct domain_txt *) find_substruct(ssd, DNS_TYPE_TXT);
+	ssd_txt = (struct domain_txt *) find_substruct(ssd, INTERNAL_TYPE_TXT);
 	if (ssd_txt == NULL) {
 		rs += sizeof(struct domain_txt);
 		tp = reallocarray(sdomain, 1, rs);
@@ -2600,7 +2600,7 @@ fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerp
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
-	ssd_sshfp = (struct domain_sshfp *)find_substruct(ssd, DNS_TYPE_SSHFP);
+	ssd_sshfp = (struct domain_sshfp *)find_substruct(ssd, INTERNAL_TYPE_SSHFP);
 	if (ssd_sshfp == NULL) {
 		rs += sizeof(struct domain_sshfp);
 		tp = reallocarray(sdomain, 1, rs);
@@ -2709,7 +2709,7 @@ fill_srv(char *name, char *type, int myttl, int priority, int weight, int port, 
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
-	ssd_srv = (struct domain_srv *)find_substruct(ssd, DNS_TYPE_SRV);
+	ssd_srv = (struct domain_srv *)find_substruct(ssd, INTERNAL_TYPE_SRV);
 	if (ssd_srv == NULL) {
 		rs += sizeof(struct domain_srv);
 		tp = reallocarray(sdomain, 1, rs);
@@ -2811,7 +2811,7 @@ fill_mx(char *name, char *type, int myttl, int priority, char *mxhost)
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
-	ssd_mx = (struct domain_mx *)find_substruct(ssd, DNS_TYPE_MX);
+	ssd_mx = (struct domain_mx *)find_substruct(ssd, INTERNAL_TYPE_MX);
 
 	if (ssd_mx == NULL) {
 
@@ -2906,7 +2906,7 @@ fill_a(char *name, char *type, int myttl, char *a)
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
-	ssd_a = (struct domain_a *)find_substruct(ssd, DNS_TYPE_A);
+	ssd_a = (struct domain_a *)find_substruct(ssd, INTERNAL_TYPE_A);
 	if (ssd_a) {
 
 		rs += sizeof(struct domain_a);
@@ -3001,7 +3001,7 @@ fill_aaaa(char *name, char *type, int myttl, char *aaaa)
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
-	ssd_aaaa = (struct domain_aaaa *)find_substruct(ssd, DNS_TYPE_AAAA);
+	ssd_aaaa = (struct domain_aaaa *)find_substruct(ssd, INTERNAL_TYPE_AAAA);
 	if (ssd_aaaa == NULL) {
 
 			rs += sizeof(struct domain_aaaa);	
@@ -3104,7 +3104,7 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
-	ssd_ns = (struct domain_ns *) find_substruct(ssd, DNS_TYPE_NS);
+	ssd_ns = (struct domain_ns *) find_substruct(ssd, INTERNAL_TYPE_NS);
 	if (ssd_ns == NULL) {
 			rs += sizeof(struct domain_ns);
 			tp = reallocarray(sdomain, 1, rs);
@@ -3216,7 +3216,7 @@ fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int seria
 		return -1;
 	}
 
-	ssd_soa = (struct domain_soa *)find_substruct(ssd, DNS_TYPE_SOA);
+	ssd_soa = (struct domain_soa *)find_substruct(ssd, INTERNAL_TYPE_SOA);
 	if (ssd_soa == NULL) {
 		rs += sizeof(struct domain_soa);
 		tp = reallocarray(sdomain, 1, rs);
