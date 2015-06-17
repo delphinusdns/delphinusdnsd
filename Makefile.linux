@@ -16,7 +16,6 @@ build:
 	$(CC) $(CFLAGS) -c reply.c
 	$(CC) $(CFLAGS) -c region.c
 	$(CC) $(CFLAGS) -c wildcard.c
-	$(CC) $(CFLAGS) -c recurse.c
 	$(CC) $(CFLAGS) -c log.c
 	$(CC) $(CFLAGS) -c axfr.c
 	$(CC) $(CFLAGS) -c filter.c
