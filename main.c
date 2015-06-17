@@ -174,7 +174,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.5 2015/06/17 11:44:39 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.6 2015/06/17 12:18:53 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -3640,6 +3640,7 @@ get_record_size(DB *db, char *converted_name, int converted_namelen)
 {
 	struct domain *sdomain;
 	DBT key, data;
+	int ret;
 
 	memset(&key, 0, sizeof(key));
 	memset(&data, 0, sizeof(data));
@@ -3650,11 +3651,11 @@ get_record_size(DB *db, char *converted_name, int converted_namelen)
 	data.data = NULL;
 	data.size = sizeof(struct domain);
 
-	if (db->get(db, NULL, &key, &data, 0) == 0) {
+	if ((ret = db->get(db, NULL, &key, &data, 0)) == 0) {
 		sdomain = (struct domain *)data.data;
 		return (sdomain->len);
 	} else {
-		if (debug)
+		if (debug && ret != DB_NOTFOUND )
 			dolog(LOG_INFO, "db->get: %s\n", strerror(errno));
 	}
 

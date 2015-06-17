@@ -100,7 +100,7 @@ static struct notifyentry {
 } *notn2, *notnp;
 
 
-static const char rcsid[] = "$Id: axfr.c,v 1.3 2015/06/17 06:45:09 pjp Exp $";
+static const char rcsid[] = "$Id: axfr.c,v 1.4 2015/06/17 12:18:53 pjp Exp $";
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list
@@ -737,14 +737,14 @@ axfr_connection(int so, char *address, int is_ipv6, DB *db)
 
 		odh = (struct dns_header *)(reply + 2);
 
+		q = question->hdr->name;
+		qlen = question->hdr->namelen;
+
 		rs = get_record_size(db, q, qlen);
 		if (rs < 0) {
 			dolog(LOG_INFO, "internal error: %s\n", strerror(errno));
 			goto drop;
 		}
-
-		q = question->hdr->name;
-		qlen = question->hdr->namelen;
 
 		memset(&key, 0, sizeof(key));	
 		memset(&data, 0, sizeof(data));
@@ -911,7 +911,10 @@ axfr_connection(int so, char *address, int is_ipv6, DB *db)
 
 						build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, nsdomain, NULL, 0xff, 1, 0, NULL);
 						outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0);
-						free(nsdomain);
+						if (nsdomain) {
+							free(nsdomain);
+							nsdomain = NULL;
+						}
 						free_question(fq);
 						
 					} /* for (i.. */
@@ -945,10 +948,14 @@ axfr_connection(int so, char *address, int is_ipv6, DB *db)
 
 			memset(&key, 0, sizeof(key));	
 			memset(&data, 0, sizeof(data));
-			if (sdomain)
+			if (sdomain) {
 				free(sdomain);
-			if (savesd)
+				sdomain = NULL;
+			}
+			if (savesd) {
 				free(savesd);
+				savesd = NULL;
+			}
 		} while (cursor->c_get(cursor, &key, &data, DB_NEXT) == 0);
 
 		cursor->c_close(cursor);
@@ -976,17 +983,25 @@ axfr_connection(int so, char *address, int is_ipv6, DB *db)
 	
 
 drop:
-	if (soa)
+	if (soa) {
 		free (soa);
+		soa = NULL;
+	}
 
-	if (sdomain)
+	if (sdomain) {
 		free (sdomain);
+		sdomain = NULL;
+	}
 	
-	if (nsdomain)
+	if (nsdomain) {
 		free (nsdomain);
+		nsdomain = NULL;
+	}
 
-	if (savesd)	
+	if (savesd) {
 		free (savesd);
+		savesd = NULL;
+	}
 
 	close(so);
 	exit(0);
@@ -1166,9 +1181,10 @@ build_soa(DB *db, char *reply, int offset, struct domain *sd, struct question *q
 int
 checklabel(DB *db, struct domain *sd, struct domain *soa, struct question *q)
 {
-	struct domain tmpsd;
+	struct domain *tmpsd;
 	char *p;
 	int plen, ret;
+	int rs;
 
 	DBT key, data;
 
@@ -1182,6 +1198,16 @@ checklabel(DB *db, struct domain *sd, struct domain *soa, struct question *q)
 		if (*p == '\0')
 			return (0);
 
+		rs = get_record_size(db, p, plen);
+		if (rs < 0) {
+			return (0);
+		}
+	
+		tmpsd = calloc(1, rs);
+		if (tmpsd == NULL) {
+			return (0);
+		}
+
 		memset(&key, 0, sizeof(key));
 		memset(&data, 0, sizeof(data));
 
@@ -1189,30 +1215,34 @@ checklabel(DB *db, struct domain *sd, struct domain *soa, struct question *q)
 		key.size = plen;
 		
 		data.data = NULL;
-		data.size = 0;
+		data.size = rs;
 	
 		ret = db->get(db, NULL, &key, &data, 0);
 		if (ret == DB_NOTFOUND) {
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
 
+			free(tmpsd);
 			continue;
 		}
 	
-		if (data.size != sizeof(struct domain)) {
+		if (data.size != rs) {
 			dolog(LOG_INFO, "AXFR btree db is damaged (%d), drop\n", __LINE__);
+			free(tmpsd);
 			return (0);
 		}
 		
-		memcpy(&tmpsd, data.data, sizeof(tmpsd));
+		memcpy(tmpsd, data.data, data.size);
 		
 		/*
  		 * the encountered label has an SOA before we got to the
 		 * root, so we skip this record entirely...
 		 */
 
-		if (tmpsd.flags & DOMAIN_HAVE_SOA) 
+		if (tmpsd->flags & DOMAIN_HAVE_SOA) {
+			free (tmpsd);
 			return (0);
+		}
 
 			
 		/*
@@ -1222,6 +1252,7 @@ checklabel(DB *db, struct domain *sd, struct domain *soa, struct question *q)
 		plen -= (*p + 1);
 		p = (p + (*p + 1));
 
+		free(tmpsd);
 		
 	} while (memcmp(p, q->hdr->name, q->hdr->namelen) != 0);
 
