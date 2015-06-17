@@ -174,7 +174,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.3 2015/06/16 20:00:06 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.4 2015/06/17 06:47:27 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -378,7 +378,7 @@ main(int argc, char *argv[])
 	 */
 
 
-	snprintf(mydatabase, sizeof(mydatabase), "%s/%ld/wdns.db", 
+	snprintf(mydatabase, sizeof(mydatabase), "%s/%ld/ddd.db", 
 		MYDB_PATH, (long)getpid());
 
 	(void)unlink(mydatabase);
