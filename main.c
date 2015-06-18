@@ -174,7 +174,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.6 2015/06/17 12:18:53 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.7 2015/06/18 10:45:53 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1666,7 +1666,7 @@ struct domain *
 lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, char *replystring)
 {
 
-	struct domain *sd;
+	struct domain *sd = NULL;
 	struct domain_ns *nsd;
 	int plen, onemore = 0;
 	int ret = 0;
@@ -1716,6 +1716,7 @@ lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, cha
 	if (data.size != rs) {
 		dolog(LOG_INFO, "btree db is damaged, drop\n");
 		free(sd);
+		sd = NULL;
 		*lzerrno = ERR_DROP;	/* free on ERR_DROP */
 		*returnval = -1;
 		return (NULL);
@@ -1803,7 +1804,7 @@ build_fake_question(char *name, int namelen, u_int16_t type)
 struct domain *
 get_soa(DB *db, struct question *question)
 {
-	struct domain *sd;
+	struct domain *sd = NULL;
 
 	int plen;
 	int ret = 0;
@@ -1963,7 +1964,7 @@ mainloop(struct cfg *cfg)
 
 	struct dns_header *dh;
 	struct question *question, *fakequestion;
-	struct domain *sd0, *sd1;
+	struct domain *sd0 = NULL, *sd1 = NULL;
 	struct domain_cname *csd;
 	
 	struct sreply sreply;
@@ -2297,8 +2298,10 @@ mainloop(struct cfg *cfg)
 						 * lookup an authoritative soa
 						 */
 
-						if (sd0)
+						if (sd0) {
 							free(sd0);
+							sd0 = NULL;
+						}
 
 						sd0 = get_soa(cfg->db, question);
 						if (sd0 != NULL) {
@@ -2866,8 +2869,10 @@ axfrentry:
 							 * lookup an authoritative soa
 							 */
 
-							if (sd0)
+							if (sd0) {
 								free (sd0);
+								sd0 = NULL;
+							}
 						
 							sd0 = get_soa(cfg->db, question);
 							if (sd0 != NULL) {
@@ -3228,6 +3233,16 @@ udpnxdomain:
 		}
 
 	drop:
+		
+		if (sd0) {	
+			free(sd0);
+			sd0 = NULL;
+		}
+
+		if (sd1) {
+			free(sd1);
+			sd1 = NULL;
+		}
 
 		continue;
 	}  /* for (;;) */
