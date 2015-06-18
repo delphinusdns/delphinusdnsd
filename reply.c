@@ -90,7 +90,7 @@ struct collects {
 extern int debug, verbose;
 
 
-static const char rcsid[] = "$Id: reply.c,v 1.5 2015/06/17 11:44:39 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.6 2015/06/18 09:56:58 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -3634,7 +3634,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	int a_count, aaaa_count, ns_count, mx_count, srv_count, sshfp_count;
 	int naptr_count;
 	int tmplen, pos, mod;
-	int ttlhack;
 	struct answer {
 		u_int16_t type;		/* 0 */
                 u_int16_t class;	/* 2 */
@@ -4319,8 +4318,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		if ((sda = (struct domain_a *)find_substruct(sd, INTERNAL_TYPE_A)) == NULL)
 			return 0;
 
-		ttlhack = 0;
-
+		a_count = 0;
 		pos = sda->a_ptr;
 		mod = sda->a_count;
 
