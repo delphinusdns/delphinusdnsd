@@ -177,7 +177,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.10 2015/06/20 18:19:01 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.11 2015/06/20 19:35:44 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -2269,7 +2269,7 @@ mainloop(struct cfg *cfg)
 				}
 					
 
-				if ((question = build_question(pbuf, len, 0)) == NULL) {
+				if ((question = build_question(pbuf, len, ntohs(dh->additional))) == NULL) {
 					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", tnp->so, tnp->ident, tnp->address);
 					goto drop;
 				}
@@ -2630,7 +2630,7 @@ tcpnxdomain:
 			
 		tcpout:
 				if (lflag)
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, answering \"%s\" (%d/%d)\n", tnp->so, tnp->ident, tnp->address, tnp->region, question->converted_name, get_dns_type(ntohs(question->hdr->qtype)), ntohs(question->hdr->qclass), replystring, len, slen);
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s answering \"%s\" (%d/%d)\n", tnp->so, tnp->ident, tnp->address, tnp->region, question->converted_name, get_dns_type(ntohs(question->hdr->qtype)), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", replystring, len, slen);
 
 
 				if (fakequestion != NULL) {

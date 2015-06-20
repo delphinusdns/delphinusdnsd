@@ -106,7 +106,7 @@ extern int debug, verbose, dnssec;
 				outlen = tmplen;			\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.11 2015/06/20 18:19:01 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.12 2015/06/20 19:35:44 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -153,7 +153,7 @@ reply_a(struct sreply *sreply, DB *db)
 		replysize = 65535;
 	}
 	
-	if (q->edns0len > 512)
+	if (!istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 
 	odh = (struct dns_header *)&reply[0];
@@ -331,7 +331,7 @@ reply_rrsig(struct sreply *sreply, DB *db)
 		replysize = 65535;
 	}
 	
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 
 	odh = (struct dns_header *)&reply[0];
@@ -493,7 +493,7 @@ reply_aaaa(struct sreply *sreply, DB *db)
 		replysize = 65535;
 	}
 
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 	
 
@@ -658,7 +658,7 @@ reply_mx(struct sreply *sreply, DB *db)
 		replysize = 65535;
 	}
 	
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 
 	odh = (struct dns_header *)&reply[0];
@@ -930,7 +930,7 @@ reply_ns(struct sreply *sreply, DB *db)
 		replysize = 65535;
 	}
 
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 	
 	odh = (struct dns_header *)&reply[0];
@@ -1243,7 +1243,7 @@ reply_cname(struct sreply *sreply)
 		replysize = 65535;
 	}
 
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 
 	odh = (struct dns_header *)&reply[0];
@@ -1439,7 +1439,7 @@ reply_ptr(struct sreply *sreply)
 		replysize = 65535;
 	}
 
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 	
 	odh = (struct dns_header *)&reply[0];
@@ -1610,7 +1610,7 @@ reply_soa(struct sreply *sreply)
 		replysize = 65535;
 	}
 
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 	
 	/* st */
@@ -1830,7 +1830,7 @@ reply_spf(struct sreply *sreply)
 		replysize = 65535;
 	}
 	
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 
 	/* st */
@@ -1967,7 +1967,7 @@ reply_txt(struct sreply *sreply)
 		replysize = 65535;
 	}
 
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 	
 	/* st */
@@ -2108,7 +2108,7 @@ reply_sshfp(struct sreply *sreply)
 		replysize = 65535;
 	}
 
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 	
 
@@ -2278,7 +2278,7 @@ reply_naptr(struct sreply *sreply, DB *db)
 		replysize = 65535;
 	}
 	
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 
 	odh = (struct dns_header *)&reply[0];
@@ -2531,7 +2531,7 @@ reply_srv(struct sreply *sreply, DB *db)
 		replysize = 65535;
 	}
 	
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 
 	odh = (struct dns_header *)&reply[0];
@@ -3244,7 +3244,7 @@ reply_noerror(struct sreply *sreply)
 		replysize = 65535;
 	}
 
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 	
 	odh = (struct dns_header *)&reply[0];
@@ -3836,7 +3836,7 @@ reply_any(struct sreply *sreply)
 		replysize = 65535;
 	}
 
-	if (q->edns0len > 512)
+	if (! istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 	
 	/* st */
