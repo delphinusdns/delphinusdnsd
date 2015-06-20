@@ -191,7 +191,10 @@ struct domain_rrsig {
 	u_int16_t type;
 	u_int32_t len;
 	struct rrsig rrsig[INTERNAL_TYPE_MAX];	/* rrsig RR */
-	int rrsig_count;			/* RRSIG count */
+	struct rrsig rrsig_dnskey[RECORD_COUNT];/* hack around dnskeys */
+	int rrsig_dnskey_count;			/* RRSIG count */
+	struct rrsig rrsig_ds[RECORD_COUNT];	/* hack around ds */
+	int rrsig_ds_count;
 } __attribute__((packed));
 
 
