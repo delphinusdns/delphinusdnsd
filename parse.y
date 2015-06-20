@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Peter J. Philipp.  All rights reserved.
+ * Copyright (c) 2014-2015 Peter J. Philipp.  All rights reserved.
  * Copyright (c) 2008 Gilles Chehade <gilles@poolp.org>
  * Copyright (c) 2008 Pierre-Yves Ritschard <pyr@openbsd.org>
  * Copyright (c) 2002, 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.12 2015/06/20 15:27:07 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.13 2015/06/20 16:01:32 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
