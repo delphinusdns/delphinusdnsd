@@ -92,7 +92,7 @@ static struct file {
 typedef struct {
 	union {
 		char *string;
-		int intval;
+		int64_t intval;
 	} v;
 	int lineno;
 } YYSTYPE;
@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.10 2015/06/17 12:40:05 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.11 2015/06/20 08:07:17 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -117,8 +117,7 @@ DBT key, data;
 struct logging logging;
 int axfrport = 0;
 time_t time_changed;
-
-
+int dnssec = 0;
 
 char 		*check_rr(char *, char *, int, int *);
 int 		fill_a(char *, char *, int, char *);
@@ -134,7 +133,7 @@ int 		fill_sshfp(char *, char *, int, int, int, char *);
 int 		fill_srv(char *, char *, int, int, int, int, char *);
 int 		fill_txt(char *, char *, int, char *);
 int		fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
-int		fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int32_t, u_int32_t, u_int16_t, char *, char *);
+int		fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
 int 		fill_nsec(char *, char *, u_int32_t, char *, char *);
 int		fill_ds(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
 
@@ -485,7 +484,7 @@ zonestatement:
 				}
 
 				if (debug)
-					printf("%s MX -> %d %s\n", $1, $7, $9);
+					printf("%s MX -> %lld %s\n", $1, $7, $9);
 
 			} else {
 				if (debug)
@@ -550,6 +549,10 @@ zonestatement:
 		|
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING CRLF
 		{
+			if (! dnssec) {
+				dolog(LOG_INFO, "WARNING DNSSEC DNSKEY RR but no dnssec enabled!\n");
+			}
+
 			if (strcasecmp($3, "dnskey") == 0) {
 				if (fill_dnskey($1, $3, $5, $7, $9, $11, $13) < 0) {	
 					return -1;
@@ -571,6 +574,10 @@ zonestatement:
 		STRING COMMA STRING COMMA NUMBER COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA STRING COMMA QUOTEDSTRING CRLF
 		{
 			if (strcasecmp($3, "rrsig") == 0) {
+				if (! dnssec) {
+					dolog(LOG_INFO, "WARNING DNSSEC RRSIG RR but no dnssec enabled!\n");
+				}
+
 				if (fill_rrsig($1, $3, $5, $7, $9, $11, $13, $15, $17, $19, $21, $23) < 0) {	
 					return -1;
 				}
@@ -593,6 +600,10 @@ zonestatement:
 		STRING COMMA STRING COMMA NUMBER COMMA STRING COMMA QUOTEDSTRING CRLF
 		{
 			if (strcasecmp($3, "nsec") == 0) {
+				if (! dnssec) {
+					dolog(LOG_INFO, "WARNING DNSSEC NSEC RR but no dnssec enabled!\n");
+				}
+
 				if (fill_nsec($1, $3, $5, $7, $9) < 0) {
 					return -1;
 				}
@@ -614,6 +625,9 @@ zonestatement:
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING CRLF
 		{
 			if (strcasecmp($3, "ds") == 0) {
+				if (! dnssec) {
+					dolog(LOG_INFO, "WARNING DNSSEC DS RR but no dnssec enabled!\n");
+				}
 				if (fill_ds($1, $3, $5, $7, $9, $11, $13) < 0) {
 					return -1;
 				}
@@ -665,6 +679,9 @@ optionsstatement:
 		if (strcasecmp($1, "recurse") == 0) {
 			dolog(LOG_DEBUG, "recursive server on\n");
 			rflag = 0; 	/* keep it off please! */
+		} else if (strcasecmp($1, "dnssec") == 0) {
+			dolog(LOG_DEBUG, "DNSSEC enabled\n");
+			dnssec = 1;
 		} else if (strcasecmp($1, "log") == 0) {
 			dolog(LOG_DEBUG, "logging on\n");
 			lflag = 1;
@@ -789,7 +806,7 @@ loggingstatement:
 		char buf[16];
 
 		if (strcasecmp($1, "logport") == 0) {
-			snprintf(buf, sizeof(buf), "%d", $2);
+			snprintf(buf, sizeof(buf), "%lld", $2);
 			logging.logport = strdup(buf);
 			if (logging.logport == NULL) {
 				dolog(LOG_ERR, "strdup failed\n");
@@ -1319,6 +1336,7 @@ yylex()
 	char *cp = NULL;
 	int c, cpos;
 	static int setupstate = 0;
+	const char *errstr;
 
 
 	do {
@@ -1540,7 +1558,11 @@ yylex()
 #endif
 
 			free (yylval.v.string);
-			yylval.v.intval = atoi(buf);
+#if ! defined __linux__ && ! defined __APPLE__ && ! defined __NetBSD__
+			yylval.v.intval = strtonum(buf, 0, 0x7fffffffffffffff, &errstr);
+#else
+			yylval.v.intval = atoll(buf);
+#endif
 
 			return (NUMBER);
 		}
@@ -2103,7 +2125,7 @@ fill_dnskey(char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t p
 }
 
 int
-fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t algorithm, u_int8_t labels, u_int32_t original_ttl, u_int32_t sig_expiration, u_int32_t sig_inception, u_int16_t keytag, char *signers_name, char *signature)
+fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t algorithm, u_int8_t labels, u_int32_t original_ttl, u_int64_t sig_expiration, u_int64_t sig_inception, u_int16_t keytag, char *signers_name, char *signature)
 {
 	DB *db = mydb;
 	void *sdomain, *tp;
@@ -2113,6 +2135,9 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 	char *converted_name, *signers_name2;
 	struct rrtab *rr;
 	int i, ret, rs;
+	char tmpbuf[32];
+	struct tm tmbuf;
+	time_t timebuf;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2186,8 +2211,20 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 	}
 
 	ssd_rrsig->rrsig[rr->internal_type].original_ttl = original_ttl;
-	ssd_rrsig->rrsig[rr->internal_type].signature_expiration = sig_expiration;
-	ssd_rrsig->rrsig[rr->internal_type].signature_inception = sig_inception;
+	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_expiration);
+	if (strptime(tmpbuf, "%Y%m%d%H%M%S", &tmbuf) == NULL) {
+		perror("sig_expiration");
+		return (-1);	
+	}
+	timebuf = mktime(&tmbuf);
+	ssd_rrsig->rrsig[rr->internal_type].signature_expiration = timebuf;
+	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_inception);
+	if (strptime(tmpbuf, "%Y%m%d%H%M%S", &tmbuf) == NULL) {
+		perror("sig_inception");
+		return (-1);	
+	}
+	timebuf = mktime(&tmbuf);
+	ssd_rrsig->rrsig[rr->internal_type].signature_inception = timebuf;
 	ssd_rrsig->rrsig[rr->internal_type].key_tag = keytag;
 
 	signers_name2 = check_rr(signers_name, type, DNS_TYPE_RRSIG, &signers_namelen);
@@ -3399,9 +3436,10 @@ fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int seria
 void *
 find_rrsig_substruct(struct domain *ssd, u_int16_t type, u_int16_t rrtype)
 {
-	struct domain_generic *sdg;
-	struct domain_rrsig *sdrr;
-	void *ptr;
+	struct domain_generic *sdg = NULL;
+	struct domain_rrsig *sdrr = NULL;
+	void *ptr = NULL;
+	void *vssd = (void *)ssd;
 
 	switch (type) {
 	case INTERNAL_TYPE_SOA:
@@ -3473,6 +3511,7 @@ find_rrsig_substruct(struct domain *ssd, u_int16_t type, u_int16_t rrtype)
 		break;
 	}
 	
+#if 0
 	for (sdg = (struct domain_generic *)(ssd + sizeof(struct domain)); \
 		sdg <= (struct domain_generic *)(ssd + ssd->len); \
 		sdg += sdg->len) {
@@ -3484,6 +3523,19 @@ find_rrsig_substruct(struct domain *ssd, u_int16_t type, u_int16_t rrtype)
 			}
 		}
 	}
+#endif
+        for (ptr = (void *)(vssd + sizeof(struct domain)); \
+                ptr <= (void *)(vssd + ssd->len); \
+                ptr += sdg->len) {
+                sdg = (struct domain_generic *)ptr;
+		if (type == sdg->type) {
+			sdrr = (struct domain_rrsig *)ptr;
+			if (rrtype == sdrr->rrsig[type].type_covered) {
+				return (ptr);
+			}
+		}
+        }
+
 
 	return NULL;
 }
