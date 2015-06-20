@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.13 2015/06/20 16:01:32 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.14 2015/06/20 17:20:29 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -2218,14 +2218,14 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 		perror("sig_expiration");
 		return (-1);	
 	}
-	timebuf = mktime(&tmbuf);
+	timebuf = timegm(&tmbuf);
 	ssd_rrsig->rrsig[rr->internal_type].signature_expiration = timebuf;
 	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_inception);
 	if (strptime(tmpbuf, "%Y%m%d%H%M%S", &tmbuf) == NULL) {
 		perror("sig_inception");
 		return (-1);	
 	}
-	timebuf = mktime(&tmbuf);
+	timebuf = timegm(&tmbuf);
 	ssd_rrsig->rrsig[rr->internal_type].signature_inception = timebuf;
 	ssd_rrsig->rrsig[rr->internal_type].key_tag = keytag;
 
