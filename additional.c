@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2005-2014 Peter J. Philipp
+ * Copyright (c) 2005-2015 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,7 +41,7 @@ extern void *		find_substruct(struct domain *, u_int16_t);
 
 extern int dnssec;
 
-static const char rcsid[] = "$Id: additional.c,v 1.4 2015/06/20 15:27:07 pjp Exp $";
+static const char rcsid[] = "$Id: additional.c,v 1.5 2015/06/20 15:58:41 pjp Exp $";
 
 
 /*

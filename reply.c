@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2005-2014 Peter J. Philipp
+ * Copyright (c) 2005-2015 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -91,7 +91,7 @@ struct collects {
 extern int debug, verbose, dnssec;
 
 
-static const char rcsid[] = "$Id: reply.c,v 1.7 2015/06/20 15:27:07 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.8 2015/06/20 15:58:41 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)

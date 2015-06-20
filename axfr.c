@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2014 Peter J. Philipp
+ * Copyright (c) 2011-2015 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -100,7 +100,7 @@ static struct notifyentry {
 } *notn2, *notnp;
 
 
-static const char rcsid[] = "$Id: axfr.c,v 1.5 2015/06/17 12:55:47 pjp Exp $";
+static const char rcsid[] = "$Id: axfr.c,v 1.6 2015/06/20 15:58:41 pjp Exp $";
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list

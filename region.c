@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2010-2014 Peter J. Philipp
+ * Copyright (c) 2010-2015 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,7 +48,7 @@ static struct entry {
 } *n2, *np;
 
 
-static const char rcsid[] = "$Id: region.c,v 1.1.1.1 2014/11/14 08:09:04 pjp Exp $";
+static const char rcsid[] = "$Id: region.c,v 1.2 2015/06/20 15:58:41 pjp Exp $";
 
 /*
  * INIT_REGION - initialize the region singly linked list

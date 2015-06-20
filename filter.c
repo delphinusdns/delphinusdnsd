@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Peter J. Philipp
+ * Copyright (c) 2014-2015 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@ static struct filterentry {
 } *fn2, *fnp;
 
 
-static const char rcsid[] = "$Id: filter.c,v 1.1.1.1 2014/11/14 08:09:04 pjp Exp $";
+static const char rcsid[] = "$Id: filter.c,v 1.2 2015/06/20 15:58:41 pjp Exp $";
 
 /*
  * INIT_FILTER - initialize the filter singly linked list

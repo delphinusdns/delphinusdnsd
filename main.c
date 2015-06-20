@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2002-2014 Peter J. Philipp
+ * Copyright (c) 2002-2015 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -175,7 +175,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.8 2015/06/20 15:27:07 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.9 2015/06/20 15:58:41 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
