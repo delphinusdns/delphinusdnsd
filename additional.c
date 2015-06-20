@@ -41,7 +41,7 @@ extern void *		find_substruct(struct domain *, u_int16_t);
 
 extern int dnssec;
 
-static const char rcsid[] = "$Id: additional.c,v 1.5 2015/06/20 15:58:41 pjp Exp $";
+static const char rcsid[] = "$Id: additional.c,v 1.6 2015/06/20 17:04:09 pjp Exp $";
 
 
 /*
@@ -526,8 +526,9 @@ additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *
 
 	rroffset = offset;
 
+	/* check if we go over our return length */
 	if ((offset + namelen) > replylen)
-		goto out;
+		return 0;
 
 	memcpy(&reply[offset], name, namelen);
 	offset += namelen;
@@ -538,8 +539,7 @@ additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *
 	}
 
 	if ((offset + sizeof(struct answer)) > replylen) {
-		offset = rroffset;
-		goto out;
+		return 0;
 	}
 
 
@@ -558,6 +558,9 @@ additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *
 	offset += sizeof(*answer);
 	rroffset = offset;
 
+	if ((offset + sdrr->rrsig[inttype].signame_len) > replylen)
+		return 0;
+
 	memcpy(&reply[offset], &sdrr->rrsig[inttype].signers_name, sdrr->rrsig[inttype].signame_len);
 
 	offset += sdrr->rrsig[inttype].signame_len;
@@ -568,6 +571,9 @@ additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *
 		offset = tmplen;
 	}
 #endif
+
+	if ((offset + sdrr->rrsig[inttype].signature_len) > replylen)
+		return 0;
 
 	memcpy(&reply[offset], &sdrr->rrsig[inttype].signature, sdrr->rrsig[inttype].signature_len);
 	offset += sdrr->rrsig[inttype].signature_len;
