@@ -36,6 +36,7 @@ extern int 		additional_aaaa(char *, int, struct domain *, char *, int, int, int
 extern int 		additional_mx(char *, int, struct domain *, char *, int, int, int *);
 extern int 		additional_ptr(char *, int, struct domain *, char *, int, int, int *);
 extern int 		additional_opt(struct question *, char *, int, int);
+extern int 		additional_rrsig(char *, int, int, struct domain *, char *, int, int);
 extern struct question 	*build_fake_question(char *, int, u_int16_t);
 extern int 		compress_label(u_char *, int, int);
 extern void 		dolog(int, char *, ...);
@@ -87,10 +88,10 @@ struct collects {
         SLIST_ENTRY(collects) collect_entry;
 } *cn1, *cn2, *cnp;
 
-extern int debug, verbose;
+extern int debug, verbose, dnssec;
 
 
-static const char rcsid[] = "$Id: reply.c,v 1.6 2015/06/18 09:56:58 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.7 2015/06/20 15:27:07 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -105,7 +106,6 @@ reply_a(struct sreply *sreply, DB *db)
 	u_int16_t outlen;
 	int a_count;
 	int mod, pos;
-	int ttlhack = 0;
 
 	struct answer {
 		char name[2];
@@ -127,7 +127,6 @@ reply_a(struct sreply *sreply, DB *db)
 	struct domain *sd = sreply->sd1;
 	struct domain_a *sda = NULL;
 	
-	u_int8_t region = sreply->region;
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
@@ -172,24 +171,11 @@ reply_a(struct sreply *sreply, DB *db)
 	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
 		q->hdr->namelen + 4);
 
-	/* if we aren't a balance record our region code is 0xff so check */
-	if (sda->region[sda->a_ptr] != 0xff) {
-		ttlhack = 1;
-	}
-
 	a_count = 0;
 	pos = sda->a_ptr;
 	mod = sda->a_count;
 
 	do {
-		/*
-		 * skip records that are not in the needed region
-		 */
-		if (ttlhack && sda->region[pos % mod] != region) {
-			pos++;
-			continue;
-		}
-
 		/*
 		 * answer->name is a pointer to the request (0xc00c) 
 		 */
@@ -224,8 +210,10 @@ reply_a(struct sreply *sreply, DB *db)
 		answer = (struct answer *)&reply[outlen];
 	} while (a_count < RECORD_COUNT && --sda->a_count);
 
-	if (ttlhack) {
-		odh->answer = htons(a_count);
+	/* Add RRSIG */
+	if (dnssec && q->dnssecok) {
+		odh->answer = htons(a_count + 1);	
+		outlen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_A, sd, reply, replysize, outlen);
 	}
 
 	if (q->edns0len) {
@@ -690,6 +678,7 @@ reply_ns(struct sreply *sreply, DB *db)
 	int wildcard = sreply->wildcard;
 	int replysize = 512;
 	int retlen = -1;
+	struct domain *sdhave_a = NULL, *sdhave_aaaa = NULL;
 
 	if ((sdns = find_substruct(sd, INTERNAL_TYPE_NS)) == NULL)
 		return -1;
@@ -828,25 +817,56 @@ reply_ns(struct sreply *sreply, DB *db)
 		answer = (struct answer *)&reply[outlen];
 	} while (++ns_count < RECORD_COUNT && --sdns->ns_count);
 
+	/* add RRSIG */
+
+	if (dnssec && q->dnssecok) {
+		if (odh->answer)
+			odh->answer = htons(ns_count + 1);	
+		else if (odh->nsrr)
+			odh->nsrr = htons(ns_count + 1);	
+
+		outlen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_NS, sd, reply, replysize, outlen);
+	}
+
 	/* shuffle through our linked collect structure and add additional */
 
 	SLIST_FOREACH(cnp, &collectshead, collect_entry) {
-		int addcount;
-		int tmplen;
+		int addcount = 0;
+		int tmplen = 0;
 
 		switch (cnp->type) {
 		case DNS_TYPE_A:
 			tmplen = additional_a(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
+			if (addcount)
+				sdhave_a = cnp->sd;
+
 			additional += addcount;
 			break;
 		case DNS_TYPE_AAAA:
 			tmplen = additional_aaaa(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
+			if (addcount)
+				sdhave_aaaa = cnp->sd;
 			additional += addcount;
 			break;
 		}
 
 		if (tmplen > 0) {
 			outlen = tmplen;
+		}
+	}
+	
+	/* Add RRSIG */
+
+	if (dnssec && q->dnssecok) {
+		if (sdhave_a) {
+			outlen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_A, sdhave_a, reply, replysize, outlen);
+			additional++;
+		} 
+
+		if (sdhave_aaaa) {
+			outlen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_AAAA, sdhave_aaaa, reply, replysize, outlen);
+			additional++;
+			
 		}
 	}
 

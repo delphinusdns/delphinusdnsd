@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.11 2015/06/20 08:07:17 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.12 2015/06/20 15:27:07 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -141,7 +141,6 @@ int             findeol(void);
 int 		get_ip(char *, int);
 char 		*get_prefixlen(char *, char *, int);
 int 		get_quotedstring(char *, int);
-void * 		find_rrsig_substruct(struct domain *, u_int16_t, u_int16_t);
 int 		get_record(struct domain *, char *, int);
 int 		get_string(char *, int);
 int             lgetc(int);
@@ -2185,7 +2184,7 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 		break;
 	}
 
-        ssd_rrsig = (struct domain_rrsig *) find_rrsig_substruct(ssd, DNS_TYPE_RRSIG, rr->type);
+        ssd_rrsig = (struct domain_rrsig *) find_substruct(ssd, INTERNAL_TYPE_RRSIG);
         if (ssd_rrsig == NULL) {
                 rs += sizeof(struct domain_rrsig);
 #ifdef __OpenBSD__
@@ -2203,8 +2202,11 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 		ssd_rrsig->type = INTERNAL_TYPE_RRSIG;
         }
 
+	printf("filling internal type %d\n", rr->internal_type);
+
 	ssd_rrsig->rrsig[rr->internal_type].type_covered = rr->type;
 	ssd_rrsig->rrsig[rr->internal_type].algorithm = algorithm;
+	ssd_rrsig->rrsig[rr->internal_type].labels = labels;
 
 	if (ssd->ttl[rr->internal_type] != original_ttl) {
 		return (-1);
@@ -3430,116 +3432,6 @@ fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int seria
 	return (0);
 
 }
-
-
-/* find a rrsig substruct in struct domain */
-void *
-find_rrsig_substruct(struct domain *ssd, u_int16_t type, u_int16_t rrtype)
-{
-	struct domain_generic *sdg = NULL;
-	struct domain_rrsig *sdrr = NULL;
-	void *ptr = NULL;
-	void *vssd = (void *)ssd;
-
-	switch (type) {
-	case INTERNAL_TYPE_SOA:
-		if (! (ssd->flags & DOMAIN_HAVE_SOA))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_A:
-		if (! (ssd->flags & DOMAIN_HAVE_A))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_AAAA:
-		if (! (ssd->flags & DOMAIN_HAVE_AAAA))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_MX:
-		if (! (ssd->flags & DOMAIN_HAVE_MX))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NS:
-		if (! (ssd->flags & DOMAIN_HAVE_NS))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_CNAME:
-		if (! (ssd->flags & DOMAIN_HAVE_CNAME))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_PTR:
-		if (! (ssd->flags & DOMAIN_HAVE_PTR))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_TXT:
-		if (! (ssd->flags & DOMAIN_HAVE_TXT))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_SPF:
-		if (! (ssd->flags & DOMAIN_HAVE_SPF))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_SRV:
-		if (! (ssd->flags & DOMAIN_HAVE_SRV))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_SSHFP:
-		if (! (ssd->flags & DOMAIN_HAVE_SSHFP))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NAPTR:
-		if (! (ssd->flags & DOMAIN_HAVE_NAPTR))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_DNSKEY:
-		if (! (ssd->flags & DOMAIN_HAVE_DNSKEY))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_DS:
-		if (! (ssd->flags & DOMAIN_HAVE_DS))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NSEC:
-		if (! (ssd->flags & DOMAIN_HAVE_NSEC))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_RRSIG:
-		if (! (ssd->flags & DOMAIN_HAVE_RRSIG))
-			return NULL;
-		break;
-	default:
-		return NULL;
-		break;
-	}
-	
-#if 0
-	for (sdg = (struct domain_generic *)(ssd + sizeof(struct domain)); \
-		sdg <= (struct domain_generic *)(ssd + ssd->len); \
-		sdg += sdg->len) {
-		if (type == sdg->type) {
-			sdrr = (struct domain_rrsig *)sdg;
-			if (rrtype == sdrr->rrsig[type].type_covered) {
-				ptr = (void *)sdg;
-				return (ptr);
-			}
-		}
-	}
-#endif
-        for (ptr = (void *)(vssd + sizeof(struct domain)); \
-                ptr <= (void *)(vssd + ssd->len); \
-                ptr += sdg->len) {
-                sdg = (struct domain_generic *)ptr;
-		if (type == sdg->type) {
-			sdrr = (struct domain_rrsig *)ptr;
-			if (rrtype == sdrr->rrsig[type].type_covered) {
-				return (ptr);
-			}
-		}
-        }
-
-
-	return NULL;
-}
-
 
 int
 get_record(struct domain *sdomain, char *converted_name, int converted_namelen)

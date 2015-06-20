@@ -34,12 +34,14 @@ int additional_aaaa(char *, int, struct domain *, char *, int, int, int *);
 int additional_mx(char *, int, struct domain *, char *, int, int, int *);
 int additional_opt(struct question *, char *, int, int);
 int additional_ptr(char *, int, struct domain *, char *, int, int, int *);
+int additional_rrsig(char *, int, int, struct domain *, char *, int, int);
 
 extern int 		compress_label(u_char *, int, int);
 extern void *		find_substruct(struct domain *, u_int16_t);
 
+extern int dnssec;
 
-static const char rcsid[] = "$Id: additional.c,v 1.3 2015/06/17 06:45:09 pjp Exp $";
+static const char rcsid[] = "$Id: additional.c,v 1.4 2015/06/20 15:27:07 pjp Exp $";
 
 
 /*
@@ -466,6 +468,7 @@ int
 additional_opt(struct question *question, char *reply, int replylen, int offset)
 {
 	struct dns_optrr *answer;
+	int rcode = 0;
 
 	if ((offset + sizeof(struct dns_optrr)) > replylen) {
 		goto out;
@@ -476,12 +479,100 @@ additional_opt(struct question *question, char *reply, int replylen, int offset)
 	memset(answer->name, 0, sizeof(answer->name));
 	answer->type = htons(DNS_TYPE_OPT);
 	answer->class = htons(question->edns0len);
-	answer->ttl = htonl(0);
+	if (dnssec && question->dnssecok)
+		rcode =  DNSSEC_OK;
+
+	answer->ttl = htonl(rcode); 	/* EXTENDED RCODE */
 
 	answer->rdlen = htons(0);
 
 	offset += sizeof(struct dns_optrr);
 
+out:
+	return (offset);
+
+}
+
+/*
+ * ADDITIONAL_RRSIG - tag on an additional RRSIG to the answer
+ * 		type passed must be an INTERNAL_TYPE!
+ */
+
+int 
+additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *reply, int replylen, int offset)
+{
+	struct answer {
+		u_int16_t type;
+		u_int16_t class;
+		u_int32_t ttl;
+		u_int16_t rdlength;	 /* 12 */
+		u_int16_t type_covered;
+		u_int8_t algorithm;
+		u_int8_t labels;
+		u_int32_t original_ttl;
+		u_int32_t sig_expiration;
+		u_int32_t sig_inception;
+		u_int16_t keytag;
+	} __attribute__((packed));
+
+
+	struct answer *answer;
+	struct domain_rrsig *sdrr;
+	int tmplen, rroffset;
+
+	sdrr = (struct domain_rrsig *)find_substruct(sd, INTERNAL_TYPE_RRSIG);
+	if (sdrr == NULL) 
+		goto out;
+
+	rroffset = offset;
+
+	if ((offset + namelen) > replylen)
+		goto out;
+
+	memcpy(&reply[offset], name, namelen);
+	offset += namelen;
+	tmplen = compress_label((u_char*)reply, offset, namelen);
+
+	if (tmplen != 0) {
+		offset = tmplen;
+	}
+
+	if ((offset + sizeof(struct answer)) > replylen) {
+		offset = rroffset;
+		goto out;
+	}
+
+
+	answer = (struct answer *)&reply[offset];
+	answer->type = htons(DNS_TYPE_RRSIG);
+	answer->class = htons(DNS_CLASS_IN);
+	answer->ttl = htonl(sd->ttl[inttype]);
+	answer->type_covered = htons(sdrr->rrsig[inttype].type_covered);
+	answer->algorithm = sdrr->rrsig[inttype].algorithm;
+	answer->labels = sdrr->rrsig[inttype].labels;
+	answer->original_ttl = htonl(sdrr->rrsig[inttype].original_ttl);
+	answer->sig_expiration = htonl(sdrr->rrsig[inttype].signature_expiration);	
+	answer->sig_inception = htonl(sdrr->rrsig[inttype].signature_inception);
+	answer->keytag = htons(sdrr->rrsig[inttype].key_tag);
+	
+	offset += sizeof(*answer);
+	rroffset = offset;
+
+	memcpy(&reply[offset], &sdrr->rrsig[inttype].signers_name, sdrr->rrsig[inttype].signame_len);
+
+	offset += sdrr->rrsig[inttype].signame_len;
+#if 0
+	tmplen = compress_label((u_char*)reply, offset, sdrr->rrsig[inttype].signame_len);
+
+	if (tmplen != 0) {
+		offset = tmplen;
+	}
+#endif
+
+	memcpy(&reply[offset], &sdrr->rrsig[inttype].signature, sdrr->rrsig[inttype].signature_len);
+	offset += sdrr->rrsig[inttype].signature_len;
+
+	answer->rdlength = htons((offset - rroffset) + 18);
 out:
 	return (offset);
 

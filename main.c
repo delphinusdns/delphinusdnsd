@@ -80,6 +80,7 @@ char 			*dns_label(char *, int *);
 int			free_question(struct question *);
 char 			*get_dns_type(int dnstype);
 struct domain * 	get_soa(DB *, struct question *);
+int			lookup_type(int);
 struct domain * 	lookup_zone(DB *, struct question *, int *, int *, char *);
 int 			get_record_size(DB *, char *, int);
 void *			find_substruct(struct domain *, u_int16_t);
@@ -174,7 +175,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.7 2015/06/18 10:45:53 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.8 2015/06/20 15:27:07 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -3766,4 +3767,31 @@ find_substruct(struct domain *ssd, u_int16_t type)
 	}
 
 	return NULL;
+}
+
+int
+lookup_type(int internal_type)
+{
+	int array[INTERNAL_TYPE_MAX];
+
+	array[INTERNAL_TYPE_A] = DNS_TYPE_A;
+	array[INTERNAL_TYPE_AAAA] = DNS_TYPE_AAAA;
+	array[INTERNAL_TYPE_CNAME] = DNS_TYPE_CNAME;
+	array[INTERNAL_TYPE_NS] = DNS_TYPE_NS;
+	array[INTERNAL_TYPE_DNSKEY] =DNS_TYPE_DNSKEY;
+	array[INTERNAL_TYPE_DS] = DNS_TYPE_DS;
+	array[INTERNAL_TYPE_MX] = DNS_TYPE_MX;
+	array[INTERNAL_TYPE_NAPTR] = DNS_TYPE_NAPTR;
+	array[INTERNAL_TYPE_NSEC] = DNS_TYPE_NSEC;
+	array[INTERNAL_TYPE_PTR] = DNS_TYPE_PTR;
+	array[INTERNAL_TYPE_SOA] = DNS_TYPE_SOA;
+	array[INTERNAL_TYPE_SPF] = DNS_TYPE_SPF;
+	array[INTERNAL_TYPE_SRV] = DNS_TYPE_SRV;
+	array[INTERNAL_TYPE_SSHFP] = DNS_TYPE_SSHFP;
+	array[INTERNAL_TYPE_TXT] = DNS_TYPE_TXT;
+
+	if (internal_type < 0 || internal_type > INTERNAL_TYPE_MAX)
+		return -1;
+
+	return(array[internal_type]);
 }
