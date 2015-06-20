@@ -68,6 +68,7 @@ extern int 	reply_spf(struct sreply *);
 extern int 	reply_srv(struct sreply *, DB *);
 extern int 	reply_sshfp(struct sreply *);
 extern int 	reply_txt(struct sreply *);
+extern int      reply_rrsig(struct sreply *, DB *);
 extern int 	remotelog(int, char *, ...);
 extern char 	*rrlimit_setup(int);
 
@@ -120,6 +121,7 @@ struct typetable {
 	{ "SPF", DNS_TYPE_SPF },
 	{ "SSHFP", DNS_TYPE_SSHFP },
 	{ "NAPTR", DNS_TYPE_NAPTR },
+	{ "RRSIG", DNS_TYPE_RRSIG },
 	{ NULL, 0}
 };
 
@@ -175,7 +177,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.9 2015/06/20 15:58:41 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.10 2015/06/20 18:19:01 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -2412,6 +2414,13 @@ tcpnxdomain:
 
 					slen = reply_any(&sreply);
 					break;		/* must break here */
+				case DNS_TYPE_RRSIG:
+					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
+						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						NULL, replybuf);
+
+					slen = reply_rrsig(&sreply, cfg->db);
+					break;		/* must break here */
 					
 				case DNS_TYPE_AAAA:
 					
@@ -2984,6 +2993,15 @@ udpnxdomain:
 
 					slen = reply_any(&sreply);
 					break;		/* must break here */
+
+				case DNS_TYPE_RRSIG:
+					build_reply(&sreply, so, buf, len, question, from, \
+						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
+						replybuf);
+
+					slen = reply_rrsig(&sreply, cfg->db);
+					break;		/* must break here */
+
 
 				case DNS_TYPE_AAAA:
 					
@@ -3640,7 +3658,14 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 
 		*error = -1;
 		return 0;
+	case DNS_TYPE_RRSIG:
+		if ((sd->flags & DOMAIN_HAVE_RRSIG) == DOMAIN_HAVE_RRSIG)  {
+			returnval = DNS_TYPE_RRSIG;
+			break;
+		}
 
+		*error = -1;
+		return 0;
 	default: /* RR's that we don't support, but have a zone for */
 
 		*error = -1;

@@ -51,6 +51,7 @@ void 		collects_init(void);
 u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int);
 u_short 	in_cksum(const u_short *, register int, int);
 int 		reply_a(struct sreply *, DB *);
+int		reply_rrsig(struct sreply *, DB *);
 int 		reply_aaaa(struct sreply *, DB *);
 int 		reply_mx(struct sreply *, DB *);
 int 		reply_ns(struct sreply *, DB *);
@@ -91,7 +92,21 @@ struct collects {
 extern int debug, verbose, dnssec;
 
 
-static const char rcsid[] = "$Id: reply.c,v 1.10 2015/06/20 17:16:31 pjp Exp $";
+#define RRSIG_ALIAS(mytype) do {					\
+				odh->answer = htons(a_count++);		\
+				tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, mytype, sd, reply, replysize, outlen);		\
+									\
+				if (tmplen == 0) {			\
+					NTOHS(odh->query);		\
+					SET_DNS_TRUNCATION(odh);	\
+					HTONS(odh->query);		\
+					goto out;			\
+				}					\
+									\
+				outlen = tmplen;			\
+			} while (0);
+
+static const char rcsid[] = "$Id: reply.c,v 1.11 2015/06/20 18:19:01 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -270,6 +285,168 @@ out:
 	update_db(db, sd);
 
 	return (retlen);
+}
+
+/*
+ * REPLY_RRSIG() - replies a DNS question (*q) on socket (so)
+ *
+ */
+
+
+int		
+reply_rrsig(struct sreply *sreply, DB *db)
+{
+	char *reply = sreply->replybuf;
+	struct dns_header *odh;
+	u_int16_t outlen = 0;
+	int a_count;
+
+	struct answer {
+		char name[2];
+		u_int16_t type;
+		u_int16_t class;
+		u_int32_t ttl;
+		u_int16_t rdlength;	 /* 12 */
+		in_addr_t rdata;		/* 16 */
+	} __attribute__((packed));
+
+	int so = sreply->so;
+	char *buf = sreply->buf;
+	int len = sreply->len;
+	struct question *q = sreply->q;
+	struct sockaddr *sa = sreply->sa;
+	int salen = sreply->salen;
+	struct domain *sd = sreply->sd1;
+	struct domain_rrsig *sdrr = NULL;
+	
+	int istcp = sreply->istcp;
+	int replysize = 512;
+	int retlen = -1;
+	int tmplen = 0;
+
+	if ((sdrr = find_substruct(sd, INTERNAL_TYPE_RRSIG)) == NULL)
+		return -1;
+
+	if (istcp) {
+		replysize = 65535;
+	}
+	
+	if (q->edns0len > 512)
+		replysize = q->edns0len;
+
+	odh = (struct dns_header *)&reply[0];
+
+	outlen = sizeof(struct dns_header);
+
+	if (len > replysize) {
+		return (retlen);
+	}
+
+	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+
+	outlen += (q->hdr->namelen + 4);
+
+	SET_DNS_REPLY(odh);
+	if (sreply->sr == NULL)
+		SET_DNS_AUTHORITATIVE(odh);
+	else	
+		SET_DNS_RECURSION_AVAIL(odh);
+
+	HTONS(odh->query);
+
+	odh->question = htons(1);
+	odh->nsrr = 0;
+	odh->additional = 0;
+
+	a_count = 0;
+
+	if (sd->flags & DOMAIN_HAVE_A) {
+		RRSIG_ALIAS(INTERNAL_TYPE_A);
+	}
+	if (sd->flags & DOMAIN_HAVE_SOA) {
+		RRSIG_ALIAS(INTERNAL_TYPE_SOA);
+	}
+	if (sd->flags & DOMAIN_HAVE_CNAME) {
+		RRSIG_ALIAS(INTERNAL_TYPE_CNAME);
+	}
+	if (sd->flags & DOMAIN_HAVE_PTR) {
+		RRSIG_ALIAS(INTERNAL_TYPE_PTR);
+	}
+	if (sd->flags & DOMAIN_HAVE_MX) {
+		RRSIG_ALIAS(INTERNAL_TYPE_MX);
+	}
+	if (sd->flags & DOMAIN_HAVE_AAAA) {
+		RRSIG_ALIAS(INTERNAL_TYPE_AAAA);
+	}
+	if (sd->flags & DOMAIN_HAVE_NS) {
+		RRSIG_ALIAS(INTERNAL_TYPE_NS);
+	}
+	if (sd->flags & DOMAIN_HAVE_TXT) {
+		RRSIG_ALIAS(INTERNAL_TYPE_TXT);
+	}
+	if (sd->flags & DOMAIN_HAVE_SRV) {
+		RRSIG_ALIAS(INTERNAL_TYPE_SRV);
+	}
+	if (sd->flags & DOMAIN_HAVE_SPF) {
+		RRSIG_ALIAS(INTERNAL_TYPE_SPF);
+	}
+	if (sd->flags & DOMAIN_HAVE_SSHFP) {
+		RRSIG_ALIAS(INTERNAL_TYPE_SSHFP);
+	}
+	if (sd->flags & DOMAIN_HAVE_NAPTR) {
+		RRSIG_ALIAS(INTERNAL_TYPE_NAPTR);
+	}
+	if (sd->flags & DOMAIN_HAVE_DNSKEY) {
+		RRSIG_ALIAS(INTERNAL_TYPE_DNSKEY);
+	}
+	if (sd->flags & DOMAIN_HAVE_DS) {
+		RRSIG_ALIAS(INTERNAL_TYPE_DS);
+	}
+	if (sd->flags & DOMAIN_HAVE_NSEC) {
+		RRSIG_ALIAS(INTERNAL_TYPE_NSEC);
+	}
+
+	odh->answer = htons(a_count);
+
+	if (q->edns0len) {
+		/* tag on edns0 opt record */
+		odh->additional = htons(1);
+		outlen = additional_opt(q, reply, replysize, outlen);
+	}
+
+out:
+	if (sreply->sr != NULL) {
+		retlen = reply_raw2(so, reply, outlen, sreply->sr);
+	} else {
+		if (istcp) {
+			char *tmpbuf;
+			u_int16_t *plen;
+
+			tmpbuf = malloc(outlen + 2);
+			if (tmpbuf == NULL) {
+				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+			}
+			plen = (u_int16_t *)tmpbuf;
+			*plen = htons(outlen);
+			
+			memcpy(&tmpbuf[2], reply, outlen);
+
+			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+				dolog(LOG_INFO, "send: %s\n", strerror(errno));
+			}
+			free(tmpbuf);
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
+		}
+
+	} /* if (->sr) */
+
+	return (retlen);
+
+
 }
 
 /* 
