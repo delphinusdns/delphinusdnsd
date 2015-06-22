@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.14 2015/06/20 17:20:29 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.15 2015/06/22 15:06:03 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -2130,6 +2130,7 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_rrsig *ssd_rrsig;
+	struct rrsig *rrsig;
 	int converted_namelen, signers_namelen;
 	char *converted_name, *signers_name2;
 	struct rrtab *rr;
@@ -2202,49 +2203,56 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 		ssd_rrsig->type = INTERNAL_TYPE_RRSIG;
         }
 
-	printf("filling internal type %d\n", rr->internal_type);
+	if (rr->internal_type == INTERNAL_TYPE_DNSKEY) {
+		printf("filling hackaround type dnskey\n");
+		rrsig = &ssd_rrsig->rrsig_dnskey[ssd_rrsig->rrsig_dnskey_count++];
+	} else {
+		printf("filling internal type %d\n", rr->internal_type);
+		rrsig = &ssd_rrsig->rrsig[rr->internal_type];
+	}
 
-	ssd_rrsig->rrsig[rr->internal_type].type_covered = rr->type;
-	ssd_rrsig->rrsig[rr->internal_type].algorithm = algorithm;
-	ssd_rrsig->rrsig[rr->internal_type].labels = labels;
+
+	rrsig->type_covered = rr->type;
+	rrsig->algorithm = algorithm;
+	rrsig->labels = labels;
 
 	if (ssd->ttl[rr->internal_type] != original_ttl) {
 		return (-1);
 	}
 
-	ssd_rrsig->rrsig[rr->internal_type].original_ttl = original_ttl;
+	rrsig->original_ttl = original_ttl;
 	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_expiration);
 	if (strptime(tmpbuf, "%Y%m%d%H%M%S", &tmbuf) == NULL) {
 		perror("sig_expiration");
 		return (-1);	
 	}
 	timebuf = timegm(&tmbuf);
-	ssd_rrsig->rrsig[rr->internal_type].signature_expiration = timebuf;
+	rrsig->signature_expiration = timebuf;
 	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_inception);
 	if (strptime(tmpbuf, "%Y%m%d%H%M%S", &tmbuf) == NULL) {
 		perror("sig_inception");
 		return (-1);	
 	}
 	timebuf = timegm(&tmbuf);
-	ssd_rrsig->rrsig[rr->internal_type].signature_inception = timebuf;
-	ssd_rrsig->rrsig[rr->internal_type].key_tag = keytag;
+	rrsig->signature_inception = timebuf;
+	rrsig->key_tag = keytag;
 
 	signers_name2 = check_rr(signers_name, type, DNS_TYPE_RRSIG, &signers_namelen);
 	if (signers_name2 == NULL) {
 		return (-1);
 	}
 
-	memcpy(ssd_rrsig->rrsig[rr->internal_type].signers_name, signers_name2, signers_namelen);
-	ssd_rrsig->rrsig[rr->internal_type].signame_len = signers_namelen;
+	memcpy(rrsig->signers_name, signers_name2, signers_namelen);
+	rrsig->signame_len = signers_namelen;
 
 	
 	/* feed our base64 key the signature */
-	ret = mybase64_decode(signature, ssd_rrsig->rrsig[rr->internal_type].signature, sizeof(ssd_rrsig->rrsig[rr->internal_type].signature));
+	ret = mybase64_decode(signature, rrsig->signature, sizeof(rrsig->signature));
 
 	if (ret < 0) 
 		return (-1);
 
-	ssd_rrsig->rrsig[rr->internal_type].signature_len = ret;
+	rrsig->signature_len = ret;
 	
 	ssd->flags |= DOMAIN_HAVE_RRSIG;
 
