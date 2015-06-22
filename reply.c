@@ -104,7 +104,7 @@ extern int debug, verbose, dnssec;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.14 2015/06/22 17:00:09 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.15 2015/06/22 17:33:34 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -1782,6 +1782,28 @@ reply_soa(struct sreply *sreply)
 
 	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
 
+	if (dnssec && q->dnssecok) {
+		int tmplen = 0;
+		int origlen = outlen;
+	
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_SOA, sd, reply, replysize, outlen, 0);
+	
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen) {
+			NTOHS(odh->answer);
+			odh->answer++;
+			HTONS(odh->answer);
+		}
+	}
+
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
@@ -1790,6 +1812,8 @@ reply_soa(struct sreply *sreply)
 
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
+
+out:
 	
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
