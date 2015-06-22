@@ -104,7 +104,7 @@ extern int debug, verbose, dnssec;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.13 2015/06/22 15:06:03 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.14 2015/06/22 17:00:09 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -226,8 +226,8 @@ reply_a(struct sreply *sreply, DB *db)
 	/* Add RRSIG */
 	if (dnssec && q->dnssecok) {
 		int tmplen = 0;
+		int origlen = outlen;
 
-		odh->answer = htons(a_count + 1);	
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_A, sd, reply, replysize, outlen, 0);
 	
 		if (tmplen == 0) {
@@ -238,6 +238,10 @@ reply_a(struct sreply *sreply, DB *db)
 		}
 
 		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(a_count + 1);	
+
 	}
 
 	if (q->edns0len) {
@@ -769,7 +773,7 @@ reply_mx(struct sreply *sreply, DB *db)
 	/* RRSIG */
 
 	if (dnssec && q->dnssecok) {
-		odh->answer = htons(mx_count + 1);	
+		int origlen = outlen;
 
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_MX, sd, reply, replysize, outlen, 0);
 
@@ -781,6 +785,10 @@ reply_mx(struct sreply *sreply, DB *db)
 		}
 
 		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(mx_count + 1);	
+
 	}
 
 	/* write additional */
@@ -812,8 +820,9 @@ reply_mx(struct sreply *sreply, DB *db)
 
 	if (dnssec && q->dnssecok) {
 		if (sdhave_a) {
+			int origlen = outlen;
+
 			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_A, sdhave_a, reply, replysize, outlen, 0);
-			additional++;
 
 			if (tmplen == 0) {
 				NTOHS(odh->query);
@@ -823,11 +832,15 @@ reply_mx(struct sreply *sreply, DB *db)
 			}
 
 			outlen = tmplen;
+			if (outlen > origlen)
+				additional++;
+
 		} 
 
 		if (sdhave_aaaa) {
+			int origlen = outlen;
+
 			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_AAAA, sdhave_aaaa, reply, replysize, outlen, 0);
-			additional++;
 
 			if (tmplen == 0) {
 				NTOHS(odh->query);
@@ -837,6 +850,8 @@ reply_mx(struct sreply *sreply, DB *db)
 			}
 
 			outlen = tmplen;
+			if (outlen > origlen)
+				additional++;
 		}
 	}
 
@@ -1073,10 +1088,7 @@ reply_ns(struct sreply *sreply, DB *db)
 	/* add RRSIG */
 
 	if (dnssec && q->dnssecok) {
-		if (odh->answer)
-			odh->answer = htons(ns_count + 1);	
-		else if (odh->nsrr)
-			odh->nsrr = htons(ns_count + 1);	
+		int origlen = outlen;
 
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_NS, sd, reply, replysize, outlen, 0);
 
@@ -1088,6 +1100,12 @@ reply_ns(struct sreply *sreply, DB *db)
 		}
 
 		outlen = tmplen;
+		if (outlen > origlen) {
+			if (odh->answer)
+				odh->answer = htons(ns_count + 1);	
+			else if (odh->nsrr)
+				odh->nsrr = htons(ns_count + 1);	
+		}
 	}
 
 	/* shuffle through our linked collect structure and add additional */
@@ -1121,8 +1139,8 @@ reply_ns(struct sreply *sreply, DB *db)
 
 	if (dnssec && q->dnssecok) {
 		if (sdhave_a) {
+			int origlen = outlen;
 			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_A, sdhave_a, reply, replysize, outlen, 0);
-			additional++;
 
 			if (tmplen == 0) {
 				NTOHS(odh->query);
@@ -1132,11 +1150,15 @@ reply_ns(struct sreply *sreply, DB *db)
 			}
 
 			outlen = tmplen;
+
+			if (outlen > origlen)
+				additional++;
 		} 
 
 		if (sdhave_aaaa) {
+			int origlen = outlen;
+
 			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_AAAA, sdhave_aaaa, reply, replysize, outlen, 0);
-			additional++;
 
 			if (tmplen == 0) {
 				NTOHS(odh->query);
@@ -1146,6 +1168,9 @@ reply_ns(struct sreply *sreply, DB *db)
 			}
 
 			outlen = tmplen;
+
+			if (outlen > origlen)
+				additional++;
 		}
 	}
 
