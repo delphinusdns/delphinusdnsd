@@ -105,7 +105,7 @@ extern int debug, verbose, dnssec;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.16 2015/06/24 05:00:28 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.17 2015/06/24 05:30:06 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -420,7 +420,7 @@ reply_dnskey(struct sreply *sreply)
 		for (i = 0; i < a_count; i++) {
 			origlen = outlen; 
 
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_DNSKEY, sd, reply, replysize, outlen, 1);
+			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_DNSKEY, sd, reply, replysize, outlen, i);
 		
 			if (tmplen == 0) {
 				NTOHS(odh->query);
