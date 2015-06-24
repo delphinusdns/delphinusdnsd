@@ -69,6 +69,7 @@ extern int 	reply_srv(struct sreply *, DB *);
 extern int 	reply_sshfp(struct sreply *);
 extern int 	reply_txt(struct sreply *);
 extern int      reply_rrsig(struct sreply *, DB *);
+extern int	reply_dnskey(struct sreply *);
 extern int 	remotelog(int, char *, ...);
 extern char 	*rrlimit_setup(int);
 
@@ -122,6 +123,7 @@ struct typetable {
 	{ "SSHFP", DNS_TYPE_SSHFP },
 	{ "NAPTR", DNS_TYPE_NAPTR },
 	{ "RRSIG", DNS_TYPE_RRSIG },
+	{ "DNSKEY", DNS_TYPE_DNSKEY },
 	{ NULL, 0}
 };
 
@@ -177,7 +179,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.11 2015/06/20 19:35:44 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.12 2015/06/24 05:00:28 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -2414,6 +2416,14 @@ tcpnxdomain:
 
 					slen = reply_any(&sreply);
 					break;		/* must break here */
+				case DNS_TYPE_DNSKEY:
+					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
+						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						NULL, replybuf);
+
+					slen = reply_dnskey(&sreply);
+					break;		/* must break here */
+					
 				case DNS_TYPE_RRSIG:
 					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
@@ -2993,6 +3003,13 @@ udpnxdomain:
 
 					slen = reply_any(&sreply);
 					break;		/* must break here */
+				case DNS_TYPE_DNSKEY:
+					build_reply(&sreply, so, buf, len, question, from, \
+						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
+						replybuf);
+
+					slen = reply_dnskey(&sreply);
+					break;
 
 				case DNS_TYPE_RRSIG:
 					build_reply(&sreply, so, buf, len, question, from, \
@@ -3661,6 +3678,14 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 	case DNS_TYPE_RRSIG:
 		if ((sd->flags & DOMAIN_HAVE_RRSIG) == DOMAIN_HAVE_RRSIG)  {
 			returnval = DNS_TYPE_RRSIG;
+			break;
+		}
+
+		*error = -1;
+		return 0;
+	case DNS_TYPE_DNSKEY:
+		if ((sd->flags & DOMAIN_HAVE_DNSKEY) == DOMAIN_HAVE_DNSKEY)  {
+			returnval = DNS_TYPE_DNSKEY;
 			break;
 		}
 
