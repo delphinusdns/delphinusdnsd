@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.17 2015/06/25 12:05:05 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.18 2015/06/25 12:50:00 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -560,6 +560,10 @@ zonestatement:
 
 				if (debug)
 					printf(" %s DNSKEY\n", $1);
+			} else if (strcasecmp($3, "ds") == 0) {
+				if (fill_ds($1, $3, $5, $7, $9, $11, $13) < 0) {
+					return -1;
+				}
 			} else {
 				if (debug)
 					printf("another dnskey like record I don't know?\n");
@@ -620,29 +624,6 @@ zonestatement:
 			free ($3);
 			free ($7);
 			free ($9);
-		}
-		|
-		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING CRLF
-		{
-			if (strcasecmp($3, "ds") == 0) {
-				if (! dnssec) {
-					dolog(LOG_INFO, "WARNING DNSSEC DS RR but no dnssec enabled!\n");
-				}
-				if (fill_ds($1, $3, $5, $7, $9, $11, $13) < 0) {
-					return -1;
-				}
-
-				if (debug)
-					printf(" %s DS\n", $1);
-			} else {
-				if (debug)
-					printf("another ds like record I don't know?\n");
-				return (-1);
-			}
-
-			free ($1); 
-			free ($3);
-			free ($13);
 		}
 		| comment CRLF
 		;
@@ -2281,7 +2262,7 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 	struct domain_ds *ssd_ds;
 	int converted_namelen;
 	char *converted_name;
-	int i, ret, rs;
+	int i, rs;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2341,12 +2322,16 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 	ssd_ds->ds.algorithm = algorithm;
 	ssd_ds->ds.digest_type = digesttype; 
 	
+	memcpy(ssd_ds->ds.digest, digest, strlen(digest));
+	ssd_ds->ds.digestlen = strlen(digest);	
+#if 0
 	ret = mybase64_decode(digest, ssd_ds->ds.digest, sizeof(ssd_ds->ds.digest));
 
 	if (ret < 0) 
 		return (-1);
 
 	ssd_ds->ds.digestlen = ret;
+#endif
 		
 	ssd->flags |= DOMAIN_HAVE_DS;
 
