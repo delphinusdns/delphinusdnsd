@@ -106,7 +106,7 @@ extern int debug, verbose, dnssec;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.18 2015/06/25 11:52:06 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.19 2015/06/25 12:05:06 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -361,6 +361,7 @@ reply_nsec(struct sreply *sreply)
 	HTONS(odh->query);
 
 	odh->question = htons(1);
+	odh->answer = htons(1);
 	odh->nsrr = 0;
 	odh->additional = 0;
 
@@ -370,45 +371,44 @@ reply_nsec(struct sreply *sreply)
 
 	a_count = 0;
 
-		if ((outlen + sizeof(struct answer) + sdnsec->nsec.ndn_len + 
-			sdnsec->nsec.bitmap_len) > replysize) {
-			NTOHS(odh->query);
-			SET_DNS_TRUNCATION(odh);
-			HTONS(odh->query);
-			goto out;
-		}
+	if ((outlen + sizeof(struct answer) + sdnsec->nsec.ndn_len + 
+		sdnsec->nsec.bitmap_len) > replysize) {
+		NTOHS(odh->query);
+		SET_DNS_TRUNCATION(odh);
+		HTONS(odh->query);
+		goto out;
+	}
 
-		/*
-		 * answer->name is a pointer to the request (0xc00c) 
-		 */
+	/*
+	 * answer->name is a pointer to the request (0xc00c) 
+	 */
 
-		answer->name[0] = 0xc0;				/* 1 byte */
-		answer->name[1] = 0x0c;				/* 2 bytes */
-		answer->type = q->hdr->qtype;			/* 4 bytes */	
-		answer->class = q->hdr->qclass;			/* 6 bytes */
-		if (sreply->sr != NULL)
-			answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_NSEC] - (time(NULL) - sd->created));
-		else
-			answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_NSEC]);			/* 10 bytes */
+	answer->name[0] = 0xc0;				/* 1 byte */
+	answer->name[1] = 0x0c;				/* 2 bytes */
+	answer->type = q->hdr->qtype;			/* 4 bytes */	
+	answer->class = q->hdr->qclass;			/* 6 bytes */
+	if (sreply->sr != NULL)
+		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_NSEC] - (time(NULL) - sd->created));
+	else
+		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_NSEC]);			/* 10 bytes */
 
-		answer->rdlength = htons(sdnsec->nsec.ndn_len + sdnsec->nsec.bitmap_len);	
+	answer->rdlength = htons(sdnsec->nsec.ndn_len + sdnsec->nsec.bitmap_len);	
 
-		outlen += sizeof(struct answer);
+	outlen += sizeof(struct answer);
 
-		memcpy(&reply[outlen], sdnsec->nsec.next_domain_name,
-			sdnsec->nsec.ndn_len);
+	memcpy(&reply[outlen], sdnsec->nsec.next_domain_name,
+		sdnsec->nsec.ndn_len);
 
-		outlen += sdnsec->nsec.ndn_len;
+	outlen += sdnsec->nsec.ndn_len;
 
-		memcpy(&reply[outlen], sdnsec->nsec.bitmap, sdnsec->nsec.bitmap_len);
-		outlen += sdnsec->nsec.bitmap_len;
+	memcpy(&reply[outlen], sdnsec->nsec.bitmap, sdnsec->nsec.bitmap_len);
+	outlen += sdnsec->nsec.bitmap_len;
 
-		a_count++;
+	a_count++;
 
-		/* set new offset for answer */
-		answer = (struct answer *)&reply[outlen];
+	/* set new offset for answer */
+	answer = (struct answer *)&reply[outlen];
 
-	odh->answer = htons(1);
 
 	/* Add RRSIG */
 	if (dnssec && q->dnssecok) {

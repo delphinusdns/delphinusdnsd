@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.16 2015/06/25 11:52:06 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.17 2015/06/25 12:05:05 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -3727,7 +3727,6 @@ create_nsec_bitmap(char *rrlist, char *bitmap, int *len)
 	char tmp[8192];
 	char *argv[256];	/* could be more XXX */
 	char **ap;
-	u_int32_t *bitrow;
 	int argc = 0;
 	int i, j, outlen = 0;
 	struct rrtab *rr;
