@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.19 2015/06/25 13:42:18 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.20 2015/06/25 18:07:23 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -144,6 +144,7 @@ char 		*get_prefixlen(char *, char *, int);
 int 		get_quotedstring(char *, int);
 int 		get_record(struct domain *, char *, int);
 int 		get_string(char *, int);
+int		hex2bin(char *, int, char *);
 int             lgetc(int);
 struct tab * 	lookup(struct tab *, char *);
 int             lungetc(int);
@@ -2263,6 +2264,7 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 	int converted_namelen;
 	char *converted_name;
 	int i, rs;
+	int ret;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2322,16 +2324,14 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 	ssd_ds->ds[ssd_ds->ds_count].algorithm = algorithm;
 	ssd_ds->ds[ssd_ds->ds_count].digest_type = digesttype; 
 	
+#if 0
 	memcpy(ssd_ds->ds[ssd_ds->ds_count].digest, digest, strlen(digest));
 	ssd_ds->ds[ssd_ds->ds_count].digestlen = strlen(digest);	
-#if 0
-	ret = mybase64_decode(digest, ssd_ds->ds.digest, sizeof(ssd_ds->ds.digest));
-
-	if (ret < 0) 
-		return (-1);
-
-	ssd_ds->ds.digestlen = ret;
 #endif
+
+	ret = hex2bin(digest, strlen(digest), ssd_ds->ds[ssd_ds->ds_count].digest);
+
+	ssd_ds->ds[ssd_ds->ds_count].digestlen = ret;
 
 	ssd_ds->ds_count++;
 		
@@ -3781,4 +3781,31 @@ create_nsec_bitmap(char *rrlist, char *bitmap, int *len)
 	*len = outlen;
 
 	return;
+}
+
+int
+hex2bin(char *input, int ilen, char *output)
+{
+	int i;
+	int ret = 0;
+	int num;
+
+	for (i = 0; i < ilen; i++) {
+		if (isalpha(input[i])) {
+			num = (tolower(input[i]) - 'a') + 10;
+		} else 
+			num = input[i] - '0';
+
+		num <<= 4;
+		i++;
+
+		if (isalpha(input[i])) {
+			num += (tolower(input[i]) - 'a') + 10;
+		} else 
+			num += input[i] - '0';
+
+		output[ret++] = num;
+	}
+	
+	return (ret);	
 }

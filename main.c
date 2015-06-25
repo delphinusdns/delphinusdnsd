@@ -70,6 +70,7 @@ extern int 	reply_sshfp(struct sreply *);
 extern int 	reply_txt(struct sreply *);
 extern int      reply_rrsig(struct sreply *, DB *);
 extern int	reply_dnskey(struct sreply *);
+extern int	reply_ds(struct sreply *);
 extern int	reply_nsec(struct sreply *);
 extern int 	remotelog(int, char *, ...);
 extern char 	*rrlimit_setup(int);
@@ -126,6 +127,7 @@ struct typetable {
 	{ "RRSIG", DNS_TYPE_RRSIG },
 	{ "DNSKEY", DNS_TYPE_DNSKEY },
 	{ "NSEC", DNS_TYPE_NSEC },
+	{ "DS", DNS_TYPE_DS },
 	{ NULL, 0}
 };
 
@@ -181,7 +183,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.13 2015/06/25 11:52:06 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.14 2015/06/25 18:07:23 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -2426,6 +2428,14 @@ tcpnxdomain:
 					slen = reply_nsec(&sreply);
 					break;		/* must break here */
 					
+				case DNS_TYPE_DS:
+					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
+						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						NULL, replybuf);
+
+					slen = reply_ds(&sreply);
+					break;		/* must break here */
+					
 				case DNS_TYPE_DNSKEY:
 					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
@@ -3019,6 +3029,14 @@ udpnxdomain:
 						replybuf);
 
 					slen = reply_nsec(&sreply);
+					break;
+
+				case DNS_TYPE_DS:
+					build_reply(&sreply, so, buf, len, question, from, \
+						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
+						replybuf);
+
+					slen = reply_ds(&sreply);
 					break;
 
 				case DNS_TYPE_DNSKEY:
@@ -3704,6 +3722,14 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 	case DNS_TYPE_NSEC:
 		if ((sd->flags & DOMAIN_HAVE_NSEC) == DOMAIN_HAVE_NSEC)  {
 			returnval = DNS_TYPE_NSEC;
+			break;
+		}
+
+		*error = -1;
+		return 0;
+	case DNS_TYPE_DS:
+		if ((sd->flags & DOMAIN_HAVE_DS) == DOMAIN_HAVE_DS)  {
+			returnval = DNS_TYPE_DS;
 			break;
 		}
 

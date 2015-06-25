@@ -41,7 +41,7 @@ extern void *		find_substruct(struct domain *, u_int16_t);
 
 extern int dnssec;
 
-static const char rcsid[] = "$Id: additional.c,v 1.7 2015/06/22 15:06:03 pjp Exp $";
+static const char rcsid[] = "$Id: additional.c,v 1.8 2015/06/25 18:07:23 pjp Exp $";
 
 
 /*
@@ -545,6 +545,12 @@ additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *
 
 	if (inttype == INTERNAL_TYPE_DNSKEY) {
 		rrsig = &sdrr->rrsig_dnskey[count];
+		if (rrsig->algorithm == 0)
+			return 0;
+	} else if (inttype == INTERNAL_TYPE_DS) {
+		rrsig = &sdrr->rrsig_ds[count];
+		if (rrsig->algorithm == 0)
+			return 0;
 	} else {
 		rrsig = &sdrr->rrsig[inttype];	
 	}
