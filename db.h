@@ -300,7 +300,8 @@ struct domain_nsec {
 struct domain_ds {
 	u_int16_t type;
 	u_int32_t len;
-	struct ds ds;				/* DS RR */
+	struct ds ds[RECORD_COUNT];		/* DS RR */
+	int ds_count;				/* count of DS */
 } __attribute__((packed));
 
 
