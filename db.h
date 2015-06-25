@@ -86,7 +86,8 @@ struct rrsig {
 struct nsec {
 	char next_domain_name[DNS_MAXNAME];
 	u_int8_t ndn_len;	/* next domain name length */
-	u_int16_t bitmap[256];	/* XXX? */
+	char bitmap[8192];
+	u_int16_t bitmap_len;
 } __attribute__((packed));
 
 struct ds {

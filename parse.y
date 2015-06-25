@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.15 2015/06/22 15:06:03 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.16 2015/06/25 11:52:06 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -137,6 +137,7 @@ int		fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t
 int 		fill_nsec(char *, char *, u_int32_t, char *, char *);
 int		fill_ds(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
 
+void		create_nsec_bitmap(char *, char *, int *);
 int             findeol(void);
 int 		get_ip(char *, int);
 char 		*get_prefixlen(char *, char *, int);
@@ -2450,7 +2451,8 @@ fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitma
 	ssd_nsec->nsec.ndn_len = converted_domainnamelen;
 
 	/* XXX create/manage bitmap */
-		
+	create_nsec_bitmap(bitmap, ssd_nsec->nsec.bitmap, (int *)&ssd_nsec->nsec.bitmap_len);
+	
 	ssd->flags |= DOMAIN_HAVE_NSEC;
 
 	set_record(ssd, rs, converted_name, converted_namelen);
@@ -3717,4 +3719,80 @@ get_prefixlen(char *input, char *prefixlength, int plsize)
 	snprintf(prefixlength, plsize, "%s", p);
 	ret = strdup(input);
 	return (ret);
+}
+
+void
+create_nsec_bitmap(char *rrlist, char *bitmap, int *len)
+{
+	char tmp[8192];
+	char *argv[256];	/* could be more XXX */
+	char **ap;
+	u_int32_t *bitrow;
+	int argc = 0;
+	int i, j, outlen = 0;
+	struct rrtab *rr;
+
+	memset(&tmp, 0, sizeof(tmp));
+
+	for (ap = argv; ap < &argv[255] && 
+		(*ap = strsep(&rrlist, " ")) != NULL; argc++) {
+		
+		if (*ap != '\0') {
+			ap++;
+		} 
+	}
+	*ap = NULL;
+
+	for (i = 0; i < argc; i++) {
+		rr = rrlookup(argv[i]);
+		if (rr != NULL) {
+			switch (rr->type % 8) {
+			case 0:
+				tmp[rr->type / 8] |= 1 << 7;
+				break;
+			case 1:
+				tmp[rr->type / 8] |= 1 << 6;
+				break;
+			case 2:
+				tmp[rr->type / 8] |= 1 << 5;
+				break;
+			case 3:
+				tmp[rr->type / 8] |= 1 << 4;
+				break;
+			case 4:
+				tmp[rr->type / 8] |= 1 << 3;
+				break;
+			case 5:
+				tmp[rr->type / 8] |= 1 << 2;
+				break;
+			case 6:
+				tmp[rr->type / 8] |= 1 << 1;
+				break;
+			case 7:
+				tmp[rr->type / 8] |= 1 << 0;
+				break;
+			}
+		}
+	}
+
+	for (i = 0, outlen = 0; i < 255; i++) {
+		for (j = 31; j >= 0; j--) {
+			if (tmp[(i * 32) + j])
+				break;
+		}
+
+		if (tmp[(i * 32) + j]) {
+			bitmap[0 + outlen] = i;
+			bitmap[1 + outlen] = j + 1;
+			memcpy(&bitmap[2 + outlen], &tmp[i * 32], j + 1);
+
+			outlen += 2;
+			outlen += j + 1;
+		}
+		
+	}
+
+	*len = outlen;
+
+	return;
 }
