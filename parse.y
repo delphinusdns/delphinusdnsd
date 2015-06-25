@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.18 2015/06/25 12:50:00 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.19 2015/06/25 13:42:18 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -2318,12 +2318,12 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 		ssd_ds->type = INTERNAL_TYPE_DS;
         }
 
-	ssd_ds->ds.key_tag = keytag;
-	ssd_ds->ds.algorithm = algorithm;
-	ssd_ds->ds.digest_type = digesttype; 
+	ssd_ds->ds[ssd_ds->ds_count].key_tag = keytag;
+	ssd_ds->ds[ssd_ds->ds_count].algorithm = algorithm;
+	ssd_ds->ds[ssd_ds->ds_count].digest_type = digesttype; 
 	
-	memcpy(ssd_ds->ds.digest, digest, strlen(digest));
-	ssd_ds->ds.digestlen = strlen(digest);	
+	memcpy(ssd_ds->ds[ssd_ds->ds_count].digest, digest, strlen(digest));
+	ssd_ds->ds[ssd_ds->ds_count].digestlen = strlen(digest);	
 #if 0
 	ret = mybase64_decode(digest, ssd_ds->ds.digest, sizeof(ssd_ds->ds.digest));
 
@@ -2332,6 +2332,8 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 
 	ssd_ds->ds.digestlen = ret;
 #endif
+
+	ssd_ds->ds_count++;
 		
 	ssd->flags |= DOMAIN_HAVE_DS;
 
