@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.20 2015/06/25 18:07:23 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.21 2015/06/26 11:02:40 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -135,6 +135,8 @@ int 		fill_txt(char *, char *, int, char *);
 int		fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
 int		fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
 int 		fill_nsec(char *, char *, u_int32_t, char *, char *);
+int		fill_nsec3param(char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
+int		fill_nsec3(char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
 int		fill_ds(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
 
 void		create_nsec_bitmap(char *, char *, int *);
@@ -551,7 +553,7 @@ zonestatement:
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING CRLF
 		{
 			if (! dnssec) {
-				dolog(LOG_INFO, "WARNING DNSSEC DNSKEY RR but no dnssec enabled!\n");
+				dolog(LOG_INFO, "WARNING DNSSEC DNSKEY/DS/NSEC3PARAM RR but no dnssec enabled!\n");
 			}
 
 			if (strcasecmp($3, "dnskey") == 0) {
@@ -565,6 +567,14 @@ zonestatement:
 				if (fill_ds($1, $3, $5, $7, $9, $11, $13) < 0) {
 					return -1;
 				}
+				if (debug)
+					printf(" %s DS\n", $1);
+			} else if (strcasecmp($3, "nsec3param") == 0) {
+				if (fill_nsec3param($1, $3, $5, $7, $9, $11, $13) < 0) {
+					return -1;
+				}
+				if (debug)
+					printf(" %s NSEC3PARAM\n", $1);
 			} else {
 				if (debug)
 					printf("another dnskey like record I don't know?\n");
@@ -625,6 +635,30 @@ zonestatement:
 			free ($3);
 			free ($7);
 			free ($9);
+		}
+		|
+		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING COMMA QUOTEDSTRING COMMA QUOTEDSTRING CRLF
+		{
+			if (strcasecmp($3, "nsec3") == 0) {
+				if (! dnssec) {
+					dolog(LOG_INFO, "WARNING DNSSEC NSEC3 RR but no dnssec enabled!\n");
+				}
+
+				if (fill_nsec3($1, $3, $5, $7, $9, $11, $13, $15, $17) < 0) {
+					return -1;
+				}
+
+				if (debug)
+					printf(" %s NSEC3\n", $1);
+			}
+
+
+
+			free ($1);
+			free ($3);
+			free ($13);
+			free ($15);
+			free ($17);
 		}
 		| comment CRLF
 		;
@@ -2346,6 +2380,21 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 	
 	return (0);
 
+}
+
+int
+fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt, char *nextname, char *bitmap)
+{
+
+	return 0;
+
+}
+
+int
+fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt)
+{
+
+	return 0;
 }
 
 int
