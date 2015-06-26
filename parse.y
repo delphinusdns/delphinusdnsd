@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.21 2015/06/26 11:02:40 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.22 2015/06/26 11:59:05 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -175,6 +175,8 @@ struct rrtab {
  { "naptr", 	DNS_TYPE_NAPTR,		INTERNAL_TYPE_NAPTR },
  { "ns",        DNS_TYPE_NS,		INTERNAL_TYPE_NS },
  { "nsec", 	DNS_TYPE_NSEC, 		INTERNAL_TYPE_NSEC },
+ { "nsec3", 	DNS_TYPE_NSEC3,		INTERNAL_TYPE_NSEC3 },
+ { "nsec3param", DNS_TYPE_NSEC3PARAM,	INTERNAL_TYPE_NSEC3PARAM },
  { "ptr",       DNS_TYPE_PTR,		INTERNAL_TYPE_PTR },
  { "rrsig", 	DNS_TYPE_RRSIG, 	-1 },
  { "soa",       DNS_TYPE_SOA, 		INTERNAL_TYPE_SOA },
@@ -389,6 +391,8 @@ zonestatement:
 				if (fill_srv($1, $3, $5, $7, $9, $11, $13) < 0) {
 					return -1;
 				}
+				if (debug)
+					printf("SRV\n");
 
 			} else {
 				if (debug)
@@ -594,6 +598,7 @@ zonestatement:
 				}
 
 				if (fill_rrsig($1, $3, $5, $7, $9, $11, $13, $15, $17, $19, $21, $23) < 0) {	
+					fprintf(stderr, "fill_rrsig failed\n");
 					return -1;
 				}
 
@@ -2233,9 +2238,11 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 	rrsig->algorithm = algorithm;
 	rrsig->labels = labels;
 
+#if 0
 	if (ssd->ttl[rr->internal_type] != original_ttl) {
 		return (-1);
 	}
+#endif
 
 	rrsig->original_ttl = original_ttl;
 	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_expiration);

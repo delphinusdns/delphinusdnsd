@@ -171,6 +171,9 @@ struct dns_question_hdr {
 #define DNS_TYPE_NSEC	47		/* RFC 4034, section 4 */
 #define DNS_TYPE_DNSKEY	48		/* RFC 4034, section 2 */
 
+#define DNS_TYPE_NSEC3	50		/* RFC 5155, section 3 */
+#define DNS_TYPE_NSEC3PARAM	51	/* RFC 5155, section 4 */
+
 #define DNS_TYPE_SPF	99		/* RFC 4408 */
 
 #define DNS_TYPE_TSIG	250		/* RFC 2845, page 3 */
