@@ -109,7 +109,7 @@ extern int debug, verbose, dnssec;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.21 2015/06/27 09:51:46 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.22 2015/06/27 10:02:45 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -1518,6 +1518,26 @@ reply_aaaa(struct sreply *sreply, DB *db)
 		/* set new offset for answer */
 		answer = (struct answer *)&reply[outlen];
 	} while (aaaa_count < RECORD_COUNT && --sdaaaa->aaaa_count);
+
+	if (dnssec && q->dnssecok) {
+		int tmplen = 0;
+		int origlen = outlen;
+
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_AAAA, sd, reply, replysize, outlen, 0);
+	
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(aaaa_count + 1);	
+
+	}
 
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
