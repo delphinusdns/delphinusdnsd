@@ -109,7 +109,7 @@ extern int debug, verbose, dnssec;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.24 2015/06/27 10:11:42 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.25 2015/06/27 11:43:51 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -228,7 +228,7 @@ reply_a(struct sreply *sreply, DB *db)
 		answer = (struct answer *)&reply[outlen];
 	} while (a_count < RECORD_COUNT && --sda->a_count);
 
-	/* Add RRSIG */
+	/* Add RRSIG reply_a */
 	if (dnssec && q->dnssecok) {
 		int tmplen = 0;
 		int origlen = outlen;
@@ -417,7 +417,7 @@ reply_nsec3param(struct sreply *sreply)
 	answer = (struct answer *)&reply[outlen];
 
 
-	/* Add RRSIG */
+	/* Add RRSIG reply_nsec3 */
 	if (dnssec && q->dnssecok) {
 		int tmplen = 0;
 		int origlen = outlen;
@@ -618,7 +618,7 @@ reply_nsec3(struct sreply *sreply)
 	answer = (struct answer *)&reply[outlen];
 
 
-	/* Add RRSIG */
+	/* Add RRSIG reply_nsec3 */
 	if (dnssec && q->dnssecok) {
 		int tmplen = 0;
 		int origlen = outlen;
@@ -799,7 +799,7 @@ reply_nsec(struct sreply *sreply)
 	answer = (struct answer *)&reply[outlen];
 
 
-	/* Add RRSIG */
+	/* Add RRSIG reply_nsec */
 	if (dnssec && q->dnssecok) {
 		int tmplen = 0;
 		int origlen = outlen;
@@ -985,7 +985,7 @@ reply_ds(struct sreply *sreply)
 
 	odh->answer = htons(a_count);
 
-	/* Add RRSIG */
+	/* Add RRSIG reply_ds */
 	if (dnssec && q->dnssecok) {
 		int tmplen = 0;
 		int origlen = outlen;
@@ -1170,7 +1170,7 @@ reply_dnskey(struct sreply *sreply)
 		answer = (struct answer *)&reply[outlen];
 	} while (a_count < RECORD_COUNT && --sdkey->dnskey_count);
 
-	/* Add RRSIG */
+	/* Add RRSIG reply_dnskey */
 	if (dnssec && q->dnssecok) {
 		int tmplen = 0;
 		int origlen = outlen;
@@ -1519,6 +1519,7 @@ reply_aaaa(struct sreply *sreply, DB *db)
 		answer = (struct answer *)&reply[outlen];
 	} while (aaaa_count < RECORD_COUNT && --sdaaaa->aaaa_count);
 
+	/* RRSIG reply_aaaa */
 	if (dnssec && q->dnssecok) {
 		int tmplen = 0;
 		int origlen = outlen;
@@ -1734,7 +1735,7 @@ reply_mx(struct sreply *sreply, DB *db)
 		answer = (struct answer *)&reply[outlen];
 	} while (++mx_count < RECORD_COUNT && --sdmx->mx_count);
 
-	/* RRSIG */
+	/* RRSIG reply_mx*/
 
 	if (dnssec && q->dnssecok) {
 		int origlen = outlen;
@@ -1779,8 +1780,6 @@ reply_mx(struct sreply *sreply, DB *db)
 			outlen = tmplen;
 		}
 	}
-
-	/* RRSIG */
 
 	if (dnssec && q->dnssecok) {
 		if (sdhave_a) {
@@ -2049,8 +2048,8 @@ reply_ns(struct sreply *sreply, DB *db)
 		answer = (struct answer *)&reply[outlen];
 	} while (++ns_count < RECORD_COUNT && --sdns->ns_count);
 
-	/* add RRSIG */
 
+	/* add RRSIG reply_ns */
 	if (dnssec && q->dnssecok) {
 		int origlen = outlen;
 
@@ -2100,7 +2099,6 @@ reply_ns(struct sreply *sreply, DB *db)
 	}
 	
 	/* Add RRSIG */
-
 	if (dnssec && q->dnssecok) {
 		if (sdhave_a) {
 			int origlen = outlen;
@@ -2746,6 +2744,7 @@ reply_soa(struct sreply *sreply)
 
 	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
 
+	/* RRSIG reply_soa */
 	if (dnssec && q->dnssecok) {
 		int tmplen = 0;
 		int origlen = outlen;
@@ -2907,7 +2906,7 @@ reply_spf(struct sreply *sreply)
 
 	answer->rdlength = htons(sdspf->spflen + 1);
 
-	/* Add RRSIG */
+	/* Add RRSIG reply_spf */
 	if (dnssec && q->dnssecok) {
 		int tmplen = 0;
 		int origlen = outlen;
@@ -3067,7 +3066,7 @@ reply_txt(struct sreply *sreply)
 
 	answer->rdlength = htons(sdtxt->txtlen + 1);
 
-	/* Add RRSIG */
+	/* Add RRSIG reply_txt */
 	if (dnssec && q->dnssecok) {
 		int tmplen = 0;
 		int origlen = outlen;
@@ -3340,6 +3339,8 @@ reply_naptr(struct sreply *sreply, DB *db)
 	char *p;
 	int retlen = -1;
 
+	struct domain *sdhave_a = NULL, *sdhave_aaaa = NULL;
+
 	if ((sdnaptr = find_substruct(sd, INTERNAL_TYPE_NAPTR)) == NULL)
 		return -1;
 
@@ -3476,19 +3477,42 @@ reply_naptr(struct sreply *sreply, DB *db)
 		answer = (struct answer *)&reply[outlen];
 	} while (++naptr_count < RECORD_COUNT && --sdnaptr->naptr_count);
 
-	/* write additional */
+	/* RRSIG reply_naptr*/
 
+	if (dnssec && q->dnssecok) {
+		int origlen = outlen;
+
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_NAPTR, sd, reply, replysize, outlen, 0);
+
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(naptr_count + 1);	
+
+	}
+
+	/* write additional */
 	SLIST_FOREACH(cnp, &collectshead, collect_entry) {
 		int addcount;
-		int tmplen;
 
 		switch (cnp->type) {
 		case DNS_TYPE_A:
 			tmplen = additional_a(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
+			if (addcount)
+				sdhave_a = cnp->sd;
 			additional += addcount;
 			break;
 		case DNS_TYPE_AAAA:
 			tmplen = additional_aaaa(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
+			if (addcount)
+				sdhave_aaaa = cnp->sd;
 			additional += addcount;
 			break;
 		}
@@ -3498,15 +3522,44 @@ reply_naptr(struct sreply *sreply, DB *db)
 		}
 	}
 
-	odh->additional = htons(additional);	
+	if (dnssec && q->dnssecok) {
+		if (sdhave_a) {
+			int origlen = outlen;
 
-	while (!SLIST_EMPTY(&collectshead)) {
-		cn1 = SLIST_FIRST(&collectshead);
-		SLIST_REMOVE_HEAD(&collectshead, collect_entry);
-		free(cn1->name);
-		free(cn1->sd);
-		free(cn1);
+			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_A, sdhave_a, reply, replysize, outlen, 0);
+
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				goto out;
+			}
+
+			outlen = tmplen;
+			if (outlen > origlen)
+				additional++;
+
+		} 
+
+		if (sdhave_aaaa) {
+			int origlen = outlen;
+
+			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_AAAA, sdhave_aaaa, reply, replysize, outlen, 0);
+
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				goto out;
+			}
+
+			outlen = tmplen;
+			if (outlen > origlen)
+				additional++;
+		}
 	}
+
+	odh->additional = htons(additional);	
 
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -3518,6 +3571,14 @@ reply_naptr(struct sreply *sreply, DB *db)
 	}
 
 out:
+	while (!SLIST_EMPTY(&collectshead)) {
+		cn1 = SLIST_FIRST(&collectshead);
+		SLIST_REMOVE_HEAD(&collectshead, collect_entry);
+		free(cn1->name);
+		free(cn1->sd);
+		free(cn1);
+	}
+
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {
