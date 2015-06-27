@@ -92,6 +92,26 @@ struct nsec {
 	u_int16_t bitmap_len;
 } __attribute__((packed));
 
+struct nsec3 {
+	u_int8_t algorithm;
+	u_int8_t flags;
+	u_int16_t iterations;
+	u_int8_t saltlen;
+	char salt[256];
+	char next[DNS_MAXNAME];
+	u_int8_t nextlen;	/* next domain name length */
+	char bitmap[8192];
+	u_int16_t bitmap_len;
+} __attribute__((packed));
+
+struct nsec3param {
+	u_int8_t algorithm;
+	u_int8_t flags;
+	u_int16_t iterations;
+	u_int8_t saltlen;
+	char salt[256];
+} __attribute__((packed));
+
 struct ds {
 	u_int16_t key_tag;
 	u_int8_t algorithm;
@@ -175,6 +195,8 @@ struct domain {
 #define DOMAIN_HAVE_DS		0x2000
 #define DOMAIN_HAVE_NSEC	0x4000
 #define DOMAIN_HAVE_RRSIG	0x8000
+#define DOMAIN_HAVE_NSEC3	0x10000
+#define DOMAIN_HAVE_NSEC3PARAM	0x20000
 	u_int32_t ttl[INTERNAL_TYPE_MAX];	/* time to lives */
 	time_t created;			/* time created, for dynamic zones */
 } __attribute__((packed));
@@ -297,6 +319,18 @@ struct domain_nsec {
 	u_int16_t type;
 	u_int32_t len;
 	struct nsec nsec;			/* NSEC RR */
+} __attribute__((packed));
+
+struct domain_nsec3 {
+	u_int16_t type;
+	u_int32_t len;
+	struct nsec3 nsec3;			/* NSEC3 RR */
+} __attribute__((packed));
+
+struct domain_nsec3param {
+	u_int16_t type;
+	u_int32_t len;
+	struct nsec3param nsec3param;		/* NSEC3PARAM RR */
 } __attribute__((packed));
 
 struct domain_ds {

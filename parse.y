@@ -101,7 +101,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.22 2015/06/26 11:59:05 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.23 2015/06/27 09:51:46 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -2392,16 +2392,207 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 int
 fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt, char *nextname, char *bitmap)
 {
+	DB *db = mydb;
+	void *sdomain, *tp;
+	struct domain *ssd;
+	struct domain_nsec3 *ssd_nsec3;
+	int converted_namelen, converted_domainnamelen;
+	char *converted_name, *converted_domainname;
+	int i, rs;
 
-	return 0;
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
 
+	converted_name = check_rr(name, type, DNS_TYPE_NSEC3, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+        rs = get_record_size(db, converted_name, converted_namelen);
+        if (rs < 0) {
+		if (debug)
+			dolog(LOG_INFO, "get_record_size failed\n");
+                return (-1);
+        }
+
+        if ((sdomain = calloc(1, rs)) == NULL) {
+		if (debug)
+			dolog(LOG_INFO, "calloc failed\n");
+                return -1;
+        }
+
+	ssd = (struct domain *)sdomain;
+
+	dolog(LOG_INFO, "getting record\n");
+	if (get_record(ssd, converted_name, converted_namelen) < 0) {
+		return (-1);
+	}
+
+
+#ifdef __linux__
+	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
+	ssd->zonename[DNS_MAXNAME] = '\0';
+#else
+	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
+#endif
+	memcpy(ssd->zone, converted_name, converted_namelen);
+	ssd->zonelen = converted_namelen;
+
+	ssd->ttl[INTERNAL_TYPE_NSEC3] = myttl;
+
+
+	for (i = 0; i < strlen(nextname); i++) {
+		nextname[i] = tolower((int)nextname[i]);
+	}
+
+	converted_domainname = check_rr(nextname, type, DNS_TYPE_NSEC3, &converted_domainnamelen);
+	if (converted_name == NULL) {
+		if (debug)
+			dolog(LOG_INFO, "check_rr failed\n");
+		return -1;
+	}
+
+	ssd_nsec3 = (struct domain_nsec3 *)find_substruct(ssd, INTERNAL_TYPE_NSEC3);
+	if (ssd_nsec3 == NULL) {
+		rs += sizeof(struct domain_nsec3);
+#ifdef __OpenBSD__
+		tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
+		if (tp == NULL) {
+			dolog(LOG_INFO, "reallocarray failed\n");
+			free (sdomain);
+			return -1;
+		}
+		sdomain = tp;
+		ssd_nsec3 = (sdomain + (rs - sizeof(struct domain_nsec3)));
+		memset((char *)ssd_nsec3, 0, sizeof(struct domain_nsec3));
+		ssd = (struct domain *)sdomain;
+		ssd_nsec3->len = sizeof(struct domain_nsec3);
+		ssd_nsec3->type = INTERNAL_TYPE_NSEC3;
+	}
+
+	ssd_nsec3->nsec3.algorithm = algorithm;
+	ssd_nsec3->nsec3.flags = flags;
+	ssd_nsec3->nsec3.iterations = iterations;
+	if (strcasecmp(salt, "-") == 0) {
+		ssd_nsec3->nsec3.saltlen = 0;
+	} else {
+		ssd_nsec3->nsec3.saltlen = strlen(salt);
+		memcpy(&ssd_nsec3->nsec3.salt, salt, strlen(salt));
+	}
+
+	memcpy(ssd_nsec3->nsec3.next, converted_domainname, converted_domainnamelen);
+	ssd_nsec3->nsec3.nextlen = converted_domainnamelen;
+
+	/* XXX create/manage bitmap */
+	create_nsec_bitmap(bitmap, ssd_nsec3->nsec3.bitmap, (int *)&ssd_nsec3->nsec3.bitmap_len);
+	
+	ssd->flags |= DOMAIN_HAVE_NSEC3;
+
+	set_record(ssd, rs, converted_name, converted_namelen);
+
+	if (converted_name)
+		free (converted_name);
+	
+	free (sdomain);
+
+	return (0);
 }
 
 int
 fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt)
 {
+	DB *db = mydb;
+	void *sdomain, *tp;
+	struct domain *ssd;
+	struct domain_nsec3param *ssd_nsec3param;
+	int i, rs;
 
-	return 0;
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_NSEC3PARAM, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+        rs = get_record_size(db, converted_name, converted_namelen);
+        if (rs < 0) {
+		if (debug)
+			dolog(LOG_INFO, "get_record_size failed\n");
+                return (-1);
+        }
+
+        if ((sdomain = calloc(1, rs)) == NULL) {
+		if (debug)
+			dolog(LOG_INFO, "calloc failed\n");
+                return -1;
+        }
+
+	ssd = (struct domain *)sdomain;
+
+	dolog(LOG_INFO, "getting record\n");
+	if (get_record(ssd, converted_name, converted_namelen) < 0) {
+		return (-1);
+	}
+
+
+#ifdef __linux__
+	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
+	ssd->zonename[DNS_MAXNAME] = '\0';
+#else
+	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
+#endif
+	memcpy(ssd->zone, converted_name, converted_namelen);
+	ssd->zonelen = converted_namelen;
+
+	ssd->ttl[INTERNAL_TYPE_NSEC3PARAM] = myttl;
+
+	ssd_nsec3param = (struct domain_nsec3param *)find_substruct(ssd, INTERNAL_TYPE_NSEC3PARAM);
+	if (ssd_nsec3param == NULL) {
+		rs += sizeof(struct domain_nsec3param);
+#ifdef __OpenBSD__
+		tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
+		if (tp == NULL) {
+			dolog(LOG_INFO, "reallocarray failed\n");
+			free (sdomain);
+			return -1;
+		}
+		sdomain = tp;
+		ssd_nsec3param = (sdomain + (rs - sizeof(struct domain_nsec3param)));
+		memset((char *)ssd_nsec3param, 0, sizeof(struct domain_nsec3param));
+		ssd = (struct domain *)sdomain;
+		ssd_nsec3param->len = sizeof(struct domain_nsec3param);
+		ssd_nsec3param->type = INTERNAL_TYPE_NSEC3PARAM;
+	}
+
+	ssd_nsec3param->nsec3param.algorithm = algorithm;
+	ssd_nsec3param->nsec3param.flags = flags;
+	ssd_nsec3param->nsec3param.iterations = iterations;
+	if (strcasecmp(salt, "-") == 0) {
+		ssd_nsec3param->nsec3param.saltlen = 0;
+	} else {
+		ssd_nsec3param->nsec3param.saltlen = strlen(salt);
+		memcpy(&ssd_nsec3param->nsec3param.salt, salt, strlen(salt));
+	}
+
+	ssd->flags |= DOMAIN_HAVE_NSEC3PARAM;
+
+	set_record(ssd, rs, converted_name, converted_namelen);
+
+	if (converted_name)
+		free (converted_name);
+	
+	free (sdomain);
+
+	return (0);
 }
 
 int

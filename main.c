@@ -72,6 +72,8 @@ extern int      reply_rrsig(struct sreply *, DB *);
 extern int	reply_dnskey(struct sreply *);
 extern int	reply_ds(struct sreply *);
 extern int	reply_nsec(struct sreply *);
+extern int	reply_nsec3(struct sreply *);
+extern int	reply_nsec3param(struct sreply *);
 extern int 	remotelog(int, char *, ...);
 extern char 	*rrlimit_setup(int);
 
@@ -128,6 +130,8 @@ struct typetable {
 	{ "DNSKEY", DNS_TYPE_DNSKEY },
 	{ "NSEC", DNS_TYPE_NSEC },
 	{ "DS", DNS_TYPE_DS },
+	{ "NSEC3", DNS_TYPE_NSEC3 },
+	{ "NSEC3PARAM", DNS_TYPE_NSEC3PARAM },
 	{ NULL, 0}
 };
 
@@ -183,7 +187,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.14 2015/06/25 18:07:23 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.15 2015/06/27 09:51:46 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -2420,6 +2424,22 @@ tcpnxdomain:
 
 					slen = reply_any(&sreply);
 					break;		/* must break here */
+				case DNS_TYPE_NSEC3PARAM:
+					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
+						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						NULL, replybuf);
+
+					slen = reply_nsec3param(&sreply);
+					break;		/* must break here */
+					
+				case DNS_TYPE_NSEC3:
+					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
+						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						NULL, replybuf);
+
+					slen = reply_nsec3(&sreply);
+					break;		/* must break here */
+					
 				case DNS_TYPE_NSEC:
 					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
@@ -3023,6 +3043,22 @@ udpnxdomain:
 
 					slen = reply_any(&sreply);
 					break;		/* must break here */
+				case DNS_TYPE_NSEC3PARAM:
+					build_reply(&sreply, so, buf, len, question, from, \
+						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
+						replybuf);
+
+					slen = reply_nsec3param(&sreply);
+					break;
+
+				case DNS_TYPE_NSEC3:
+					build_reply(&sreply, so, buf, len, question, from, \
+						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
+						replybuf);
+
+					slen = reply_nsec3(&sreply);
+					break;
+
 				case DNS_TYPE_NSEC:
 					build_reply(&sreply, so, buf, len, question, from, \
 						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
@@ -3719,6 +3755,22 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 
 		*error = -1;
 		return 0;
+	case DNS_TYPE_NSEC3PARAM:
+		if ((sd->flags & DOMAIN_HAVE_NSEC3PARAM) == DOMAIN_HAVE_NSEC3PARAM)  {
+			returnval = DNS_TYPE_NSEC3PARAM;
+			break;
+		}
+
+		*error = -1;
+		return 0;
+	case DNS_TYPE_NSEC3:
+		if ((sd->flags & DOMAIN_HAVE_NSEC3) == DOMAIN_HAVE_NSEC3)  {
+			returnval = DNS_TYPE_NSEC3;
+			break;
+		}
+
+		*error = -1;
+		return 0;
 	case DNS_TYPE_NSEC:
 		if ((sd->flags & DOMAIN_HAVE_NSEC) == DOMAIN_HAVE_NSEC)  {
 			returnval = DNS_TYPE_NSEC;
@@ -3846,6 +3898,14 @@ find_substruct(struct domain *ssd, u_int16_t type)
 		if (! (ssd->flags & DOMAIN_HAVE_DS))
 			return NULL;
 		break;
+	case INTERNAL_TYPE_NSEC3PARAM:
+		if (! (ssd->flags & DOMAIN_HAVE_NSEC3PARAM))
+			return NULL;
+		break;
+	case INTERNAL_TYPE_NSEC3:
+		if (! (ssd->flags & DOMAIN_HAVE_NSEC3))
+			return NULL;
+		break;
 	case INTERNAL_TYPE_NSEC:
 		if (! (ssd->flags & DOMAIN_HAVE_NSEC))
 			return NULL;
@@ -3885,6 +3945,8 @@ lookup_type(int internal_type)
 	array[INTERNAL_TYPE_MX] = DNS_TYPE_MX;
 	array[INTERNAL_TYPE_NAPTR] = DNS_TYPE_NAPTR;
 	array[INTERNAL_TYPE_NSEC] = DNS_TYPE_NSEC;
+	array[INTERNAL_TYPE_NSEC3] = DNS_TYPE_NSEC3;
+	array[INTERNAL_TYPE_NSEC3PARAM] = DNS_TYPE_NSEC3PARAM;
 	array[INTERNAL_TYPE_PTR] = DNS_TYPE_PTR;
 	array[INTERNAL_TYPE_SOA] = DNS_TYPE_SOA;
 	array[INTERNAL_TYPE_SPF] = DNS_TYPE_SPF;
