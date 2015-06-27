@@ -109,7 +109,7 @@ extern int debug, verbose, dnssec;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.25 2015/06/27 11:43:51 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.26 2015/06/27 11:54:30 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -3653,6 +3653,9 @@ reply_srv(struct sreply *sreply, DB *db)
 	int wildcard = sreply->wildcard;
 	int replysize = 512;
 	int retlen = -1;
+	int tmplen;
+
+	struct domain *sdhave_a = NULL, *sdhave_aaaa = NULL;
 
 	if ((sdsrv = find_substruct(sd, INTERNAL_TYPE_SRV)) == NULL)
 		return -1;
@@ -3762,19 +3765,40 @@ reply_srv(struct sreply *sreply, DB *db)
 		answer = (struct answer *)&reply[outlen];
 	} while (++srv_count < RECORD_COUNT && --sdsrv->srv_count);
 
-	/* write additional */
+	if (dnssec && q->dnssecok) {
+		int origlen = outlen;
 
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_SRV, sd, reply, replysize, outlen, 0);
+
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(srv_count + 1);	
+
+	}
+
+	/* write additional */
 	SLIST_FOREACH(cnp, &collectshead, collect_entry) {
 		int addcount;
-		int tmplen;
 
 		switch (cnp->type) {
 		case DNS_TYPE_A:
 			tmplen = additional_a(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
+			if (addcount)
+				sdhave_a = cnp->sd;
 			additional += addcount;
 			break;
 		case DNS_TYPE_AAAA:
 			tmplen = additional_aaaa(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
+			if (addcount)
+				sdhave_aaaa = cnp->sd;
 			additional += addcount;
 			break;
 		}
@@ -3784,15 +3808,44 @@ reply_srv(struct sreply *sreply, DB *db)
 		}
 	}
 
-	odh->additional = htons(additional);	
+	if (dnssec && q->dnssecok) {
+		if (sdhave_a) {
+			int origlen = outlen;
 
-	while (!SLIST_EMPTY(&collectshead)) {
-		cn1 = SLIST_FIRST(&collectshead);
-		SLIST_REMOVE_HEAD(&collectshead, collect_entry);
-		free(cn1->name);
-		free(cn1->sd);
-		free(cn1);
+			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_A, sdhave_a, reply, replysize, outlen, 0);
+
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				goto out;
+			}
+
+			outlen = tmplen;
+			if (outlen > origlen)
+				additional++;
+
+		} 
+
+		if (sdhave_aaaa) {
+			int origlen = outlen;
+
+			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_AAAA, sdhave_aaaa, reply, replysize, outlen, 0);
+
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				goto out;
+			}
+
+			outlen = tmplen;
+			if (outlen > origlen)
+				additional++;
+		}
 	}
+
+	odh->additional = htons(additional);	
 
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -3804,6 +3857,14 @@ reply_srv(struct sreply *sreply, DB *db)
 	}
 
 out:
+	while (!SLIST_EMPTY(&collectshead)) {
+		cn1 = SLIST_FIRST(&collectshead);
+		SLIST_REMOVE_HEAD(&collectshead, collect_entry);
+		free(cn1->name);
+		free(cn1->sd);
+		free(cn1);
+	}
+
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {
