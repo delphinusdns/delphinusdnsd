@@ -56,7 +56,7 @@ extern int 	reply_any(struct sreply *);
 extern int 	reply_cname(struct sreply *);
 extern int 	reply_fmterror(struct sreply *);
 extern int 	reply_notimpl(struct sreply *);
-extern int 	reply_nxdomain(struct sreply *);
+extern int 	reply_nxdomain(struct sreply *, DB *);
 extern int 	reply_noerror(struct sreply *);
 extern int 	reply_soa(struct sreply *);
 extern int 	reply_mx(struct sreply *, DB *);
@@ -187,7 +187,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.15 2015/06/27 09:51:46 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.16 2015/07/01 08:42:58 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1374,7 +1374,8 @@ dns_label(char *name, int *returnlen)
 		p++;
 	}
 
-	dolog(LOG_DEBUG, "converting name= %s\n", name);
+	if (debug)
+		dolog(LOG_DEBUG, "converting name= %s\n", name);
 
 	return dnslabel;
 }
@@ -1721,7 +1722,48 @@ lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, cha
 
 	ret = db->get(db, NULL, &key, &data, 0);
 	if (ret != 0) {
-		*lzerrno = ERR_NXDOMAIN;
+		/*
+		 * We have a condition where a record does not exist but we
+		 * move toward the apex of the record, and there may be 
+		 * something.  We return NXDOMAIN if there is an apex with 
+		 * SOA if not then we return REFUSED 
+		 */
+		while (*p != 0) {
+			plen -= (*p + 1);
+			p = (p + (*p + 1));
+
+			free(sd);
+			rs = get_record_size(db, p, plen);
+			if (rs < 0) {
+				*lzerrno = ERR_DROP;
+				*returnval = -1;
+				return (NULL);
+			}
+			if ((sd = (struct domain *)calloc(1, rs)) == NULL) {
+				*lzerrno = ERR_DROP; /* only free on ERR_DROP */
+				*returnval = -1;
+				return (NULL);	
+			}
+
+			memset(&key, 0, sizeof(key));
+			memset(&data, 0, sizeof(data));
+
+			key.data = (char *)p;
+			key.size = plen;
+
+			data.data = NULL;
+			data.size = rs;
+
+			ret = db->get(db, NULL, &key, &data, 0);
+			if (ret == 0)
+				memcpy((char *)sd, (char *)data.data, data.size);
+			if (ret == 0 && (sd->flags & DOMAIN_HAVE_SOA)) {
+				*lzerrno = ERR_NXDOMAIN;
+				*returnval = -1;
+				return (sd);
+			}
+		}
+		*lzerrno = ERR_REFUSED;
 		*returnval = -1;
 		return (sd);
 	}
@@ -2298,6 +2340,20 @@ mainloop(struct cfg *cfg)
 						snprintf(replystring, DNS_MAXNAME, "DROP");
 						goto tcpout;
 
+					case ERR_REFUSED:
+						snprintf(replystring, DNS_MAXNAME, "REFUSED");
+#if 0
+						fakequestion = build_fake_question(sd0->zone, sd0->zonelen, DNS_TYPE_SOA);
+						if (fakequestion == NULL) {
+							dolog(LOG_INFO, "fakequestion failed\n");
+							break;
+						}
+#endif
+
+						build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, wildcard, NULL, replybuf);
+						slen = reply_refused(&sreply);
+						goto tcpout;
+						break;
 					case ERR_NXDOMAIN:
 						goto tcpnxdomain;
 					case ERR_NOERROR:
@@ -2350,7 +2406,7 @@ tcpnxdomain:
 											tnp->region, istcp, tnp->wildcard, NULL,
 											replybuf);
 
-							slen = reply_nxdomain(&sreply);
+							slen = reply_nxdomain(&sreply, cfg->db);
 					}
 					goto tcpout;
 				case DNS_TYPE_CNAME:
@@ -2907,7 +2963,20 @@ axfrentry:
 					case ERR_DROP:
 						snprintf(replystring, DNS_MAXNAME, "DROP");
 						goto udpout;
+					case ERR_REFUSED:
+						snprintf(replystring, DNS_MAXNAME, "REFUSED");
+#if 0
+						fakequestion = build_fake_question(sd0->zone, sd0->zonelen, DNS_TYPE_SOA);
+						if (fakequestion == NULL) {
+							dolog(LOG_INFO, "fakequestion failed\n");
+							break;
+						}
+#endif
 
+						build_reply(&sreply, so, buf, len, question, from, fromlen, sd0, NULL, aregion, istcp, wildcard, NULL, replybuf);
+						slen = reply_refused(&sreply);
+						goto udpout;
+						break;
 					case ERR_NXDOMAIN:
 						goto udpnxdomain;
 					case ERR_NOERROR:
@@ -2966,7 +3035,7 @@ udpnxdomain:
 								fromlen, sd0, NULL, aregion, istcp, \
 								wildcard, NULL, replybuf);
 
-								slen = reply_nxdomain(&sreply);
+								slen = reply_nxdomain(&sreply, cfg->db);
 						}
 						goto udpout;
 				case DNS_TYPE_CNAME:

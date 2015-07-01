@@ -37,6 +37,7 @@ extern int 		additional_mx(char *, int, struct domain *, char *, int, int, int *
 extern int 		additional_ptr(char *, int, struct domain *, char *, int, int, int *);
 extern int 		additional_opt(struct question *, char *, int, int);
 extern int 		additional_rrsig(char *, int, int, struct domain *, char *, int, int, int);
+extern int 		additional_nsec(char *, int, int, struct domain *, char *, int, int);
 extern struct question 	*build_fake_question(char *, int, u_int16_t);
 extern int 		compress_label(u_char *, int, int);
 extern void 		dolog(int, char *, ...);
@@ -44,7 +45,8 @@ extern int 		free_question(struct question *);
 extern struct domain * 	lookup_zone(DB *, struct question *, int *, int *, char *);
 extern void 		slave_shutdown(void);
 extern void *		find_substruct(struct domain *, u_int16_t);
-
+extern int 		get_record_size(DB *, char *, int);
+extern char *		dns_label(char *, int *);
 
 struct domain 	*Lookup_zone(DB *, char *, u_int16_t, u_int16_t, int);
 void 		collects_init(void);
@@ -61,7 +63,7 @@ int 		reply_aaaa(struct sreply *, DB *);
 int 		reply_mx(struct sreply *, DB *);
 int 		reply_ns(struct sreply *, DB *);
 int 		reply_notimpl(struct sreply *);
-int 		reply_nxdomain(struct sreply *);
+int 		reply_nxdomain(struct sreply *, DB *);
 int 		reply_noerror(struct sreply *);
 int 		reply_soa(struct sreply *);
 int 		reply_ptr(struct sreply *);
@@ -77,6 +79,10 @@ int 		reply_fmterror(struct sreply *);
 int		reply_raw2(int, char *, int, struct recurses *);
 int 		reply_raw6(int, char *, int, struct recurses *);
 void 		update_db(DB *, struct domain *);
+struct domain * find_nsec(char *name, int namelen, struct domain *sd, DB *db);
+int 		nsec_comp(const void *a, const void *b);
+char * 		convert_name(char *name, int namelen);
+int 		count_dots(char *name);
 
 #ifdef __linux__
 static int 	udp_cksum(const struct iphdr *, const struct udphdr *, int);
@@ -109,7 +115,7 @@ extern int debug, verbose, dnssec;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.27 2015/06/27 12:02:16 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.28 2015/07/01 08:42:58 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -3992,7 +3998,7 @@ reply_notimpl(struct sreply  *sreply)
  */
 
 int
-reply_nxdomain(struct sreply *sreply)
+reply_nxdomain(struct sreply *sreply, DB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4004,11 +4010,10 @@ reply_nxdomain(struct sreply *sreply)
 	char *label, *plabel;
 
 	struct answer {
-		char name[2];
 		u_int16_t type;
 		u_int16_t class;
 		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		u_int16_t rdlength;	 /* 10 */
 		char rdata;		
 	} __attribute__((packed));
 
@@ -4032,6 +4037,7 @@ reply_nxdomain(struct sreply *sreply)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct domain *sd = sreply->sd1;
+	struct domain *sd0 = NULL;
 	struct domain_soa *sdsoa = NULL;
 	int istcp = sreply->istcp;
 	int replysize = 512;
@@ -4040,6 +4046,9 @@ reply_nxdomain(struct sreply *sreply)
 	if (istcp) {
 		replysize = 65535;
 	}
+
+	if (!istcp && q->edns0len > 512)
+		replysize = q->edns0len;
 	
 	odh = (struct dns_header *)&reply[0];
 	outlen = sizeof(struct dns_header);
@@ -4105,7 +4114,7 @@ reply_nxdomain(struct sreply *sreply)
 	/* blank query */
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
-	outlen += (q->hdr->namelen + 4);
+	outlen += (q->hdr->namelen + 4); 
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr != NULL)
@@ -4122,11 +4131,12 @@ reply_nxdomain(struct sreply *sreply)
 	odh->nsrr = htons(1);
 	odh->additional = 0;
 
-	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
-		q->hdr->namelen + 4);
+	memcpy(&reply[outlen], sd->zone, sd->zonelen);
+	outlen += sd->zonelen;
 
-	answer->name[0] = 0xc0;
-	answer->name[1] = 0x0c;
+	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
+		q->hdr->namelen + 4 + sd->zonelen);
+
 	answer->type = htons(DNS_TYPE_SOA);
 	answer->class = q->hdr->qclass;
 	if (sreply->sr != NULL)
@@ -4134,15 +4144,9 @@ reply_nxdomain(struct sreply *sreply)
 	else
 		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_SOA]);
 
-	outlen += 12;			/* up to rdata length */
+	outlen += 10;   /* sizeof(struct answer)  up to rdata length */
 
 	p = (char *)&answer->rdata;
-
-#if 0
-	label = dns_label((char *)mysoa.nsserver, &labellen);
-	if (label == NULL)
-		return (retlen);
-#endif
 
 	label = &sdsoa->soa.nsserver[0];
 	labellen = sdsoa->soa.nsserver_len;
@@ -4230,6 +4234,81 @@ reply_nxdomain(struct sreply *sreply)
 	outlen += sizeof(sdsoa->soa.minttl);
 
 	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
+
+	/* RRSIG reply_nxdomain */
+	if (dnssec && q->dnssecok) {
+		int tmplen = 0;
+		int origlen = outlen;
+
+		tmplen = additional_rrsig(sd->zone, sd->zonelen, INTERNAL_TYPE_SOA, sd, reply, replysize, outlen, 0);
+	
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->nsrr = htons(2);	
+
+		origlen = outlen;
+		if (sd->flags & DOMAIN_HAVE_NSEC) {
+			sd0 = find_nsec(q->hdr->name, q->hdr->namelen, sd, db);
+			if (sd0 == NULL)
+				goto out;
+			tmplen = additional_nsec(sd0->zone, sd0->zonelen, INTERNAL_TYPE_NSEC, sd0, reply, replysize, outlen);
+			free (sd0);
+		}
+#if 0
+		} else if (sd->flags & DOMAIN_HAVE_NSEC3) {
+			tmplen = additional_nsec3();
+		}
+#endif
+
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->nsrr = htons(4);
+
+#if 1
+		/* we must now prove we're not wildcarding */
+		origlen = outlen;
+		if (sd->flags & DOMAIN_HAVE_NSEC) {
+			tmplen = additional_nsec(sd->zone, sd->zonelen, INTERNAL_TYPE_NSEC, sd, reply, replysize, outlen);
+		}
+
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->nsrr = htons(6);
+
+#endif
+	}
+
+	if (q->edns0len) {
+		/* tag on edns0 opt record */
+		odh->additional = htons(1);
+		outlen = additional_opt(q, reply, replysize, outlen);
+	}
+
+out:
 
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
@@ -5913,4 +5992,306 @@ truncate:
 	HTONS(odh->query);
 	
 	return (offset);
+}
+
+/* FIND_NSEC  */
+/* finds the right nsec domainname in a zone */
+struct domain *
+find_nsec(char *name, int namelen, struct domain *sd, DB *db)
+{
+	DBT key, data;
+	char *table, *tmp;
+	char *nsecname;
+	struct domainnames {
+		char name[DNS_MAXNAME + 1];
+		char next[DNS_MAXNAME + 1];
+	} *dn;
+
+	struct domain *sd0;
+	struct domain_nsec *sdnsec;
+	char *humanname;
+	char *backname;
+	char tmpname[DNS_MAXNAME];
+	int tmplen;
+	int backnamelen;
+	int rs, ret;
+	int i, names = 100;
+	int j;
+
+	humanname = convert_name(name, namelen);
+
+	if ((sdnsec = find_substruct(sd, INTERNAL_TYPE_NSEC)) == NULL) {
+		free (humanname);
+		return (NULL);
+	}
+
+	
+	table = calloc(names, sizeof(struct domainnames));	
+	if (table == NULL) {
+		free (humanname);
+		return (NULL);
+	}
+
+	dn = (struct domainnames *)table;
+	strlcpy(dn->name, sd->zonename, DNS_MAXNAME + 1);
+	nsecname = convert_name(sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
+	strlcpy(dn->next, nsecname, DNS_MAXNAME + 1);
+	
+	rs = get_record_size(db, sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
+	if (rs < 0) {
+		free (nsecname);
+		free (humanname);
+		free (table);
+		return (NULL);
+	}
+
+	if ((sd0 = calloc(1, rs)) == NULL) {
+		free (nsecname);
+		free (humanname);
+		free (table);
+		return (NULL);
+	}
+
+	memset(&key, 0, sizeof(key));
+	memset(&data, 0, sizeof(data));
+	
+	key.data = sdnsec->nsec.next_domain_name;
+	key.size = sdnsec->nsec.ndn_len;
+
+	data.data = NULL;
+	data.size = rs;
+
+	ret = db->get(db, NULL, &key, &data, 0);	
+	if (ret != 0) {
+		free (nsecname);
+		free (humanname);
+		free (table);
+		free (sd0);
+		return (NULL);
+	}
+
+	memcpy(sd0, data.data, data.size);
+
+	if ((sdnsec = find_substruct(sd0, INTERNAL_TYPE_NSEC)) == NULL) {
+		free (nsecname);
+		free (humanname);
+		free (table);
+		free (sd0);
+		return (NULL);
+	}
+
+	i = 1;
+	while (strcasecmp(nsecname, sd->zonename) != 0) {
+		/* grow our table */
+		if (i == names - 1) {
+			names += 100;
+	
+			tmp = realloc(table, names * sizeof(struct domainnames));
+			if (tmp == NULL) {
+				free (nsecname);
+				free (humanname);
+				free (table);
+				free (sd0);
+				return (NULL);
+			}
+			table = tmp;
+		}
+
+		dn = ((struct domainnames *)table) + i;
+		
+		free (nsecname);
+		strlcpy(dn->name, sd0->zonename, DNS_MAXNAME + 1);
+		nsecname = convert_name(sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
+		strlcpy(dn->next, nsecname, DNS_MAXNAME + 1);
+		
+		rs = get_record_size(db, sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
+		if (rs < 0) {
+			free (table);
+			return (NULL);
+		}
+
+		memcpy(tmpname, sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
+		tmplen = sdnsec->nsec.ndn_len;
+
+		free (sd0);
+		if ((sd0 = calloc(1, rs)) == NULL) {
+			free (humanname);
+			free (table);
+			return (NULL);
+		}
+
+		memset(&key, 0, sizeof(key));
+		memset(&data, 0, sizeof(data));
+		
+		key.data = tmpname;
+		key.size = tmplen;
+
+		data.data = NULL;
+		data.size = rs;
+
+		ret = db->get(db, NULL, &key, &data, 0);	
+		if (ret != 0) {
+			free (humanname);
+			free (table);
+			free (sd0);
+			return (NULL);
+		}
+
+		memcpy(sd0, data.data, data.size);
+
+		if ((sdnsec = find_substruct(sd0, INTERNAL_TYPE_NSEC)) == NULL) {
+			free (humanname);
+			free (table);
+			free (sd0);
+			return (NULL);
+		}
+
+		i++;
+	}
+
+	free (nsecname);
+	dn = ((struct domainnames *)table) + i;
+	strlcpy(dn->next, ".", DNS_MAXNAME + 1);
+	strlcpy(dn->name, humanname, DNS_MAXNAME + 1);
+
+	i++;
+
+	/* now we sort the shebang */
+
+	qsort(table, i, sizeof(struct domainnames), nsec_comp);
+	
+	for (j = 0; j < i; j++) {
+		dn = ((struct domainnames *)table) + j;
+		
+#if DEBUG
+		if (debug)
+			printf("%s\n", dn->name);
+#endif
+
+		if (strcmp(dn->next, ".") == 0)
+			break;
+	}
+
+	dn = ((struct domainnames *)table) + (j - 1);	
+	
+	/* found it, get it via db after converting it */	
+	
+	/* free what we don't need */
+	free (humanname);
+	free (sd0);
+	
+	backname = dns_label(dn->name, &backnamelen);
+	free (table);
+	
+	rs = get_record_size(db, backname, backnamelen);
+	if (rs < 0) {
+		free (backname);
+		return (NULL);
+	}
+
+	if ((sd0 = calloc(1, rs)) == NULL) {
+		free (backname);
+		return (NULL);
+	}
+
+	memset(&key, 0, sizeof(key));
+	memset(&data, 0, sizeof(data));
+	
+	key.data = backname;
+	key.size = backnamelen;
+
+	data.data = NULL;
+	data.size = rs;
+
+	ret = db->get(db, NULL, &key, &data, 0);	
+	if (ret != 0) {
+		free (backname);
+		free (sd0);
+		return (NULL);
+	}
+	
+
+	memcpy(sd0, data.data, data.size);
+	free (backname);
+
+	return (sd0);
+}
+
+char *
+convert_name(char *name, int namelen)
+{
+	char *ret;
+	char *p, *p0;
+	int plen;
+	int i;
+
+	ret = calloc(namelen + 1, 1);
+	if (ret == NULL) {
+		return NULL;
+	}
+
+	memcpy(ret, name + 1, namelen - 1);
+	
+	p0 = ret;
+	p = name;
+	plen = namelen;
+
+        while (*p != 0) {
+		if (*p > 63)
+			break;
+		for (i = 0; i < *p; i++) {
+			*p0++ = p[i + 1];
+		}
+		*p0++ = '.';
+        	plen -= (*p + 1);
+                p = (p + (*p + 1));
+	}
+
+	return (ret);
+}
+
+/* canonical sort compare */
+
+int
+nsec_comp(const void *a, const void *b)
+{
+	struct domainnames {
+		char name[DNS_MAXNAME + 1];
+		char next[DNS_MAXNAME + 1];
+	};
+	struct domainnames *dn0, *dn1;
+	int dots0, dots1;
+
+	dn0 = (struct domainnames *)a;
+	dn1 = (struct domainnames *)b;
+
+	/* count the dots we need this for canonical compare */
+
+	dots0 = count_dots(dn0->name);
+	dots1 = count_dots(dn1->name);
+
+	if (dots0 > dots1)
+		return 1;
+	else if (dots1 > dots0)
+		return -1;
+	
+			
+	/* we have a tie, strcmp them */
+
+	return (strcmp(dn0->name, dn1->name));
+}
+
+int
+count_dots(char *name)
+{
+	int i;
+	int ret = 0;
+
+
+	for (i = 0; i < strlen(name); i++) {
+		if (name[i] == '.')
+			ret++;
+	}
+
+	return(ret);
 }

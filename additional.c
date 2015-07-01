@@ -35,13 +35,14 @@ int additional_mx(char *, int, struct domain *, char *, int, int, int *);
 int additional_opt(struct question *, char *, int, int);
 int additional_ptr(char *, int, struct domain *, char *, int, int, int *);
 int additional_rrsig(char *, int, int, struct domain *, char *, int, int, int);
+int additional_nsec(char *, int, int, struct domain *, char *, int, int);
 
 extern int 		compress_label(u_char *, int, int);
 extern void *		find_substruct(struct domain *, u_int16_t);
 
 extern int dnssec;
 
-static const char rcsid[] = "$Id: additional.c,v 1.8 2015/06/25 18:07:23 pjp Exp $";
+static const char rcsid[] = "$Id: additional.c,v 1.9 2015/07/01 08:42:58 pjp Exp $";
 
 
 /*
@@ -591,6 +592,77 @@ additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *
 	offset += rrsig->signature_len;
 
 	answer->rdlength = htons((offset - rroffset) + 18);
+out:
+	return (offset);
+
+}
+
+/*
+ * ADDITIONAL_NSEC - tag on an additional NSEC with RRSIG to the answer
+ * 		type passed must be an INTERNAL_TYPE!
+ */
+
+int 
+additional_nsec(char *name, int namelen, int inttype, struct domain *sd, char *reply, int replylen, int offset)
+{
+	struct answer {
+		u_int16_t type;
+		u_int16_t class;
+		u_int32_t ttl;
+		u_int16_t rdlength;	 /* 12 */
+	} __attribute__((packed));
+
+	struct answer *answer;
+	struct domain_nsec *sdnsec;
+	int tmplen, rroffset;
+
+	sdnsec = (struct domain_nsec *)find_substruct(sd, INTERNAL_TYPE_NSEC);
+	if (sdnsec == NULL) 
+		goto out;
+
+	rroffset = offset;
+
+	/* check if we go over our return length */
+	if ((offset + namelen) > replylen)
+		return 0;
+
+	memcpy(&reply[offset], name, namelen);
+	offset += namelen;
+	tmplen = compress_label((u_char*)reply, offset, namelen);
+
+	if (tmplen != 0) {
+		offset = tmplen;
+	}
+
+	if ((offset + sizeof(struct answer)) > replylen) {
+		return 0;
+	}
+
+	answer = (struct answer *)&reply[offset];
+	answer->type = htons(DNS_TYPE_NSEC);
+	answer->class = htons(DNS_CLASS_IN);
+	answer->ttl = htonl(sd->ttl[inttype]);
+	answer->rdlength = htons(sdnsec->nsec.ndn_len + 
+			sdnsec->nsec.bitmap_len);
+	
+	offset += sizeof(*answer);
+
+	memcpy(&reply[offset], sdnsec->nsec.next_domain_name,
+                sdnsec->nsec.ndn_len);
+
+	offset += sdnsec->nsec.ndn_len;
+
+	memcpy(&reply[offset], sdnsec->nsec.bitmap, sdnsec->nsec.bitmap_len);
+	offset += sdnsec->nsec.bitmap_len;
+
+	tmplen = additional_rrsig(name, namelen, INTERNAL_TYPE_NSEC, sd, reply, replylen, offset, 0);
+
+	if (tmplen == 0) {
+		goto out;
+	}
+
+	offset = tmplen;
+
 out:
 	return (offset);
 

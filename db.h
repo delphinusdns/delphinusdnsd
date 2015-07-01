@@ -34,6 +34,7 @@
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2
 #define ERR_NOERROR	0x4
+#define ERR_REFUSED	0x8
 
 #define RECORD_COUNT	20
 #define NEGATIVE_CACHE_TIME	600	/* DNS & Bind 3rd edition page 35 */
