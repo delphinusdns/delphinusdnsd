@@ -64,7 +64,7 @@ int 		reply_mx(struct sreply *, DB *);
 int 		reply_ns(struct sreply *, DB *);
 int 		reply_notimpl(struct sreply *);
 int 		reply_nxdomain(struct sreply *, DB *);
-int 		reply_noerror(struct sreply *);
+int 		reply_noerror(struct sreply *, DB *);
 int 		reply_soa(struct sreply *);
 int 		reply_ptr(struct sreply *);
 int 		reply_txt(struct sreply *);
@@ -115,7 +115,7 @@ extern int debug, verbose, dnssec;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.28 2015/07/01 08:42:58 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.29 2015/07/01 09:15:30 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -4280,7 +4280,6 @@ reply_nxdomain(struct sreply *sreply, DB *db)
 		if (outlen > origlen)
 			odh->nsrr = htons(4);
 
-#if 1
 		/* we must now prove we're not wildcarding */
 		origlen = outlen;
 		if (sd->flags & DOMAIN_HAVE_NSEC) {
@@ -4299,7 +4298,6 @@ reply_nxdomain(struct sreply *sreply, DB *db)
 		if (outlen > origlen)
 			odh->nsrr = htons(6);
 
-#endif
 	}
 
 	if (q->edns0len) {
@@ -4486,7 +4484,7 @@ reply_fmterror(struct sreply *sreply)
  */
 
 int
-reply_noerror(struct sreply *sreply)
+reply_noerror(struct sreply *sreply, DB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4498,7 +4496,6 @@ reply_noerror(struct sreply *sreply)
 	char *label, *plabel;
 
 	struct answer {
-		char name[2];
 		u_int16_t type;
 		u_int16_t class;
 		u_int32_t ttl;
@@ -4526,6 +4523,7 @@ reply_noerror(struct sreply *sreply)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct domain *sd = sreply->sd1;
+	struct domain *sd0 = NULL;
 	struct domain_soa *sdsoa = NULL;
 	int istcp = sreply->istcp;
 	int replysize = 512;
@@ -4596,15 +4594,14 @@ reply_noerror(struct sreply *sreply)
 	/* blank query */
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
-	outlen += (q->hdr->namelen + 4);
+	outlen += (q->hdr->namelen + 4); 
 
 	SET_DNS_REPLY(odh);
-
-	if (sreply->sr == NULL)
-		SET_DNS_AUTHORITATIVE(odh);
-	else
+	if (sreply->sr != NULL)
 		SET_DNS_RECURSION_AVAIL(odh);
-	
+	else
+		SET_DNS_AUTHORITATIVE(odh);
+
 	NTOHS(odh->query);
 
 	odh->question = htons(1);
@@ -4612,19 +4609,21 @@ reply_noerror(struct sreply *sreply)
 	odh->nsrr = htons(1);
 	odh->additional = 0;
 
-	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
-		q->hdr->namelen + 4);
+	memcpy(&reply[outlen], sd->zone, sd->zonelen);
+	outlen += sd->zonelen;
 
-	answer->name[0] = 0xc0;
-	answer->name[1] = 0x0c;
+	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
+		q->hdr->namelen + 4 + sd->zonelen);
+
 	answer->type = htons(DNS_TYPE_SOA);
 	answer->class = q->hdr->qclass;
+
 	if (sreply->sr != NULL)
 		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_SOA] - (time(NULL) - sd->created));
 	else
 		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_SOA]);
 
-	outlen += 12;			/* up to rdata length */
+	outlen += 10;			/* up to rdata length */
 
 	p = (char *)&answer->rdata;
 
@@ -4714,6 +4713,49 @@ reply_noerror(struct sreply *sreply)
 	outlen += sizeof(sdsoa->soa.minttl);
 
 	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
+	/* RRSIG reply_nxdomain */
+	if (dnssec && q->dnssecok) {
+		int tmplen = 0;
+		int origlen = outlen;
+
+		tmplen = additional_rrsig(sd->zone, sd->zonelen, INTERNAL_TYPE_SOA, sd, reply, replysize, outlen, 0);
+	
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->nsrr = htons(2);	
+
+		origlen = outlen;
+		if (sd->flags & DOMAIN_HAVE_NSEC) {
+			sd0 = Lookup_zone(db, q->hdr->name, q->hdr->namelen, htons(DNS_TYPE_NSEC), 0);
+			tmplen = additional_nsec(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_NSEC, sd0, reply, replysize, outlen);
+			free(sd0);
+		}
+#if 0
+		} else if (sd->flags & DOMAIN_HAVE_NSEC3) {
+			tmplen = additional_nsec3();
+		}
+#endif
+
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->nsrr = htons(4);
+	}
 
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -4724,6 +4766,7 @@ reply_noerror(struct sreply *sreply)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 	
+out:
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {

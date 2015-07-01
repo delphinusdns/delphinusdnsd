@@ -57,7 +57,7 @@ extern int 	reply_cname(struct sreply *);
 extern int 	reply_fmterror(struct sreply *);
 extern int 	reply_notimpl(struct sreply *);
 extern int 	reply_nxdomain(struct sreply *, DB *);
-extern int 	reply_noerror(struct sreply *);
+extern int 	reply_noerror(struct sreply *, DB *);
 extern int 	reply_soa(struct sreply *);
 extern int 	reply_mx(struct sreply *, DB *);
 extern int 	reply_naptr(struct sreply *, DB *);
@@ -187,7 +187,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.16 2015/07/01 08:42:58 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.17 2015/07/01 09:15:30 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -2380,7 +2380,7 @@ mainloop(struct cfg *cfg)
 												sd0, NULL, tnp->region, istcp, 
 												tnp->wildcard, NULL, replybuf);
 
-								slen = reply_noerror(&sreply);
+								slen = reply_noerror(&sreply, cfg->db);
 						}
 						goto tcpout;
 
@@ -3010,7 +3010,7 @@ axfrentry:
 										fromlen, sd0, NULL, aregion, istcp, wildcard, 
 										NULL, replybuf);
 
-									slen = reply_noerror(&sreply);
+									slen = reply_noerror(&sreply, cfg->db);
 							}
 							goto udpout;
 						} /* else rflag */
