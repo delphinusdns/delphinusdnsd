@@ -72,7 +72,7 @@ extern int      reply_rrsig(struct sreply *, DB *);
 extern int	reply_dnskey(struct sreply *);
 extern int	reply_ds(struct sreply *);
 extern int	reply_nsec(struct sreply *);
-extern int	reply_nsec3(struct sreply *);
+extern int	reply_nsec3(struct sreply *, DB *);
 extern int	reply_nsec3param(struct sreply *);
 extern int 	remotelog(int, char *, ...);
 extern char 	*rrlimit_setup(int);
@@ -187,7 +187,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.17 2015/07/01 09:15:30 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.18 2015/07/01 16:11:35 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -2493,7 +2493,7 @@ tcpnxdomain:
 						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
 						NULL, replybuf);
 
-					slen = reply_nsec3(&sreply);
+					slen = reply_nsec3(&sreply, cfg->db);
 					break;		/* must break here */
 					
 				case DNS_TYPE_NSEC:
@@ -3125,7 +3125,7 @@ udpnxdomain:
 						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
 						replybuf);
 
-					slen = reply_nsec3(&sreply);
+					slen = reply_nsec3(&sreply, cfg->db);
 					break;
 
 				case DNS_TYPE_NSEC:

@@ -53,7 +53,7 @@ void 		collects_init(void);
 u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int);
 u_short 	in_cksum(const u_short *, register int, int);
 int 		reply_a(struct sreply *, DB *);
-int		reply_nsec3(struct sreply *);
+int		reply_nsec3(struct sreply *, DB *);
 int		reply_nsec3param(struct sreply *);
 int		reply_nsec(struct sreply *);
 int		reply_dnskey(struct sreply *);
@@ -115,7 +115,7 @@ extern int debug, verbose, dnssec;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.29 2015/07/01 09:15:30 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.30 2015/07/01 16:11:35 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -493,7 +493,7 @@ out:
  */
 
 int
-reply_nsec3(struct sreply *sreply)
+reply_nsec3(struct sreply *sreply, DB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -539,6 +539,13 @@ reply_nsec3(struct sreply *sreply)
 	if (!istcp && q->edns0len > 512)
 		replysize = q->edns0len;
 
+
+	/* RFC 5155 section 7.2.8 */
+	/* we are the sole RR here, or perhaps we are accompanied by an rrsig */
+	if ((sd->flags == DOMAIN_HAVE_NSEC)  ||
+		(sd->flags == (DOMAIN_HAVE_NSEC3 | DOMAIN_HAVE_RRSIG))) {
+		return (reply_nxdomain(sreply, db));
+	}
 	odh = (struct dns_header *)&reply[0];
 
 	outlen = sizeof(struct dns_header);
