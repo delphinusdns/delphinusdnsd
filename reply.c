@@ -68,6 +68,7 @@ int 		reply_noerror(struct sreply *, DB *);
 int 		reply_soa(struct sreply *);
 int 		reply_ptr(struct sreply *);
 int 		reply_txt(struct sreply *);
+int 		reply_version(struct sreply *);
 int 		reply_spf(struct sreply *);
 int 		reply_srv(struct sreply *, DB *);
 int 		reply_naptr(struct sreply *, DB *);
@@ -101,6 +102,7 @@ struct collects {
 } *cn1, *cn2, *cnp;
 
 extern int debug, verbose, dnssec;
+extern char *versionstring;
 
 
 #define RRSIG_ALIAS(mytype) do {					\
@@ -115,7 +117,7 @@ extern int debug, verbose, dnssec;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.30 2015/07/01 16:11:35 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.31 2015/09/05 17:45:46 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -3110,6 +3112,136 @@ reply_txt(struct sreply *sreply)
 	}
 
 out:
+
+	if (sreply->sr != NULL) {
+		retlen = reply_raw2(so, reply, outlen, sreply->sr);
+	} else {
+		if (istcp) {
+			char *tmpbuf;
+			u_int16_t *plen;
+
+			tmpbuf = malloc(outlen + 2);
+			if (tmpbuf == NULL) {
+				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+			}
+			plen = (u_int16_t *)tmpbuf;
+			*plen = htons(outlen);
+			
+			memcpy(&tmpbuf[2], reply, outlen);
+
+			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+				dolog(LOG_INFO, "send: %s\n", strerror(errno));
+			}
+			free(tmpbuf);
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
+		}
+	}
+
+	return (retlen);
+}
+
+
+/* 
+ * REPLY_VERSION() - replies a DNS question (*q) on socket (so)
+ *
+ */
+
+
+int
+reply_version(struct sreply *sreply)
+{
+	char *reply = sreply->replybuf;
+	struct dns_header *odh;
+	u_int16_t outlen;
+	char *p;
+
+	struct answer {
+		char name[2];
+		u_int16_t type;
+		u_int16_t class;
+		u_int32_t ttl;
+		u_int16_t rdlength;	 /* 12 */
+		char rdata;		
+	} __attribute__((packed));
+
+	struct answer *answer;
+
+	int so = sreply->so;
+	char *buf = sreply->buf;
+	int len = sreply->len;
+	struct question *q = sreply->q;
+	struct sockaddr *sa = sreply->sa;
+	int salen = sreply->salen;
+	int istcp = sreply->istcp;
+	int replysize = 512;
+	int retlen = -1;
+
+	if (istcp) {
+		replysize = 65535;
+	}
+
+	if (! istcp && q->edns0len > 512)
+		replysize = q->edns0len;
+	
+	/* st */
+
+	odh = (struct dns_header *)&reply[0];
+	outlen = sizeof(struct dns_header);
+
+	if (len > replysize) {
+		return (retlen);
+	}
+
+	/* copy question to reply */
+	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+	/* blank query */
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+
+	outlen += (q->hdr->namelen + 4);
+
+	SET_DNS_REPLY(odh);
+	if (sreply->sr == NULL)
+		SET_DNS_AUTHORITATIVE(odh);
+	else
+		SET_DNS_RECURSION_AVAIL(odh);
+	
+	HTONS(odh->query);
+
+	odh->question = htons(1);
+	odh->answer = htons(1);
+	odh->nsrr = 0;
+	odh->additional = 0;
+
+	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
+		q->hdr->namelen + 4);
+
+	answer->name[0] = 0xc0;
+	answer->name[1] = 0x0c;
+	answer->type = q->hdr->qtype;
+	answer->class = q->hdr->qclass;
+	answer->ttl = htonl(3600);
+
+	outlen += 12;			/* up to rdata length */
+
+	p = (char *)&answer->rdata;
+
+	*p = strlen(versionstring);
+	memcpy((p + 1), versionstring, strlen(versionstring));
+	outlen += (strlen(versionstring) + 1);
+
+	answer->rdlength = htons(strlen(versionstring) + 1);
+
+	if (q->edns0len) {
+		/* tag on edns0 opt record */
+		NTOHS(odh->additional);
+		odh->additional++;
+		HTONS(odh->additional);
+
+		outlen = additional_opt(q, reply, replysize, outlen);
+	}
 
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);

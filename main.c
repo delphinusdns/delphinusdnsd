@@ -68,6 +68,7 @@ extern int 	reply_spf(struct sreply *);
 extern int 	reply_srv(struct sreply *, DB *);
 extern int 	reply_sshfp(struct sreply *);
 extern int 	reply_txt(struct sreply *);
+extern int 	reply_version(struct sreply *);
 extern int      reply_rrsig(struct sreply *, DB *);
 extern int	reply_dnskey(struct sreply *);
 extern int	reply_ds(struct sreply *);
@@ -167,6 +168,7 @@ u_int16_t port = 53;
 u_int32_t cachesize = 0;
 char *bind_list[255];
 char *interface_list[255];
+char *versionstring = "delphinusdnsd pre-1.0.0";
 
 /* singly linked list for tcp operations */
 SLIST_HEAD(listhead, tcps) tcpshead;
@@ -187,7 +189,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.18 2015/07/01 16:11:35 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.19 2015/09/05 17:45:46 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -2341,15 +2343,15 @@ mainloop(struct cfg *cfg)
 						goto tcpout;
 
 					case ERR_REFUSED:
-						snprintf(replystring, DNS_MAXNAME, "REFUSED");
-#if 0
-						fakequestion = build_fake_question(sd0->zone, sd0->zonelen, DNS_TYPE_SOA);
-						if (fakequestion == NULL) {
-							dolog(LOG_INFO, "fakequestion failed\n");
-							break;
+						if (ntohs(question->hdr->qclass) == DNS_CLASS_CH &&
+							ntohs(question->hdr->qtype) == DNS_TYPE_TXT &&
+								strcasecmp(question->converted_name, "version.bind.") == 0) {
+								snprintf(replystring, DNS_MAXNAME, "VERSION");
+								build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, wildcard, NULL, replybuf);
+								slen = reply_version(&sreply);
+								goto tcpout;
 						}
-#endif
-
+						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, wildcard, NULL, replybuf);
 						slen = reply_refused(&sreply);
 						goto tcpout;
@@ -2964,6 +2966,14 @@ axfrentry:
 						snprintf(replystring, DNS_MAXNAME, "DROP");
 						goto udpout;
 					case ERR_REFUSED:
+						if (ntohs(question->hdr->qclass) == DNS_CLASS_CH &&
+							ntohs(question->hdr->qtype) == DNS_TYPE_TXT &&
+								strcasecmp(question->converted_name, "version.bind.") == 0) {
+								snprintf(replystring, DNS_MAXNAME, "VERSION");
+								build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, wildcard, NULL, replybuf);
+								slen = reply_version(&sreply);
+								goto udpout;
+						}
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 #if 0
 						fakequestion = build_fake_question(sd0->zone, sd0->zonelen, DNS_TYPE_SOA);

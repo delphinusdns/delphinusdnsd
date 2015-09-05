@@ -61,6 +61,7 @@ extern u_int16_t port;
 extern u_int32_t cachesize;
 extern char *bind_list[255];
 extern char *interface_list[255];
+extern char *versionstring;
 
 
 
@@ -101,7 +102,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.23 2015/06/27 09:51:46 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.24 2015/09/05 17:45:46 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -720,8 +721,9 @@ optionsstatement:
 	
 			dolog(LOG_DEBUG, "interface \"%s\" added\n", $2);
 			interface_list[icount++] = $2;
+		} else if (strcasecmp($1, "versionstring") == 0) {
+			versionstring = strdup($2);
 		}
-
 	}
 	|
 	STRING NUMBER SEMICOLON CRLF
