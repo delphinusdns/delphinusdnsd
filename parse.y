@@ -62,6 +62,7 @@ extern u_int32_t cachesize;
 extern char *bind_list[255];
 extern char *interface_list[255];
 extern char *versionstring;
+extern uint8_t vslen;
 
 
 
@@ -102,7 +103,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.24 2015/09/05 17:45:46 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.25 2015/09/05 22:27:09 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -722,7 +723,13 @@ optionsstatement:
 			dolog(LOG_DEBUG, "interface \"%s\" added\n", $2);
 			interface_list[icount++] = $2;
 		} else if (strcasecmp($1, "versionstring") == 0) {
+			if (strlen($2) > 255) {
+				dolog(LOG_ERR, "versionstring too long\n");
+				return (-1);
+			}
+
 			versionstring = strdup($2);
+			vslen = strlen(versionstring);
 		}
 	}
 	|

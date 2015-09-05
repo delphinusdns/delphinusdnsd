@@ -103,6 +103,7 @@ struct collects {
 
 extern int debug, verbose, dnssec;
 extern char *versionstring;
+extern uint8_t vslen;
 
 
 #define RRSIG_ALIAS(mytype) do {					\
@@ -117,7 +118,7 @@ extern char *versionstring;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.31 2015/09/05 17:45:46 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.32 2015/09/05 22:27:09 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -3228,11 +3229,11 @@ reply_version(struct sreply *sreply)
 
 	p = (char *)&answer->rdata;
 
-	*p = strlen(versionstring);
-	memcpy((p + 1), versionstring, strlen(versionstring));
-	outlen += (strlen(versionstring) + 1);
+	*p = vslen;
+	memcpy((p + 1), versionstring, vslen);
+	outlen += (vslen + 1);
 
-	answer->rdlength = htons(strlen(versionstring) + 1);
+	answer->rdlength = htons(vslen + 1);
 
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
