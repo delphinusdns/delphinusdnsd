@@ -103,7 +103,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.25 2015/09/05 22:27:09 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.26 2015/09/12 14:08:54 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -2583,6 +2583,7 @@ fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_i
 	}
 
 	ssd_nsec3param->nsec3param.algorithm = algorithm;
+	dolog(LOG_INFO, "algorithm = %d\n", algorithm);
 	ssd_nsec3param->nsec3param.flags = flags;
 	ssd_nsec3param->nsec3param.iterations = iterations;
 	if (strcasecmp(salt, "-") == 0) {

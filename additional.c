@@ -36,13 +36,14 @@ int additional_opt(struct question *, char *, int, int);
 int additional_ptr(char *, int, struct domain *, char *, int, int, int *);
 int additional_rrsig(char *, int, int, struct domain *, char *, int, int, int);
 int additional_nsec(char *, int, int, struct domain *, char *, int, int);
+int additional_nsec3(char *, int, int, struct domain *, char *, int, int);
 
 extern int 		compress_label(u_char *, int, int);
 extern void *		find_substruct(struct domain *, u_int16_t);
 
 extern int dnssec;
 
-static const char rcsid[] = "$Id: additional.c,v 1.9 2015/07/01 08:42:58 pjp Exp $";
+static const char rcsid[] = "$Id: additional.c,v 1.10 2015/09/12 14:08:54 pjp Exp $";
 
 
 /*
@@ -662,6 +663,97 @@ additional_nsec(char *name, int namelen, int inttype, struct domain *sd, char *r
 	}
 
 	offset = tmplen;
+
+out:
+	return (offset);
+
+}
+
+/*
+ * ADDITIONAL_NSEC3 - tag on an additional NSEC3 with RRSIG to the answer
+ * 		type passed must be an INTERNAL_TYPE!
+ */
+
+int 
+additional_nsec3(char *name, int namelen, int inttype, struct domain *sd, char *reply, int replylen, int offset)
+{
+	struct answer {
+		u_int16_t type;
+		u_int16_t class;
+		u_int32_t ttl;
+		u_int16_t rdlength;	 /* 12 */
+		u_int8_t algorithm;
+		u_int8_t flags;
+		u_int16_t iterations;
+		u_int8_t saltlen;
+	} __attribute__((packed));
+
+	struct answer *answer;
+	struct domain_nsec3 *sdnsec3;
+	int tmplen, rroffset;
+	u_int8_t *somelen;
+
+	sdnsec3 = (struct domain_nsec3 *)find_substruct(sd, INTERNAL_TYPE_NSEC3);
+	if (sdnsec3 == NULL) 
+		goto out;
+
+	rroffset = offset;
+
+	/* check if we go over our return length */
+	if ((offset + namelen) > replylen)
+		return 0;
+
+	memcpy(&reply[offset], name, namelen);
+	offset += namelen;
+	tmplen = compress_label((u_char*)reply, offset, namelen);
+
+	if (tmplen != 0) {
+		offset = tmplen;
+	}
+
+	if ((offset + sizeof(struct answer)) > replylen) {
+		return 0;
+	}
+
+	answer = (struct answer *)&reply[offset];
+	answer->type = htons(DNS_TYPE_NSEC3);
+	answer->class = htons(DNS_CLASS_IN);
+	answer->ttl = htonl(sd->ttl[inttype]);
+	answer->rdlength = htons(6 + sdnsec3->nsec3.saltlen + 
+			sdnsec3->nsec3.nextlen + sdnsec3->nsec3.bitmap_len);
+	answer->algorithm = sdnsec3->nsec3.algorithm;
+	answer->flags = sdnsec3->nsec3.flags;
+	answer->iterations = htons(sdnsec3->nsec3.iterations);
+	answer->saltlen = sdnsec3->nsec3.saltlen;
+	
+	offset += sizeof(*answer);
+
+	if (sdnsec3->nsec3.saltlen) {
+		memcpy(&reply[offset], &sdnsec3->nsec3.salt, sdnsec3->nsec3.saltlen);
+		offset += sdnsec3->nsec3.saltlen;
+	}
+
+	somelen = (u_int8_t *)&reply[offset];
+	*somelen = sdnsec3->nsec3.nextlen;
+
+	offset += 1;
+
+	memcpy(&reply[offset], sdnsec3->nsec3.next, sdnsec3->nsec3.nextlen);
+
+	offset += sdnsec3->nsec3.nextlen;
+
+	memcpy(&reply[offset], sdnsec3->nsec3.bitmap, sdnsec3->nsec3.bitmap_len);
+	offset += sdnsec3->nsec3.bitmap_len;
+
+#if 1
+	tmplen = additional_rrsig(name, namelen, INTERNAL_TYPE_NSEC3, sd, reply, replylen, offset, 0);
+
+	if (tmplen == 0) {
+		goto out;
+	}
+
+	offset = tmplen;
+#endif
 
 out:
 	return (offset);
