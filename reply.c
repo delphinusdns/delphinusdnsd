@@ -92,6 +92,7 @@ char * 		base32hex_encode(u_char *input, int len);
 struct domain * find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, DB *db);
 struct domain * find_nsec3_match_closest(char *name, int namelen, struct domain *sd, DB *db);
 struct domain * find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, DB *db);
+struct domain * find_nsec3_match_qname(char *name, int namelen, struct domain *sd, DB *db);
 
 #ifdef __linux__
 static int 	udp_cksum(const struct iphdr *, const struct udphdr *, int);
@@ -126,7 +127,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.33 2015/09/12 14:08:54 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.34 2015/09/12 14:36:35 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -4914,12 +4915,13 @@ reply_noerror(struct sreply *sreply, DB *db)
 			sd0 = Lookup_zone(db, q->hdr->name, q->hdr->namelen, htons(DNS_TYPE_NSEC), 0);
 			tmplen = additional_nsec(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_NSEC, sd0, reply, replysize, outlen);
 			free(sd0);
+		} else if (sd->flags & DOMAIN_HAVE_NSEC3PARAM) {
+			sd0 = find_nsec3_match_qname(q->hdr->name, q->hdr->namelen, sd, db);
+			if (sd0 == NULL)
+				goto out;
+			tmplen = additional_nsec3(sd0->zone, sd0->zonelen, INTERNAL_TYPE_NSEC3, sd0, reply, replysize, outlen);
+			free (sd0);
 		}
-#if 0
-		} else if (sd->flags & DOMAIN_HAVE_NSEC3) {
-			tmplen = additional_nsec3();
-		}
-#endif
 
 		if (tmplen == 0) {
 			NTOHS(odh->query);
@@ -7295,6 +7297,172 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, DB *db)
 	
 	/* free what we don't need */
 	free (sd0);
+	
+	dolog(LOG_INFO, "converting %s\n", dn->name);
+	backname = dns_label(dn->name, &backnamelen);
+	free (table);
+	
+	rs = get_record_size(db, backname, backnamelen);
+	if (rs < 0) {
+		free (backname);
+		return (NULL);
+	}
+
+	if ((sd0 = calloc(1, rs)) == NULL) {
+		free (backname);
+		return (NULL);
+	}
+
+	memset(&key, 0, sizeof(key));
+	memset(&data, 0, sizeof(data));
+	
+	key.data = backname;
+	key.size = backnamelen;
+
+	data.data = NULL;
+	data.size = rs;
+
+	ret = db->get(db, NULL, &key, &data, 0);	
+	if (ret != 0) {
+		free (backname);
+		free (sd0);
+		return (NULL);
+	}
+	
+
+	memcpy(sd0, data.data, data.size);
+	free (backname);
+
+	dolog(LOG_INFO, "returning %s\n", sd0->zonename);
+	return (sd0);
+}
+
+/*
+ * FIND_NSEC3_MATCH_QNAME - find the matching QNAME and return NSEC3
+ *
+ */
+
+struct domain *
+find_nsec3_match_qname(char *name, int namelen, struct domain *sd, DB *db)
+{
+	struct domainnames {
+		char name[DNS_MAXNAME + 1];
+		char next[DNS_MAXNAME + 1];
+	} *dn;
+
+	DBC *cursor;
+	DBT key, data;
+
+	char *hashname;
+	char *backname;
+	char *table, *tmp;
+	int backnamelen;
+	int rs, ret;
+	int i, j;
+	int count, hashnamelen;
+	struct domain *sd0, *sd1;
+	struct domain_nsec3param *n3p;
+	struct question *question;
+
+	if ((n3p = find_substruct(sd, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
+		return NULL;
+	}
+
+	hashname = hash_name(name, namelen,  &n3p->nsec3param);
+	if (hashname == NULL) {
+		dolog(LOG_INFO, "unable to get hashname\n");
+		return NULL;
+	}
+
+#if DEBUG
+	dolog(LOG_INFO, "hashname  = %s\n", hashname);
+#endif
+	
+	/* now go through our zone and find NSEC3 domains */
+	/* first pass, count the NSEC3 list */	
+	
+	/* we need question for checklabel() */
+	question = build_fake_question(sd->zone, sd->zonelen, 0);
+	if (question == NULL) {
+		dolog(LOG_INFO, "build_fake_question failed\n");
+		return NULL;
+	}
+
+	count = count_nsec3_in_zone(db, sd, question);
+
+	/* realloc names structure to fit the NSEC3 names */
+	
+	tmp = calloc(count, sizeof(struct domainnames));
+	if (tmp == NULL) {
+		dolog(LOG_INFO, "realloc: %s\n", strerror(errno));
+		free_question(question);
+		return NULL;	
+	}
+		
+	table = tmp;
+	dn = (struct domainnames *)tmp;
+
+	/* second pass, fill NSEC3 list */
+
+	if (db->cursor(db, NULL, &cursor, 0) != 0) {
+		dolog(LOG_INFO, "find_nsec3 db->cursor: %s\n", strerror(errno));
+		free_question(question);
+		return NULL;
+	}	
+
+	memset(&key, 0, sizeof(key));
+	memset(&data, 0, sizeof(data));
+
+	if (cursor->c_get(cursor, &key, &data, DB_FIRST) != 0) {
+		dolog(LOG_INFO, "find_nsec3 cursor->c_get: %s\n", strerror(errno));
+		free_question(question);
+		return NULL;
+	}
+
+	i = 1;
+
+	do {
+		rs = data.size;
+		if ((sd1 = calloc(1, rs)) == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			free_question(question);
+			return NULL;
+		}
+
+		memcpy((char *)sd1, (char *)data.data, data.size);
+
+		if (checklabel(db, sd1, sd, question) == 1) {
+			if (sd1->flags & DOMAIN_HAVE_NSEC3) {
+				strlcpy(dn->name, sd1->zonename, DNS_MAXNAME + 1);
+				strlcpy(dn->next, "-", DNS_MAXNAME + 1);
+				dn++;
+			}
+		}
+
+		free (sd1);
+
+		memset(&key, 0, sizeof(key));
+		memset(&data, 0, sizeof(data));
+
+	}  while (cursor->c_get(cursor, &key, &data, DB_NEXT) == 0);
+
+	cursor->c_close(cursor);
+	free_question(question);
+
+	/* now we sort the shebang */
+	qsort(table, count, sizeof(struct domainnames), nsec3_comp);
+
+	hashnamelen = strlen(hashname);
+	for (j = 0; j < count; j++) {
+		dn = ((struct domainnames *)table) + j;
+		
+		if (strncasecmp(dn->name, hashname, hashnamelen) == 0)
+			break;
+	}
+
+	dn = ((struct domainnames *)table) + j;	
+	
+	/* found it, get it via db after converting it */	
 	
 	dolog(LOG_INFO, "converting %s\n", dn->name);
 	backname = dns_label(dn->name, &backnamelen);
