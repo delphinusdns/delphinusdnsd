@@ -127,7 +127,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.34 2015/09/12 14:36:35 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.35 2015/09/12 17:09:14 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -6533,7 +6533,7 @@ count_dots(char *name)
 }
 
 /* 
- * find_next_closer()
+ * FIND_NEXT_CLOSER - find the next closest record
  */
 
 struct domain *
@@ -6586,6 +6586,13 @@ find_next_closer(DB *db, char *name, int namelen)
 		}
 
 		memcpy((char *)sd, (char *)data.data, data.size);
+		if (sd->flags & DOMAIN_HAVE_NSEC3) {
+			plen -= (*p + 1);
+			p = (p + (*p + 1));
+			free (sd);
+			continue;
+		}
+
 		return (sd);
 	} while (*p);
 
@@ -6771,7 +6778,7 @@ find_nsec3_match_closest(char *name, int namelen, struct domain *sd, DB *db)
 	int backnamelen;
 	int rs, ret;
 	int i, j;
-	int count;
+	int count, hashnamelen;
 	struct domain *sd0, *sd1;
 	struct domain_nsec3param *n3p;
 	struct question *question;
@@ -6880,14 +6887,19 @@ find_nsec3_match_closest(char *name, int namelen, struct domain *sd, DB *db)
 	/* now we sort the shebang */
 	qsort(table, count, sizeof(struct domainnames), nsec3_comp);
 
+	hashnamelen = strlen(hashname);
 	for (j = 0; j < count; j++) {
 		dn = ((struct domainnames *)table) + j;
 		
-		if (strncasecmp(dn->name, hashname, strlen(hashname)) == 0)
+		if (strncasecmp(dn->name, hashname, hashnamelen) == 0)
 			break;
 	}
 
-	dn = ((struct domainnames *)table) + j;	
+	if (j == count) {
+		dolog(LOG_INFO, "did not find hashname %s in list\n", hashname);
+		free (sd0);	
+		return NULL;
+	}
 	
 	/* found it, get it via db after converting it */	
 	
@@ -7460,7 +7472,11 @@ find_nsec3_match_qname(char *name, int namelen, struct domain *sd, DB *db)
 			break;
 	}
 
-	dn = ((struct domainnames *)table) + j;	
+	if (j == count) {
+		free(table);
+		return NULL;
+	}
+		
 	
 	/* found it, get it via db after converting it */	
 	

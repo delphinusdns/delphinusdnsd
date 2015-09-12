@@ -190,7 +190,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.21 2015/09/05 22:34:30 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.22 2015/09/12 17:09:14 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1725,6 +1725,7 @@ lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, cha
 
 	ret = db->get(db, NULL, &key, &data, 0);
 	if (ret != 0) {
+nsec3:
 		/*
 		 * We have a condition where a record does not exist but we
 		 * move toward the apex of the record, and there may be 
@@ -1801,6 +1802,8 @@ lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, cha
 			*lzerrno = ERR_NOERROR;
 			goto out;
 		}
+	} else if (sd->flags & DOMAIN_HAVE_NSEC3) {
+		goto nsec3;
 	}
 
 	*returnval = check_qtype(sd, ntohs(question->hdr->qtype), 0, &error);
@@ -2496,7 +2499,7 @@ tcpnxdomain:
 						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
 						NULL, replybuf);
 
-					slen = reply_nsec3(&sreply, cfg->db);
+					slen = reply_nxdomain(&sreply, cfg->db);
 					break;		/* must break here */
 					
 				case DNS_TYPE_NSEC:
@@ -3136,7 +3139,7 @@ udpnxdomain:
 						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
 						replybuf);
 
-					slen = reply_nsec3(&sreply, cfg->db);
+					slen = reply_nxdomain(&sreply, cfg->db);
 					break;
 
 				case DNS_TYPE_NSEC:
