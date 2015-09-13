@@ -43,7 +43,7 @@ extern void *		find_substruct(struct domain *, u_int16_t);
 
 extern int dnssec;
 
-static const char rcsid[] = "$Id: additional.c,v 1.10 2015/09/12 14:08:54 pjp Exp $";
+static const char rcsid[] = "$Id: additional.c,v 1.11 2015/09/13 05:57:35 pjp Exp $";
 
 
 /*
@@ -578,13 +578,6 @@ additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *
 	memcpy(&reply[offset], rrsig->signers_name, rrsig->signame_len);
 
 	offset += rrsig->signame_len;
-#if 0
-	tmplen = compress_label((u_char*)reply, offset, rrsig->signame_len);
-
-	if (tmplen != 0) {
-		offset = tmplen;
-	}
-#endif
 
 	if ((offset + rrsig->signature_len) > replylen)
 		return 0;

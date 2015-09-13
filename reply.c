@@ -51,6 +51,7 @@ extern void 		slave_shutdown(void);
 extern void *		find_substruct(struct domain *, u_int16_t);
 extern int 		get_record_size(DB *, char *, int);
 extern char *		dns_label(char *, int *);
+extern int 		lookup_type(int internal_type);
 
 struct domain 	*Lookup_zone(DB *, char *, u_int16_t, u_int16_t, int);
 void 		collects_init(void);
@@ -127,7 +128,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.35 2015/09/12 17:09:14 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.36 2015/09/13 05:57:35 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -5434,7 +5435,8 @@ u_int16_t
 create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int soa)
 {
 	int a_count, aaaa_count, ns_count, mx_count, srv_count, sshfp_count;
-	int naptr_count;
+	int naptr_count, rrsig_count;
+	int internal_type;
 	int tmplen, pos, mod;
 	struct answer {
 		u_int16_t type;		/* 0 */
@@ -5457,6 +5459,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	struct domain_mx *sdmx = NULL;
 	struct domain_spf *sdspf = NULL;
 	struct domain_sshfp *sdsshfp = NULL;
+	struct domain_nsec *sdnsec = NULL;
+	struct domain_rrsig *sdrrsig = NULL;
 	struct question *q = sreply->q;
 	struct dns_header *odh = (struct dns_header *)reply;
 	int labellen;
@@ -5584,6 +5588,83 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		offset += sizeof(sdsoa->soa.minttl);
 
 		answer->rdlength = htons(&reply[offset] - answer->rdata);
+
+	}
+	if (sd->flags & DOMAIN_HAVE_RRSIG) {
+		if ((sdrrsig = (struct domain_rrsig *)find_substruct(sd, INTERNAL_TYPE_RRSIG)) == NULL)
+			return 0;
+
+		rrsig_count = 0;
+		for (internal_type = 0; internal_type < INTERNAL_TYPE_MAX; internal_type++) {
+			int checktype;
+
+			checktype = lookup_type(internal_type);
+			if (checktype == -1)
+				continue;
+
+			if (sd->flags & checktype) {
+				rrsig_count++;
+				tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen,
+				internal_type, sd, reply, rlen, offset, 0);
+	
+				if (tmplen == 0)
+					goto truncate;
+
+				offset = tmplen;
+			}
+		} 
+
+		NTOHS(odh->answer);
+		odh->answer += rrsig_count;
+		HTONS(odh->answer);
+
+	}
+	if (sd->flags & DOMAIN_HAVE_NSEC) {
+		if ((sdnsec = (struct domain_nsec *)find_substruct(sd, INTERNAL_TYPE_NSEC)) == NULL)
+			return 0;
+
+		do {
+			if (offset + q->hdr->namelen > rlen)
+				goto truncate;
+
+			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
+			offset += q->hdr->namelen;
+
+			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+				offset = tmplen;
+			} 
+
+			answer = (struct answer *)&reply[offset];
+
+			answer->type = htons(DNS_TYPE_NSEC);
+			answer->class = htons(DNS_CLASS_IN);
+			answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_NSEC]);
+
+			answer->rdlength = htons(namelen);
+
+			offset += 10;		/* struct answer */
+
+			if (offset + sdnsec->nsec.ndn_len > rlen)
+				goto truncate;
+
+			memcpy((char *)&answer->rdata, (char *)sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
+
+			offset += sdnsec->nsec.ndn_len;
+
+			if (offset + sdnsec->nsec.bitmap_len > rlen)
+				goto truncate;
+				
+			memcpy((char *)&reply[offset], sdnsec->nsec.bitmap, sdnsec->nsec.bitmap_len);
+
+			offset += sdnsec->nsec.bitmap_len;
+			
+			answer->rdlength = htons(&reply[offset] - answer->rdata);
+
+		} while (0);
+
+		NTOHS(odh->answer);
+		odh->answer += 1;
+		HTONS(odh->answer);
 
 	}
 	if (sd->flags & DOMAIN_HAVE_NS) {
@@ -7518,3 +7599,49 @@ find_nsec3_match_qname(char *name, int namelen, struct domain *sd, DB *db)
 	dolog(LOG_INFO, "returning %s\n", sd0->zonename);
 	return (sd0);
 }
+
+#if 0
+static int
+lookup_type(int internal_type)
+{
+	switch (internal_type) {
+	case INTERNAL_TYPE_SOA:
+		return DNS_TYPE_SOA;
+	case INTERNAL_TYPE_A:
+		return DNS_TYPE_A;
+	case INTERNAL_TYPE_AAAA:
+		return DNS_TYPE_AAAA;
+	case INTERNAL_TYPE_MX:
+		return DNS_TYPE_MX;
+	case INTERNAL_TYPE_NS:
+		return DNS_TYPE_NS;
+	case INTERNAL_TYPE_CNAME:
+		return DNS_TYPE_CNAME;
+	case INTERNAL_TYPE_PTR:
+		return DNS_TYPE_PTR;
+	case INTERNAL_TYPE_TXT:
+		return DNS_TYPE_TXT;
+	case INTERNAL_TYPE_SPF:
+		return DNS_TYPE_SPF;
+	case INTERNAL_TYPE_SRV:
+		return DNS_TYPE_SRV;
+	case INTERNAL_TYPE_SSHFP:
+		return DNS_TYPE_SSHFP;
+	case INTERNAL_TYPE_NAPTR:
+		return DNS_TYPE_NAPTR;
+	case INTERNAL_TYPE_DNSKEY:
+		return DNS_TYPE_DNSKEY;
+	case INTERNAL_TYPE_DS:
+		return DNS_TYPE_DS;
+	case INTERNAL_TYPE_NSEC:
+		return DNS_TYPE_NSEC;
+	case INTERNAL_TYPE_NSEC3:
+		return DNS_TYPE_NSEC3;
+	case INTERNAL_TYPE_NSEC3PARAM:
+		return DNS_TYPE_NSEC3PARAM;
+	}
+
+	/* NOTREACHED */
+	return -1;
+}
+#endif 
