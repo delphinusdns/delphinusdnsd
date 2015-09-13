@@ -1,6 +1,6 @@
 PROG=delphinusdnsd
 
-SRCS=main.c parse.y reply.c additional.c region.c wildcard.c log.c axfr.c filter.c ratelimit.c whitelist.c base64.c
+SRCS=main.c parse.y reply.c additional.c region.c wildcard.c log.c axfr.c filter.c ratelimit.c whitelist.c base64.c dnssec.c
 
 #CFLAGS= -DDEBUG  -g -Wall
 CFLAGS= -Wall -g  -I/usr/local/include/db4

@@ -22,10 +22,11 @@ build:
 	$(CC) $(CFLAGS) -c ratelimit.c
 	$(CC) $(CFLAGS) -c whitelist.c
 	$(CC) $(CFLAGS) -c base64.c
+	$(CC) $(CFLAGS) -c dnssec.c
 	$(AR) -x libressllibcrypto.a libcompat_la-arc4random.o 
 	$(AR) -x libressllibcrypto.a libcompat_la-getentropy_linux.o
 	$(AR) -x libressllibcrypto.a libcompatnoopt_la-explicit_bzero.o
-	$(CC) $(CFLAGS) -o delphinusdnsd additional.o main.o parse.o reply.o region.o wildcard.o recurse.o log.o axfr.o filter.o ratelimit.o whitelist.o libcompat_la-arc4random.o libcompat_la-getentropy_linux.o libcompatnoopt_la-explicit_bzero.o $(LDADD)
+	$(CC) $(CFLAGS) -o delphinusdnsd additional.o main.o parse.o reply.o region.o wildcard.o recurse.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o libcompat_la-arc4random.o libcompat_la-getentropy_linux.o libcompatnoopt_la-explicit_bzero.o $(LDADD)
 
 
 install:
