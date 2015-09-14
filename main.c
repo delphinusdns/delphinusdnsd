@@ -42,6 +42,7 @@ extern int 	find_recurse(struct sockaddr_storage *, int);
 extern u_int8_t find_region(struct sockaddr_storage *, int);
 extern int 	find_whitelist(struct sockaddr_storage *, int);
 extern int 	find_wildcard(struct sockaddr_storage *, int);
+extern void 	init_dnssec(void);
 extern void 	init_wildcard(void);
 extern void 	init_recurse(void);
 extern void 	init_region(void);
@@ -190,7 +191,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.23 2015/09/13 05:57:35 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.24 2015/09/14 09:59:10 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -437,6 +438,7 @@ main(int argc, char *argv[])
 	init_filter();
 	init_whitelist();
 	init_notifyslave();
+	init_dnssec();
 
 	if (parse_file(db, conffile) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");

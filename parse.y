@@ -29,6 +29,8 @@
 extern void 	dolog(int, char *, ...);
 extern char 	*dns_label(char *, int *);
 extern u_int8_t find_region(struct sockaddr_storage *, int);
+extern int 	insert_apex(char *, char *, int);
+extern int 	insert_nsec3(char *, char *, char *, int);
 extern int 	insert_region(char *, char *, u_int8_t);
 extern int 	insert_axfr(char *, char *);
 extern int 	insert_notifyslave(char *, char *);
@@ -103,12 +105,13 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.26 2015/09/12 14:08:54 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.27 2015/09/14 09:59:10 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
 static uint64_t confstatus = 0;
 static DB *mydb;
+static char *current_zone = NULL;
 
 YYSTYPE yylval;
 
@@ -2418,6 +2421,13 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 		return -1;
 	}
 
+	if (dnssec) {
+#ifdef DEBUG
+		dolog(LOG_INFO, "inserting %s\n", name);
+#endif
+		insert_nsec3(current_zone, name, converted_name, converted_namelen);
+	}
+
         rs = get_record_size(db, converted_name, converted_namelen);
         if (rs < 0) {
 		if (debug)
@@ -3584,6 +3594,11 @@ fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int seria
 	if (converted_name == NULL) {
 		dolog(LOG_ERR, "error input line %d\n", file->lineno);
 		return (-1);
+	}
+
+	if (dnssec) {
+		insert_apex(name, converted_name, converted_namelen);
+		current_zone = strdup(name);
 	}
 
 	rs = get_record_size(db, converted_name, converted_namelen);
