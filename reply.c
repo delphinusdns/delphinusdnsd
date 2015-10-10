@@ -127,7 +127,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.38 2015/10/10 09:34:42 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.39 2015/10/10 11:01:07 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -5463,6 +5463,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	struct domain_rrsig *sdrrsig = NULL;
 	struct domain_ds *sdds = NULL;
 	struct domain_dnskey *sddnskey = NULL;
+	struct domain_nsec3param *sdnsec3param = NULL;
+	struct domain_nsec3 *sdnsec3 = NULL;
 	struct question *q = sreply->q;
 	struct dns_header *odh = (struct dns_header *)reply;
 	int labellen;
@@ -5471,9 +5473,12 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	u_int16_t namelen;
 	u_int16_t *mx_priority, *srv_priority, *srv_port, *srv_weight;
 	u_int16_t *naptr_order, *naptr_preference, *ds_keytag;
-	u_int16_t *dnskey_flags;
+	u_int16_t *dnskey_flags, *nsec3param_iterations;
+	u_int16_t *nsec3_iterations;
 	u_int8_t *sshfp_alg, *sshfp_fptype, *ds_alg, *ds_digesttype;
 	u_int8_t *dnskey_protocol, *dnskey_alg;
+	u_int8_t *nsec3param_alg, *nsec3param_flags, *nsec3param_saltlen;
+	u_int8_t *nsec3_alg, *nsec3_flags, *nsec3_saltlen, *nsec3_hashlen;
 	char *name, *p;
 	int i;
 
@@ -5743,6 +5748,149 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		} while (ds_count < RECORD_COUNT && --sdds->ds_count);
 
+
+	}
+	if (sd->flags & DOMAIN_HAVE_NSEC3) {
+		if ((sdnsec3 = (struct domain_nsec3 *)find_substruct(sd, INTERNAL_TYPE_NSEC3)) == NULL)
+			return 0;
+
+		do {
+			if (offset + q->hdr->namelen > rlen)
+				goto truncate;
+
+			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
+			offset += q->hdr->namelen;
+
+			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+				offset = tmplen;
+			} 
+
+			answer = (struct answer *)&reply[offset];
+
+			answer->type = htons(DNS_TYPE_NSEC3);
+			answer->class = htons(DNS_CLASS_IN);
+			answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_NSEC3]);
+
+			answer->rdlength = htons(namelen);
+
+			offset += 10;		/* struct answer */
+
+			if (offset + sizeof(*nsec3_alg) + sizeof(*nsec3_flags) 
+				+ sizeof(*nsec3_iterations) 
+				+ sizeof(*nsec3_saltlen)
+				+ sdnsec3->nsec3.saltlen + sizeof(*nsec3_hashlen)
+				+ sdnsec3->nsec3.nextlen 
+				+ sdnsec3->nsec3.bitmap_len > rlen)
+				goto truncate;
+
+			nsec3_alg = (u_int8_t *)&reply[offset];
+			*nsec3_alg = sdnsec3->nsec3.algorithm;
+
+			offset += sizeof(*nsec3_alg);
+
+			nsec3_flags = (u_int8_t *)&reply[offset];
+			*nsec3_flags = sdnsec3->nsec3.flags;
+
+			offset += sizeof(*nsec3_flags);
+
+			nsec3_iterations = (u_int16_t *)&reply[offset];
+			*nsec3_iterations = htons(sdnsec3->nsec3.iterations);
+			offset += sizeof(*nsec3_iterations);
+
+			nsec3_saltlen = (u_int8_t *)&reply[offset];
+			*nsec3_saltlen = sdnsec3->nsec3.saltlen;
+			offset += sizeof(*nsec3_saltlen);
+		
+			memcpy(&reply[offset], &sdnsec3->nsec3.salt,
+				sdnsec3->nsec3.saltlen);	
+			
+			offset += sdnsec3->nsec3.saltlen;
+
+			nsec3_hashlen = (u_int8_t *)&reply[offset];
+			*nsec3_hashlen = sdnsec3->nsec3.nextlen;
+			offset += sizeof(*nsec3_hashlen);
+
+			memcpy(&reply[offset], &sdnsec3->nsec3.next,
+				sdnsec3->nsec3.nextlen);	
+			
+			offset += sdnsec3->nsec3.nextlen;
+
+			memcpy(&reply[offset], &sdnsec3->nsec3.bitmap,
+				sdnsec3->nsec3.bitmap_len);
+
+			offset += sdnsec3->nsec3.bitmap_len;
+
+			answer->rdlength = htons(&reply[offset] - answer->rdata);
+
+		} while (0);
+
+		NTOHS(odh->answer);
+		odh->answer += 1;
+		HTONS(odh->answer);
+
+	}
+	if (sd->flags & DOMAIN_HAVE_NSEC3PARAM) {
+		if ((sdnsec3param = (struct domain_nsec3param *)find_substruct(sd, INTERNAL_TYPE_NSEC3PARAM)) == NULL)
+			return 0;
+
+		do {
+			if (offset + q->hdr->namelen > rlen)
+				goto truncate;
+
+			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
+			offset += q->hdr->namelen;
+
+			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+				offset = tmplen;
+			} 
+
+			answer = (struct answer *)&reply[offset];
+
+			answer->type = htons(DNS_TYPE_NSEC3PARAM);
+			answer->class = htons(DNS_CLASS_IN);
+			answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_NSEC3PARAM]);
+
+			answer->rdlength = htons(namelen);
+
+			offset += 10;		/* struct answer */
+
+			if (offset + sizeof(sdnsec3param->nsec3param.algorithm)
+				+ sizeof(sdnsec3param->nsec3param.flags) 
+				+ sizeof(sdnsec3param->nsec3param.iterations)
+				+ sizeof(sdnsec3param->nsec3param.saltlen) > rlen)
+				goto truncate;
+
+			nsec3param_alg = (u_int8_t *)&reply[offset];
+			*nsec3param_alg = sdnsec3param->nsec3param.algorithm;
+
+			offset += sizeof(*nsec3param_alg);
+
+			nsec3param_flags = (u_int8_t *)&reply[offset];
+			*nsec3param_flags = sdnsec3param->nsec3param.flags;
+
+			offset += sizeof(*nsec3param_flags);
+
+			nsec3param_iterations = (u_int16_t *)&reply[offset];
+			*nsec3param_iterations = htons(sdnsec3param->nsec3param.iterations);
+			offset += sizeof(*nsec3param_iterations);
+
+			nsec3param_saltlen = (u_int8_t *)&reply[offset];
+			*nsec3param_saltlen = sdnsec3param->nsec3param.saltlen;
+
+			offset += sizeof(*nsec3param_saltlen);
+		
+			memcpy(&reply[offset], &sdnsec3param->nsec3param.salt,
+				sdnsec3param->nsec3param.saltlen);	
+			
+			offset += sdnsec3param->nsec3param.saltlen;
+
+			answer->rdlength = htons(&reply[offset] - answer->rdata);
+
+		} while (0);
+
+		NTOHS(odh->answer);
+		odh->answer += 1;
+		HTONS(odh->answer);
 
 	}
 	if (sd->flags & DOMAIN_HAVE_NSEC) {
