@@ -135,7 +135,30 @@ insert_nsec3(char *zonename, char *domainname, char *dname, int dnamelen)
 	memcpy(n3->dname, dname, dnamelen);
 	n3->dnamelen = dnamelen;
 
-	TAILQ_INSERT_TAIL(&dn->nsec3head, n3, nsec3_entries);
+
+	/*
+	 * sort the tailq here 
+	 */
+
+	if (TAILQ_EMPTY(&dn->nsec3head)) {
+		TAILQ_INSERT_TAIL(&dn->nsec3head, n3, nsec3_entries);
+	} else {
+		ns3p = TAILQ_FIRST(&dn->nsec3head);
+		if (strcmp(n3->domainname, ns3p->domainname) < 0) {
+			TAILQ_INSERT_BEFORE(ns3p, n3, nsec3_entries);
+		} else {
+			while ((ns3p = TAILQ_NEXT(ns3p, nsec3_entries)) != NULL) {
+				if (strcmp(n3->domainname, ns3p->domainname) < 0) {
+					TAILQ_INSERT_BEFORE(ns3p, n3, nsec3_entries);
+					break;
+				}
+			}
+		}
+		if (ns3p == NULL) {
+			TAILQ_INSERT_TAIL(&dn->nsec3head, n3, nsec3_entries);
+		}
+	}
+
 
 	return (0);
 }
