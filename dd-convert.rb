@@ -1,6 +1,6 @@
 #!/usr/local/bin/ruby
 #
-# $Id: dd-convert.rb,v 1.1 2015/11/07 18:13:37 pjp Exp $
+# $Id: dd-convert.rb,v 1.2 2015/11/07 19:00:38 pjp Exp $
 #
 # Copyright (c) 2015 Peter J. Philipp
 # All rights reserved.
@@ -43,6 +43,8 @@ require 'optparse'
 require 'openssl'
 require 'pp'
 require 'tempfile'
+
+require 'etc'
 require 'dns/zone'
 
 #
@@ -572,27 +574,43 @@ class MyCreateKeys < Hash
 	def initialize(type, algorithm, bits, zonename, ttl)
 		self[:zskname] = ''
 		self[:kskname] = ''
+		systemid = [] 
 		super()
+
+		systemid = Etc.uname[:sysname]
 		
 		if type == 1 then
-			createKSK(algorithm, bits, zonename, ttl)	
+			createKSK(algorithm, bits, zonename, ttl, systemid)	
 		else
-			createZSK(algorithm, bits, zonename, ttl)
+			createZSK(algorithm, bits, zonename, ttl, systemid)
 		end
 	end
 
-	def createKSK(algorithm, bits, zonename, ttl)
-		IO.popen('/usr/local/sbin/dnssec-keygen -3 -L ' + \
+	def createKSK(algorithm, bits, zonename, ttl, systemid)
+		if systemid == "OpenBSD" then
+			keygen = "/usr/local/sbin/dnssec-keygen"
+		elsif systemid == "FreeBSD" then
+			keygen = "/usr/sbin/dnssec-keygen"
+		end
+		
+		IO.popen(keygen + ' -3 -L ' + \
 			ttl.to_s + ' -f KSK -a ' + algorithm + \
 			' -b ' + bits.to_s + ' -n zone ' + \
 			zonename, 'r+') do |pipe|
 
 			self[:kskname] = pipe.read
 		end
+
 	end
 
-	def createZSK(algorithm, bits, zonename, ttl)
-		IO.popen('/usr/local/sbin/dnssec-keygen -3 -L ' + \
+	def createZSK(algorithm, bits, zonename, ttl, systemid)
+		if systemid == "OpenBSD" then
+			keygen = "/usr/local/sbin/dnssec-keygen"
+		elsif systemid == "FreeBSD" then
+			keygen = "/usr/sbin/dnssec-keygen"
+		end
+		
+		IO.popen(keygen + ' -3 -L ' + \
 			ttl.to_s + ' -a ' + algorithm + \
 			' -b ' + bits.to_s + ' -n zone ' + \
 			zonename, 'r+') do |pipe|
@@ -611,7 +629,12 @@ def usage
 end
 
 
+#
 # start 
+#
+
+systemid = [] 
+systemid = Etc.uname[:sysname]
 
 arguments = ParseArguments.new(ARGV)
 
@@ -650,7 +673,14 @@ if arguments[:input] != "" then
 
 	out.rewind
 
-	IO.popen('/usr/local/sbin/dnssec-signzone -O full -3 \'' + \
+	if systemid == "OpenBSD" then
+		signzonepath = "/usr/local/sbin/dnssec-signzone"
+	elsif systemid == "FreeBSD"
+		signzonepath = "/usr/sbin/dnssec-signzone"
+	end
+
+	
+	IO.popen(signzonepath + ' -O full -3 \'' + \
 		arguments[:salt] + '\' -H ' + arguments[:iterations].to_s + \
 		' -o ' + arguments[:zonename] + '. -t  -k ' + \
 		arguments[:kskname].chomp + ' ' + out.path + ' ' + \
