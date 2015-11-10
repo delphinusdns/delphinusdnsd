@@ -193,7 +193,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.25 2015/11/10 11:04:07 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.26 2015/11/10 11:25:57 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1888,7 +1888,6 @@ get_soa(DB *db, struct question *question)
 
 	int plen;
 	int ret = 0;
-	int wildcard = 0;
 	int rs;
 	
 	DBT key, data;
@@ -1920,13 +1919,6 @@ get_soa(DB *db, struct question *question)
 
 		ret = db->get(db, NULL, &key, &data, 0);
 		if (ret != 0) {
-			/*
-			 * If we're not wildcarding end the search here and
-			 * return with -1 
-			 */
-			if (! wildcard) 
-				return (NULL);
-
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
 			free (sd);
@@ -3023,14 +3015,6 @@ axfrentry:
 					case ERR_NXDOMAIN:
 						goto udpnxdomain;
 					case ERR_NOERROR:
-						if (rflag && recursion) {
-							snprintf(replystring, DNS_MAXNAME, "RECURSE");
-							if (send(sp, (char *)&rh, sizeof(rh), 0) < 0) {
-								dolog(LOG_INFO, "send sp: %s\n", strerror(errno));
-							}
-
-							goto udpout;
-						} else {
 							/*
 							 * this is hackish not sure if this should be here
 							 */
@@ -3054,9 +3038,8 @@ axfrentry:
 										NULL, replybuf);
 
 									slen = reply_noerror(&sreply, cfg->db);
-							}
+							} 
 							goto udpout;
-						} /* else rflag */
 					}
 				}
 
