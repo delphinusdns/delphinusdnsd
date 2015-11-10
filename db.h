@@ -57,7 +57,8 @@
 #define INTERNAL_TYPE_RRSIG	15
 #define INTERNAL_TYPE_NSEC3	16
 #define INTERNAL_TYPE_NSEC3PARAM 17
-#define INTERNAL_TYPE_MAX	18
+#define INTERNAL_TYPE_TLSA	18
+#define INTERNAL_TYPE_MAX	19
 
 /* db stuff */
 
@@ -160,6 +161,14 @@ struct sshfp {
 	int fplen;			/* fingerprint length */
 } __attribute__((packed));
 
+struct tlsa {
+	u_int8_t usage;			/* TLSA usage */
+	u_int8_t selector;		/* TLSA selector */
+	u_int8_t matchtype;		/* TLSA matching type */
+	char data[DNS_MAXNAME];  	/* TLSA data */
+	int datalen;			/* data length */
+} __attribute__((packed));
+
 struct naptr {
 	u_int16_t order;		/* NAPTR 16 bit order */
 	u_int16_t preference;		/* 16 bit preference */
@@ -198,6 +207,7 @@ struct domain {
 #define DOMAIN_HAVE_RRSIG	0x8000
 #define DOMAIN_HAVE_NSEC3	0x10000
 #define DOMAIN_HAVE_NSEC3PARAM	0x20000
+#define DOMAIN_HAVE_TLSA	0x40000
 	u_int32_t ttl[INTERNAL_TYPE_MAX];	/* time to lives */
 	time_t created;			/* time created, for dynamic zones */
 } __attribute__((packed));
@@ -300,6 +310,13 @@ struct domain_sshfp {
 	u_int32_t len;
 	struct sshfp sshfp[RECORD_COUNT];	/* SSHFP resource record */
 	int sshfp_count;			/* SSHFP RR count */
+} __attribute__((packed));
+
+struct domain_tlsa {
+	u_int16_t type;
+	u_int32_t len;
+	struct tlsa tlsa[RECORD_COUNT];		/* TLSA resource record */
+	int tlsa_count;				/* TLSA RR count */
 } __attribute__((packed));
 
 struct domain_naptr {

@@ -173,6 +173,7 @@ struct dns_question_hdr {
 
 #define DNS_TYPE_NSEC3	50		/* RFC 5155, section 3 */
 #define DNS_TYPE_NSEC3PARAM	51	/* RFC 5155, section 4 */
+#define DNS_TYPE_TLSA	52		/* RFC 6698, section 7.1 */
 
 #define DNS_TYPE_SPF	99		/* RFC 4408 */
 
@@ -210,6 +211,10 @@ struct dns_question_hdr {
 #define DNS_SSHFP_SIZE_SHA1	20	/* RFC 4255 */
 #define DNS_SSHFP_SIZE_SHA256	32 	/* RFC 6594 */
 
+/* TLSA fingerprint sizes */
+
+#define DNS_TLSA_SIZE_SHA256	32	/* RFC 6698 */
+#define DNS_TLSA_SIZE_SHA512	64	/* RFC 6698 */
 
 struct question {
 	struct dns_question_hdr *hdr;

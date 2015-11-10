@@ -77,6 +77,7 @@ int 		reply_spf(struct sreply *);
 int 		reply_srv(struct sreply *, DB *);
 int 		reply_naptr(struct sreply *, DB *);
 int 		reply_sshfp(struct sreply *);
+int		reply_tlsa(struct sreply *);
 int 		reply_cname(struct sreply *);
 int 		reply_any(struct sreply *);
 int 		reply_refused(struct sreply *);
@@ -127,7 +128,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.39 2015/10/10 11:01:07 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.40 2015/11/10 11:04:07 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -1218,7 +1219,7 @@ reply_dnskey(struct sreply *sreply)
 				odh->answer = htons(a_count + 1 + i);	
 		}
 
-		}
+	}
 
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -3282,6 +3283,193 @@ reply_version(struct sreply *sreply)
 
 	return (retlen);
 }
+
+/* 
+ * REPLY_TLSA() - replies a DNS question (*q) on socket (so)
+ *			(based on reply_sshfp)
+ */
+
+
+int
+reply_tlsa(struct sreply *sreply)
+{
+	char *reply = sreply->replybuf;
+	struct dns_header *odh;
+	int tlsa_count;
+	u_int16_t *plen;
+	u_int16_t outlen;
+
+	struct answer {
+		char name[2];
+		u_int16_t type;
+		u_int16_t class;
+		u_int32_t ttl;
+		u_int16_t rdlength;	 /* 12 */
+		u_int8_t usage; 
+		u_int8_t selector;
+		u_int8_t matchtype;
+		char target;
+	} __attribute__((packed));
+
+	struct answer *answer;
+
+	int so = sreply->so;
+	char *buf = sreply->buf;
+	int len = sreply->len;
+	struct question *q = sreply->q;
+	struct sockaddr *sa = sreply->sa;
+	int salen = sreply->salen;
+	struct domain *sd = sreply->sd1;
+	struct domain_tlsa *sdtlsa = NULL;
+	int istcp = sreply->istcp;
+	int typelen = 0;
+	int replysize = 512;
+	int retlen = -1;
+
+	if ((sdtlsa = find_substruct(sd, INTERNAL_TYPE_TLSA)) == NULL)
+		return -1;
+
+	if (istcp) {
+		replysize = 65535;
+	}
+
+	if (! istcp && q->edns0len > 512)
+		replysize = q->edns0len;
+	
+
+	odh = (struct dns_header *)&reply[0];
+
+	outlen = sizeof(struct dns_header);
+
+	if (len > replysize) {
+		return (retlen);
+	}
+
+	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+
+	outlen += (q->hdr->namelen + 4);
+
+	SET_DNS_REPLY(odh);
+
+	if (sreply->sr == NULL) {
+		SET_DNS_AUTHORITATIVE(odh);
+	} else
+		SET_DNS_RECURSION_AVAIL(odh);
+	
+	HTONS(odh->query);
+
+	odh->question = htons(1);
+	odh->answer = htons(sdtlsa->tlsa_count);
+	odh->nsrr = 0;
+	odh->additional = 0;
+
+	/* skip dns header, question name, qtype and qclass */
+	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
+		q->hdr->namelen + 4);
+
+	tlsa_count = 0;
+	do {
+		answer->name[0] = 0xc0;
+		answer->name[1] = 0x0c;
+		answer->type = q->hdr->qtype;
+		answer->class = q->hdr->qclass;
+		if (sreply->sr != NULL)
+			answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_TLSA] - (time(NULL) - sd->created));
+		else
+			answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_TLSA]);
+
+		switch (sdtlsa->tlsa[tlsa_count].matchtype) {
+		case 1:
+			typelen = DNS_TLSA_SIZE_SHA256;
+			break;
+		case 2:
+			typelen = DNS_TLSA_SIZE_SHA512;
+			break;
+		default:
+			dolog(LOG_ERR, "oops bad tlsa type? not returning a packet!\n");
+			return (retlen);
+		}
+
+		answer->rdlength = htons((3 * sizeof(u_int8_t)) + typelen); 
+		answer->usage = sdtlsa->tlsa[tlsa_count].usage;
+		answer->selector = sdtlsa->tlsa[tlsa_count].selector;
+		answer->matchtype = sdtlsa->tlsa[tlsa_count].matchtype;
+
+		memcpy((char *)&answer->target, (char *)sdtlsa->tlsa[tlsa_count].data, sdtlsa->tlsa[tlsa_count].datalen);
+
+		/* can we afford to write another header? if no truncate */
+		if (sdtlsa->tlsa_count > 1 && (outlen + 12 + 3 + sdtlsa->tlsa[tlsa_count].datalen) > replysize) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			goto out;
+		}
+
+		/* set new offset for answer */
+		outlen += (12 + 3 + sdtlsa->tlsa[tlsa_count].datalen);
+		answer = (struct answer *)&reply[outlen];
+	} while (++tlsa_count < RECORD_COUNT && --sdtlsa->tlsa_count);
+
+	/* RRSIG reply_tlsa */
+	if (dnssec && q->dnssecok) {
+		int tmplen = 0;
+		int origlen = outlen;
+
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_TLSA, sd, reply, replysize, outlen, 0);
+	
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(tlsa_count + 1);	
+
+	}
+
+	if (q->edns0len) {
+		/* tag on edns0 opt record */
+		NTOHS(odh->additional);
+		odh->additional++;
+		HTONS(odh->additional);
+
+		outlen = additional_opt(q, reply, replysize, outlen);
+	}
+
+out:
+	if (sreply->sr != NULL) {
+		retlen = reply_raw2(so, reply, outlen, sreply->sr);
+	} else {
+		if (istcp) {
+			char *tmpbuf;
+
+			tmpbuf = malloc(outlen + 2);
+			if (tmpbuf == NULL) {
+				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+			}
+			plen = (u_int16_t *)tmpbuf;
+			*plen = htons(outlen);
+				
+			memcpy(&tmpbuf[2], reply, outlen);
+			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+				dolog(LOG_INFO, "send: %s\n", strerror(errno));
+			}
+			free(tmpbuf);
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
+		}
+	}
+
+	return (retlen);
+}
+
 
 /* 
  * REPLY_SSHFP() - replies a DNS question (*q) on socket (so)

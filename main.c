@@ -68,6 +68,7 @@ extern int 	reply_refused(struct sreply *);
 extern int 	reply_spf(struct sreply *);
 extern int 	reply_srv(struct sreply *, DB *);
 extern int 	reply_sshfp(struct sreply *);
+extern int 	reply_tlsa(struct sreply *);
 extern int 	reply_txt(struct sreply *);
 extern int 	reply_version(struct sreply *);
 extern int      reply_rrsig(struct sreply *, DB *);
@@ -134,6 +135,7 @@ struct typetable {
 	{ "DS", DNS_TYPE_DS },
 	{ "NSEC3", DNS_TYPE_NSEC3 },
 	{ "NSEC3PARAM", DNS_TYPE_NSEC3PARAM },
+	{ "TLSA", DNS_TYPE_TLSA },
 	{ NULL, 0}
 };
 
@@ -191,7 +193,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.24 2015/09/14 09:59:10 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.25 2015/11/10 11:04:07 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1480,6 +1482,21 @@ compress_label(u_char *buf, u_int16_t offset, int labellen)
 			p += *p;
 			p++;
 			break;
+		case DNS_TYPE_TLSA:
+			p += 2;
+			switch (*p) {
+			case 1:
+				p += DNS_TLSA_SIZE_SHA256 + 1;
+				break;
+			case 2:
+				p += DNS_TLSA_SIZE_SHA512 + 1;
+				break;
+			default:
+				/* XXX */
+				goto end;
+			}
+
+			break;
 		case DNS_TYPE_SSHFP:
 			p++;
 			switch (*p) {
@@ -2613,6 +2630,16 @@ tcpnxdomain:
 					}
 					break;
 
+				case DNS_TYPE_TLSA:
+					if (type0 == DNS_TYPE_TLSA) {
+						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
+							fromlen, sd0, NULL, tnp->region, istcp, 
+							tnp->wildcard, NULL, replybuf);
+
+						slen = reply_tlsa(&sreply);
+					}
+					break;
+
 				case DNS_TYPE_SSHFP:
 					if (type0 == DNS_TYPE_SSHFP) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
@@ -3260,6 +3287,16 @@ udpnxdomain:
 					}
 					break;
 
+				case DNS_TYPE_TLSA:
+					if (type0 == DNS_TYPE_TLSA) {
+						build_reply(&sreply, so, buf, len, question, from,  \
+							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							NULL, replybuf);
+
+						slen = reply_tlsa(&sreply);
+					}
+					break;
+
 				case DNS_TYPE_SSHFP:
 					if (type0 == DNS_TYPE_SSHFP) {
 						build_reply(&sreply, so, buf, len, question, from,  \
@@ -3773,6 +3810,15 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 
 		return 0;
 
+	case DNS_TYPE_TLSA:
+		if ((sd->flags & DOMAIN_HAVE_TLSA) == DOMAIN_HAVE_TLSA) {
+			returnval = DNS_TYPE_TLSA;
+			break;
+		}
+
+		*error = -1;
+		return 0;
+
 	case DNS_TYPE_SSHFP:
 		if ((sd->flags & DOMAIN_HAVE_SSHFP) == DOMAIN_HAVE_SSHFP) {
 			returnval = DNS_TYPE_SSHFP;
@@ -3967,6 +4013,10 @@ find_substruct(struct domain *ssd, u_int16_t type)
 		if (! (ssd->flags & DOMAIN_HAVE_SRV))
 			return NULL;
 		break;
+	case INTERNAL_TYPE_TLSA:
+		if (! (ssd->flags & DOMAIN_HAVE_TLSA))
+			return NULL;
+		break;
 	case INTERNAL_TYPE_SSHFP:
 		if (! (ssd->flags & DOMAIN_HAVE_SSHFP))
 			return NULL;
@@ -4038,6 +4088,7 @@ lookup_type(int internal_type)
 	array[INTERNAL_TYPE_SPF] = DOMAIN_HAVE_SPF;
 	array[INTERNAL_TYPE_SRV] = DOMAIN_HAVE_SRV;
 	array[INTERNAL_TYPE_SSHFP] = DOMAIN_HAVE_SSHFP;
+	array[INTERNAL_TYPE_TLSA] = DOMAIN_HAVE_TLSA;
 	array[INTERNAL_TYPE_TXT] = DOMAIN_HAVE_TXT;
 
 	if (internal_type < 0 || internal_type > INTERNAL_TYPE_MAX)

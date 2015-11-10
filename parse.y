@@ -105,7 +105,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.27 2015/09/14 09:59:10 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.28 2015/11/10 11:04:07 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -136,6 +136,7 @@ int 		fill_soa(char *, char *, int, char *, char *, int, int, int, int, int);
 int 		fill_spf(char *, char *, int, char *);
 int 		fill_sshfp(char *, char *, int, int, int, char *);
 int 		fill_srv(char *, char *, int, int, int, int, char *);
+int 		fill_tlsa(char *, char *,int, uint8_t, uint8_t, uint8_t, char *);
 int 		fill_txt(char *, char *, int, char *);
 int		fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
 int		fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
@@ -188,6 +189,7 @@ struct rrtab {
  { "spf",	DNS_TYPE_SPF,		INTERNAL_TYPE_SPF },
  { "srv",       DNS_TYPE_SRV, 		INTERNAL_TYPE_SRV },
  { "sshfp", 	DNS_TYPE_SSHFP,		INTERNAL_TYPE_SSHFP },
+ { "tlsa", 	DNS_TYPE_TLSA,		INTERNAL_TYPE_TLSA },
  { "txt",       DNS_TYPE_TXT,		INTERNAL_TYPE_TXT },
 };
 
@@ -584,6 +586,12 @@ zonestatement:
 				}
 				if (debug)
 					printf(" %s NSEC3PARAM\n", $1);
+			} else if (strcasecmp($3, "tlsa") == 0) {
+				if (fill_tlsa($1, $3, $5, $7, $9, $11, $13) < 0) {
+					return -1;
+				}
+				if (debug)
+					printf(" %s TLSA\n", $1);
 			} else {
 				if (debug)
 					printf("another dnskey like record I don't know?\n");
@@ -2923,6 +2931,123 @@ fill_txt(char *name, char *type, int myttl, char *msg)
 	free (sdomain);
 
 
+	return (0);
+
+}
+
+int
+fill_tlsa(char *name, char *type, int myttl, uint8_t usage, uint8_t selector, uint8_t matchtype, char *data)
+{
+	DB *db = mydb;
+	void *sdomain, *tp;
+	struct domain *ssd;
+	struct domain_tlsa *ssd_tlsa;
+	int converted_namelen;
+	char *converted_name;
+	char *p, *ep, save;
+	int len, i;
+	int rs;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_TLSA, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	rs = get_record_size(db, converted_name, converted_namelen);
+	if (rs < 0) {
+		return -1;
+	}
+
+	if ((sdomain = calloc(1, rs)) == NULL) {
+		return -1;
+	}
+
+	ssd = (struct domain *)sdomain;
+
+	if (get_record(ssd, converted_name, converted_namelen) < 0) {
+		return (-1);
+	}
+
+
+#ifdef __linux__
+	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
+	ssd->zonename[DNS_MAXNAME] = '\0';
+#else
+	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
+#endif
+	memcpy(ssd->zone, converted_name, converted_namelen);
+	ssd->zonelen = converted_namelen;
+
+	ssd_tlsa = (struct domain_tlsa *)find_substruct(ssd, INTERNAL_TYPE_TLSA);
+	if (ssd_tlsa == NULL) {
+		rs += sizeof(struct domain_tlsa);
+#ifdef __OpenBSD__
+		tp = reallocarray(sdomain, 1, rs);
+#else
+		tp = realloc(sdomain, rs);
+#endif
+		if (tp == NULL) {
+			free (sdomain);
+			return -1;
+		}
+
+		sdomain = tp;
+		ssd_tlsa = (sdomain + (rs - sizeof(struct domain_tlsa)));
+		memset((char *)ssd_tlsa, 0, sizeof(struct domain_tlsa));
+		ssd = (struct domain *)sdomain;
+		ssd_tlsa->len = sizeof(struct domain_tlsa);
+		ssd_tlsa->type = INTERNAL_TYPE_TLSA;
+		
+	}
+
+	if (ssd_tlsa->tlsa_count >= RECORD_COUNT) {
+		dolog(LOG_INFO, "%s: too many TLSA records for zone \"%s\", skipping line %d\n", file->name, name, file->lineno);
+		return (-1);
+	}
+
+	ssd->ttl[INTERNAL_TYPE_TLSA] = myttl;
+
+	ssd_tlsa->tlsa[ssd_tlsa->tlsa_count].usage = usage;
+	ssd_tlsa->tlsa[ssd_tlsa->tlsa_count].selector = selector;
+	ssd_tlsa->tlsa[ssd_tlsa->tlsa_count].matchtype = matchtype;
+
+	switch (matchtype) {
+	case 1:
+		len = ssd_tlsa->tlsa[ssd_tlsa->tlsa_count].datalen = DNS_TLSA_SIZE_SHA256;
+		break;
+	case 2:
+		len = ssd_tlsa->tlsa[ssd_tlsa->tlsa_count].datalen = DNS_TLSA_SIZE_SHA512;
+		break;
+	default:
+		dolog(LOG_ERR, "tlsa: unknown match type!\n");
+		return -1;
+	}
+
+	p = data;
+	for (i = 0; i < len; i++) {
+		save = p[2];
+		p[2] = '\0';
+		ssd_tlsa->tlsa[ssd_tlsa->tlsa_count].data[i] = strtol(p, &ep, 16);
+		p[2] = save;
+		p += 2;
+	}
+
+
+	ssd_tlsa->tlsa_count++;
+
+	ssd->flags |= DOMAIN_HAVE_TLSA;
+
+	set_record(ssd, rs, converted_name, converted_namelen);
+	
+	if (converted_name)
+		free (converted_name);
+
+	free (sdomain);
+	
 	return (0);
 
 }
