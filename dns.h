@@ -219,7 +219,7 @@ struct dns_question_hdr {
 struct question {
 	struct dns_question_hdr *hdr;
 	char *converted_name;
-	int edns0len;
+	u_int16_t edns0len;
 	int dnssecok;
 };
 
