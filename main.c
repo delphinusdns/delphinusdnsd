@@ -194,7 +194,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.28 2015/11/14 11:22:43 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.29 2015/11/14 11:52:41 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1249,10 +1249,6 @@ build_question(char *buf, int len, int additional)
 			break;
 
 		if (ntohs(opt->type) != DNS_TYPE_OPT)
-			break;
-
-		/* if we got options here I don't want to know about them */
-		if (ntohs(opt->rdlen) > 0)
 			break;
 
 		/* RFC 3225 */
