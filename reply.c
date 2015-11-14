@@ -129,7 +129,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.41 2015/11/14 10:07:19 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.42 2015/11/14 11:22:43 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -269,13 +269,13 @@ reply_a(struct sreply *sreply, DB *db)
 
 	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {
@@ -460,15 +460,15 @@ reply_nsec3param(struct sreply *sreply)
 				odh->answer = htons(a_count + 1 + i);	
 		}
 
-		}
+	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {
@@ -668,15 +668,15 @@ reply_nsec3(struct sreply *sreply, DB *db)
 				odh->answer = htons(a_count + 1 + i);	
 		}
 
-		}
+	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {
@@ -849,15 +849,15 @@ reply_nsec(struct sreply *sreply)
 				odh->answer = htons(a_count + 1 + i);	
 		}
 
-		}
+	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {
@@ -1035,15 +1035,15 @@ reply_ds(struct sreply *sreply)
 				odh->answer = htons(a_count + 1 + i);	
 		}
 
-		}
+	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {
@@ -1222,13 +1222,13 @@ reply_dnskey(struct sreply *sreply)
 
 	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {
@@ -1394,13 +1394,13 @@ reply_rrsig(struct sreply *sreply, DB *db)
 
 	odh->answer = htons(a_count);
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {
@@ -1567,13 +1567,13 @@ reply_aaaa(struct sreply *sreply, DB *db)
 
 	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {
@@ -1847,6 +1847,7 @@ reply_mx(struct sreply *sreply, DB *db)
 
 	odh->additional = htons(additional);	
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
@@ -1856,7 +1857,6 @@ reply_mx(struct sreply *sreply, DB *db)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	while (!SLIST_EMPTY(&collectshead)) {
 		cn1 = SLIST_FIRST(&collectshead);
 		SLIST_REMOVE_HEAD(&collectshead, collect_entry);
@@ -2165,6 +2165,7 @@ reply_ns(struct sreply *sreply, DB *db)
 
 	odh->additional = htons(additional);	
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
@@ -2174,7 +2175,6 @@ reply_ns(struct sreply *sreply, DB *db)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	while (!SLIST_EMPTY(&collectshead)) {
 		cn1 = SLIST_FIRST(&collectshead);
 		SLIST_REMOVE_HEAD(&collectshead, collect_entry);
@@ -2794,6 +2794,7 @@ reply_soa(struct sreply *sreply)
 		}
 	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
@@ -2803,7 +2804,6 @@ reply_soa(struct sreply *sreply)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
@@ -2954,6 +2954,7 @@ reply_spf(struct sreply *sreply)
 
 	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
@@ -2963,7 +2964,6 @@ reply_spf(struct sreply *sreply)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
@@ -3114,6 +3114,7 @@ reply_txt(struct sreply *sreply)
 
 	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
@@ -3123,7 +3124,6 @@ reply_txt(struct sreply *sreply)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
@@ -3433,6 +3433,7 @@ reply_tlsa(struct sreply *sreply)
 
 	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
@@ -3442,7 +3443,6 @@ reply_tlsa(struct sreply *sreply)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {
@@ -3618,6 +3618,7 @@ reply_sshfp(struct sreply *sreply)
 
 	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
@@ -3627,7 +3628,6 @@ reply_sshfp(struct sreply *sreply)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {
@@ -3926,6 +3926,7 @@ reply_naptr(struct sreply *sreply, DB *db)
 
 	odh->additional = htons(additional);	
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
@@ -3935,7 +3936,6 @@ reply_naptr(struct sreply *sreply, DB *db)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	while (!SLIST_EMPTY(&collectshead)) {
 		cn1 = SLIST_FIRST(&collectshead);
 		SLIST_REMOVE_HEAD(&collectshead, collect_entry);
@@ -4212,6 +4212,7 @@ reply_srv(struct sreply *sreply, DB *db)
 
 	odh->additional = htons(additional);	
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
@@ -4221,7 +4222,6 @@ reply_srv(struct sreply *sreply, DB *db)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 	while (!SLIST_EMPTY(&collectshead)) {
 		cn1 = SLIST_FIRST(&collectshead);
 		SLIST_REMOVE_HEAD(&collectshead, collect_entry);
@@ -4667,13 +4667,13 @@ reply_nxdomain(struct sreply *sreply, DB *db)
 
 	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-out:
 
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
@@ -5125,6 +5125,7 @@ reply_noerror(struct sreply *sreply, DB *db)
 			odh->nsrr = htons(4);
 	}
 
+out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
@@ -5134,7 +5135,6 @@ reply_noerror(struct sreply *sreply, DB *db)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 	
-out:
 	if (sreply->sr != NULL) {
 		retlen = reply_raw2(so, reply, outlen, sreply->sr);
 	} else {

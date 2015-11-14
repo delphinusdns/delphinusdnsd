@@ -194,7 +194,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.27 2015/11/14 10:07:19 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.28 2015/11/14 11:22:43 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1260,16 +1260,12 @@ build_question(char *buf, int len, int additional)
 		if (((ttl >> 16) & 0xff) != 0)
 			q->ednsversion = (ttl >> 16) & 0xff;
 
-		if (ttl & DNSSEC_OK)
-			q->dnssecok = 1;
-		else if (ttl != 0)
-			break;
-
-
 		q->edns0len = ntohs(opt->class);
 		if (q->edns0len < 512)
 			q->edns0len = 512;	/* RFC 6891 - page 10 */
 
+		if (ttl & DNSSEC_OK)
+			q->dnssecok = 1;
 	} while (0);
 
 	/* fill our name into the dns header struct */
