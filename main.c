@@ -194,7 +194,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.29 2015/11/14 11:52:41 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.30 2015/11/14 16:22:47 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -2034,7 +2034,7 @@ mainloop(struct cfg *cfg)
 	struct sockaddr_storage logfrom;
 
 	struct dns_header *dh;
-	struct question *question, *fakequestion;
+	struct question *question = NULL, *fakequestion = NULL;
 	struct domain *sd0 = NULL, *sd1 = NULL;
 	struct domain_cname *csd;
 	

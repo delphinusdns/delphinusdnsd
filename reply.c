@@ -129,7 +129,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.42 2015/11/14 11:22:43 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.43 2015/11/14 16:22:47 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -6815,7 +6815,7 @@ reply_badvers(struct sreply *sreply)
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		q->badvers = DNS_BADVERS;
+		q->badvers = 1;
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
