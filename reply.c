@@ -69,6 +69,7 @@ int 		reply_ns(struct sreply *, DB *);
 int 		reply_notimpl(struct sreply *);
 int 		reply_nxdomain(struct sreply *, DB *);
 int 		reply_noerror(struct sreply *, DB *);
+int		reply_badvers(struct sreply *);
 int 		reply_soa(struct sreply *);
 int 		reply_ptr(struct sreply *);
 int 		reply_txt(struct sreply *);
@@ -128,7 +129,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.40 2015/11/10 11:04:07 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.41 2015/11/14 10:07:19 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -6757,4 +6758,94 @@ truncate:
 	HTONS(odh->query);
 	
 	return (offset);
+}
+
+/* 
+ * REPLY_BADVERS() - replies a DNS question (*q) on socket (so)
+ *
+ */
+
+int
+reply_badvers(struct sreply *sreply)
+{
+	char *reply = sreply->replybuf;
+	struct dns_header *odh;
+	u_int16_t outlen;
+
+	int so = sreply->so;
+	char *buf = sreply->buf;
+	int len = sreply->len;
+	struct question *q = sreply->q;
+	struct sockaddr *sa = sreply->sa;
+	int salen = sreply->salen;
+	int istcp = sreply->istcp;
+	int replysize = 512;
+	int retlen = -1;
+
+	if (istcp) {
+		replysize = 65535;
+	}
+
+	if (!istcp && q->edns0len > 512)
+		replysize = q->edns0len;
+	
+	odh = (struct dns_header *)&reply[0];
+	outlen = sizeof(struct dns_header);
+
+	if (len > replysize) {
+		return (retlen);
+
+	}
+
+	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+
+	outlen += (q->hdr->namelen + 4);
+
+	SET_DNS_REPLY(odh);
+	SET_DNS_AUTHORITATIVE(odh);
+	
+	HTONS(odh->query);
+
+	odh->question = htons(1);
+	odh->answer = 0;
+	odh->nsrr = 0;
+	odh->additional = 0;
+
+	if (q->edns0len) {
+		/* tag on edns0 opt record */
+		odh->additional = htons(1);
+		q->badvers = DNS_BADVERS;
+		outlen = additional_opt(q, reply, replysize, outlen);
+	}
+
+	if (sreply->sr != NULL) {
+		retlen = reply_raw2(so, reply, outlen, sreply->sr);
+	} else {
+	
+		if (istcp) {
+			char *tmpbuf;
+			u_int16_t *plen;
+
+			tmpbuf = malloc(outlen + 2);
+			if (tmpbuf == NULL) {
+				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+			}
+			plen = (u_int16_t *)tmpbuf;
+			*plen = htons(outlen);
+			
+			memcpy(&tmpbuf[2], reply, outlen);
+
+			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+				dolog(LOG_INFO, "send: %s\n", strerror(errno));
+			}
+			free(tmpbuf);
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
+		}
+	} /* sreply->sr.. */
+
+	return (retlen);
 }

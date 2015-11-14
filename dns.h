@@ -104,6 +104,7 @@ struct dns_question_hdr {
 #define DNS_BADTIME	0x12	/* RCODE (18) BADTIME RFC 2845 p. 3 */
 #define DNS_BADKEY	0x11	/* RCODE (17) BADKEY RFC 2845 p. 3 */
 #define DNS_BADSIG	0x10	/* RCODE (16) BADSIG RFC 2845 p. 3 */
+#define DNS_BADVERS	0x10	/* RCODE (16) BADVERS RFC 2671 p. 6 */
 #define	DNS_REFUSED	0x5	/* RCODE - Refused */
 #define DNS_NOTIMPL	0x4	/* RCODE - Not Implemented */
 #define DNS_NAMEERR	0x3	/* RCODE - Name Error, NXDOMAIN */
@@ -220,7 +221,9 @@ struct question {
 	struct dns_question_hdr *hdr;
 	char *converted_name;
 	u_int16_t edns0len;
+	u_int8_t ednsversion;
 	int dnssecok;
+	int badvers;
 };
 
 #endif /* DNS_H */

@@ -54,6 +54,7 @@ extern void 	receivelog(char *, int);
 extern int 	reply_a(struct sreply *, DB *);
 extern int 	reply_aaaa(struct sreply *, DB *);
 extern int 	reply_any(struct sreply *);
+extern int 	reply_badvers(struct sreply *);
 extern int 	reply_cname(struct sreply *);
 extern int 	reply_fmterror(struct sreply *);
 extern int 	reply_notimpl(struct sreply *);
@@ -193,7 +194,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.26 2015/11/10 11:25:57 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.27 2015/11/14 10:07:19 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1087,6 +1088,7 @@ build_question(char *buf, int len, int additional)
 	u_int i;
 	u_int namelen = 0;
 	u_int16_t *qtype, *qclass;
+	u_int32_t ttl;
 	int num_label;
 
 	char *p, *end_name = NULL;
@@ -1254,10 +1256,15 @@ build_question(char *buf, int len, int additional)
 			break;
 
 		/* RFC 3225 */
-		if (ntohl(opt->ttl) & DNSSEC_OK)
+		ttl = ntohl(opt->ttl);
+		if (((ttl >> 16) & 0xff) != 0)
+			q->ednsversion = (ttl >> 16) & 0xff;
+
+		if (ttl & DNSSEC_OK)
 			q->dnssecok = 1;
-		else if (ntohl(opt->ttl) != 0)
+		else if (ttl != 0)
 			break;
+
 
 		q->edns0len = ntohs(opt->class);
 		if (q->edns0len < 512)
@@ -2342,7 +2349,6 @@ mainloop(struct cfg *cfg)
 					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", tnp->so, tnp->ident, tnp->address);
 					goto drop;
 				}
-
 				/* goto drop beyond this point should goto out instead */
 				fakequestion = NULL;
 
@@ -2979,6 +2985,18 @@ axfrentry:
 				}
 
 				/* goto drop beyond this point should goto out instead */
+
+				/* hack around whether we're edns version 0 */
+				if (question->ednsversion != 0) {
+					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, wildcard, NULL, replybuf);
+					slen = reply_badvers(&sreply);
+
+					dolog(LOG_INFO, "on descriptor %u interface \"%s\" edns version is %u from %s, replying badvers\n", so, cfg->ident[i], question->ednsversion, address);
+
+					snprintf(replystring, DNS_MAXNAME, "BADVERS");
+					goto udpout;
+				}
+
 				fakequestion = NULL;
 
 				sd0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring);
