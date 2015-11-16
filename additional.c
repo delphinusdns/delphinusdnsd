@@ -43,7 +43,7 @@ extern void *		find_substruct(struct domain *, u_int16_t);
 
 extern int dnssec;
 
-static const char rcsid[] = "$Id: additional.c,v 1.12 2015/11/14 10:07:19 pjp Exp $";
+static const char rcsid[] = "$Id: additional.c,v 1.13 2015/11/16 19:11:16 pjp Exp $";
 
 
 /*
@@ -575,7 +575,7 @@ additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *
 	answer->sig_inception = htonl(rrsig->signature_inception);
 	answer->keytag = htons(rrsig->key_tag);
 	
-	offset += sizeof(*answer);
+	offset += sizeof(struct answer);
 	rroffset = offset;
 
 	if ((offset + rrsig->signame_len) > replylen)

@@ -129,7 +129,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.43 2015/11/14 16:22:47 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.44 2015/11/16 19:11:16 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -5801,14 +5801,39 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 				continue;
 
 			if (sd->flags & checktype) {
-				rrsig_count++;
-				tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen,
-				internal_type, sd, reply, rlen, offset, 0);
-	
-				if (tmplen == 0)
-					goto truncate;
+				if (internal_type == INTERNAL_TYPE_DNSKEY) {	
+					for (i = 0; i < sdrrsig->rrsig_dnskey_count; i++) {
+						rrsig_count++;
+						tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen,
+						internal_type, sd, reply, rlen, offset, i);
+			
+						if (tmplen == 0)
+							goto truncate;
 
-				offset = tmplen;
+						offset = tmplen;
+					}
+				} else if (internal_type == INTERNAL_TYPE_DS) {
+					for (i = 0; i < sdrrsig->rrsig_ds_count; i++) {
+						rrsig_count++;
+						tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen,
+						internal_type, sd, reply, rlen, offset, i);
+			
+						if (tmplen == 0)
+							goto truncate;
+
+						offset = tmplen;
+					}
+				} else {
+
+					rrsig_count++;
+					tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen,
+					internal_type, sd, reply, rlen, offset, 0);
+		
+					if (tmplen == 0)
+						goto truncate;
+
+					offset = tmplen;
+				}
 			}
 		} 
 
