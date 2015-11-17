@@ -106,7 +106,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.29 2015/11/17 08:03:45 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.30 2015/11/17 09:25:33 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -2450,7 +2450,6 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 
 	ssd = (struct domain *)sdomain;
 
-	dolog(LOG_INFO, "getting record\n");
 	if (get_record(ssd, converted_name, converted_namelen) < 0) {
 		return (-1);
 	}
@@ -2557,7 +2556,6 @@ fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_i
 
 	ssd = (struct domain *)sdomain;
 
-	dolog(LOG_INFO, "getting record\n");
 	if (get_record(ssd, converted_name, converted_namelen) < 0) {
 		return (-1);
 	}
@@ -2596,7 +2594,6 @@ fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_i
 	}
 
 	ssd_nsec3param->nsec3param.algorithm = algorithm;
-	dolog(LOG_INFO, "algorithm = %d\n", algorithm);
 	ssd_nsec3param->nsec3param.flags = flags;
 	ssd_nsec3param->nsec3param.iterations = iterations;
 	if (strcasecmp(salt, "-") == 0) {
@@ -2653,7 +2650,6 @@ fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitma
 
 	ssd = (struct domain *)sdomain;
 
-	dolog(LOG_INFO, "getting record\n");
 	if (get_record(ssd, converted_name, converted_namelen) < 0) {
 		return (-1);
 	}
@@ -3856,10 +3852,8 @@ set_record(struct domain *sdomain, int rs, char *converted_name, int converted_n
 	DB *db = mydb; /* XXX */
 	int ret;
 
-	dolog(LOG_INFO, "set_record with len = %d\n", rs);
 	/* everythign in parse.y should get this flag! */
 	sdomain->len = rs;
-	//sdomain->flags |= DOMAIN_STATIC_ZONE;
 
 	memset(&key, 0, sizeof(key));
 	memset(&data, 0, sizeof(data));
