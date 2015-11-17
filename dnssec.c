@@ -49,6 +49,8 @@ int count_dots(char *name);
 struct domain * find_next_closer(DB *db, char *name, int namelen);
 char * hash_name(char *name, int len, struct nsec3param *n3p);
 char * base32hex_encode(u_char *input, int len);
+int 	base32hex_decode(u_char *, u_char *);
+void 	mysetbit(u_char *, int);
 
 extern int              get_record_size(DB *, char *, int);
 extern char *           dns_label(char *, int *);
@@ -658,6 +660,85 @@ hash_name(char *name, int len, struct nsec3param *n3p)
 
 	return (base32hex_encode(md, sizeof(md)));	
 }
+
+void
+mysetbit(u_char *input, int pos)
+{
+	int bit;
+	int byte;
+
+	byte = pos / 8;
+	bit = pos % 8;
+	
+	switch (bit) {
+	case 0:
+		input[byte] |= 128;
+		break;
+	case 1:
+		input[byte] |= 64;
+		break;
+	case 2:
+		input[byte] |= 32;
+		break;
+	case 3:
+		input[byte] |= 16;
+		break;
+	case 4:
+		input[byte] |= 8;
+		break;
+	case 5:
+		input[byte] |= 4;
+		break;
+	case 6:
+		input[byte] |= 2;
+		break;
+	case 7:
+		input[byte] |= 1;
+		break;
+	}
+
+	return;
+}
+
+int
+base32hex_decode(u_char *input, u_char *output)
+{
+	u_int8_t tmp;
+	u_char *character = "0123456789abcdefghijklmnopqrstuv=";
+	u_char *start = character, *p = character;
+	int i, j;
+	int len;
+	int bit = 0;
+
+	len = (strlen(input) * 5) / 8;
+
+	memset(output, 0, len);
+
+	for (i = 0; i < strlen(input); i++) {
+		if (input[i] == '=')
+			continue;
+
+		input[i] = tolower(input[i]);
+		for (p = character; *p && *p != input[i]; p++);
+		if (p == NULL)
+			return 0;
+		
+		tmp = (p - start);
+		tmp <<= 3;
+
+		for (j = 0; j < 5; j++) {
+			if (tmp & 128)
+				mysetbit(output, bit);
+			
+			bit++;
+			tmp <<= 1;
+		}
+	}
+		
+	return (len);
+}
+
+
 
 char *
 base32hex_encode(u_char *input, int len)

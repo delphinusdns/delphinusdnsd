@@ -26,6 +26,7 @@
 #include "db.h"
 
 
+extern int	base32hex_decode(u_char *, u_char *);
 extern void 	dolog(int, char *, ...);
 extern char 	*dns_label(char *, int *);
 extern u_int8_t find_region(struct sockaddr_storage *, int);
@@ -105,7 +106,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.28 2015/11/10 11:04:07 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.29 2015/11/17 08:03:45 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -2416,8 +2417,6 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_nsec3 *ssd_nsec3;
-	int converted_namelen, converted_domainnamelen;
-	char *converted_name, *converted_domainname;
 	int i, rs;
 
 	for (i = 0; i < strlen(name); i++) {
@@ -2473,13 +2472,6 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 		nextname[i] = tolower((int)nextname[i]);
 	}
 
-	converted_domainname = check_rr(nextname, type, DNS_TYPE_NSEC3, &converted_domainnamelen);
-	if (converted_name == NULL) {
-		if (debug)
-			dolog(LOG_INFO, "check_rr failed\n");
-		return -1;
-	}
-
 	ssd_nsec3 = (struct domain_nsec3 *)find_substruct(ssd, INTERNAL_TYPE_NSEC3);
 	if (ssd_nsec3 == NULL) {
 		rs += sizeof(struct domain_nsec3);
@@ -2511,8 +2503,11 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 		memcpy(&ssd_nsec3->nsec3.salt, salt, strlen(salt));
 	}
 
-	memcpy(ssd_nsec3->nsec3.next, converted_domainname, converted_domainnamelen);
-	ssd_nsec3->nsec3.nextlen = converted_domainnamelen;
+	ssd_nsec3->nsec3.nextlen = base32hex_decode(nextname, (u_char*)&ssd_nsec3->nsec3.next);
+	if (ssd_nsec3->nsec3.nextlen == 0) {
+		dolog(LOG_INFO, "base32_decode faulty");
+		return -1;
+	}
 
 	/* XXX create/manage bitmap */
 	create_nsec_bitmap(bitmap, ssd_nsec3->nsec3.bitmap, (int *)&ssd_nsec3->nsec3.bitmap_len);
