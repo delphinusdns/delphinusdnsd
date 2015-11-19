@@ -747,10 +747,11 @@ base32hex_encode(u_char *input, int len)
 	u_int64_t tb = 0;
 	int i;
 	u_char *p;
-	static char ret[32];
+	static char ret[33];
 	
 	u_char *character = "0123456789abcdefghijklmnopqrstuv=";
 
+	memset(&ret, 0, sizeof(ret));
 	p = &ret[0];
 	ui = input;
 
