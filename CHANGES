@@ -1,3 +1,5 @@
+Changes in RELEASE_1_1 from RELEASE_1_0
+
 Changes in RELEASE_1_0 from BETA_9
 
 - name change from wildcarddnsd to delphinusdnsd
@@ -5,7 +7,13 @@ Changes in RELEASE_1_0 from BETA_9
 - internal database has been changed in it's ABI
 - wildcarding is off for good (due to DNSSEC)
 - split-horizon for A records is gone, (may be added back one day)
-
+- EDNS fixup (RFC 2671)
+- DNSSEC (RFC 4033, 4034, 4035)
+- DNSSEC NSEC3 (RFC 5155)
+- TLSA RR (described in RFC 6698)
+- dd-convert.rb ruby zone sign tool
+- Linux now relies on libressl 2.2.4 library, details in the configure
+- some bug fixes
 
 Changes in BETA_9 from BETA_8
 
