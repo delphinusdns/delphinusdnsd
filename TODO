@@ -1,6 +1,13 @@
 The TODO's here are for delphinusdnsd which is the successor of wildcarddnsd.
 Please see http://delphinusdns.centroid.eu for updates/news.
 
+For 1.1.0 release
+
+- either a zonesigner (instead of relying on BIND's) or 
+- signing zones immediately at startup which doesn't require a zonesigner
+- TSIG support would still be nice
+
+
 For 1.0.0 release
 
 - TSIG (RFC 2845) support
@@ -17,7 +24,6 @@ Anything else would be nice but I have to put it on the backburner...
 * Slave AXFR would be nice (advanced)
 * HINFO support (junior devels) 
 * recursing and caching support rewrite (super advanced)
-* DNSSEC support (super advanced)
 * openbsd port support (for 5.0/5.1 perhaps?) (junior/intermediate)
 * recursing/caching todo's: (super advanced)
 
