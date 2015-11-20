@@ -1,4 +1,4 @@
-$Id: README,v 1.4 2015/11/07 18:09:34 pjp Exp $
+$Id: README,v 1.5 2015/11/20 13:17:12 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -10,7 +10,8 @@ $Id: README,v 1.4 2015/11/07 18:09:34 pjp Exp $
  3.5 Mac OS X
 4. COMPATIBILITY
 5. EXAMPLES
-6. WHAT IT CAN'T DO
+6. DNSSEC
+7. WHAT IT CAN'T DO
 
 1. README 
 ---------
@@ -190,8 +191,13 @@ Rasbian OS        |        yes ***     |       yes           | version 5   |
 
 in the directory "examples" are a few examples from working configs.
 
+6. DNSSEC
+---------
 
-6. WHAT IT CAN'T DO
+Is new for the 1.0.0 release.  Stay tuned.
+
+
+7. WHAT IT CAN'T DO
 -------------------
 
 * CNAME recursion.  When you look up www.yahoo.com you see this:
@@ -206,9 +212,6 @@ The recursive part of delphinusdnsd isn't able to recurse CNAME's and it
 also doesn't have loop detection of CNAME's.  This means that some lookups
 will fail on a UNIX host using delphinusdnsd recursively, so it's useless
 this needs fixing and the fix isn't simple.
-
-* DNSSEC.  Signed zones are becoming more and more common on the Internet.
-Delphinusdnsd can't do DNSSEC yet, unfortunately.
 
 * Solaris.  Unless you port some functions to solaris it won't compile on
 there.
