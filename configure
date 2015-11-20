@@ -39,8 +39,8 @@ linux() {
 
 	# libressl
 
-	if [ ! -d ../libressl-2.1.1 ] ; then
-		echo Please install libressl-2.1.1 in the directory before this one!
+	if [ ! -d ../libressl-2.2.4 ] ; then
+		echo Please install libressl-2.2.4 in the directory before this one!
 		echo You can get it from http://ftp.openbsd.org/pub/OpenBSD/LibreSSL/
 		echo "Please extract it and ./configure && make check, this will not "
 		echo install it into your system only into that directory.
@@ -52,10 +52,10 @@ linux() {
 		exit 1
 	else
 		echo Now making a symlink for libcrypto and libssl...
-		ln -s ../libressl-2.1.1/crypto/.libs/libcrypto.a libressllibcrypto.a
-		ln -s ../libressl-2.1.1/crypto/.libs/libcompat.a libressllibcompat.a
-		ln -s ../libressl-2.1.1/ssl/.libs/libssl.a libressllibssl.a
-		ln -s ../libressl-2.1.1/crypto/.libs/libcompatnoopt.a libressllibcompatnoopt.a
+		ln -s ../libressl-2.2.4/crypto/.libs/libcrypto.a libressllibcrypto.a
+		ln -s ../libressl-2.2.4/crypto/.libs/libcompat.a libressllibcompat.a
+		ln -s ../libressl-2.2.4/ssl/.libs/libssl.a libressllibssl.a
+		ln -s ../libressl-2.2.4/crypto/.libs/libcompatnoopt.a libressllibcompatnoopt.a
 		echo done.	
 	fi
 }

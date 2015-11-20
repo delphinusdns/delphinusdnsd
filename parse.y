@@ -106,7 +106,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.30 2015/11/17 09:25:33 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.31 2015/11/20 19:31:08 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -2769,7 +2769,7 @@ fill_naptr(char *name, char *type, int myttl, int order, int preference, char *f
 
 #ifdef __linux__
 	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	sdomain->zonename[DNS_MAXNAME] = '\0';
+	ssd->zonename[DNS_MAXNAME] = '\0';
 #else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
 #endif
