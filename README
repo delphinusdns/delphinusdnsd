@@ -1,4 +1,4 @@
-$Id: README,v 1.6 2015/11/20 19:35:45 pjp Exp $
+$Id: README,v 1.7 2015/11/21 07:36:18 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -176,7 +176,7 @@ OpenBSD 5.6       |        yes         |       yes           | version 4.6 |
 ------------------+--------------------+---------------------+-------------+
 Linux 		  |        yes         |       yes           | version 5   |
 ------------------+--------------------+---------------------+-------------+
-Mac OS X Yosemite |        yes         |       yes           | version 4.8 |
+Mac OS X ElCapitan|        yes         |       yes           | version 4.8 |
 with MacPorts     |                    |                     |		   |	
 ------------------+--------------------+---------------------+-------------+
 Rasbian OS        |        yes ***     |       yes           | version 5   |
