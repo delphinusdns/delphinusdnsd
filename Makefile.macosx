@@ -1,6 +1,6 @@
 PROG=delphinusdnsd
 CC=gcc
-CFLAGS=-I/opt/local/include/db48 -L/opt/local/lib/db48 -D__APPLE_USE_RFC_3542=1 -DDEFAULT_PRIVILEGE='"nobody"'
+CFLAGS=-I/opt/local/include/ -I/opt/local/include/db48 -L/opt/local/lib/db48 -D__APPLE_USE_RFC_3542=1 -DDEFAULT_PRIVILEGE='"nobody"'
 LDADD=-ldb -lssl -lcrypto -DDEFAULT_PRIVILEGE='"nobody"'
 YACC=bison
 
