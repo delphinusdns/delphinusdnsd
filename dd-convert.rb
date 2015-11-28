@@ -1,6 +1,6 @@
 #!/usr/local/bin/ruby
 #
-# $Id: dd-convert.rb,v 1.2 2015/11/07 19:00:38 pjp Exp $
+# $Id: dd-convert.rb,v 1.3 2015/11/28 19:07:19 pjp Exp $
 #
 # Copyright (c) 2015 Peter J. Philipp
 # All rights reserved.
@@ -453,59 +453,33 @@ class InputFile < MyTranslation
 				zone = true
 			end
 			if zone == true then
-				zonefile << line
 				if line =~ /^.*}/ then
 					zone = false
 					break
 				end
+				zonefile << line
 			end
 		end
-
-		delete inputfile
-		zonefile.sort!
-
-		# first pass, sort by RRSET
-
-		#puts "zone \"" + savezonename + "\" {"
-		# pjp 20151012
-		#self[linecount] = "zone \"" + savezonename + "\" {"
-		#linecount += 1
 
 		count = 0
-		lastname = savezonename
-		# sort the records after rrset
 		zonefile.each() do |line|
-			count += 1
 			m = self.lookup_record(zonefile, count)
 			if m == nil then
+				count += 1
 				next
 			end
-		
-			domainname = m[0].strip
-			if domainname.downcase != lastname then
-				n = self.sort_domaintypes(zonefile, count, lastname)
-				lastrr = n[0]
-				n.each() do |x|
-					self[linecount] = x.join(",")
-					linecount += 1
-					#print "\t"
-					#puts x.join(",")
-					lastrr = x
-				end
-			end
-
-			lastname = domainname.downcase
+			self[linecount] = m.join(",").chomp.strip
+			linecount += 1
+			count += 1
 		end
 
-		#puts "}"
-		# pjp 20151012
-		#self[linecount] = "}"
 	end
 
 	def lookup_record(zonefile, number)
 		line = zonefile[number]	
 
-		if line =~ /zone/ || line =~ /^.*;/ then
+		if line =~ /zone/ || line =~ /^.*;/ || line =~ /}/ || \
+			line =~ /^$/ then
 			return nil
 		end
 		
@@ -516,31 +490,6 @@ class InputFile < MyTranslation
 		m = line.split(',')
 		
 		return m
-	end
-
-	def sort_domaintypes(zonefile, number, domainname)  
-		replace = []
-		save = ""
-		count = number 
-		(number - 1).downto(0).each() do |line|
-			count -= 1
-			m = self.lookup_record(zonefile, line)
-			if m == nil then
-				next
-			end
-			if m[0].strip.downcase != domainname then
-				break
-			end
-			m.each() do |x|
-				x.strip!
-				x.chomp!
-			end
-			replace << m
-		end
-
-		# pjp
-		replace.sort_by! { |f| [ @@name2rr[f[1]] ]}
-		return replace
 	end
 end
 
@@ -643,6 +592,7 @@ if arguments[:input] != "" then
 	inputfile = InputFile.new(arguments[:input], arguments[:zonename])
 	#puts inputfile
 	bindfile = ConvertD2B.new(inputfile)
+	#puts bindfile
 	out = Tempfile.new('master.' + arguments[:zonename]);
 	bindfile.to_a.each() do |line|
 		out.puts line
