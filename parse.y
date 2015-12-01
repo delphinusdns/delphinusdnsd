@@ -81,7 +81,7 @@ static struct file {
 #define STATE_IP 1
 #define STATE_ZONE 2
 
-#define WILDCARDVERSION 6
+#define DELPHINUSVERSION 7
 
 #define CONFIG_START            0x1
 #define CONFIG_VERSION          0x2
@@ -106,7 +106,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.32 2015/12/01 13:56:11 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.33 2015/12/01 13:58:44 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -256,9 +256,9 @@ version:
 	VERSION quotednumber SEMICOLON CRLF
 	{
 		version = atoi($2);
-		if (version != WILDCARDVERSION) {
+		if (version != DELPHINUSVERSION) {
 			dolog(LOG_ERR, "version of configfile is wrong,"
-					" must be \"%d\"!\n", WILDCARDVERSION);
+					" must be \"%d\"!\n", DELPHINUSVERSION);
 			return (-1);
 		}
 		free ($2);
