@@ -106,7 +106,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.31 2015/11/20 19:31:08 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.32 2015/12/01 13:56:11 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -3597,7 +3597,7 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 		nstype = NS_TYPE_HINT;
 	} else {
 		converted_name = check_rr(name, type, DNS_TYPE_DELEGATE, &converted_namelen);
-		nstype = NS_TYPE_DELEGATE;
+		nstype = NS_TYPE_DELEGATE; 	/* XXX see below */
 	}
 
 	if (converted_name == NULL) {
@@ -3627,6 +3627,16 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 #endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
+
+	/*
+	 * check if this is not the apex of a zone, if it was we're almost
+	 * guaranteed to have come across a SOA already and it's not flagged
+	 * then set the delegate type, this should make it possible to have		 * "NS" records instead of "delegate" records which are delphinusdnsd
+	 * internal
+	 */
+
+	if (!(ssd->flags & DOMAIN_HAVE_SOA))
+		nstype = NS_TYPE_DELEGATE;
 
 	ssd_ns = (struct domain_ns *) find_substruct(ssd, INTERNAL_TYPE_NS);
 	if (ssd_ns == NULL) {

@@ -1,6 +1,6 @@
-#!/usr/local/bin/ruby
+#!/usr/bin/env ruby
 #
-# $Id: dd-convert.rb,v 1.3 2015/11/28 19:07:19 pjp Exp $
+# $Id: dd-convert.rb,v 1.4 2015/12/01 13:56:11 pjp Exp $
 #
 # Copyright (c) 2015 Peter J. Philipp
 # All rights reserved.
@@ -66,6 +66,7 @@ class ParseArguments < Hash
 		self[:salt] = ""
 		self[:ttl] = 3600
 		self[:iterations] = 10
+		self[:xsystem] = ""
 
 		opts = OptionParser.new do |opts|
 			opts.banner = "Usage: #$0 [options]"
@@ -129,6 +130,10 @@ class ParseArguments < Hash
 
 			opts.on('-t', '--ttl TTL', 'the TTL for the keys') do |filename|
 				self[:ttl] = filename
+			end
+
+			opts.on('-X', '--XSystem', 'specify an alternate system') do |system|
+				self[:xsystem] = system || ''
 			end
 
 			opts.on('-Z', '--ZSK', 'create ZSK keys') do |zsk|
@@ -520,13 +525,17 @@ class MyCreateKeys < Hash
 			"ecdsap384sha384"	=>	14
 		}
 
-	def initialize(type, algorithm, bits, zonename, ttl)
+	def initialize(type, algorithm, bits, zonename, ttl, xsystem)
 		self[:zskname] = ''
 		self[:kskname] = ''
 		systemid = [] 
 		super()
 
-		systemid = Etc.uname[:sysname]
+		if xsystem == "" then
+			systemid = Etc.uname[:sysname]
+		else
+			systemid = xsystem
+		end
 		
 		if type == 1 then
 			createKSK(algorithm, bits, zonename, ttl, systemid)	
@@ -538,7 +547,7 @@ class MyCreateKeys < Hash
 	def createKSK(algorithm, bits, zonename, ttl, systemid)
 		if systemid == "OpenBSD" then
 			keygen = "/usr/local/sbin/dnssec-keygen"
-		elsif systemid == "FreeBSD" then
+		else
 			keygen = "/usr/sbin/dnssec-keygen"
 		end
 		
@@ -555,7 +564,7 @@ class MyCreateKeys < Hash
 	def createZSK(algorithm, bits, zonename, ttl, systemid)
 		if systemid == "OpenBSD" then
 			keygen = "/usr/local/sbin/dnssec-keygen"
-		elsif systemid == "FreeBSD" then
+		else
 			keygen = "/usr/sbin/dnssec-keygen"
 		end
 		
@@ -583,9 +592,13 @@ end
 #
 
 systemid = [] 
-systemid = Etc.uname[:sysname]
-
 arguments = ParseArguments.new(ARGV)
+
+if arguments[:xsystem] == "" then
+	systemid = Etc.uname[:sysname]
+else
+	systemid = arguments[:xsystem]
+end
 
 if arguments[:input] != "" then
 	puts '################################################################'
@@ -599,13 +612,19 @@ if arguments[:input] != "" then
 	end
 
 	if arguments[:KSK] == 1 then
-		arguments[:kskname] = MyCreateKeys.new(1 , arguments[:algorithm], arguments[:numbits], arguments[:zonename], arguments[:ttl])[:kskname]
-		puts 'created KSK key ' + arguments[:kskname]
+		arguments[:kskname] = MyCreateKeys.new(1 , \
+		arguments[:algorithm], arguments[:numbits], \
+		arguments[:zonename], arguments[:ttl], \
+		arguments[:xsystem])[:kskname]
+			puts 'created KSK key ' + arguments[:kskname]
 	end
 
 	if arguments[:ZSK] == 1 then
-		arguments[:zskname] = MyCreateKeys.new(2 , arguments[:algorithm], arguments[:numbits], arguments[:zonename], arguments[:ttl])[:zskname]
-		puts 'created ZSK key ' + arguments[:zskname]
+		arguments[:zskname] = MyCreateKeys.new(2 , \
+		arguments[:algorithm], arguments[:numbits], \
+		arguments[:zonename], arguments[:ttl], \
+		arguments[:xsystem])[:zskname]
+			puts 'created ZSK key ' + arguments[:zskname]
 	end
 
 	if arguments[:kskname] == '' then
@@ -626,6 +645,8 @@ if arguments[:input] != "" then
 	if systemid == "OpenBSD" then
 		signzonepath = "/usr/local/sbin/dnssec-signzone"
 	elsif systemid == "FreeBSD"
+		signzonepath = "/usr/sbin/dnssec-signzone"
+	else
 		signzonepath = "/usr/sbin/dnssec-signzone"
 	end
 

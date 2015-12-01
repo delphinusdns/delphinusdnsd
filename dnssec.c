@@ -757,7 +757,7 @@ base32hex_decode(u_char *input, u_char *output)
 
 		input[i] = tolower(input[i]);
 		for (p = character; *p && *p != input[i]; p++);
-		if (*p == NULL)
+		if (*p == '\0')
 			return 0;
 		
 		tmp = (p - start);
