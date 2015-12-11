@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 #
-# $Id: dd-convert.rb,v 1.5 2015/12/11 20:04:59 pjp Exp $
+# $Id: dd-convert.rb,v 1.6 2015/12/11 20:16:02 pjp Exp $
 #
 # Copyright (c) 2015 Peter J. Philipp
 # All rights reserved.
@@ -792,15 +792,16 @@ if arguments[:input] != "" then
 			output.puts '  ' + rrline.join(",")
 			rrline = []
 		elsif type == "NAPTR" then
-# bogus , catch later!
 			dnsfield = record.general_prefix
 			rrline << dnsfield[0] << 'naptr' << dnsfield[1]
 			rrline << record.order.to_s 
 			rrline << record.pref.to_s
-			rrline << record.flags 
 			rrline << '"' + record.service + '"'
 			rrline << '"' + record.regexp + '"'
 			rrline << record.replacement.to_s
+			# this is mislabelled in dns-zone! but preserve order
+			rrline << record.flags
+			#
 			output.puts '  ' + rrline.join(",")
 			rrline = []
 		elsif type == "SRV" then
