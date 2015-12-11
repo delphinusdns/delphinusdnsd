@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 #
-# $Id: dd-convert.rb,v 1.4 2015/12/01 13:56:11 pjp Exp $
+# $Id: dd-convert.rb,v 1.5 2015/12/11 20:04:59 pjp Exp $
 #
 # Copyright (c) 2015 Peter J. Philipp
 # All rights reserved.
@@ -592,6 +592,7 @@ end
 #
 
 systemid = [] 
+rrline = []
 arguments = ParseArguments.new(ARGV)
 
 if arguments[:xsystem] == "" then
@@ -682,130 +683,143 @@ if arguments[:input] != "" then
 		type = field[6]
 		if type == "SOA" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',soa,' +  \
-				dnsfield[1] + ',' + \
-				record.nameserver + ',' + \
-				record.email.to_s + ',' + \
-				record.serial.to_s + ',' + \
-				record.refresh_ttl.to_s + ',' + \
-				record.retry_ttl.to_s + ',' + \
-				record.expiry_ttl.to_s + ',' + \
-				record.minimum_ttl.to_s
+			rrline << dnsfield[0] << 'soa' << dnsfield[1]
+			rrline << record.nameserver << record.email.to_s
+			rrline << record.serial.to_s << record.refresh_ttl.to_s 
+			rrline << record.retry_ttl.to_s 
+			rrline << record.expiry_ttl.to_s 
+			rrline << record.minimum_ttl.to_s
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "A" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',a,' + \
-				dnsfield[1] + ',' + record.address
+			rrline << dnsfield[0] << 'a' << dnsfield[1]
+			rrline << record.address
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "AAAA" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',aaaa,' + \
-				dnsfield[1] + ',' + record.address
+			rrline << dnsfield[0] << 'aaaa' << dnsfield[1]
+			rrline << record.address
+			output.puts '  ' + rrline.join(",")
+			rrline = [] 
 		elsif type == "TXT" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',txt,' + \
-				dnsfield[1] + ',' + record.text
+			rrline << dnsfield[0] << 'txt' << dnsfield[1]
+			rrline << '"' + record.text + '"'
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "SPF" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',spf,' + \
-				dnsfield[1] + ',"' + record.text + '"'
+			rrline << dnsfield[0] << 'spf' << dnsfield[1]
+			rrline << '"' + record.text + '"'
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "RRSIG" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',rrsig,' + \
-				dnsfield[1] + ',' + \
-				record.type_covered + ',' + \
-				record.algorithm.to_s + ',' + \
-				record.labels.to_s + ',' + \
-				record.original_ttl.to_s + ',' + \
-				record.signature_expiration.to_s + ',' + \
-				record.signature_inception.to_s + ',' + \
-				record.key_tag.to_s + ',' + \
-				record.signer.to_s.gsub(/ /, "") + ',"' + \
-				record.signature.to_s.gsub(/ /, "") + '"'
+			rrline << dnsfield[0] << 'rrsig' << dnsfield[1]
+			rrline << record.type_covered << record.algorithm.to_s 
+			rrline << record.labels.to_s << record.original_ttl.to_s
+			rrline << record.signature_expiration.to_s 
+			rrline << record.signature_inception.to_s 
+			rrline << record.key_tag.to_s 
+			rrline << record.signer.to_s.gsub(/ /, "") 
+			rrline << '"' + record.signature.to_s.gsub(/ /, "") \
+				+ '"'
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "NSEC3PARAM" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',nsec3param,' + \
-				dnsfield[1] + ',' + \
-				record.algorithm.to_s + ',' + \
-				record.flags.to_s + ',' + \
-				record.iterations.to_s + ',"' + \
-				record.salt.to_s + '"'
+			rrline << dnsfield[0] << 'nsec3param' << dnsfield[1]
+			rrline << record.algorithm.to_s 
+			rrline << record.flags.to_s 
+			rrline << record.iterations.to_s
+			rrline << '"' + record.salt.to_s + '"'
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "NSEC3" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',nsec3,' + \
-				dnsfield[1] + ',' + \
-				record.algorithm.to_s + ',' + \
-				record.flags.to_s + ',' + \
-				record.iterations.to_s + ',"' + \
-				record.salt.to_s + '","' + \
-				record.next_hashed_owner_name.to_s + '","' + \
-				record.rrset_types.to_s + '"'
-		elsif type == "NSEC" then
-			#dnsfield = record.general_prefix
-			#output.puts '  ' + dnsfield[0] + ',nsec,completeme'
+			rrline << dnsfield[0] << 'nsec3' << dnsfield[1]
+			rrline << record.algorithm.to_s 
+			rrline << record.flags.to_s 
+			rrline << record.iterations.to_s
+			rrline << '"' + record.salt.to_s + '"'
+			rrline << '"' + record.next_hashed_owner_name.to_s \
+				+ '"'
+			rrline << '"' + record.rrset_types.to_s + '"'
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "DNSKEY" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',dnskey,' + \
-				dnsfield[1] + ',' + \
-				record.flags.to_s + ',' + \
-				record.protocol.to_s + ',' + \
-				record.algorithm.to_s + ',"' + \
-				record.key.to_s.gsub(/ /, "") + '"' 	
+			rrline << dnsfield[0] << 'dnskey' << dnsfield[1]
+			rrline << record.flags.to_s
+			rrline << record.protocol.to_s
+			rrline << record.algorithm.to_s
+			rrline << '"' + record.key.to_s.gsub(/ /, "") + '"'
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "DS" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',ds,' + \
-				dnsfield[1] + ',' + \
-				record.key_tag.to_s + ',' + \
-				record.algorithm.to_s + ',' + \
-				record.digest_type.to_s + ',"' + \
-				record.digest.to_s.gsub(/ /, "") + '"'
+			rrline << dnsfield[0] << 'ds' << dnsfield[1]
+			rrline << record.key_tag.to_s
+			rrline << record.algorithm.to_s
+			rrline << record.digest_type.to_s
+			rrline << '"' + record.digest.to_s.gsub(/ /, "") + '"'
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "MX" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',mx,' + \
-				dnsfield[1] + ',' + \
-				record.priority.to_s + ',' + \
-				record.exchange.to_s 
+			rrline << dnsfield[0] << 'mx' << dnsfield[1]
+			rrline << record.priority.to_s << record.exchange.to_s
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "NS" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',ns,' + \
-				dnsfield[1] + ',' + \
-				record.nameserver
+			rrline << dnsfield[0] << 'ns' << dnsfield[1]
+			rrline << record.nameserver
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "CNAME" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',cname,' + \
-				dnsfield[1] + ',' + \
-				record.domainname	
+			rrline << dnsfield[0] << 'cname' << dnsfield[1]
+			rrline << record.domainname	
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "PTR" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',ptr,' + \
-				dnsfield[1] + ',' + \
-				record.name
-			
+			rrline << dnsfield[0] << 'ptr' << dnsfield[1]
+			rrline << record.name
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "NAPTR" then
 # bogus , catch later!
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',naptr,' + \
-				dnsfield[1] + ',' + \
-				record.order.to_s + ',' + \
-				record.pref.to_s + ',' + \
-				record.flags + ',"' + \
-				record.service + '","' + \
-				record.regexp + '",' + \
-				record.replacement
+			rrline << dnsfield[0] << 'naptr' << dnsfield[1]
+			rrline << record.order.to_s 
+			rrline << record.pref.to_s
+			rrline << record.flags 
+			rrline << '"' + record.service + '"'
+			rrline << '"' + record.regexp + '"'
+			rrline << record.replacement.to_s
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "SRV" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',srv,' + \
-				dnsfield[1] + ',' + \
-				record.priority.to_s + ',' + \
-				record.weight.to_s + ',' + \
-				record.port.to_s + ',' + \
-				record.target.to_s 	
+			rrline << dnsfield[0] << 'srv' << dnsfield[1]
+			rrline << record.priority.to_s
+			rrline << record.weight.to_s << record.port.to_s
+			rrline << record.target.to_s 	
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		elsif type == "SSHFP" then
 			dnsfield = record.general_prefix
-			output.puts '  ' + dnsfield[0] + ',sshfp,' + \
-				dnsfield[1] + ',' + \
-				record.algorithm_number.to_s  + ',' + \
-				record.fingerprint_type.to_s + ',"' + \
-				record.fingerprint.to_s.gsub(/ /, "") + '"'
-
+			rrline << dnsfield[0] << 'sshfp' << dnsfield[1]
+			rrline << record.algorithm_number.to_s
+			rrline << record.fingerprint_type.to_s
+			rrline << '"' + record.fingerprint.to_s.gsub(/ /, "") \
+				+ '"'
+			output.puts '  ' + rrline.join(",")
+			rrline = []
 		end
 	end
 
