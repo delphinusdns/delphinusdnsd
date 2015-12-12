@@ -1,4 +1,4 @@
-$Id: README,v 1.8 2015/12/01 13:56:11 pjp Exp $
+$Id: README,v 1.9 2015/12/12 07:54:16 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -11,6 +11,11 @@ $Id: README,v 1.8 2015/12/01 13:56:11 pjp Exp $
 4. COMPATIBILITY
 5. EXAMPLES
 6. DNSSEC
+ 6.1 Preparing your computer for DNSSEC
+ 6.2 Signing your zone with dd-convert.rb
+ 6.3 re-signing with existing keys
+ 6.4 What to do with the .signed file
+ 6.5 How can I sub-delegate a zone with DNSSEC
 7. WHAT IT CAN'T DO
 
 1. README 
@@ -195,7 +200,81 @@ in the directory "examples" are a few examples from working configs.
 6. DNSSEC
 ---------
 
-Is new for the 1.0.0 release.  Stay tuned.
+DNSSEC is added hostmaster commitment.  You will have to re-sign your zone at
+least once a month in order to operate with DNSSEC.  Make sure this is what
+you want.
+
+6.1 Preparing your computer for DNSSEC
+--------------------------------------
+
+What you need to do is install ruby version 2.1 if you haven't already and then
+install the ruby gems dns-zone and etc, like so:
+
+	gem install dns-zone --version '0.2.0'
+	gem install etc
+	
+After that the dd-convert.rb will function right.
+
+6.2 Signing your zone with dd-convert.rb
+----------------------------------------
+
+The very first time you'll want to create ZSK and KSK keys.  They are the
+zone signing and key signing keys respectively.  Every DNSSEC zone has at
+least one of these.  To create these with dd-convert.rb I use -Z and -K
+options.  Here is an example:
+
+	./dd-convert.rb -Z -K -i centroid.eu -n centroid.eu
+
+What this does is it creates the keys and signs the zone 'centroid.eu' with
+the zonename centroid.eu.  No trailing dots are needed.  The output will be
+called centroid.eu.signed and the keys will be created and look like this:
+
+alpha$ ls K*
+Kcentroid.eu.+008+04815.key             Kcentroid.eu.+008+40405.key
+Kcentroid.eu.+008+04815.private         Kcentroid.eu.+008+40405.private
+
+This is the output format of dnssec-keygen utility and format is simple:
+
+K for key, centroid.eu. for the zone name, +008 for the algorithm used in
+this case it's rsasha256 and lastly a unique identifier for the key.  
+
+Keep these keys in a private place and only pull them out when you are going
+to re-sign the zone, as shown in #6.3.  Also, and this is important, save the
+output of dd-convert.rb so that you know which is the ZSK and which is the
+KSK.
+
+6.3 re-signing with existing keys
+---------------------------------
+
+In order to do the monthly re-signing you must know which key is the ZSK and
+which is the KSK.  The initial -Z -K options of dd-convert.rb will tell which
+one is which.
+
+	./dd-convert.rb -z Kcentroid.eu.+008+04815 -k Kcentroid.eu.+008+40405 \
+		-i centroid.eu -n centroid.eu
+
+Note, this will overwrite any centroid.eu.signed file.
+
+
+6.4 What to do with the .signed file
+------------------------------------
+
+Install the .signed file as your zone.  I personally use include's in my 
+configfile so that this is managed easy.  Then restart delphinusdnsd after
+setting the 'dnssec' option.  Your zone should talk DNSSEC, after you upload
+the KSK to your registrar.  They'll likely want the DNSKEY and in some cases
+grab it themselves over the insecure channel.  My registrar joker.com did 
+this.  Other than that the dnssec-keysign program that dd-convert.rb uses 
+creates a dsset-centroid.eu. file which has the uploadable DS keys in it.
+It's up to you to upload DS or DNSKEY (which can derive DS keys) to your 
+registrar and from there to your parent zone.
+
+
+6.5 How can I sub-delegate a zone with DNSSEC
+---------------------------------------------
+
+You can't in delphinusdnsd 1.0.0.  Sorry.  You'll have to delegate non-signed
+or keep DNSSEC off.  Patches sent in are always welcome to make this work.
 
 
 7. WHAT IT CAN'T DO
