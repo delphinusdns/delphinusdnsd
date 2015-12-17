@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 #
-# $Id: dd-convert.rb,v 1.6 2015/12/11 20:16:02 pjp Exp $
+# $Id: dd-convert.rb,v 1.7 2015/12/17 15:47:34 pjp Exp $
 #
 # Copyright (c) 2015 Peter J. Philipp
 # All rights reserved.
@@ -654,7 +654,7 @@ if arguments[:input] != "" then
 	
 	IO.popen(signzonepath + ' -O full -3 \'' + \
 		arguments[:salt] + '\' -H ' + arguments[:iterations].to_s + \
-		' -o ' + arguments[:zonename] + '. -t  -k ' + \
+		' -e +31536000 -o ' + arguments[:zonename] + '. -t  -k ' + \
 		arguments[:kskname].chomp + ' ' + out.path + ' ' + \
 		arguments[:zskname].chomp , 'r+') do |pipe|
 
