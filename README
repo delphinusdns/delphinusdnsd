@@ -1,4 +1,4 @@
-$Id: README,v 1.9 2015/12/12 07:54:16 pjp Exp $
+$Id: README,v 1.10 2015/12/19 11:00:51 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -201,8 +201,7 @@ in the directory "examples" are a few examples from working configs.
 ---------
 
 DNSSEC is added hostmaster commitment.  You will have to re-sign your zone at
-least once a month in order to operate with DNSSEC.  Make sure this is what
-you want.
+periodic intervals.  This can be automated though.
 
 6.1 Preparing your computer for DNSSEC
 --------------------------------------
