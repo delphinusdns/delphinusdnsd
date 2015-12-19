@@ -100,7 +100,7 @@ static struct notifyentry {
 } *notn2, *notnp;
 
 
-static const char rcsid[] = "$Id: axfr.c,v 1.6 2015/06/20 15:58:41 pjp Exp $";
+static const char rcsid[] = "$Id: axfr.c,v 1.7 2015/12/19 15:29:02 pjp Exp $";
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list
@@ -404,7 +404,8 @@ axfrloop(int *afd, int sockcount, char **ident, DB *db)
 			continue;
 		}
 		if (sel < 0) {
-			dolog(LOG_INFO, "select: %s\n", strerror(errno));
+			if (errno != EINTR)
+				dolog(LOG_INFO, "select: %s\n", strerror(errno));
 			continue;
 		}
 
