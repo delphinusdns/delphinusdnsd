@@ -12,7 +12,6 @@ build:
 	$(CC) $(CFLAGS) -c main.c
 	$(CC) $(CFLAGS) -c reply.c
 	$(CC) $(CFLAGS) -c region.c
-	$(CC) $(CFLAGS) -c wildcard.c
 	$(CC) $(CFLAGS) -c log.c
 	$(CC) $(CFLAGS) -c axfr.c
 	$(CC) $(CFLAGS) -c filter.c
@@ -20,7 +19,7 @@ build:
 	$(CC) $(CFLAGS) -c whitelist.c
 	$(CC) $(CFLAGS) -c base64.c
 	$(CC) $(CFLAGS) -c dnssec.c
-	$(CC) $(CFLAGS) -o delphinusdnsd additional.o main.o parse.o reply.o region.o wildcard.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o $(LDADD)
+	$(CC) $(CFLAGS) -o delphinusdnsd additional.o main.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o $(LDADD)
 
 clean:
 	rm -f *.o delphinusdnsd config.h Makefile

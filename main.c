@@ -41,9 +41,7 @@ extern int 	find_filter(struct sockaddr_storage *, int);
 extern int 	find_recurse(struct sockaddr_storage *, int);
 extern u_int8_t find_region(struct sockaddr_storage *, int);
 extern int 	find_whitelist(struct sockaddr_storage *, int);
-extern int 	find_wildcard(struct sockaddr_storage *, int);
 extern void 	init_dnssec(void);
-extern void 	init_wildcard(void);
 extern void 	init_recurse(void);
 extern void 	init_region(void);
 extern void 	init_filter(void);
@@ -187,13 +185,12 @@ static struct tcps {
 	int so;
 	int isv6;
 	u_int8_t region;
-	int wildcard;
 	time_t time;
 	SLIST_ENTRY(tcps) tcps_entry;
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.31 2015/12/19 11:18:25 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.32 2015/12/19 11:33:15 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -430,7 +427,6 @@ main(int argc, char *argv[])
 
 	/* end of setup_master code */
 		
-	init_wildcard();
 	init_region();
 	init_filter();
 	init_whitelist();
@@ -1886,7 +1882,6 @@ mainloop(struct cfg *cfg)
 	int so;
 	int type0, type1;
 	int lzerrno;
-	int wildcard = 0;
 	int filter = 0;
 	int rcheck = 0;
 	int blacklist = 1;
@@ -2059,7 +2054,6 @@ mainloop(struct cfg *cfg)
 					sin6 = (struct sockaddr_in6 *)from;
 					inet_ntop(AF_INET6, (void *)&sin6->sin6_addr, (char *)&address, sizeof(address));
 					aregion = find_region((struct sockaddr_storage *)sin6, AF_INET6);
-					wildcard = find_wildcard((struct sockaddr_storage *)sin6, AF_INET6);
 					filter = find_filter((struct sockaddr_storage *)sin6, AF_INET6);
 					if (whitelist) {
 						blacklist = find_whitelist((struct sockaddr_storage *)sin6, AF_INET6);
@@ -2070,7 +2064,6 @@ mainloop(struct cfg *cfg)
 					fromlen = sizeof(struct sockaddr_in);
 					sin = (struct sockaddr_in *)from;
 					inet_ntop(AF_INET, (void *)&sin->sin_addr, (char *)&address, sizeof(address));
-					wildcard = find_wildcard((struct sockaddr_storage *)sin, AF_INET);
 					aregion = find_region((struct sockaddr_storage *)sin, AF_INET);
 					filter = find_filter((struct sockaddr_storage *)sin, AF_INET);
 					if (whitelist) {
@@ -2135,7 +2128,6 @@ mainloop(struct cfg *cfg)
 				tn1->ident = strdup(cfg->ident[i]);
 				tn1->address = strdup(address);
 				tn1->region = aregion;
-				tn1->wildcard = wildcard;
 				tn1->time = time(NULL);
 
 				SLIST_INSERT_HEAD(&tcpshead, tn1, tcps_entry);
@@ -2217,7 +2209,7 @@ mainloop(struct cfg *cfg)
 					/* format error */
 					build_reply(	&sreply, tnp->so, pbuf, len, NULL, 
 									from, fromlen, NULL, NULL, tnp->region, 
-									istcp, tnp->wildcard, NULL, replybuf);
+									istcp, 0, NULL, replybuf);
 
 					slen = reply_fmterror(&sreply);
 					dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", tnp->so, tnp->ident, tnp->address);
@@ -2248,12 +2240,12 @@ mainloop(struct cfg *cfg)
 							ntohs(question->hdr->qtype) == DNS_TYPE_TXT &&
 								strcasecmp(question->converted_name, "version.bind.") == 0) {
 								snprintf(replystring, DNS_MAXNAME, "VERSION");
-								build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, wildcard, NULL, replybuf);
+								build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 								slen = reply_version(&sreply);
 								goto tcpout;
 						}
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, wildcard, NULL, replybuf);
+						build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_refused(&sreply);
 						goto tcpout;
 						break;
@@ -2281,7 +2273,7 @@ mainloop(struct cfg *cfg)
 								build_reply(	&sreply, tnp->so, pbuf, len, 
 												question, from, fromlen, 
 												sd0, NULL, tnp->region, istcp, 
-												tnp->wildcard, NULL, replybuf);
+												0, NULL, replybuf);
 
 								slen = reply_noerror(&sreply, cfg->db);
 						}
@@ -2306,7 +2298,7 @@ tcpnxdomain:
 			
 							build_reply(	&sreply, tnp->so, pbuf, len, question, 
 											from, fromlen, sd0, NULL, 
-											tnp->region, istcp, tnp->wildcard, NULL,
+											tnp->region, istcp, 0, NULL,
 											replybuf);
 
 							slen = reply_nxdomain(&sreply, cfg->db);
@@ -2343,7 +2335,7 @@ tcpnxdomain:
 				default:
 					 build_reply(	&sreply, tnp->so, pbuf, len, question, 
 									from, fromlen, NULL, NULL, tnp->region, 
-									istcp, tnp->wildcard, NULL, replybuf);
+									istcp, 0, NULL, replybuf);
 
 					slen = reply_notimpl(&sreply);
 					snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
@@ -2355,20 +2347,20 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_CNAME) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, 	\
 							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							tnp->region, istcp, tnp->wildcard, NULL, replybuf);
+							tnp->region, istcp, 0, NULL, replybuf);
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, tnp->so, pbuf, len, question, 
 									from, fromlen, sd0, NULL, 
-									tnp->region, istcp, tnp->wildcard, NULL,
+									tnp->region, istcp, 0, NULL,
 									replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 						break;
 					} else if (type0 == DNS_TYPE_A) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+							fromlen, sd0, NULL, tnp->region, istcp, 0, 
 							NULL, replybuf);
 						slen = reply_a(&sreply, cfg->db);
 						break;		/* must break here */
@@ -2378,14 +2370,14 @@ tcpnxdomain:
 
 				case DNS_TYPE_ANY:
 					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						fromlen, sd0, NULL, tnp->region, istcp, 0, 
 						NULL, replybuf);
 
 					slen = reply_any(&sreply);
 					break;		/* must break here */
 				case DNS_TYPE_NSEC3PARAM:
 					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						fromlen, sd0, NULL, tnp->region, istcp, 0, 
 						NULL, replybuf);
 
 					slen = reply_nsec3param(&sreply);
@@ -2393,7 +2385,7 @@ tcpnxdomain:
 					
 				case DNS_TYPE_NSEC3:
 					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						fromlen, sd0, NULL, tnp->region, istcp, 0, 
 						NULL, replybuf);
 
 					slen = reply_nxdomain(&sreply, cfg->db);
@@ -2401,7 +2393,7 @@ tcpnxdomain:
 					
 				case DNS_TYPE_NSEC:
 					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						fromlen, sd0, NULL, tnp->region, istcp, 0, 
 						NULL, replybuf);
 
 					slen = reply_nsec(&sreply);
@@ -2409,7 +2401,7 @@ tcpnxdomain:
 					
 				case DNS_TYPE_DS:
 					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						fromlen, sd0, NULL, tnp->region, istcp, 0, 
 						NULL, replybuf);
 
 					slen = reply_ds(&sreply);
@@ -2417,7 +2409,7 @@ tcpnxdomain:
 					
 				case DNS_TYPE_DNSKEY:
 					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						fromlen, sd0, NULL, tnp->region, istcp, 0, 
 						NULL, replybuf);
 
 					slen = reply_dnskey(&sreply);
@@ -2425,7 +2417,7 @@ tcpnxdomain:
 					
 				case DNS_TYPE_RRSIG:
 					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, tnp->wildcard, 
+						fromlen, sd0, NULL, tnp->region, istcp, 0, 
 						NULL, replybuf);
 
 					slen = reply_rrsig(&sreply, cfg->db);
@@ -2436,19 +2428,19 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_CNAME) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							tnp->region, istcp, tnp->wildcard, NULL, replybuf);
+							tnp->region, istcp, 0, NULL, replybuf);
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 						break;
 					 } else if (type0 == DNS_TYPE_AAAA) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, 
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_aaaa(&sreply, cfg->db);
 						break;		/* must break here */
@@ -2460,14 +2452,14 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_CNAME) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							tnp->region, istcp, tnp->wildcard, NULL, replybuf);
+							tnp->region, istcp, 0, NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 
 					} else if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 
@@ -2475,7 +2467,7 @@ tcpnxdomain:
 					} else if (type0 == DNS_TYPE_MX) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_mx(&sreply, cfg->db);
 						break;		/* must break here */
@@ -2486,13 +2478,13 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_SOA) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_soa(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 						break;
@@ -2502,7 +2494,7 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 					}
@@ -2512,7 +2504,7 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_TLSA) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_tlsa(&sreply);
 					}
@@ -2522,7 +2514,7 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_SSHFP) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_sshfp(&sreply);
 					}
@@ -2533,7 +2525,7 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_SRV) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_srv(&sreply, cfg->db);
 					}
@@ -2543,7 +2535,7 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_NAPTR) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_naptr(&sreply, cfg->db);
 					}
@@ -2553,13 +2545,13 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_CNAME) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 						break;
@@ -2570,7 +2562,7 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_CNAME) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 							fromlen, sd0, ((type1 > 0) ? sd1 : NULL) \
-							, tnp->region, istcp, tnp->wildcard, NULL,
+							, tnp->region, istcp, 0, NULL,
 							replybuf);
 
 						slen = reply_cname(&sreply);
@@ -2579,7 +2571,7 @@ tcpnxdomain:
 
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 
@@ -2588,7 +2580,7 @@ tcpnxdomain:
 
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, 	
 								fromlen, sd0, NULL, tnp->region, istcp, 
-								tnp->wildcard, NULL, replybuf);
+								0, NULL, replybuf);
 
 						slen = reply_ptr(&sreply);
 						break;		/* must break here */
@@ -2600,7 +2592,7 @@ tcpnxdomain:
 
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
 							fromlen, sd0, NULL, tnp->region, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_txt(&sreply);
 					}
@@ -2611,7 +2603,7 @@ tcpnxdomain:
 
 						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
 							fromlen, sd0, NULL, tnp->region, istcp, 	
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_spf(&sreply);
 					}
@@ -2631,7 +2623,7 @@ tcpnxdomain:
 					if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 							fromlen, sd0, NULL, aregion, istcp, 
-							tnp->wildcard, NULL, replybuf);
+							0, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 
@@ -2639,7 +2631,7 @@ tcpnxdomain:
 
 						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
 						fromlen, NULL, NULL, tnp->region, istcp, 
-						tnp->wildcard, NULL, replybuf);
+						0, NULL, replybuf);
 		
 						slen = reply_notimpl(&sreply);
 						snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
@@ -2765,7 +2757,6 @@ axfrentry:
 					}
 
 					aregion = find_region((struct sockaddr_storage *)sin6, AF_INET6);
-					wildcard = find_wildcard((struct sockaddr_storage *)sin6, AF_INET6);
 					filter = find_filter((struct sockaddr_storage *)sin6, AF_INET6);
 					if (whitelist) {
 						blacklist = find_whitelist((struct sockaddr_storage *)sin6, AF_INET6);
@@ -2783,7 +2774,6 @@ axfrentry:
 					}
 
 					aregion = find_region((struct sockaddr_storage *)sin, AF_INET);
-					wildcard = find_wildcard((struct sockaddr_storage *)sin, AF_INET);
 					filter = find_filter((struct sockaddr_storage *)sin, AF_INET);
 					if (whitelist) {
 						blacklist = find_whitelist((struct sockaddr_storage *)sin, AF_INET);
@@ -2816,7 +2806,7 @@ axfrentry:
 					dolog(LOG_INFO, "on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
 
 					/* format error */
-					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, wildcard, NULL, replybuf);
+					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 
 					slen = reply_fmterror(&sreply);
 					dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
@@ -2825,7 +2815,7 @@ axfrentry:
 
 				if (filter) {
 
-					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, wildcard, NULL, replybuf);
+					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 					slen = reply_refused(&sreply);
 
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, filter policy\n", so, cfg->ident[i], address, received_ttl, aregion);
@@ -2834,7 +2824,7 @@ axfrentry:
 
 				if (whitelist && blacklist == 0) {
 
-					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, wildcard, NULL, replybuf);
+					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 					slen = reply_refused(&sreply);
 
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, whitelist policy\n", so, cfg->ident[i], address, received_ttl, aregion);
@@ -2855,7 +2845,7 @@ axfrentry:
 
 				/* hack around whether we're edns version 0 */
 				if (question->ednsversion != 0) {
-					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, wildcard, NULL, replybuf);
+					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 					slen = reply_badvers(&sreply);
 
 					dolog(LOG_INFO, "on descriptor %u interface \"%s\" edns version is %u from %s, replying badvers\n", so, cfg->ident[i], question->ednsversion, address);
@@ -2880,7 +2870,7 @@ axfrentry:
 							ntohs(question->hdr->qtype) == DNS_TYPE_TXT &&
 								strcasecmp(question->converted_name, "version.bind.") == 0) {
 								snprintf(replystring, DNS_MAXNAME, "VERSION");
-								build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, wildcard, NULL, replybuf);
+								build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 								slen = reply_version(&sreply);
 								goto udpout;
 						}
@@ -2893,7 +2883,7 @@ axfrentry:
 						}
 #endif
 
-						build_reply(&sreply, so, buf, len, question, from, fromlen, sd0, NULL, aregion, istcp, wildcard, NULL, replybuf);
+						build_reply(&sreply, so, buf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_refused(&sreply);
 						goto udpout;
 						break;
@@ -2919,7 +2909,7 @@ axfrentry:
 							if (sd0 != NULL) {
 
 									build_reply(&sreply, so, buf, len, question, from, \
-										fromlen, sd0, NULL, aregion, istcp, wildcard, 
+										fromlen, sd0, NULL, aregion, istcp, 0, 
 										NULL, replybuf);
 
 									slen = reply_noerror(&sreply, cfg->db);
@@ -2944,7 +2934,7 @@ udpnxdomain:
 						if (sd0 != NULL) {
 								build_reply(&sreply, so, buf, len, question, from, \
 								fromlen, sd0, NULL, aregion, istcp, \
-								wildcard, NULL, replybuf);
+								0, NULL, replybuf);
 
 								slen = reply_nxdomain(&sreply, cfg->db);
 						}
@@ -2979,7 +2969,7 @@ udpnxdomain:
 					break;
 				default:
 					 build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, NULL, NULL, aregion, istcp, wildcard, \
+							fromlen, NULL, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 					slen = reply_notimpl(&sreply);
@@ -2993,13 +2983,13 @@ udpnxdomain:
 
 						build_reply(&sreply, so, buf, len, question, from, 	\
 							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							aregion, istcp, wildcard, NULL, replybuf);
+							aregion, istcp, 0, NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3007,7 +2997,7 @@ udpnxdomain:
 					} else if (type0 == DNS_TYPE_A) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, 
+							fromlen, sd0, NULL, aregion, istcp, 0, 
 							NULL, replybuf);
 
 						slen = reply_a(&sreply, cfg->db);
@@ -3018,14 +3008,14 @@ udpnxdomain:
 
 				case DNS_TYPE_ANY:
 					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
+						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
 						replybuf);
 
 					slen = reply_any(&sreply);
 					break;		/* must break here */
 				case DNS_TYPE_NSEC3PARAM:
 					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
+						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
 						replybuf);
 
 					slen = reply_nsec3param(&sreply);
@@ -3033,7 +3023,7 @@ udpnxdomain:
 
 				case DNS_TYPE_NSEC3:
 					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
+						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
 						replybuf);
 
 					slen = reply_nxdomain(&sreply, cfg->db);
@@ -3041,7 +3031,7 @@ udpnxdomain:
 
 				case DNS_TYPE_NSEC:
 					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
+						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
 						replybuf);
 
 					slen = reply_nsec(&sreply);
@@ -3049,7 +3039,7 @@ udpnxdomain:
 
 				case DNS_TYPE_DS:
 					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
+						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
 						replybuf);
 
 					slen = reply_ds(&sreply);
@@ -3057,7 +3047,7 @@ udpnxdomain:
 
 				case DNS_TYPE_DNSKEY:
 					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
+						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
 						replybuf);
 
 					slen = reply_dnskey(&sreply);
@@ -3065,7 +3055,7 @@ udpnxdomain:
 
 				case DNS_TYPE_RRSIG:
 					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, wildcard, NULL,
+						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
 						replybuf);
 
 					slen = reply_rrsig(&sreply, cfg->db);
@@ -3078,13 +3068,13 @@ udpnxdomain:
 
 						build_reply(&sreply, so, buf, len, question, from, \
 							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							aregion, istcp, wildcard, NULL, replybuf);
+							aregion, istcp, 0, NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3092,7 +3082,7 @@ udpnxdomain:
 					 } else if (type0 == DNS_TYPE_AAAA) {
 
 						build_reply(&sreply, so, buf, len, question, from, 
-							fromlen, sd0, NULL, aregion, istcp, wildcard, 
+							fromlen, sd0, NULL, aregion, istcp, 0, 
 							NULL, replybuf);
 
 						slen = reply_aaaa(&sreply, cfg->db);
@@ -3106,20 +3096,20 @@ udpnxdomain:
 
 						build_reply(&sreply, so, buf, len, question, from, \
 							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							aregion, istcp, wildcard, NULL, replybuf);
+							aregion, istcp, 0, NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 	   				} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 						break;
 					} else if (type0 == DNS_TYPE_MX) {
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 						slen = reply_mx(&sreply, cfg->db);
 						break;		/* must break here */
@@ -3130,14 +3120,14 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_SOA) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_soa(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3148,7 +3138,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3158,7 +3148,7 @@ udpnxdomain:
 				case DNS_TYPE_TLSA:
 					if (type0 == DNS_TYPE_TLSA) {
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_tlsa(&sreply);
@@ -3168,7 +3158,7 @@ udpnxdomain:
 				case DNS_TYPE_SSHFP:
 					if (type0 == DNS_TYPE_SSHFP) {
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_sshfp(&sreply);
@@ -3180,7 +3170,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_SRV) {
 
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_srv(&sreply, cfg->db);
@@ -3191,7 +3181,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_NAPTR) {
 
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_naptr(&sreply, cfg->db);
@@ -3202,14 +3192,14 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_CNAME) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3222,13 +3212,13 @@ udpnxdomain:
 
 						build_reply(&sreply, so, buf, len, question, from, \
 							fromlen, sd0, ((type1 > 0) ? sd1 : NULL) \
-							, aregion, istcp, wildcard, NULL, replybuf);
+							, aregion, istcp, 0, NULL, replybuf);
 
 						slen = reply_cname(&sreply);
 					} else if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3236,7 +3226,7 @@ udpnxdomain:
 					} else if (type0 == DNS_TYPE_PTR) {
 
 						build_reply(&sreply, so, buf, len, question, from, 	
-								fromlen, sd0, NULL, aregion, istcp, wildcard, \
+								fromlen, sd0, NULL, aregion, istcp, 0, \
 								NULL, replybuf);
 
 						slen = reply_ptr(&sreply);
@@ -3247,7 +3237,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_TXT) {
 
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_txt(&sreply);
@@ -3257,7 +3247,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_SPF) {
 
 						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_spf(&sreply);
@@ -3275,7 +3265,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, wildcard, \
+							fromlen, sd0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -3283,7 +3273,7 @@ udpnxdomain:
 
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, NULL, NULL, aregion, istcp, wildcard, \
+							fromlen, NULL, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_notimpl(&sreply);
@@ -3355,7 +3345,7 @@ udpnxdomain:
  */
 
 void
-build_reply(struct sreply *reply, int so, char *buf, int len, struct question *q, struct sockaddr *sa, socklen_t slen, struct domain *sd1, struct domain *sd2, u_int8_t region, int istcp, int wildcard, struct recurses *sr, char *replybuf)
+build_reply(struct sreply *reply, int so, char *buf, int len, struct question *q, struct sockaddr *sa, socklen_t slen, struct domain *sd1, struct domain *sd2, u_int8_t region, int istcp, int deprecated0, struct recurses *sr, char *replybuf)
 {
 	reply->so = so;
 	reply->buf = buf;
@@ -3367,7 +3357,7 @@ build_reply(struct sreply *reply, int so, char *buf, int len, struct question *q
 	reply->sd2 = sd2;
 	reply->region = region;
 	reply->istcp = istcp;
-	reply->wildcard = wildcard;
+	reply->wildcard = 0;
 	reply->sr = sr;
 	reply->replybuf = replybuf;
 

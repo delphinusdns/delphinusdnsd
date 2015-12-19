@@ -38,7 +38,6 @@ extern int 	insert_notifyslave(char *, char *);
 extern int 	insert_filter(char *, char *);
 extern int 	insert_recurse(char *, char *);
 extern int 	insert_whitelist(char *, char *);
-extern int 	insert_wildcard(char *, char *);
 extern void 	slave_shutdown(void);
 extern int 	mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int 	mybase64_decode(char const *, u_char *, size_t);
@@ -105,7 +104,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.34 2015/12/19 11:18:25 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.35 2015/12/19 11:33:15 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -229,7 +228,6 @@ cmd	:
 	| include 
 	| zone 
 	| region CRLF
-	| wof CRLF
 	| axfr CRLF
 	| notify CRLF
 	| whitelist CRLF
@@ -1179,57 +1177,6 @@ recursestatement	:	ipcidr SEMICOLON CRLF
 					if (debug)
 						printf("recurse inserted %s address\n", $1);
 #endif
-
-					free (dst);
-					free ($1);
-				}
-				| comment CRLF
-				;	
-
-
-/* wildcard-only-for "these hosts" { .. } */
-
-wof:
-	WOF woflabel wofcontent 
-	{		 
-		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
-                        dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
-                        return (-1);
-                }
-	}
-	;
-
-woflabel:
-	QUOTEDSTRING
-	;
-
-wofcontent:
-			OBRACE wofstatements EBRACE 
-			| OBRACE CRLF wofstatements EBRACE 
-			;
-
-wofstatements 	:  		
-				wofstatements wofstatement  
-				| wofstatement 
-				;
-
-wofstatement		:	ipcidr SEMICOLON CRLF
-				{
-					char prefixlength[INET_ADDRSTRLEN];
-					char *dst;
-				
-					if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
-						
-						return (-1);
-					}
-
-					if (insert_wildcard(dst, prefixlength) < 0) {
-						dolog(LOG_ERR, "insert_wildcard, line %d\n", file->lineno);
-						return (-1);
-					}
-	
-					if (debug)
-						printf("wildcard inserted %s address\n", $1);
 
 					free (dst);
 					free ($1);
