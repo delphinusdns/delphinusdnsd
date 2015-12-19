@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 14, 2014
+.Dd December 19, 2015
 .Dt DELPHINUSDNS.CONF 5
 .Os 
 .Sh NAME
@@ -45,9 +45,7 @@ Here is a sample
 .Nm
 file:
 .Bd -literal
-; sample config file that is in production.
-;
-version "6";
+version "7";
 options "cool stuff" {
 	interface "lo0";
 	interface "em0";
@@ -61,6 +59,7 @@ options "cool stuff" {
 
 	;fork 2;
 	log;
+	;dnssec;
 }
 
 axfrport "10053";
@@ -202,7 +201,8 @@ zone = "zone" ("string") [ "{" zonedata "}" ]
 zonedata = { [hostname] [ "," dnstype] [ "," ttl ] ["," variablednsdata] }
 hostname = string
 dnstype = ( "a" | "aaaa" | "ptr" | "mx" | "soa" | "ns" | "sshfp" | "spf" | 
-		"naptr" | "txt" | "delegate" | "hint" )
+		"naptr" | "txt" | "dnskey" | "rrsig" | "nsec" | "nsec3" |
+		"nsec3param" | "ds" | "tlsa" | "delegate" | "hint" )
 ttl = number
 
 region = "region" ("string") [ "{" cidrlist "}"
@@ -230,12 +230,13 @@ comment = ( semicolon | pound ) line
 
 options = "options" ("string") [ "{" optionlist "}" ]
 optionlist = ( optrecurse | optinterface | optfork | optport | 
-		optratelimit | optbind )
+		optratelimit | optbind | optdnssec )
 optrecurse = "recurse" semicolon 
 optinterface = "interface" ("string") semicolon
 optfork = "fork" number semicolon
 optratelimit = "ratelimit-pps" number semicolon
 optbind = "bind" cidr-address semicolon
+optdnssec = "dnssec" semicolon
 .Ed
 .Sh FILES
 .Pa /etc/delphinusdns.conf
