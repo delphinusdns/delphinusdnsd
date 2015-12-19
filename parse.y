@@ -55,7 +55,6 @@ extern int bflag;
 extern int iflag;
 extern int lflag;
 extern int nflag;
-extern int rflag;
 extern int bcount;
 extern int icount;
 extern int ratelimit;
@@ -106,7 +105,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.33 2015/12/01 13:58:44 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.34 2015/12/19 11:18:25 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -711,10 +710,7 @@ optionsstatement:
 
 	STRING SEMICOLON CRLF
 	{
-		if (strcasecmp($1, "recurse") == 0) {
-			dolog(LOG_DEBUG, "recursive server on\n");
-			rflag = 0; 	/* keep it off please! */
-		} else if (strcasecmp($1, "dnssec") == 0) {
+		if (strcasecmp($1, "dnssec") == 0) {
 			dolog(LOG_DEBUG, "DNSSEC enabled\n");
 			dnssec = 1;
 		} else if (strcasecmp($1, "log") == 0) {

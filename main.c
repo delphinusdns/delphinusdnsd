@@ -165,7 +165,6 @@ int bflag = 0;
 int iflag = 0;
 int lflag = 0;
 int nflag = 0;
-int rflag = 0;
 int bcount = 0;
 int icount = 0;
 u_int16_t port = 53;
@@ -194,7 +193,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.30 2015/11/14 16:22:47 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.31 2015/12/19 11:18:25 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -208,7 +207,6 @@ main(int argc, char *argv[])
 	static int tcp[DEFAULT_SOCKET];
 	static int afd[DEFAULT_SOCKET];
 	static int uafd[DEFAULT_SOCKET];
-	int raw[2];
 	int lfd = -1;
 	int fd, n;
 
@@ -217,7 +215,6 @@ main(int argc, char *argv[])
 	int salen, ret;
 	int found = 0;
 	int on = 1;
-	int sp[2];
 
 	pid_t pid;
 
@@ -245,7 +242,7 @@ main(int argc, char *argv[])
 
 	av = argv;
 
-	while ((ch = getopt(argc, argv, "b:c:df:i:ln:p:rv")) != -1) {
+	while ((ch = getopt(argc, argv, "b:c:df:i:ln:p:v")) != -1) {
 		switch (ch) {
 		case 'b':
 			bflag = 1;
@@ -284,9 +281,6 @@ main(int argc, char *argv[])
 			break;
 		case 'p':
 			port = atoi(optarg) & 0xffff;
-			break;
-		case 'r':
-			rflag = 1;
 			break;
 		case 'v':
 			verbose++;
@@ -754,28 +748,6 @@ main(int argc, char *argv[])
 		}
 	} /* if bflag? */
 
-	if (rflag == 1) {
-		if ((raw[0] = socket(AF_INET, SOCK_RAW, IPPROTO_RAW)) < 0) {
-			dolog(LOG_INFO, "raw socket: %s\n", strerror(errno));
-			slave_shutdown();
-			exit(1);
-		}
-
-		if (setsockopt(raw[0], IPPROTO_IP, IP_HDRINCL, &on, sizeof(on)) < 0) {
-			dolog(LOG_INFO, "raw setsockopt: %s\n", strerror(errno));
-			slave_shutdown();
-			exit(1);	
-		}
-
-		if ((raw[1] = socket(AF_INET6, SOCK_RAW, IPPROTO_UDP)) < 0) {
-			dolog(LOG_INFO, "raw socket[1]: %s\n", strerror(errno));
-			slave_shutdown();
-			exit(1);
-		}
-		
-	} /* rflag */
-
-
 	/* if we are binding a log socket do it now */
 	if (logging.bind == 1 || logging.active == 1)  {
 		switch (logging.loghost2.ss_family) {
@@ -919,11 +891,6 @@ main(int argc, char *argv[])
 				close(uafd[j]);
 			}
 
-			if (rflag) {
-				close(raw[0]);
-				close(raw[1]);
-			}
-
 #if !defined __linux__ && !defined __APPLE__
 			setproctitle("AXFR engine on port %d", axfrport);
 #endif
@@ -960,42 +927,6 @@ main(int argc, char *argv[])
 	for (n = 0; n < nflag; n++) {
 		switch (pid = fork()) {
 		case 0:
-			if (rflag) {
-					/* 
-					 * set up socket pair
-					 */
-					
-					if (socketpair(AF_UNIX, SOCK_DGRAM, 0, (int *)&sp) < 0) {
-						dolog(LOG_INFO, "socketpair: %s\n", strerror(errno));
-						slave_shutdown();
-						exit(1);
-					}
-			
-					switch (pid = fork()) {
-					case -1:
-						dolog(LOG_INFO, "fork: %s\n", strerror(errno));
-						slave_shutdown();
-						exit(1);
-
-					case 0:	
-						for (j = 0; j < i; j++) {
-							close(tcp[j]);
-							close(udp[j]);
-						}
-						close (sp[1]);	
-
-						/* NOTREACHED */
-						break;
-
-					default:
-						close(raw[0]);
-						close(raw[1]);
-						close (sp[0]);
-						break;
-					} /* switch */
-				}	/* rflag */
-
-			
 			cfg->sockcount = i;
 			cfg->db = db;
 			for (i = 0; i < cfg->sockcount; i++) {
@@ -1007,7 +938,7 @@ main(int argc, char *argv[])
 
 				cfg->ident[i] = strdup(ident[i]);
 			}
-			cfg->recurse = (rflag ? sp[1] : -1);
+
 			cfg->log = lfd;
 
 			
@@ -1019,44 +950,6 @@ main(int argc, char *argv[])
 		} /* switch pid= fork */
 	} /* for (.. nflag */
 
-	if (rflag) {
-			/* 
-			 * set up socket pair
-			 */
-			
-			if (socketpair(AF_UNIX, SOCK_DGRAM, 0, (int *)&sp) < 0) {
-				dolog(LOG_INFO, "socketpair: %s\n", strerror(errno));
-				slave_shutdown();
-				exit(1);
-			}
-	
-			switch (pid = fork()) {
-			case -1:
-				dolog(LOG_INFO, "fork: %s\n", strerror(errno));
-				slave_shutdown();
-				exit(1);
-
-			case 0:	
-				for (j = 0; j < i; j++) {
-					close(tcp[j]);
-					close(udp[j]);
-					close(uafd[j]);
-				}
-				close (sp[1]);	
-
-				/* NOTREACHED */
-				break;
-
-			default:
-				close(raw[0]);
-				close(raw[1]);
-				close (sp[0]);
-				break;
-			} /* switch */
-			
-	}	/* rflag */
-
-	
 	cfg->sockcount = i;
 	cfg->db = db;
 	for (i = 0; i < cfg->sockcount; i++) {
@@ -2024,13 +1917,11 @@ mainloop(struct cfg *cfg)
 	} sockaddr_large;
 
 	socklen_t fromlen = sizeof(sockaddr_large);
-	socklen_t namelen = sizeof(struct sockaddr_storage);
 	socklen_t logfromlen = sizeof(struct sockaddr_storage);
 
 	struct sockaddr *from = (void *)&sockaddr_large;
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
-	struct sockaddr_storage sto;
 	struct sockaddr_storage logfrom;
 
 	struct dns_header *dh;
@@ -2039,7 +1930,6 @@ mainloop(struct cfg *cfg)
 	struct domain_cname *csd;
 	
 	struct sreply sreply;
-	struct srecurseheader rh;
 	struct timeval tv = { 10, 0};
 
 	struct msghdr msgh;
@@ -2047,8 +1937,6 @@ mainloop(struct cfg *cfg)
 	struct iovec iov;
 	
 	int flag;
-	int recursion = 0;
-
 
 	SLIST_INIT(&tcpshead);
 	collects_init();
@@ -2864,14 +2752,6 @@ axfrentry:
                      				}
 				}
 	
-				if (rflag) {
-					if (getsockname(so, (struct sockaddr*)&sto, &namelen) < 0) {
-						dolog(LOG_INFO, "getsockname failed: %s\n", strerror(errno));
-					}
-					
-					memset(&rh, 0, sizeof(rh));
-				}
-
 				if (from->sa_family == AF_INET6) {
 					is_ipv6 = 1;
 
@@ -2966,11 +2846,6 @@ axfrentry:
 					goto drop;
 				}
 					
-				if (rflag && recursion) {
-					memcpy(&rh.buf, buf, len);
-					rh.len = len;
-				}
-
 				if ((question = build_question(buf, len, ntohs(dh->additional))) == NULL) {
 					dolog(LOG_INFO, "on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
 					goto drop;
