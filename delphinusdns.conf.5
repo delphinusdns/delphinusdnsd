@@ -189,7 +189,7 @@ Syntax for
 in BNF:
 .Bd -literal
 line = ( version | axfrport | include | zone | region | 
-	wof | axfr | notify | whitelist | filter | recurse | logging 
+	axfr | notify | whitelist | filter | recurse | logging 
         | comment | options )
 
 version = "version" ("number") semicolon
@@ -208,8 +208,6 @@ ttl = number
 region = "region" ("string") [ "{" cidrlist "}"
 
 cidrlist = { [ cidr-address ] semicolon ... }
-
-wof = "wildcard-only-for" ("string") [ "{" cidrlist "}" ]
 
 axfr = "axfr-for" ("string") [ "{" cidrlist "}" ]
 
