@@ -55,7 +55,6 @@ extern int 		lookup_type(int internal_type);
 struct domain 	*Lookup_zone(DB *, char *, u_int16_t, u_int16_t, int);
 void 		collects_init(void);
 u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int);
-u_short 	in_cksum(const u_short *, register int, int);
 int 		reply_a(struct sreply *, DB *);
 int		reply_nsec3(struct sreply *, DB *);
 int		reply_nsec3param(struct sreply *);
@@ -83,8 +82,6 @@ int 		reply_cname(struct sreply *);
 int 		reply_any(struct sreply *);
 int 		reply_refused(struct sreply *);
 int 		reply_fmterror(struct sreply *);
-int		reply_raw2(int, char *, int, struct recurses *);
-int 		reply_raw6(int, char *, int, struct recurses *);
 void 		update_db(DB *, struct domain *);
 struct domain * find_nsec(char *name, int namelen, struct domain *sd, DB *db);
 int 		nsec_comp(const void *a, const void *b);
@@ -95,12 +92,6 @@ struct domain * find_nsec3_cover_next_closer(char *name, int namelen, struct dom
 struct domain * find_nsec3_match_closest(char *name, int namelen, struct domain *sd, DB *db);
 struct domain * find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, DB *db);
 struct domain * find_nsec3_match_qname(char *name, int namelen, struct domain *sd, DB *db);
-
-#ifdef __linux__
-static int 	udp_cksum(const struct iphdr *, const struct udphdr *, int);
-#else
-static int 	udp_cksum(const struct ip *, const struct udphdr *, int);
-#endif
 
 SLIST_HEAD(listhead, collects) collectshead;
 
@@ -129,7 +120,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.44 2015/11/16 19:11:16 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.45 2015/12/19 11:55:24 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -276,33 +267,29 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
 
-	} /* if (->sr) */
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		}
+	}
+
 	/*
 	 * update a_ptr setting 
 	 */
@@ -469,33 +456,28 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
 
-	} /* if (->sr) */
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		}
+	}
 
 	return (retlen);
 }
@@ -677,33 +659,28 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
 
-	} /* if (->sr) */
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		}
+	}
 
 	return (retlen);
 }
@@ -858,33 +835,29 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
 
-	} /* if (->sr) */
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		}
+	}
+
 
 	return (retlen);
 }
@@ -1044,33 +1017,28 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
 
-	} /* if (->sr) */
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		}
+	}
 
 	return (retlen);
 }
@@ -1229,33 +1197,28 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
 
-	} /* if (->sr) */
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		}
+	}
 
 	return (retlen);
 }
@@ -1401,33 +1364,28 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
 
-	} /* if (->sr) */
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		}
+	}
 
 	return (retlen);
 
@@ -1574,30 +1532,26 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
+
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+	
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
 	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
-
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-		
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -1865,28 +1819,24 @@ out:
 		free(cn1);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
+	if (istcp) {
+		char *tmpbuf;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-				
-			memcpy(&tmpbuf[2], reply, outlen);
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+			
+		memcpy(&tmpbuf[2], reply, outlen);
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -2183,28 +2133,24 @@ out:
 		free(cn1);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
+	if (istcp) {
+		char *tmpbuf;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -2388,30 +2334,26 @@ reply_cname(struct sreply *sreply)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
+	if (istcp) {
+		char *tmpbuf;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-				
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}	
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+			
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		}	
 	}
 
 	return (retlen);
@@ -2545,30 +2487,26 @@ reply_ptr(struct sreply *sreply)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 	
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
+
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
 	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
-
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -2805,30 +2743,26 @@ out:
 	}
 
 	
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
+
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
 	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
-
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -2965,30 +2899,26 @@ out:
 	}
 
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
+
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
 	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
-
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -3125,30 +3055,26 @@ out:
 	}
 
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
+
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
 	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
-
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -3255,30 +3181,26 @@ reply_version(struct sreply *sreply)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
+
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
 	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
-
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -3443,28 +3365,24 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
+	if (istcp) {
+		char *tmpbuf;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-				
-			memcpy(&tmpbuf[2], reply, outlen);
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+			
+		memcpy(&tmpbuf[2], reply, outlen);
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -3628,28 +3546,24 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
+	if (istcp) {
+		char *tmpbuf;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-				
-			memcpy(&tmpbuf[2], reply, outlen);
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+			
+		memcpy(&tmpbuf[2], reply, outlen);
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -3944,28 +3858,24 @@ out:
 		free(cn1);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
+	if (istcp) {
+		char *tmpbuf;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-				
-			memcpy(&tmpbuf[2], reply, outlen);
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+			
+		memcpy(&tmpbuf[2], reply, outlen);
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -4230,28 +4140,24 @@ out:
 		free(cn1);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-		if (istcp) {
-			char *tmpbuf;
+	if (istcp) {
+		char *tmpbuf;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-				
-			memcpy(&tmpbuf[2], reply, outlen);
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+			
+		memcpy(&tmpbuf[2], reply, outlen);
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -4414,30 +4320,26 @@ reply_nxdomain(struct sreply *sreply, DB *db)
 		
 
 		HTONS(odh->query);		
-		if (sreply->sr != NULL) {
-			retlen = reply_raw2(so, reply, len, sreply->sr);
+		if (istcp) {
+			char *tmpbuf;
+			u_int16_t *plen;
+
+			tmpbuf = malloc(len + 2);
+			if (tmpbuf == NULL) {
+				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+			}
+			plen = (u_int16_t *)tmpbuf;
+			*plen = htons(len);
+			
+			memcpy(&tmpbuf[2], reply, len);
+
+			if ((retlen = send(so, tmpbuf, len + 2, 0)) < 0) {
+				dolog(LOG_INFO, "send: %s\n", strerror(errno));
+			}
+			free(tmpbuf);
 		} else {
-			if (istcp) {
-				char *tmpbuf;
-				u_int16_t *plen;
-
-				tmpbuf = malloc(len + 2);
-				if (tmpbuf == NULL) {
-					dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-				}
-				plen = (u_int16_t *)tmpbuf;
-				*plen = htons(len);
-				
-				memcpy(&tmpbuf[2], reply, len);
-
-				if ((retlen = send(so, tmpbuf, len + 2, 0)) < 0) {
-					dolog(LOG_INFO, "send: %s\n", strerror(errno));
-				}
-				free(tmpbuf);
-			} else {
-				if ((retlen = sendto(so, reply, len, 0, sa, salen)) < 0) {
-					dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-				}
+			if ((retlen = sendto(so, reply, len, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
 
@@ -4675,33 +4577,28 @@ out:
 	}
 
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-	
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-	} /* sreply->sr.. */
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		}
+	} 
 
 	return (retlen);
 }
@@ -5135,30 +5032,26 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 	
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
+
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+	
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
 	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
-
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-		
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -5242,282 +5135,6 @@ collects_init(void)
 }
 
 int
-reply_raw2(int so, char *reply, int outlen, struct recurses *sr)
-{
-	char buf[2048];
-#ifdef __linux__
-	struct iphdr *ip;
-#else
-	struct ip *ip;
-#endif
-	struct udphdr *udp;
-	int udplen = outlen + sizeof(struct udphdr);
-	struct sockaddr_in *sin_src, *sin_dst;
-	int retlen = -1;
-
-	if (sr->af == AF_INET6) {
-		retlen = reply_raw6(so, reply, outlen, sr);
-		return (retlen);
-	}
-
-#ifdef __linux__
-	ip = (struct iphdr *)&buf[0];
-#else
-	ip = (struct ip *)&buf[0];
-#endif
-	udp = (struct udphdr *)&buf[sizeof(struct ip)];
-	memcpy(&buf[sizeof(struct ip) + sizeof(struct udphdr)], reply, outlen);
-
-#ifdef __linux__
-	ip->version = IPVERSION;
-	ip->ihl = sizeof(struct iphdr) >> 2;
-
-	ip->tos = 0;
-	ip->tot_len = htons(udplen + sizeof(struct iphdr));
-	ip->id = arc4random() & 0xffff;
-	ip->frag_off = htons(IP_DF);
-	ip->ttl = 64;
-	ip->protocol = IPPROTO_UDP;
-	ip->check = 0;
-	sin_dst = (struct sockaddr_in *)(&sr->dest);
-	ip->saddr = sin_dst->sin_addr.s_addr;
-	sin_src = (struct sockaddr_in *)(&sr->source);
-	ip->daddr = sin_src->sin_addr.s_addr;
-
-	ip->check = 0;	
-	ip->check = in_cksum((u_short*)ip, sizeof(struct iphdr), ip->check);
-#else
-	ip->ip_v = IPVERSION;
-	ip->ip_hl = sizeof(struct ip) >> 2;
-
-	ip->ip_tos = 0;
-
-#ifdef __OpenBSD__
-	ip->ip_len = htons(udplen + sizeof(struct ip));
-#else
-	ip->ip_len = udplen + sizeof(struct ip);
-#endif
-
-	ip->ip_id = arc4random();
-
-#ifdef __OpenBSD__
-	ip->ip_off = htons(IP_DF);
-#else
-	ip->ip_off = IP_DF;
-#endif
-
-	ip->ip_ttl = 64;
-	ip->ip_p = IPPROTO_UDP;
-
-	sin_src = (struct sockaddr_in *)(&sr->source);
-	ip->ip_dst.s_addr = sin_src->sin_addr.s_addr;
-	sin_dst = (struct sockaddr_in *)(&sr->dest);
-	ip->ip_src.s_addr = sin_dst->sin_addr.s_addr;
-
-	ip->ip_sum = 0;	
-	ip->ip_sum = in_cksum((u_short*)ip, sizeof(struct ip), ip->ip_sum);
-#endif
-
-#ifdef __linux__
-	
-	udp->source = sin_dst->sin_port;
-	udp->dest = sin_src->sin_port;
-	udp->len = htons(udplen);
-	udp->check = 0;
-
-	udp->check = udp_cksum(ip, udp, udplen);
-
-#else
-	udp->uh_sport = sin_dst->sin_port;
-	udp->uh_dport = sin_src->sin_port;
-	udp->uh_ulen = htons(udplen);
-	udp->uh_sum = 0;
-
-	udp->uh_sum = udp_cksum(ip, udp, udplen);
-#endif
-
-#ifdef __linux__
-	if ((retlen = sendto(so, buf, sizeof(struct iphdr) + udplen, 0, (struct sockaddr *)(&sr->dest), sizeof(struct sockaddr))) < 0) {
-#else
-	if ((retlen = sendto(so, buf, sizeof(struct ip) + udplen, 0, (struct sockaddr *)(&sr->dest), sizeof(struct sockaddr))) < 0) {
-#endif
-		dolog(LOG_ERR, "sendto: %s\n", strerror(errno));
-	}
-
-	return (retlen);
-}
-
-/*
- * REPLY_RAW6 - do an ipv6 raw reply 
- *
- */
-
-int
-reply_raw6(int so, char *reply, int outlen, struct recurses *sr)
-{
-	char buf[2048];
-	char csum[2048];
-
-	struct udphdr *udp;
-	int udplen = outlen + sizeof(struct udphdr);
-	struct sockaddr_in6 *sin_src, *sin_dst;
-	struct sockaddr_in6 sin6;
-	
-	struct ip6_hdr_pseudo *pseudo;
-	int retlen = -1;
-
-	udp = (struct udphdr *)&buf[0];
-	memcpy(&buf[sizeof(struct udphdr)], reply, outlen);
-
-	sin_src = (struct sockaddr_in6 *)(&sr->source);
-	sin_dst = (struct sockaddr_in6 *)(&sr->dest);
-
-#ifdef __linux__
-	udp->source = sin_dst->sin6_port;
-	udp->dest = sin_src->sin6_port;
-	udp->len = htons(udplen);
-	udp->check = 0;
-#else
-	udp->uh_sport = sin_dst->sin6_port;
-	udp->uh_dport = sin_src->sin6_port;
-	udp->uh_ulen = htons(udplen);
-	udp->uh_sum = 0;
-#endif
-
-	memset(&sin6, 0, sizeof(sin6));
-	sin6.sin6_family = AF_INET6;
-	memcpy((char *)&sin6.sin6_addr, (char *)&sin_dst->sin6_addr, sizeof(struct in6_addr));
-
-	if (bind(so, (struct sockaddr *)&sin6, sizeof(sin6)) < 0) {
-		dolog(LOG_ERR, "bind6: %s\n", strerror(errno));
-		return (retlen);
-        }
-	
-	memset(&sin6, 0, sizeof(sin6));
-	sin6.sin6_family = AF_INET6;
-	memcpy(&sin6.sin6_addr, (char *)&sin_src->sin6_addr, sizeof(struct in6_addr));
-	sin6.sin6_port = sin_src->sin6_port;
-#ifndef __linux__
-	sin6.sin6_len = sizeof(struct sockaddr_in6);
-#endif
-
-	pseudo = (struct ip6_hdr_pseudo *)&csum[0];
-	pseudo->ip6ph_nxt = IPPROTO_UDP;
-	pseudo->ip6ph_len = htons(udplen);
-	memcpy((char *)&pseudo->ip6ph_src, &sin_dst->sin6_addr, sizeof(struct in6_addr));
-	memcpy((char *)&pseudo->ip6ph_dst, &sin_src->sin6_addr, sizeof(struct in6_addr));
-
-	memcpy((char *)&csum[sizeof(struct ip6_hdr_pseudo)], udp, udplen);
-
-#ifdef __linux__
-        udp->check = in_cksum((u_short *)&csum[0], sizeof(struct ip6_hdr_pseudo) + udplen, 0);
-#else
-        udp->uh_sum = in_cksum((u_short *)&csum[0], sizeof(struct ip6_hdr_pseudo) + udplen, 0);
-#endif
-
-
-	if ((retlen = sendto(so, buf, udplen, 0, (struct sockaddr *)(&sr->dest), sizeof(struct sockaddr_in6))) < 0) {
-		dolog(LOG_ERR, "sendto: %s\n", strerror(errno));
-	}
-
-	return (retlen);
-}
-
-
-
-
-
-/* from print_udp.c */
-/*
- * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996
- *      The Regents of the University of California.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that: (1) source code distributions
- * retain the above copyright notice and this paragraph in its entirety, (2)
- * distributions including binary code include the above copyright notice and
- * this paragraph in its entirety in the documentation or other materials
- * provided with the distribution, and (3) all advertising materials mentioning
- * features or use of this software display the following acknowledgement:
- * ``This product includes software developed by the University of California,
- * Lawrence Berkeley Laboratory and its contributors.'' Neither the name of
- * the University nor the names of its contributors may be used to endorse
- * or promote products derived from this software without specific prior
- * written permission.
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
- */
-
-static int 
-#ifdef __linux__
-udp_cksum(const struct iphdr *ip, const struct udphdr *up, int len)
-#else
-udp_cksum(const struct ip *ip, const struct udphdr *up, int len)
-#endif
-{
-        union phu {
-                struct phdr {
-                        u_int32_t src;
-                        u_int32_t dst;
-                        u_char mbz;
-                        u_char proto;
-                        u_int16_t len;
-                } ph;
-                u_int16_t pa[6];
-        } phu;
-        const u_int16_t *sp;
-        u_int32_t sum;
-
-        /* pseudo-header.. */
-        phu.ph.len = htons((u_int16_t)len);
-        phu.ph.mbz = 0;
-        phu.ph.proto = IPPROTO_UDP;
-#ifdef __linux__
-        memcpy(&phu.ph.src, &ip->saddr, sizeof(u_int32_t));
-        memcpy(&phu.ph.dst, &ip->daddr, sizeof(u_int32_t));
-#else
-        memcpy(&phu.ph.src, &ip->ip_src.s_addr, sizeof(u_int32_t));
-        memcpy(&phu.ph.dst, &ip->ip_dst.s_addr, sizeof(u_int32_t));
-#endif
-
-        sp = &phu.pa[0];
-        sum = sp[0]+sp[1]+sp[2]+sp[3]+sp[4]+sp[5];
-
-        return in_cksum((u_short *)up, len, sum);
-}
-
-u_short
-in_cksum(const u_short *addr, register int len, int csum)
-{
-        int nleft = len;
-        const u_short *w = addr;
-        u_short answer;
-        int sum = csum;
-
-        /*
-         *  Our algorithm is simple, using a 32 bit accumulator (sum),
-         *  we add sequential 16 bit words to it, and at the end, fold
-         *  back all the carry bits from the top 16 bits into the lower
-         *  16 bits.
-         */
-        while (nleft > 1)  {
-                sum += *w++;
-                nleft -= 2;
-        }
-        if (nleft == 1)
-                sum += htons(*(u_char *)w<<8);
-
-        /*
-         * add back carry outs from top 16 bits to low 16 bits
-         */
-        sum = (sum >> 16) + (sum & 0xffff);     /* add hi 16 to low 16 */
-        sum += (sum >> 16);                     /* add carry */
-        answer = ~sum;                          /* truncate to 16 bits */
-        return (answer);
-}
-
-int
 reply_any(struct sreply *sreply)
 {
 	char *reply = sreply->replybuf;
@@ -5584,30 +5201,26 @@ reply_any(struct sreply *sreply)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 			
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
+
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
 	} else {
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
-
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
 
@@ -6844,33 +6457,28 @@ reply_badvers(struct sreply *sreply)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (sreply->sr != NULL) {
-		retlen = reply_raw2(so, reply, outlen, sreply->sr);
-	} else {
-	
-		if (istcp) {
-			char *tmpbuf;
-			u_int16_t *plen;
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
 
-			tmpbuf = malloc(outlen + 2);
-			if (tmpbuf == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(outlen);
-			
-			memcpy(&tmpbuf[2], reply, outlen);
-
-			if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-	} /* sreply->sr.. */
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		}
+	}
 
 	return (retlen);
 }
