@@ -200,9 +200,11 @@ include = "include" ("filename") semicolon
 zone = "zone" ("string") [ "{" zonedata "}" ]
 zonedata = { [hostname] [ "," dnstype] [ "," ttl ] ["," variablednsdata] }
 hostname = string
-dnstype = ( "a" | "aaaa" | "ptr" | "mx" | "soa" | "ns" | "sshfp" | "spf" | 
-		"naptr" | "txt" | "dnskey" | "rrsig" | "nsec" | "nsec3" |
-		"nsec3param" | "ds" | "tlsa" | "delegate" | "hint" )
+dnstype = ( 	"a" | "aaaa" | "cname" | "dnskey" | "ds" | "mx" | "naptr" |
+		"ns" | "nsec" | "nsec3" | "nsec3param" | "ptr" | "rrsig" |
+		"soa" | "spf" | "srv" | "sshfp" | "tlsa" | "txt" |
+		"delegate" | "hint" )
+
 ttl = number
 
 region = "region" ("string") [ "{" cidrlist "}"
