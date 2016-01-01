@@ -1,4 +1,4 @@
-$Id: README,v 1.10 2015/12/19 11:00:51 pjp Exp $
+$Id: README,v 1.11 2016/01/01 08:24:31 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -206,13 +206,17 @@ periodic intervals.  This can be automated though.
 6.1 Preparing your computer for DNSSEC
 --------------------------------------
 
-What you need to do is install ruby version 2.1 if you haven't already and then
-install the ruby gems dns-zone and etc, like so:
+What you need is the ISC Bind package or port.  In particular you need the 
+programs dnssec-signzone and dnssec-keygen.
+
+Also what you need to do is install ruby version 2.1 if you haven't already 
+and then install the ruby gems dns-zone and etc, like so:
 
 	gem install dns-zone --version '0.2.0'
 	gem install etc
 	
-After that the dd-convert.rb will function right.
+After that the dd-convert.rb which is in this install directory will function 
+right.
 
 6.2 Signing your zone with dd-convert.rb
 ----------------------------------------
@@ -274,23 +278,11 @@ registrar and from there to your parent zone.
 
 You can't in delphinusdnsd 1.0.0.  Sorry.  You'll have to delegate non-signed
 or keep DNSSEC off.  Patches sent in are always welcome to make this work.
+Maybe for 1.1.0.
 
 
 7. WHAT IT CAN'T DO
 -------------------
-
-* CNAME recursion.  When you look up www.yahoo.com you see this:
-
-;; ANSWER SECTION:
-www.yahoo.com.          58      IN      CNAME   fp.wg1.b.yahoo.com.
-fp.wg1.b.yahoo.com.     2802    IN      CNAME   eu-fp.wa1.b.yahoo.com.
-eu-fp.wa1.b.yahoo.com.  8       IN      A       87.248.122.122
-eu-fp.wa1.b.yahoo.com.  8       IN      A       87.248.112.181
-
-The recursive part of delphinusdnsd isn't able to recurse CNAME's and it 
-also doesn't have loop detection of CNAME's.  This means that some lookups
-will fail on a UNIX host using delphinusdnsd recursively, so it's useless
-this needs fixing and the fix isn't simple.
 
 * Solaris.  Unless you port some functions to solaris it won't compile on
 there.
