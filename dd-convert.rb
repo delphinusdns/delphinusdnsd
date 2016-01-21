@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 #
-# $Id: dd-convert.rb,v 1.8 2016/01/21 08:37:43 pjp Exp $
+# $Id: dd-convert.rb,v 1.9 2016/01/21 08:50:12 pjp Exp $
 #
 # Copyright (c) 2015 Peter J. Philipp
 # All rights reserved.
@@ -348,7 +348,8 @@ class ConvertD2B < MyTranslation
 					if m[2].to_i != ttl then
 						self[linenum] += " " + m[2]
 					end
-					self[linenum] += " IN TXT " + m[3]
+					mytext = m[3...m.length].join(",")
+					self[linenum] += " IN TXT " + mytext
 
 					linenum += 1
 				elsif m[1].downcase == "spf" then
