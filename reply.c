@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2005-2015 Peter J. Philipp
+ * Copyright (c) 2005-2016 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -120,7 +120,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.45 2015/12/19 11:55:24 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.46 2016/01/21 15:02:41 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -4286,6 +4286,13 @@ reply_nxdomain(struct sreply *sreply, DB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	
+	struct {
+		char name[DNS_MAXNAME];
+		int len;
+	} uniq[3];
+		
+	int rruniq = 0;
 
 	if (istcp) {
 		replysize = 65535;
@@ -4505,6 +4512,10 @@ reply_nxdomain(struct sreply *sreply, DB *db)
 			sd0 = find_nsec3_cover_next_closer(q->hdr->name, q->hdr->namelen, sd, db);
 			if (sd0 == NULL)
 				goto out;
+
+			memcpy(&uniq[rruniq].name, sd0->zone, sd0->zonelen);
+			uniq[rruniq++].len = sd0->zonelen;
+			
 			tmplen = additional_nsec3(sd0->zone, sd0->zonelen, INTERNAL_TYPE_NSEC3, sd0, reply, replysize, outlen);
 			free (sd0);
 		}
@@ -4528,7 +4539,13 @@ reply_nxdomain(struct sreply *sreply, DB *db)
 			sd0 = find_nsec3_match_closest(q->hdr->name, q->hdr->namelen, sd, db);
 			if (sd0 == NULL)
 				goto out;
-			tmplen = additional_nsec3(sd0->zone, sd0->zonelen, INTERNAL_TYPE_NSEC3, sd0, reply, replysize, outlen);
+
+			memcpy(&uniq[rruniq].name, sd0->zone, sd0->zonelen);
+			uniq[rruniq++].len = sd0->zonelen;
+
+			if (memcmp(uniq[0].name, uniq[1].name, uniq[1].len) != 0)
+				tmplen = additional_nsec3(sd0->zone, sd0->zonelen, INTERNAL_TYPE_NSEC3, sd0, reply, replysize, outlen);
+
 			free (sd0);
 			
 		}	
@@ -4550,7 +4567,13 @@ reply_nxdomain(struct sreply *sreply, DB *db)
 			sd0 = find_nsec3_wildcard_closest(q->hdr->name, q->hdr->namelen, sd, db);
 			if (sd0 == NULL)
 				goto out;
-			tmplen = additional_nsec3(sd0->zone, sd0->zonelen, INTERNAL_TYPE_NSEC3, sd0, reply, replysize, outlen);
+
+			memcpy(&uniq[rruniq].name, sd0->zone, sd0->zonelen);
+			uniq[rruniq++].len = sd0->zonelen;
+
+			if (memcmp(uniq[0].name, uniq[2].name, uniq[2].len) != 0&&
+				memcmp(uniq[1].name, uniq[2].name, uniq[2].len) != 0)
+				tmplen = additional_nsec3(sd0->zone, sd0->zonelen, INTERNAL_TYPE_NSEC3, sd0, reply, replysize, outlen);
 			free (sd0);
 			
 		}	
@@ -4793,6 +4816,14 @@ reply_noerror(struct sreply *sreply, DB *db)
 	int replysize = 512;
 	int retlen = -1;
 
+	struct {
+		char name[DNS_MAXNAME];
+		int len;
+	} uniq[3];
+		
+	int rruniq = 0;
+
+
 	if (istcp) {
 		replysize = 65535;
 	}
@@ -5005,6 +5036,10 @@ reply_noerror(struct sreply *sreply, DB *db)
 			sd0 = find_nsec3_match_qname(q->hdr->name, q->hdr->namelen, sd, db);
 			if (sd0 == NULL)
 				goto out;
+
+			memcpy(&uniq[rruniq].name, sd0->zone, sd0->zonelen);
+			uniq[rruniq++].len = sd0->zonelen;
+
 			tmplen = additional_nsec3(sd0->zone, sd0->zonelen, INTERNAL_TYPE_NSEC3, sd0, reply, replysize, outlen);
 			free (sd0);
 		}
