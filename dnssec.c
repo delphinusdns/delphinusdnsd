@@ -203,16 +203,20 @@ find_next_closer_nsec3(char *zonename, int zonelen, char *hashname)
 		return NULL;
 	}
 
-#ifdef DEBUG
+#if DEBUG
 	dolog(LOG_INFO, "resolved at %s\n", n3->domainname);
 #endif
 
 	if ((ns3p = TAILQ_PREV(n3, a, nsec3_entries)) != NULL) {
 		return (ns3p->domainname);
+	} else
+		return (n3->domainname);
+#if 0
 	} else {
 		ns3p = TAILQ_LAST(&dnp->nsec3head, a);
 		return (ns3p->domainname);
 	}
+#endif
 
 	/* NOTREACHED */
 	return (NULL);
@@ -620,6 +624,11 @@ find_next_closer(DB *db, char *name, int namelen)
 
 	p = name;
 	plen = namelen;
+
+	/* advance one label */
+	plen -= (*p + 1);
+	p = (p + (*p + 1));
+
 
 	do {
 		rs = get_record_size(db, p, plen);
