@@ -120,7 +120,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.46 2016/01/21 15:02:41 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.47 2016/01/22 11:48:49 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -1737,6 +1737,8 @@ reply_mx(struct sreply *sreply, DB *db)
 
 	}
 
+#if 0
+	/* the below makes problems with DNSSEC, to be revisited... */
 	/* write additional */
 
 	SLIST_FOREACH(cnp, &collectshead, collect_entry) {
@@ -1800,6 +1802,8 @@ reply_mx(struct sreply *sreply, DB *db)
 	}
 
 	odh->additional = htons(additional);	
+
+#endif
 
 out:
 	if (q->edns0len) {
