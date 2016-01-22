@@ -46,7 +46,8 @@ char * convert_name(char *name, int namelen);
 int nsec_comp(const void *a, const void *b);
 int nsec3_comp(const void *a, const void *b);
 int count_dots(char *name);
-struct domain * find_next_closer(DB *db, char *name, int namelen);
+struct domain * find_closest_encloser(DB *db, char *name, int namelen);
+char * find_next_closer_name(char *, int, char *, int, int *);
 char * hash_name(char *name, int len, struct nsec3param *n3p);
 char * base32hex_encode(u_char *input, int len);
 int 	base32hex_decode(u_char *, u_char *);
@@ -209,14 +210,10 @@ find_next_closer_nsec3(char *zonename, int zonelen, char *hashname)
 
 	if ((ns3p = TAILQ_PREV(n3, a, nsec3_entries)) != NULL) {
 		return (ns3p->domainname);
-	} else
-		return (n3->domainname);
-#if 0
 	} else {
 		ns3p = TAILQ_LAST(&dnp->nsec3head, a);
 		return (ns3p->domainname);
 	}
-#endif
 
 	/* NOTREACHED */
 	return (NULL);
@@ -606,11 +603,65 @@ count_dots(char *name)
 }
 
 /* 
- * FIND_NEXT_CLOSER - find the next closest record
+ * FIND_NEXT_CLOSER - find the next closer name 
+ */
+
+char *
+find_next_closer_name(char *qname, int qlen, char *closestname, int clen, int *rlen)
+{
+	static char save[DNS_MAXNAME];
+
+	int plen;
+	int qcount = 0;
+	int ccount = 0;
+	int discard;
+	
+	char *p;
+
+	p = qname;
+	plen = qlen;
+
+	do {
+		plen -= (*p + 1);
+		p = (p + (*p + 1));
+		qcount++;
+	} while (*p);
+
+	p = closestname;
+	plen = clen;
+
+	do {
+		plen -= (*p + 1);
+		p = (p + (*p + 1));
+		ccount++;
+	} while (*p);
+
+
+	discard = qcount - (ccount + 1);	
+	if (discard < 0)
+		return NULL;
+
+	p = qname;
+	plen = qlen;
+	
+	while (*p && discard > 0) {
+		plen -= (*p + 1);
+		p = (p + (*p + 1));
+		discard--;
+	}
+
+	*rlen = plen;
+	memcpy(save, p, plen);
+
+	return ((char *)&save);
+}
+
+/* 
+ * FIND_CLOSEST_ENCLOSER - find the closest encloser record
  */
 
 struct domain *
-find_next_closer(DB *db, char *name, int namelen)
+find_closest_encloser(DB *db, char *name, int namelen)
 {
 	struct domain *sd = NULL;
 
@@ -888,7 +939,7 @@ find_nsec3_match_closest(char *name, int namelen, struct domain *sd, DB *db)
 	}
 
 	/* first off find  the next closer record */
-	sd0 = find_next_closer(db, name, namelen);
+	sd0 = find_closest_encloser(db, name, namelen);
 	if (sd0 == NULL) {
 		return NULL;
 	}
@@ -981,7 +1032,7 @@ find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, DB *db)
 	}
 
 	/* first off find  the next closer record */
-	sd0 = find_next_closer(db, name, namelen);
+	sd0 = find_closest_encloser(db, name, namelen);
 	if (sd0 == NULL) {
 		return NULL;
 	}
@@ -1069,22 +1120,24 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, DB *db)
 	int rs, ret;
 	struct domain *sd0;
 	struct domain_nsec3param *n3p;
+	char *ncn;
+	int ncnlen;
 
 	if ((n3p = find_substruct(sd, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
 		return NULL;
 	}
 
 	/* first off find  the next closer record */
-	sd0 = find_next_closer(db, name, namelen);
+	sd0 = find_closest_encloser(db, name, namelen);
 	if (sd0 == NULL) {
 		return NULL;
 	}
 
-#if DEBUG
-	dolog(LOG_INFO, "next closer = %s\n", sd0->zonename);
-#endif
+	ncn = find_next_closer_name(name, namelen, sd0->zone, sd0->zonelen, &ncnlen);
+	if (ncn == NULL)
+		return NULL;
 
-	hashname = hash_name(sd0->zone, sd0->zonelen, &n3p->nsec3param);
+	hashname = hash_name(ncn, ncnlen, &n3p->nsec3param);
 	if (hashname == NULL) {
 		dolog(LOG_INFO, "unable to get hashname\n");
 		free (sd0);
