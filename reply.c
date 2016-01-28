@@ -120,7 +120,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.47 2016/01/22 11:48:49 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.48 2016/01/28 17:48:01 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -2052,6 +2052,7 @@ reply_ns(struct sreply *sreply, DB *db)
 		}
 	}
 
+#if 0
 	/* shuffle through our linked collect structure and add additional */
 
 	SLIST_FOREACH(cnp, &collectshead, collect_entry) {
@@ -2118,6 +2119,7 @@ reply_ns(struct sreply *sreply, DB *db)
 	}
 
 	odh->additional = htons(additional);	
+#endif
 
 out:
 	if (q->edns0len) {
