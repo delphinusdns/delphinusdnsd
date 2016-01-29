@@ -190,7 +190,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.33 2015/12/19 15:13:03 pjp Exp $";
+static const char rcsid[] = "$Id: main.c,v 1.34 2016/01/29 10:06:14 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1934,7 +1934,6 @@ mainloop(struct cfg *cfg)
 	int flag;
 
 	SLIST_INIT(&tcpshead);
-	collects_init();
 
 	replybuf = calloc(1, 65536);
 	if (replybuf == NULL) {

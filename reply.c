@@ -53,7 +53,6 @@ extern char *		dns_label(char *, int *);
 extern int 		lookup_type(int internal_type);
 
 struct domain 	*Lookup_zone(DB *, char *, u_int16_t, u_int16_t, int);
-void 		collects_init(void);
 u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int);
 int 		reply_a(struct sreply *, DB *);
 int		reply_nsec3(struct sreply *, DB *);
@@ -93,16 +92,6 @@ struct domain * find_nsec3_match_closest(char *name, int namelen, struct domain 
 struct domain * find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, DB *db);
 struct domain * find_nsec3_match_qname(char *name, int namelen, struct domain *sd, DB *db);
 
-SLIST_HEAD(listhead, collects) collectshead;
-
-struct collects {
-	char *name;
-	u_int16_t namelen;
-	u_int16_t type;
-	struct domain *sd;
-        SLIST_ENTRY(collects) collect_entry;
-} *cn1, *cn2, *cnp;
-
 extern int debug, verbose, dnssec;
 extern char *versionstring;
 extern uint8_t vslen;
@@ -120,7 +109,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.49 2016/01/28 17:56:34 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.50 2016/01/29 10:06:14 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -1572,13 +1561,11 @@ reply_mx(struct sreply *sreply, DB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	struct domain *sd0 = NULL;
 	int mx_count;
 	u_int16_t *plen;
 	char *name;
 	u_int16_t outlen = 0;
 	u_int16_t namelen;
-	int additional = 0;
 	int tmplen = 0;
 
 	struct answer {
@@ -1602,12 +1589,9 @@ reply_mx(struct sreply *sreply, DB *db)
 	struct domain *sd = sreply->sd1;
 	struct domain_mx *sdmx = NULL;
 	int istcp = sreply->istcp;
-	int wildcard = sreply->wildcard;
 	int replysize = 512;
 	int retlen = -1;
 	
-	struct domain *sdhave_a = NULL, *sdhave_aaaa = NULL;
-
 	if ((sdmx = find_substruct(sd, INTERNAL_TYPE_MX)) == NULL) {
 		dolog(LOG_INFO, "no such record MX!\n");
 		return -1;
@@ -1671,37 +1655,6 @@ reply_mx(struct sreply *sreply, DB *db)
 		name = sdmx->mx[mx_count].exchange;
 		namelen = sdmx->mx[mx_count].exchangelen;
 
-		sd0 = Lookup_zone(db, name, namelen, htons(DNS_TYPE_A), wildcard);
-		if (sd0 != NULL) {
-			cn1 = malloc(sizeof(struct collects));
-			if (cn1 != NULL) {
-				cn1->name = malloc(namelen);
-				if (cn1->name != NULL) {
-					memcpy(cn1->name, name, namelen);
-					cn1->namelen = namelen;
-					cn1->sd = sd0;
-					cn1->type = DNS_TYPE_A;
-
-					SLIST_INSERT_HEAD(&collectshead, cn1, collect_entry);
-				}				
-			}
-		}
-		sd0 = Lookup_zone(db, name, namelen, htons(DNS_TYPE_AAAA), wildcard);
-		if (sd0 != NULL) {
-			cn1 = malloc(sizeof(struct collects));
-			if (cn1 != NULL) {
-				cn1->name = malloc(namelen);
-				if (cn1->name != NULL) {
-					memcpy(cn1->name, name, namelen);
-					cn1->namelen = namelen;
-					cn1->sd = sd0;
-					cn1->type = DNS_TYPE_AAAA;
-
-					SLIST_INSERT_HEAD(&collectshead, cn1, collect_entry);
-				}				
-			}
-		}
-
 		outlen += (12 + 2 + sdmx->mx[mx_count].exchangelen);
 
 		/* can we afford to write another header? if no truncate */
@@ -1737,74 +1690,6 @@ reply_mx(struct sreply *sreply, DB *db)
 
 	}
 
-#if 0
-	/* the below makes problems with DNSSEC, to be revisited... */
-	/* write additional */
-
-	SLIST_FOREACH(cnp, &collectshead, collect_entry) {
-		int addcount;
-
-		switch (cnp->type) {
-		case DNS_TYPE_A:
-			tmplen = additional_a(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
-			if (addcount)
-				sdhave_a = cnp->sd;
-			additional += addcount;
-			break;
-		case DNS_TYPE_AAAA:
-			tmplen = additional_aaaa(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
-			if (addcount)
-				sdhave_aaaa = cnp->sd;
-			additional += addcount;
-			break;
-		}
-
-		if (tmplen > 0) {
-			outlen = tmplen;
-		}
-	}
-
-	if (dnssec && q->dnssecok) {
-		if (sdhave_a) {
-			int origlen = outlen;
-
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_A, sdhave_a, reply, replysize, outlen, 0);
-
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				goto out;
-			}
-
-			outlen = tmplen;
-			if (outlen > origlen)
-				additional++;
-
-		} 
-
-		if (sdhave_aaaa) {
-			int origlen = outlen;
-
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_AAAA, sdhave_aaaa, reply, replysize, outlen, 0);
-
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				goto out;
-			}
-
-			outlen = tmplen;
-			if (outlen > origlen)
-				additional++;
-		}
-	}
-
-	odh->additional = htons(additional);	
-
-#endif
-
 out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -1813,14 +1698,6 @@ out:
 		HTONS(odh->additional);
 
 		outlen = additional_opt(q, reply, replysize, outlen);
-	}
-
-	while (!SLIST_EMPTY(&collectshead)) {
-		cn1 = SLIST_FIRST(&collectshead);
-		SLIST_REMOVE_HEAD(&collectshead, collect_entry);
-		free(cn1->name);
-		free(cn1->sd);
-		free(cn1);
 	}
 
 	if (istcp) {
@@ -1857,7 +1734,6 @@ reply_ns(struct sreply *sreply, DB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	struct domain *sd0;
 	int tmplen = 0;
 	int ns_count;
 	int mod, pos;
@@ -1865,7 +1741,6 @@ reply_ns(struct sreply *sreply, DB *db)
 	char *name;
 	u_int16_t outlen = 0;
 	u_int16_t namelen;
-	int additional = 0;
 
 	struct answer {
 		char name[2];
@@ -1887,10 +1762,8 @@ reply_ns(struct sreply *sreply, DB *db)
 	struct domain *sd = sreply->sd1;
 	struct domain_ns *sdns = NULL;
 	int istcp = sreply->istcp;
-	int wildcard = sreply->wildcard;
 	int replysize = 512;
 	int retlen = -1;
-	struct domain *sdhave_a = NULL, *sdhave_aaaa = NULL;
 
 	if ((sdns = find_substruct(sd, INTERNAL_TYPE_NS)) == NULL)
 		return -1;
@@ -1971,40 +1844,6 @@ reply_ns(struct sreply *sreply, DB *db)
 
 		memcpy((char *)&answer->ns, (char *)name, namelen);
 
-		sd0 = Lookup_zone(db, name, namelen, htons(DNS_TYPE_A), wildcard);
-		if (sd0 != NULL) {
-			cn1 = malloc(sizeof(struct collects));
-			if (cn1 != NULL) {
-				cn1->name = malloc(namelen);
-				if (cn1->name != NULL) {
-					memcpy(cn1->name, name, namelen);
-					cn1->namelen = namelen;
-					cn1->sd = sd0;
-					cn1->type = DNS_TYPE_A;
-
-					SLIST_INSERT_HEAD(&collectshead, cn1, collect_entry);
-				}				
-			}
-			
-		}
-		sd0 = Lookup_zone(db, name, namelen, htons(DNS_TYPE_AAAA), wildcard);
-		if (sd0 != NULL) {
-			cn1 = malloc(sizeof(struct collects));
-			if (cn1 != NULL) {
-				cn1->name = malloc(namelen);
-				if (cn1->name != NULL) {
-					memcpy(cn1->name, name, namelen);
-					cn1->namelen = namelen;
-					cn1->sd = sd0;
-					cn1->type = DNS_TYPE_AAAA;
-
-					SLIST_INSERT_HEAD(&collectshead, cn1, collect_entry);
-
-				}				
-			}
-		
-		}
-
 		outlen += (12 + namelen);
 
 		/* compress the label if possible */
@@ -2052,75 +1891,6 @@ reply_ns(struct sreply *sreply, DB *db)
 		}
 	}
 
-#if 0
-	/* shuffle through our linked collect structure and add additional */
-
-	SLIST_FOREACH(cnp, &collectshead, collect_entry) {
-		int tmplen = 0;
-		int addcount = 0;
-
-		switch (cnp->type) {
-		case DNS_TYPE_A:
-			tmplen = additional_a(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
-			if (addcount)
-				sdhave_a = cnp->sd;
-
-			additional += addcount;
-			break;
-		case DNS_TYPE_AAAA:
-			tmplen = additional_aaaa(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
-			if (addcount)
-				sdhave_aaaa = cnp->sd;
-			additional += addcount;
-			break;
-		}
-
-		if (tmplen > 0)
-			outlen = tmplen;
-
-	}
-	
-	/* Add RRSIG */
-	if (dnssec && q->dnssecok) {
-		if (sdhave_a) {
-			int origlen = outlen;
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_A, sdhave_a, reply, replysize, outlen, 0);
-
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				goto out;
-			}
-
-			outlen = tmplen;
-
-			if (outlen > origlen)
-				additional++;
-		} 
-
-		if (sdhave_aaaa) {
-			int origlen = outlen;
-
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_AAAA, sdhave_aaaa, reply, replysize, outlen, 0);
-
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				goto out;
-			}
-
-			outlen = tmplen;
-
-			if (outlen > origlen)
-				additional++;
-		}
-	}
-
-	odh->additional = htons(additional);	
-#endif
-
 out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -2129,14 +1899,6 @@ out:
 		HTONS(odh->additional);
 
 		outlen = additional_opt(q, reply, replysize, outlen);
-	}
-
-	while (!SLIST_EMPTY(&collectshead)) {
-		cn1 = SLIST_FIRST(&collectshead);
-		SLIST_REMOVE_HEAD(&collectshead, collect_entry);
-		free(cn1->name);
-		free(cn1->sd);
-		free(cn1);
 	}
 
 	if (istcp) {
@@ -3588,13 +3350,11 @@ reply_naptr(struct sreply *sreply, DB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	struct domain *sd0;
 	int naptr_count;
 	u_int16_t *plen;
 	char *name;
 	u_int16_t outlen;
 	u_int16_t namelen;
-	int additional = 0;
 
 	struct answer {
 		char name[2];
@@ -3618,13 +3378,10 @@ reply_naptr(struct sreply *sreply, DB *db)
 	struct domain *sd = sreply->sd1;
 	struct domain_naptr *sdnaptr = NULL;
 	int istcp = sreply->istcp;
-	int wildcard = sreply->wildcard;
 	int replysize = 512;
 	int tmplen, savelen;
 	char *p;
 	int retlen = -1;
-
-	struct domain *sdhave_a = NULL, *sdhave_aaaa = NULL;
 
 	if ((sdnaptr = find_substruct(sd, INTERNAL_TYPE_NAPTR)) == NULL)
 		return -1;
@@ -3717,39 +3474,6 @@ reply_naptr(struct sreply *sreply, DB *db)
 
 		answer->rdlength = htons(outlen - (savelen + 12));
 
-
-		sd0 = Lookup_zone(db, name, namelen, htons(DNS_TYPE_A), wildcard);
-		if (sd0 != NULL) {
-			cn1 = malloc(sizeof(struct collects));
-			if (cn1 != NULL) {
-				cn1->name = malloc(namelen);
-				if (cn1->name != NULL) {
-					memcpy(cn1->name, name, namelen);
-					cn1->namelen = namelen;
-					cn1->sd = sd0;
-					cn1->type = DNS_TYPE_A;
-
-					SLIST_INSERT_HEAD(&collectshead, cn1, collect_entry);
-				}				
-			}
-		}
-		sd0 = Lookup_zone(db, name, namelen, htons(DNS_TYPE_AAAA), wildcard);
-		if (sd0 != NULL) {
-			cn1 = malloc(sizeof(struct collects));
-			if (cn1 != NULL) {
-				cn1->name = malloc(namelen);
-				if (cn1->name != NULL) {
-					memcpy(cn1->name, name, namelen);
-					cn1->namelen = namelen;
-					cn1->sd = sd0;
-					cn1->type = DNS_TYPE_AAAA;
-
-					SLIST_INSERT_HEAD(&collectshead, cn1, collect_entry);
-				}				
-			}
-		}
-
-
 		/* can we afford to write another header? if no truncate */
 		if (sdnaptr->naptr_count > naptr_count && (outlen + 12 + 4 + sdnaptr->naptr[naptr_count + 1].replacementlen + sdnaptr->naptr[naptr_count + 1].flagslen + 1 + sdnaptr->naptr[naptr_count + 1].serviceslen + 1 + sdnaptr->naptr[naptr_count + 1].regexplen + 1) > replysize) {
 			NTOHS(odh->query);
@@ -3783,69 +3507,6 @@ reply_naptr(struct sreply *sreply, DB *db)
 
 	}
 
-	/* write additional */
-	SLIST_FOREACH(cnp, &collectshead, collect_entry) {
-		int addcount;
-
-		switch (cnp->type) {
-		case DNS_TYPE_A:
-			tmplen = additional_a(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
-			if (addcount)
-				sdhave_a = cnp->sd;
-			additional += addcount;
-			break;
-		case DNS_TYPE_AAAA:
-			tmplen = additional_aaaa(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
-			if (addcount)
-				sdhave_aaaa = cnp->sd;
-			additional += addcount;
-			break;
-		}
-
-		if (tmplen > 0) {
-			outlen = tmplen;
-		}
-	}
-
-	if (dnssec && q->dnssecok) {
-		if (sdhave_a) {
-			int origlen = outlen;
-
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_A, sdhave_a, reply, replysize, outlen, 0);
-
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				goto out;
-			}
-
-			outlen = tmplen;
-			if (outlen > origlen)
-				additional++;
-
-		} 
-
-		if (sdhave_aaaa) {
-			int origlen = outlen;
-
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_AAAA, sdhave_aaaa, reply, replysize, outlen, 0);
-
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				goto out;
-			}
-
-			outlen = tmplen;
-			if (outlen > origlen)
-				additional++;
-		}
-	}
-
-	odh->additional = htons(additional);	
-
 out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -3854,14 +3515,6 @@ out:
 		HTONS(odh->additional);
 
 		outlen = additional_opt(q, reply, replysize, outlen);
-	}
-
-	while (!SLIST_EMPTY(&collectshead)) {
-		cn1 = SLIST_FIRST(&collectshead);
-		SLIST_REMOVE_HEAD(&collectshead, collect_entry);
-		free(cn1->name);
-		free(cn1->sd);
-		free(cn1);
 	}
 
 	if (istcp) {
@@ -3900,13 +3553,11 @@ reply_srv(struct sreply *sreply, DB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	struct domain *sd0;
 	int srv_count;
 	u_int16_t *plen;
 	char *name;
 	u_int16_t outlen;
 	u_int16_t namelen;
-	int additional = 0;
 
 	struct answer {
 		char name[2];
@@ -3931,12 +3582,9 @@ reply_srv(struct sreply *sreply, DB *db)
 	struct domain *sd = sreply->sd1;
 	struct domain_srv *sdsrv = NULL;
 	int istcp = sreply->istcp;
-	int wildcard = sreply->wildcard;
 	int replysize = 512;
 	int retlen = -1;
 	int tmplen;
-
-	struct domain *sdhave_a = NULL, *sdhave_aaaa = NULL;
 
 	if ((sdsrv = find_substruct(sd, INTERNAL_TYPE_SRV)) == NULL)
 		return -1;
@@ -4001,37 +3649,6 @@ reply_srv(struct sreply *sreply, DB *db)
 		name = sdsrv->srv[srv_count].target;
 		namelen = sdsrv->srv[srv_count].targetlen;
 
-		sd0 = Lookup_zone(db, name, namelen, htons(DNS_TYPE_A), wildcard);
-		if (sd0 != NULL) {
-			cn1 = malloc(sizeof(struct collects));
-			if (cn1 != NULL) {
-				cn1->name = malloc(namelen);
-				if (cn1->name != NULL) {
-					memcpy(cn1->name, name, namelen);
-					cn1->namelen = namelen;
-					cn1->sd = sd0;
-					cn1->type = DNS_TYPE_A;
-
-					SLIST_INSERT_HEAD(&collectshead, cn1, collect_entry);
-				}				
-			}
-		}
-		sd0 = Lookup_zone(db, name, namelen, htons(DNS_TYPE_AAAA), wildcard);
-		if (sd0 != NULL) {
-			cn1 = malloc(sizeof(struct collects));
-			if (cn1 != NULL) {
-				cn1->name = malloc(namelen);
-				if (cn1->name != NULL) {
-					memcpy(cn1->name, name, namelen);
-					cn1->namelen = namelen;
-					cn1->sd = sd0;
-					cn1->type = DNS_TYPE_AAAA;
-
-					SLIST_INSERT_HEAD(&collectshead, cn1, collect_entry);
-				}				
-			}
-		}
-
 		outlen += (12 + 6 + sdsrv->srv[srv_count].targetlen);
 
 		/* can we afford to write another header? if no truncate */
@@ -4065,71 +3682,6 @@ reply_srv(struct sreply *sreply, DB *db)
 
 	}
 
-#if 0
-	/* write additional */
-	SLIST_FOREACH(cnp, &collectshead, collect_entry) {
-		int addcount;
-
-		switch (cnp->type) {
-		case DNS_TYPE_A:
-			tmplen = additional_a(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
-			if (addcount)
-				sdhave_a = cnp->sd;
-			additional += addcount;
-			break;
-		case DNS_TYPE_AAAA:
-			tmplen = additional_aaaa(cnp->name, cnp->namelen, cnp->sd, reply, replysize, outlen, &addcount);
-			if (addcount)
-				sdhave_aaaa = cnp->sd;
-			additional += addcount;
-			break;
-		}
-
-		if (tmplen > 0) {
-			outlen = tmplen;
-		}
-	}
-
-	if (dnssec && q->dnssecok) {
-		if (sdhave_a) {
-			int origlen = outlen;
-
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_A, sdhave_a, reply, replysize, outlen, 0);
-
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				goto out;
-			}
-
-			outlen = tmplen;
-			if (outlen > origlen)
-				additional++;
-
-		} 
-
-		if (sdhave_aaaa) {
-			int origlen = outlen;
-
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_AAAA, sdhave_aaaa, reply, replysize, outlen, 0);
-
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				goto out;
-			}
-
-			outlen = tmplen;
-			if (outlen > origlen)
-				additional++;
-		}
-	}
-
-	odh->additional = htons(additional);	
-#endif
-
 out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -4138,14 +3690,6 @@ out:
 		HTONS(odh->additional);
 
 		outlen = additional_opt(q, reply, replysize, outlen);
-	}
-
-	while (!SLIST_EMPTY(&collectshead)) {
-		cn1 = SLIST_FIRST(&collectshead);
-		SLIST_REMOVE_HEAD(&collectshead, collect_entry);
-		free(cn1->name);
-		free(cn1->sd);
-		free(cn1);
 	}
 
 	if (istcp) {
@@ -5169,12 +4713,6 @@ Lookup_zone(DB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcard)
 	free_question(fakequestion);
 	
 	return (sd);
-}
-
-void 
-collects_init(void)
-{
-	SLIST_INIT(&collectshead);
 }
 
 int
