@@ -104,7 +104,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.35 2015/12/19 11:33:15 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.36 2016/05/26 17:28:15 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -2441,8 +2441,8 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 	if (strcasecmp(salt, "-") == 0) {
 		ssd_nsec3->nsec3.saltlen = 0;
 	} else {
-		ssd_nsec3->nsec3.saltlen = strlen(salt);
-		memcpy(&ssd_nsec3->nsec3.salt, salt, strlen(salt));
+		ssd_nsec3->nsec3.saltlen = (strlen(salt) / 2);
+		hex2bin(salt, strlen(salt), ssd_nsec3->nsec3.salt);
 	}
 
 	ssd_nsec3->nsec3.nextlen = base32hex_decode(nextname, (u_char*)&ssd_nsec3->nsec3.next);
@@ -2542,8 +2542,8 @@ fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_i
 	if (strcasecmp(salt, "-") == 0) {
 		ssd_nsec3param->nsec3param.saltlen = 0;
 	} else {
-		ssd_nsec3param->nsec3param.saltlen = strlen(salt);
-		memcpy(&ssd_nsec3param->nsec3param.salt, salt, strlen(salt));
+		ssd_nsec3param->nsec3param.saltlen = (strlen(salt) / 2);
+		hex2bin(salt, strlen(salt), ssd_nsec3param->nsec3param.salt);
 	}
 
 	ssd->flags |= DOMAIN_HAVE_NSEC3PARAM;
