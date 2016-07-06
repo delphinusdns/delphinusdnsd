@@ -1,0 +1,19 @@
+.PATH: ${.CURDIR}/..
+
+PROG=dd-convert
+
+SRCS=dd-convert.c parse.y base64.c dnssec.c log.c util.c
+
+CFLAGS= -Wall -g  -I/usr/local/include/db4 -I${.CURDIR}/..
+LDFLAGS= -Wall -g -L/usr/local/lib/db4
+LDADD= -lcrypto -lssl -ldb
+
+OBJDIR=.
+BINDIR=/usr/local/sbin
+MANDIR=/usr/local/man/man
+
+NOMAN=1
+#MAN= delphinusdnsd.8
+#MAN+= delphinusdns.conf.5
+
+.include <bsd.prog.mk>
