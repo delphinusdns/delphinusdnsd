@@ -1,17 +1,6 @@
-PROG=delphinusdnsd
+.include <bsd.own.mk>
 
-SRCS=main.c parse.y reply.c additional.c region.c log.c axfr.c filter.c ratelimit.c whitelist.c base64.c dnssec.c
+SUBDIR= delphinusdnsd
 
-#CFLAGS= -DDEBUG  -g -Wall
-CFLAGS= -Wall -g  -I/usr/local/include/db4
-LDFLAGS= -Wall -g -L/usr/local/lib/db4
-LDADD= -lcrypto -lssl -ldb
+.include <bsd.subdir.mk>
 
-OBJDIR=.
-BINDIR=/usr/local/sbin
-MANDIR=/usr/local/man/man
-
-MAN= delphinusdnsd.8
-MAN+= delphinusdns.conf.5
-
-.include <bsd.prog.mk>
