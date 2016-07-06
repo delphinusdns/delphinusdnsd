@@ -29,7 +29,7 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-int debug = 0;		/* log.c usually logs to syslog at 0 */
+int debug = 0;
 int verbose = 0;
 
 void	dolog(int pri, char *fmt, ...);
@@ -251,11 +251,8 @@ dolog(int pri, char *fmt, ...)
 	 *  then print it, otherwise 
 	 */
 
-	if (pri == LOG_DEBUG) {
-		if (debug)
-			vprintf(fmt, ap);
-	} else {
-			vprintf(fmt, ap);
+	if (pri <= LOG_ERR) {
+		vprintf(fmt, ap);
 	}	
 	
 	va_end(ap);
