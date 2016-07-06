@@ -28,7 +28,7 @@
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h" 
-#include "config.h"
+#include "ddd-config.h"
 
 /* prototypes */
 
@@ -190,7 +190,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.1 2016/07/06 05:12:50 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.2 2016/07/06 05:21:54 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop

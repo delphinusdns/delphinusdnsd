@@ -28,7 +28,7 @@
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h" 
-#include "config.h"
+#include "ddd-config.h"
 
 /* prototypes */
 
