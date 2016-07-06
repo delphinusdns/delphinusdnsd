@@ -103,7 +103,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.39 2016/07/06 14:57:19 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.40 2016/07/06 14:58:18 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -197,7 +197,7 @@ struct rrtab {
 %}
 
 
-%token VERSION OBRACE EBRACE REGION AXFRFOR RECURSEFOR
+%token VERSION OBRACE EBRACE REGION AXFRFOR 
 %token DOT COLON TEXT WOF INCLUDE ZONE COMMA CRLF 
 %token ERROR AXFRPORT LOGGING OPTIONS FILTER NOTIFY
 %token WHITELIST
@@ -1205,7 +1205,6 @@ struct tab cmdtab[] = {
 	{ "include", INCLUDE, 0 },
 	{ "logging", LOGGING, 0 },
 	{ "options", OPTIONS, 0 },
-	{ "recurse-for", RECURSEFOR, STATE_IP },
 	{ "region", REGION, STATE_IP },
 	{ "wildcard-only-for", WOF, STATE_IP },
 	{ "version", VERSION, 0 },
