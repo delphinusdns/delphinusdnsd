@@ -194,8 +194,14 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-	
+	/* three passes to "sign" our zones */
+	/* first pass, add dnskey records, on apex */
 
+	/* second pass calculate RRSIG's for every RR set */
+
+	/* third pass construct NSEC3 records */	
+
+	/* write new zone file */
 
 	exit(0);
 }

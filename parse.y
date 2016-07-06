@@ -36,7 +36,6 @@ extern int 	insert_region(char *, char *, u_int8_t);
 extern int 	insert_axfr(char *, char *);
 extern int 	insert_notifyslave(char *, char *);
 extern int 	insert_filter(char *, char *);
-extern int 	insert_recurse(char *, char *);
 extern int 	insert_whitelist(char *, char *);
 extern void 	slave_shutdown(void);
 extern int 	mybase64_encode(u_char const *, size_t, char *, size_t);
@@ -104,7 +103,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.38 2016/07/06 12:14:58 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.39 2016/07/06 14:57:19 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -232,7 +231,6 @@ cmd	:
 	| notify CRLF
 	| whitelist CRLF
 	| filter CRLF
-	| recurse CRLF 
 	| logging 
 	| comment CRLF
 	| options
@@ -973,7 +971,7 @@ whiteliststatement	:	ipcidr SEMICOLON CRLF
 					}
 	
 					if (debug)
-						printf("recurse inserted %s address\n", $1);
+						printf("whitelist inserted %s address\n", $1);
 	
 					whitelist = 1;
 
@@ -1025,7 +1023,7 @@ filterstatement	:	ipcidr SEMICOLON CRLF
 					}
 	
 					if (debug)
-						printf("recurse inserted %s address\n", $1);
+						printf("filter inserted %s address\n", $1);
 
 					free (dst);
 					free ($1);
@@ -1125,65 +1123,13 @@ axfrstatement	:	ipcidr SEMICOLON CRLF
 					}
 	
 					if (debug)
-						printf("recurse inserted %s address\n", $1);
+						printf("axfr inserted %s address\n", $1);
 
 					free (dst);
 					free ($1);
 			}
 			| comment CRLF
 			;	
-
-/* recurse-for "these hosts" { .. } */
-
-recurse:
-	RECURSEFOR recurselabel recursecontent
-	{
-		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
-                        dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
-                        return (-1);
-                }
-	}
-	;
-
-recurselabel:
-	QUOTEDSTRING
-	;
-
-recursecontent:
-			OBRACE recursestatements EBRACE
-			| OBRACE CRLF recursestatements EBRACE
-			;
-
-recursestatements 	:  		
-				recursestatements recursestatement 
-				| recursestatement 
-				;
-
-recursestatement	:	ipcidr SEMICOLON CRLF
-				{
-					char prefixlength[INET_ADDRSTRLEN];
-					char *dst;
-				
-					if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
-						return (-1);
-					}
-
-#if 0
-					if (insert_recurse(dst, prefixlength) < 0) {
-						dolog(LOG_ERR, "insert_recurse, line %d\n", file->lineno);
-						return (-1);
-					}
-	
-					if (debug)
-						printf("recurse inserted %s address\n", $1);
-#endif
-
-					free (dst);
-					free ($1);
-				}
-				| comment CRLF
-				;	
-
 
 /* region "lacnic" { .. } */
 
