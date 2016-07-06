@@ -25,9 +25,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
-#include "include.h"
-#include "dns.h"
-#include "db.h"
+#include "ddd-include.h"
+#include "ddd-dns.h"
+#include "ddd-db.h"
 
 int additional_a(char *, int, struct domain *, char *, int, int, int *);
 int additional_aaaa(char *, int, struct domain *, char *, int, int, int *);
@@ -43,7 +43,7 @@ extern void *		find_substruct(struct domain *, u_int16_t);
 
 extern int dnssec;
 
-static const char rcsid[] = "$Id: additional.c,v 1.13 2015/11/16 19:11:16 pjp Exp $";
+static const char rcsid[] = "$Id: additional.c,v 1.14 2016/07/06 05:12:50 pjp Exp $";
 
 
 /*

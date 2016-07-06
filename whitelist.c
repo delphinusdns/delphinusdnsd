@@ -30,9 +30,9 @@
  * this file is based on filter.c 
  */
 
-#include "include.h"
-#include "dns.h"
-#include "db.h"
+#include "ddd-include.h"
+#include "ddd-dns.h"
+#include "ddd-db.h"
 
 int	find_whitelist(struct sockaddr_storage *, int);
 void	init_whitelist(void);
@@ -58,7 +58,7 @@ static struct whitelistentry {
 } *wln2, *wlnp;
 
 
-static const char rcsid[] = "$Id: whitelist.c,v 1.2 2015/06/20 15:58:41 pjp Exp $";
+static const char rcsid[] = "$Id: whitelist.c,v 1.3 2016/07/06 05:12:51 pjp Exp $";
 
 /*
  * INIT_FILTER - initialize the whitelist singly linked list

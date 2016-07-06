@@ -25,9 +25,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
-#include "include.h"
-#include "dns.h"
-#include "db.h"
+#include "ddd-include.h"
+#include "ddd-dns.h"
+#include "ddd-db.h"
 
 int	find_filter(struct sockaddr_storage *, int);
 void	init_filter(void);
@@ -51,7 +51,7 @@ static struct filterentry {
 } *fn2, *fnp;
 
 
-static const char rcsid[] = "$Id: filter.c,v 1.2 2015/06/20 15:58:41 pjp Exp $";
+static const char rcsid[] = "$Id: filter.c,v 1.3 2016/07/06 05:12:50 pjp Exp $";
 
 /*
  * INIT_FILTER - initialize the filter singly linked list

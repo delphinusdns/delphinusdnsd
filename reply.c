@@ -25,9 +25,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
-#include "include.h"
-#include "dns.h"
-#include "db.h"
+#include "ddd-include.h"
+#include "ddd-dns.h"
+#include "ddd-db.h"
 
 
 /* prototypes */
@@ -109,7 +109,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.50 2016/01/29 10:06:14 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.51 2016/07/06 05:12:51 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)

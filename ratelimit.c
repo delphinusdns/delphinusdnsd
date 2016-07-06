@@ -25,9 +25,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
-#include "include.h"
-#include "dns.h"
-#include "db.h"
+#include "ddd-include.h"
+#include "ddd-dns.h"
+#include "ddd-db.h"
 
 void 			add_rrlimit(int, u_int16_t *, int, char *);
 int 			check_rrlimit(int, u_int16_t *, int, char *);

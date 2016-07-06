@@ -21,9 +21,9 @@
  */
 
 %{
-#include "include.h"
-#include "dns.h"
-#include "db.h"
+#include "ddd-include.h"
+#include "ddd-dns.h"
+#include "ddd-db.h"
 
 
 extern int	base32hex_decode(u_char *, u_char *);
@@ -104,7 +104,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.36 2016/05/26 17:28:15 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.37 2016/07/06 05:12:50 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;

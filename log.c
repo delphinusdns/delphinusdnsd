@@ -26,9 +26,9 @@
  * 
  */
 
-#include "include.h"
-#include "dns.h"
-#include "db.h"
+#include "ddd-include.h"
+#include "ddd-dns.h"
+#include "ddd-db.h"
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>

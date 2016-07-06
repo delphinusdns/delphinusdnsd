@@ -1,0 +1,21 @@
+.PATH:    ${.CURDIR}/..
+
+PROG=delphinusdnsd
+
+SRCS=delphinusdnsd.c parse.y reply.c additional.c region.c log.c axfr.c filter.c ratelimit.c whitelist.c base64.c dnssec.c util.c
+
+#CFLAGS= -DDEBUG  -g -Wall
+CFLAGS= -Wall -g  -I/usr/local/include/db4
+CFLAGS+= -I${.CURDIR}/.. 
+LDFLAGS= -Wall -g -L/usr/local/lib/db4
+LDADD= -lcrypto -lssl -ldb
+LDLIBS= 
+
+OBJDIR=.
+BINDIR=/usr/local/sbin
+MANDIR=/usr/local/man/man
+
+MAN= delphinusdnsd.8
+MAN+= delphinusdns.conf.5
+
+.include <bsd.prog.mk>

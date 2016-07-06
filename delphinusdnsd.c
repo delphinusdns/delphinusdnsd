@@ -25,9 +25,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
-#include "include.h"
-#include "dns.h"
-#include "db.h" 
+#include "ddd-include.h"
+#include "ddd-dns.h"
+#include "ddd-db.h" 
 #include "config.h"
 
 /* prototypes */
@@ -78,20 +78,21 @@ extern int	reply_nsec3(struct sreply *, DB *);
 extern int	reply_nsec3param(struct sreply *);
 extern int 	remotelog(int, char *, ...);
 extern char 	*rrlimit_setup(int);
+extern char 	*dns_label(char *, int *);
+extern void 	slave_shutdown(void);
+extern int 	get_record_size(DB *, char *, int);
+extern void *	find_substruct(struct domain *, u_int16_t);
 
 struct question		*build_fake_question(char *, int, u_int16_t);
 struct question		*build_question(char *, int, int);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct domain *, struct domain *, u_int8_t, int, int, struct recurses *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
 u_int16_t		check_qtype(struct domain *, u_int16_t, int, int *);
-char 			*dns_label(char *, int *);
 int			free_question(struct question *);
 char 			*get_dns_type(int dnstype);
 struct domain * 	get_soa(DB *, struct question *);
 int			lookup_type(int);
 struct domain * 	lookup_zone(DB *, struct question *, int *, int *, char *);
-int 			get_record_size(DB *, char *, int);
-void *			find_substruct(struct domain *, u_int16_t);
 void			mainloop(struct cfg *);
 void 			master_reload(int);
 void 			master_shutdown(int);
@@ -99,7 +100,6 @@ int 			memcasecmp(u_char *, u_char *, int);
 void 			recurseheader(struct srecurseheader *, int, struct sockaddr_storage *, struct sockaddr_storage *, int);
 void 			setup_master(DB *, DB_ENV *, char **);
 void 			slave_signal(int);
-void 			slave_shutdown(void);
 
 /* aliases */
 
@@ -148,7 +148,6 @@ extern int ratelimit;
 extern int ratelimit_packets_per_second;
 extern int whitelist;
 
-static int *ptr = NULL;
 static int reload = 0;
 static int mshutdown = 0;
 static int msig;
@@ -171,6 +170,7 @@ char *bind_list[255];
 char *interface_list[255];
 char *versionstring = "delphinusdnsd -current";
 uint8_t vslen = 22;
+int *ptr = NULL;
 
 /* singly linked list for tcp operations */
 SLIST_HEAD(listhead, tcps) tcpshead;
@@ -190,7 +190,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: main.c,v 1.35 2016/01/29 10:39:46 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.1 2016/07/06 05:12:50 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1194,85 +1194,6 @@ free_question(struct question *q)
 	free(q);
 	
 	return 0;
-}
-
-/*
- * DNS_LABEL - build a DNS NAME (with labels) from a canonical name
- * 
- */
-
-char *
-dns_label(char *name, int *returnlen)
-{
-	int len, newlen = 0;
-	int i, lc = 0;			/* lc = label count */
-
-	char *dnslabel, *p;
-	char *labels[255];
-	char **pl;
-	char tname[DNS_MAXNAME + 1];	/* 255 bytes  + 1*/
-	char *pt = &tname[0];
-
-
-	if (name == NULL) 
-		return NULL;
-
-#if __linux__
-	strncpy(tname, name, sizeof(tname));
-	tname[sizeof(tname) - 1] = 0;
-#else
-	strlcpy(tname, name, sizeof(tname));
-#endif
-
-	len = strlen(tname);
-	if (tname[len - 1] == '.') 
-		tname[len - 1] = '\0';
-
-	for (pl=labels;pl<&labels[254]&&(*pl=strsep(&pt,"."))!= NULL;pl++,lc++)
-		newlen += strlen(*pl);
-
-	newlen += lc;			/* add label count to length */
-
-
-	/* make the buffer space, add 1 for trailing NULL */
-	if ((dnslabel = malloc(newlen + 1)) == NULL) {
-		return NULL;
-	}
-
-	*returnlen = newlen + 1;
-	dnslabel[newlen] = '\0';	/* trailing NULL */
-
-	for (i = 0, p = dnslabel; i < lc; i++) {
-		len = strlen(labels[i]);
-		*p++ = len;
-#if __linux__
-		/* XXX */
-		strncpy(p, labels[i], newlen - (p - dnslabel) + 1);
-		p[newlen - (p - dnslabel)] = 0;
-#else
-		strlcpy(p, labels[i], newlen - (p - dnslabel) + 1);
-#endif
-		p += len;
-	}
-
-	/*
-	 * XXX hack to make all DNS names lower case, we only preserve
-	 * case on compressed answers..
-	 */
-
-	for (i = 0, p = dnslabel; i < *returnlen; i++) {
-		int c;
-		
-		c = *p;
-		if (isalpha(c))
-			*p = tolower(c);
-		p++;
-	}
-
-	if (debug)
-		dolog(LOG_DEBUG, "converting name= %s\n", name);
-
-	return dnslabel;
 }
 
 /*
@@ -3551,21 +3472,6 @@ master_shutdown(int sig)
 	mshutdown = 1;
 }
 
-/*
- * slave_shutdown - a slave wishes to shutdown, enter its pid into the 
- *			shutdown shared memory and return.
- */
-
-void
-slave_shutdown(void)
-{
-	pid_t pid;
-
-	pid = getpid();
-
-	*ptr = pid;
-}
-
 /* 
  * slave_signal - a slave got a signal, call slave_shutdown and exit..
  */
@@ -3791,136 +3697,6 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 	}
 
 	return (returnval);
-}
-
-int 
-get_record_size(DB *db, char *converted_name, int converted_namelen)
-{
-	struct domain *sdomain;
-	DBT key, data;
-	int ret;
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-
-	key.data = (char *)converted_name;
-	key.size = converted_namelen;
-
-	data.data = NULL;
-	data.size = sizeof(struct domain);
-
-	if ((ret = db->get(db, NULL, &key, &data, 0)) == 0) {
-		sdomain = (struct domain *)data.data;
-		return (sdomain->len);
-	} else {
-		if (debug && ret != DB_NOTFOUND )
-			dolog(LOG_INFO, "db->get: %s\n", strerror(errno));
-	}
-
-	return sizeof(struct domain);
-}
-
-/* find a substruct in struct domain, first match wins */
-
-void *
-find_substruct(struct domain *ssd, u_int16_t type)
-{
-	struct domain_generic *sdg = NULL;
-	void *ptr = NULL;
-	void *vssd = (void *)ssd;
-
-	switch (type) {
-	case INTERNAL_TYPE_SOA:
-		if (! (ssd->flags & DOMAIN_HAVE_SOA))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_A:
-		if (! (ssd->flags & DOMAIN_HAVE_A))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_AAAA:
-		if (! (ssd->flags & DOMAIN_HAVE_AAAA))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_MX:
-		if (! (ssd->flags & DOMAIN_HAVE_MX))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NS:
-		if (! (ssd->flags & DOMAIN_HAVE_NS))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_CNAME:
-		if (! (ssd->flags & DOMAIN_HAVE_CNAME))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_PTR:
-		if (! (ssd->flags & DOMAIN_HAVE_PTR))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_TXT:
-		if (! (ssd->flags & DOMAIN_HAVE_TXT))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_SPF:
-		if (! (ssd->flags & DOMAIN_HAVE_SPF))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_SRV:
-		if (! (ssd->flags & DOMAIN_HAVE_SRV))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_TLSA:
-		if (! (ssd->flags & DOMAIN_HAVE_TLSA))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_SSHFP:
-		if (! (ssd->flags & DOMAIN_HAVE_SSHFP))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NAPTR:
-		if (! (ssd->flags & DOMAIN_HAVE_NAPTR))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_DNSKEY:
-		if (! (ssd->flags & DOMAIN_HAVE_DNSKEY))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_DS:
-		if (! (ssd->flags & DOMAIN_HAVE_DS))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NSEC3PARAM:
-		if (! (ssd->flags & DOMAIN_HAVE_NSEC3PARAM))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NSEC3:
-		if (! (ssd->flags & DOMAIN_HAVE_NSEC3))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NSEC:
-		if (! (ssd->flags & DOMAIN_HAVE_NSEC))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_RRSIG:
-		if (! (ssd->flags & DOMAIN_HAVE_RRSIG))
-			return NULL;
-		break;
-	default:
-		return NULL;
-		break;
-	}
-	
-	for (ptr = (void *)(vssd + sizeof(struct domain)); \
-		ptr <= (void *)(vssd + ssd->len); \
-		ptr += sdg->len) {
-		sdg = (struct domain_generic *)ptr;
-		if (type == sdg->type) {
-			return (ptr);
-		}
-	}
-
-	return NULL;
 }
 
 int

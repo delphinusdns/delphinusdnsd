@@ -25,9 +25,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
-#include "include.h"
-#include "dns.h"
-#include "db.h"
+#include "ddd-include.h"
+#include "ddd-dns.h"
+#include "ddd-db.h"
 
 u_int8_t 	find_region(struct sockaddr_storage *, int);
 in_addr_t 	getmask(int);
@@ -48,7 +48,7 @@ static struct entry {
 } *n2, *np;
 
 
-static const char rcsid[] = "$Id: region.c,v 1.2 2015/06/20 15:58:41 pjp Exp $";
+static const char rcsid[] = "$Id: region.c,v 1.3 2016/07/06 05:12:51 pjp Exp $";
 
 /*
  * INIT_REGION - initialize the region singly linked list

@@ -25,9 +25,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
-#include "include.h"
-#include "dns.h"
-#include "db.h"
+#include "ddd-include.h"
+#include "ddd-dns.h"
+#include "ddd-db.h"
 
 
 void	axfrloop(int *, int, char **, DB *);
@@ -100,7 +100,7 @@ static struct notifyentry {
 } *notn2, *notnp;
 
 
-static const char rcsid[] = "$Id: axfr.c,v 1.7 2015/12/19 15:29:02 pjp Exp $";
+static const char rcsid[] = "$Id: axfr.c,v 1.8 2016/07/06 05:12:50 pjp Exp $";
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list
