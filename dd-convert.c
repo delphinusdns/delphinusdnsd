@@ -29,8 +29,11 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-int debug = 0;
+int debug = 0;		/* log.c usually logs to syslog at 0 */
 int verbose = 0;
+
+void	dolog(int pri, char *fmt, ...);
+
 
 /* glue */
 int insert_axfr(char *, char *);
@@ -60,11 +63,15 @@ int
 main(int argc, char *argv[])
 {
 	int ch;
+	int ret;
+
+	key_t key;
 
 	char *zonefile = NULL;
 	char *zonename = NULL;
 	
 	DB *db;
+	DB_ENV *dbenv;
 
 
 	while ((ch = getopt(argc, argv, "a:B:I:i:Kk:n:o:s:t:Zz:")) != -1) {
@@ -86,6 +93,7 @@ main(int argc, char *argv[])
 
 		case 'i':
 			/* inputfile */
+			zonefile = optarg;
 
 			break;
 
@@ -102,6 +110,7 @@ main(int argc, char *argv[])
 		case 'n':
 
 			/* zone name */
+			zonename = optarg;
 
 			break;
 
@@ -132,46 +141,123 @@ main(int argc, char *argv[])
 	
 	}
 
-	if (zonefile == NULL && zonename == NULL) {
+	if (zonefile == NULL || zonename == NULL) {
 		fprintf(stderr, "must provide a zonefile and a zonename!\n");
 		exit(1);
 	}
 
 	printf("zonefile is %s\n", zonefile);
+
+	/* open the database(s) */
+	if ((ret = db_env_create(&dbenv, 0)) != 0) {
+		fprintf(stderr, "db_env_create: %s\n", db_strerror(ret));
+		exit(1);
+	}
+
+	key = ftok("/usr/local/sbin/dd-convert", 1);
+	if (key == (key_t)-1) {
+		perror("ftok");
+		exit(1);
+	}
+
+	if ((ret = dbenv->set_shm_key(dbenv, key)) != 0) {
+		fprintf(stderr, "dbenv->set_shm_key failed\n");
+		exit(1);
+	}
+
+	if (mkdir("tmp/", 0700) < 0) {
+		perror("mkdir");
+	}
+
+	if ((ret = dbenv->open(dbenv, "tmp", DB_CREATE | \
+		DB_INIT_LOCK | DB_INIT_MPOOL | DB_SYSTEM_MEM, \
+		S_IRUSR | S_IWUSR)) != 0) {
+		fprintf(stderr, "dbenv->open: %s\n", db_strerror(ret));
+		exit(1);
+	}
+
+	if (db_create((DB **)&db, (DB_ENV*)dbenv, 0) != 0) {
+		perror("db_create");
+		exit(1);
+	}
+
+	if (db->open(db, NULL, "ddc.db", NULL, DB_BTREE, DB_CREATE, 0600) != 0) {
+		perror("db->open");
+		exit(1);
+	}
+
+	/* now we start reading our configfile */
 		
+	
+	if (parse_file(db, zonefile) < 0) {
+		dolog(LOG_INFO, "parsing config file failed\n");
+		exit(1);
+	}
+
+	
 
 
-
+	exit(0);
 }
 
 
 int
 insert_axfr(char *address, char *prefixlen)
 {
-	return -1;
+	return 0;
 }
 
 int
 insert_region(char *address, char *prefixlen)
 {
-	return -1;
+	return 0;
 }
 
 int
 insert_filter(char *address, char *prefixlen)
 {
-	return -1;
+	return 0;
 }
 
 int
 insert_whitelist(char *address, char *prefixlen)
 {
-	return -1;
+	return 0;
 }
 
 int
 insert_notifyslave(char *address, char *prefixlen)
 {
-	return -1;
+	return 0;
 }
 
+
+
+
+/*
+ * dolog() - is a wrapper to syslog and printf depending on debug flag
+ *
+ */
+
+void 
+dolog(int pri, char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+
+	/*
+	 * if the message is a debug message and verbose (-v) is set
+	 *  then print it, otherwise 
+	 */
+
+	if (pri == LOG_DEBUG) {
+		if (debug)
+			vprintf(fmt, ap);
+	} else {
+			vprintf(fmt, ap);
+	}	
+	
+	va_end(ap);
+
+}

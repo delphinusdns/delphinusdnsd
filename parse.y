@@ -104,7 +104,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.37 2016/07/06 05:12:50 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.38 2016/07/06 12:14:58 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -562,7 +562,7 @@ zonestatement:
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING CRLF
 		{
 			if (! dnssec) {
-				dolog(LOG_INFO, "WARNING DNSSEC DNSKEY/DS/NSEC3PARAM RR but no dnssec enabled!\n");
+				dolog(LOG_INFO, "WARNING DNSSEC DNSKEY/DS/NSEC3PARAM/TLSA RR but no dnssec enabled!\n");
 			}
 
 			if (strcasecmp($3, "dnskey") == 0) {
