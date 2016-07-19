@@ -33,6 +33,9 @@ int debug = 0;
 int verbose = 0;
 
 void	dolog(int pri, char *fmt, ...);
+int	add_dnskey(DB *, char *, char *);
+char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *);
+void 	dump_db(DB *);
 
 
 /* glue */
@@ -59,6 +62,10 @@ int icount = 0;
 int vslen = 0;
 char *versionstring = NULL;
 
+/* externs */
+
+extern int fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
+
 int
 main(int argc, char *argv[])
 {
@@ -69,6 +76,9 @@ main(int argc, char *argv[])
 
 	char *zonefile = NULL;
 	char *zonename = NULL;
+	
+	char *ksk_key = NULL;
+	char *zsk_key = NULL;
 	
 	DB *db;
 	DB_ENV *dbenv;
@@ -104,6 +114,7 @@ main(int argc, char *argv[])
 
 		case 'k':
 			/* use KSK key */
+			ksk_key = optarg;
 
 			break;
 
@@ -127,13 +138,13 @@ main(int argc, char *argv[])
 			break;
 
 		case 'Z':
-
 			/* create ZSK */
 
 			break;
 
 		case 'z':
 			/* use ZSK */
+			zsk_key = optarg;
 
 			break;
 
@@ -196,6 +207,16 @@ main(int argc, char *argv[])
 
 	/* three passes to "sign" our zones */
 	/* first pass, add dnskey records, on apex */
+
+	if (zsk_key == NULL && ksk_key == NULL) {
+		dolog(LOG_INFO, "no ksk or zsk keys specified\n");
+		exit(1);
+	}
+
+	if (add_dnskey(db, zsk_key, ksk_key) < 0) {
+		dolog(LOG_INFO, "add_dnskey failed\n");
+		exit(1);
+	}
 
 	/* second pass calculate RRSIG's for every RR set */
 
@@ -262,5 +283,152 @@ dolog(int pri, char *fmt, ...)
 	}	
 	
 	va_end(ap);
+
+}
+
+int	
+add_dnskey(DB *db, char *zsk_key, char *ksk_key)
+{
+	char key[4096];
+	char buf[512];
+	char *zone;
+	int fd;
+	uint32_t ttl;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
+
+	/* first the zsk */
+	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
+	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
+		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+		return -1;
+	}
+
+	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&key)) == NULL) {
+		dolog(LOG_INFO, "parse %s\n", buf);
+		close (fd);
+		return -1;
+	}
+
+	close(fd);
+	
+	if (fill_dnskey(zone, "dnskey", ttl, flags, protocol, algorithm, key) < 0) {
+		return -1;
+	}
+
+	/* now the ksk */
+	snprintf(buf, sizeof(buf), "%s.key", ksk_key);
+	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
+		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+		return -1;
+	}
+
+	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&key)) == NULL) {
+		dolog(LOG_INFO, "parse %s\n", buf);
+		close (fd);
+		return -1;
+	}
+
+	close(fd);
+	
+	if (fill_dnskey(zone, "dnskey", ttl, flags, protocol, algorithm, key) < 0) {
+		return -1;
+	}
+
+	dump_db(db);
+
+
+	return 0;
+}
+
+char *
+parse_keyfile(int fd, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t *algorithm, char *key)
+{
+	static char retbuf[256];
+	char buf[8192];
+	char *p, *q;
+	FILE *f;
+
+	if ((f = fdopen(fd, "r")) == NULL)
+		return NULL;
+	
+	while (fgets(buf, sizeof(buf), f) != NULL) {
+		if (buf[0] == ';')
+			continue;
+	}
+
+	/* name */
+	p = &buf[0];
+	q = strchr(p, ' ');
+	if (q == NULL) {
+		return NULL;
+	}
+	
+	*q++ = '\0';
+	
+	strlcpy(retbuf, p, sizeof(retbuf));
+	/* ttl */
+	p = q;
+	
+	q = strchr(p, ' ');
+	if (q == NULL)
+		return NULL;
+
+	*q++ = '\0';
+	*ttl = atoi(p);
+	/* IN/DNSKEY/ flags */
+	p = q;
+	q = strchr(p, ' ');
+	if (q == NULL)
+		return NULL;
+	q++;
+	p = q;
+	q = strchr(p, ' ');
+	if (q == NULL)
+		return NULL;
+	q++;
+	p = q;
+	q = strchr(p, ' ');
+	if (q == NULL) 
+		return NULL;
+	*q++ = '\0';
+	*flags = atoi(p);
+	/* protocol */
+	p = q;
+	q = strchr(p, ' ');
+	if (q == NULL)
+		return NULL;
+	*q++ = '\0';
+	*protocol = atoi(p);
+	/* algorithm */
+	p = q;
+	q = strchr(p, ' ');
+	if (q == NULL)
+		return NULL;
+	*q++ = '\0';
+	*algorithm = atoi(p);
+	/* key */
+	p = q;
+
+	q = key;
+	while (*p) {
+		if (*p == ' ' || *p == '\n' || *p == '\r') {
+			p++;
+			continue;
+		}
+
+		*q++ = *p++;
+	}
+	*q = '\0';
+			
+	return (&retbuf[0]);	
+}
+
+void
+dump_db(DB *db)
+{
+	
+
 
 }

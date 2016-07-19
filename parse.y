@@ -103,7 +103,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.40 2016/07/06 14:58:18 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.41 2016/07/19 08:44:59 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -223,15 +223,15 @@ cmd_list:
 
 cmd	:  	
 	version 
-	| axfrport 
-	| include 
-	| zone 
+	| axfrport
+	| include
+	| zone
 	| region CRLF
 	| axfr CRLF
 	| notify CRLF
 	| whitelist CRLF
 	| filter CRLF
-	| logging 
+	| logging
 	| comment CRLF
 	| options
 	;
@@ -321,10 +321,12 @@ quotedfilename:
 zone:
 	ZONE zonelabel zonecontent
 	{
+#if 0
 		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
                         dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
                         return (-1);
                 }
+#endif
 	}
 	;
 
