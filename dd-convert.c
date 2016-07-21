@@ -615,6 +615,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 	fprintf(f, "; Activate: %s (%s)\n", buf, bin);
 
 	/* bogus */
+	/* Thanks for pointing out it's bogus, could have written RFC 3110! */
 	p = &bin[0];
 	binlen = BN_bn2bin(rsa->e, (char *)&bin[1]);
 	len = binlen;
