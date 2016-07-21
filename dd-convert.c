@@ -478,6 +478,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 	char *p;
 	time_t now;
 	struct tm *tm;
+	mode_t savemask;
 
 	if ((rsa = RSA_new()) == NULL) {
 		dolog(LOG_INFO, "RSA_new: %s\n", strerror(errno));
@@ -534,6 +535,8 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 		
 	snprintf(buf, sizeof(buf), "%s.private", retval);
 
+	savemask = umask(077);
+
 	f = fopen(buf, "w+");
 	if (f == NULL) {
 		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
@@ -589,9 +592,11 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 	BN_free(e);
 
 	/* now for the .key */
+
 	
 	snprintf(buf, sizeof(buf), "%s.key", retval);
 
+	umask(savemask);
 	f = fopen(buf, "w+");
 	if (f == NULL) {
 		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
