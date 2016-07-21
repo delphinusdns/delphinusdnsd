@@ -38,7 +38,7 @@ int verbose = 0;
 void	dolog(int pri, char *fmt, ...);
 int	add_dnskey(DB *, char *, char *);
 char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *);
-char *	create_key(char *, int, int);
+char *	create_key(char *, int, int, int, int);
 void 	dump_db(DB *);
 char * alg_to_name(int);
 
@@ -83,6 +83,7 @@ main(int argc, char *argv[])
 {
 	int ch;
 	int ret, bits = 2048;
+	int ttl = 86400;
 	int create_zsk = 0;
 	int create_ksk = 0;
 	int algorithm = ALGORITHM_RSASHA256;
@@ -151,6 +152,7 @@ main(int argc, char *argv[])
 		case 't':
 
 			/* ttl of the zone */
+			ttl = atoi(optarg);
 
 			break;
 
@@ -175,9 +177,9 @@ main(int argc, char *argv[])
 	}
 
 	if (create_ksk)
-		ksk_key = create_key(zonename, algorithm, bits);
+		ksk_key = create_key(zonename, ttl, 257, algorithm, bits);
 	if (create_zsk)
-		zsk_key = create_key(zonename, algorithm, bits);
+		zsk_key = create_key(zonename, ttl, 256, algorithm, bits);
 
 	if (ksk_key == NULL || zsk_key == NULL) {
 		dolog(LOG_INFO, "must specify both a ksk and a zsk key! or -z -k\n");
@@ -461,7 +463,7 @@ dump_db(DB *db)
 }
 
 char *	
-create_key(char *zonename, int algorithm, int bits)
+create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 {
 	FILE *f;
         RSA *rsa;
@@ -473,6 +475,7 @@ create_key(char *zonename, int algorithm, int bits)
 	int i, binlen, len;
 	uint32_t pid;
 	char *retval;
+	char *p;
 	time_t now;
 	struct tm *tm;
 
@@ -583,8 +586,42 @@ create_key(char *zonename, int algorithm, int bits)
 	fprintf(f, "Activate: %s\n", buf);
 	
 	fclose(f);
-	
 	BN_free(e);
+
+	/* now for the .key */
+	
+	snprintf(buf, sizeof(buf), "%s.key", retval);
+
+	f = fopen(buf, "w+");
+	if (f == NULL) {
+		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
+		snprintf(buf, sizeof(buf), "%s.private", retval);
+		unlink(buf);
+		RSA_free(rsa);
+		return NULL;
+	}
+	
+	fprintf(f, "; This is a %s key, keyid %d, for %s%s\n", (flags == 257) ? "key-signing" : "zone-signing", pid, zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".");
+
+	strftime(buf, sizeof(buf), "%Y%m%d%H%M%S", tm);
+	strftime(bin, sizeof(bin), "%c", tm);
+	fprintf(f, "; Created: %s (%s)\n", buf, bin);
+	fprintf(f, "; Publish: %s (%s)\n", buf, bin);
+	fprintf(f, "; Activate: %s (%s)\n", buf, bin);
+
+	/* bogus */
+	p = &bin[0];
+	binlen = BN_bn2bin(rsa->e, (char *)&bin[1]);
+	len = binlen;
+	*p = len;
+	len++;
+	binlen = BN_bn2bin(rsa->n, (char *)&bin[len]);
+	len += binlen;
+	binlen = len;
+	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	fprintf(f, "%s%s %d IN DNSKEY %d 3 %d %s\n", zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".", ttl, flags, algorithm, b64);
+
+	fclose(f);
 	RSA_free(rsa);
 	
 	return (retval);
