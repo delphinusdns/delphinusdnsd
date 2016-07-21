@@ -29,14 +29,24 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
+#include <openssl/bn.h>
+#include <openssl/rsa.h>
+
 int debug = 0;
 int verbose = 0;
 
 void	dolog(int pri, char *fmt, ...);
 int	add_dnskey(DB *, char *, char *);
 char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *);
+char *	create_key(char *, int, int);
 void 	dump_db(DB *);
+char * alg_to_name(int);
 
+#define ALGORITHM_RSASHA1	5		/* rfc 4034 , mandatory */
+#define ALGORITHM_RSASHA256	8		/* rfc 5702 */
+#define ALGORITHM_RSASHA512	10		/* rfc 5702 */
+
+#define RSA_F5			0x100000001
 
 /* glue */
 int insert_axfr(char *, char *);
@@ -65,12 +75,17 @@ char *versionstring = NULL;
 /* externs */
 
 extern int fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
+extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
+extern int      mybase64_decode(char const *, u_char *, size_t);
 
 int
 main(int argc, char *argv[])
 {
 	int ch;
-	int ret;
+	int ret, bits = 2048;
+	int create_zsk = 0;
+	int create_ksk = 0;
+	int algorithm = ALGORITHM_RSASHA256;
 
 	key_t key;
 
@@ -94,6 +109,7 @@ main(int argc, char *argv[])
 		case 'B':
 			/* bits */
 
+			bits = atoi(optarg);
 			break;
 
 		case 'I':
@@ -109,6 +125,7 @@ main(int argc, char *argv[])
 
 		case 'K':
 			/* create KSK key */
+			create_ksk = 1;
 
 			break;
 
@@ -139,7 +156,7 @@ main(int argc, char *argv[])
 
 		case 'Z':
 			/* create ZSK */
-
+			create_zsk = 1;
 			break;
 
 		case 'z':
@@ -154,6 +171,16 @@ main(int argc, char *argv[])
 
 	if (zonefile == NULL || zonename == NULL) {
 		fprintf(stderr, "must provide a zonefile and a zonename!\n");
+		exit(1);
+	}
+
+	if (create_ksk)
+		ksk_key = create_key(zonename, algorithm, bits);
+	if (create_zsk)
+		zsk_key = create_key(zonename, algorithm, bits);
+
+	if (ksk_key == NULL || zsk_key == NULL) {
+		dolog(LOG_INFO, "must specify both a ksk and a zsk key! or -z -k\n");
 		exit(1);
 	}
 
@@ -431,4 +458,153 @@ dump_db(DB *db)
 	
 
 
+}
+
+char *	
+create_key(char *zonename, int algorithm, int bits)
+{
+	FILE *f;
+        RSA *rsa;
+        BIGNUM *e;
+        BN_GENCB cb;
+	char buf[512];
+	char bin[4096];
+	char b64[4096];
+	int i, binlen, len;
+	uint32_t pid;
+	char *retval;
+	time_t now;
+	struct tm *tm;
+
+	if ((rsa = RSA_new()) == NULL) {
+		dolog(LOG_INFO, "RSA_new: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	if ((e = BN_new()) == NULL) {
+		dolog(LOG_INFO, "BN_new: %s\n", strerror(errno));
+		RSA_free(rsa);
+		return NULL;
+	}
+
+	for (i = 0; i < 32; i++) {
+		if (RSA_F4 & (1 << i)) {
+			BN_set_bit(e, i);
+		}
+	}
+
+	BN_GENCB_set_old(&cb, NULL, NULL);
+	
+	switch (algorithm) {
+	case ALGORITHM_RSASHA1:
+		break;
+	case ALGORITHM_RSASHA256:
+		break;
+	case ALGORITHM_RSASHA512:
+		break;
+	default:
+		dolog(LOG_INFO, "invalid key\n");
+		return NULL;
+	}
+
+	if (RSA_generate_key_ex(rsa, bits, e, &cb) == 0) {
+		dolog(LOG_INFO, "RSA_generate_key_ex: %s\n", strerror(errno));
+		BN_free(e);
+		RSA_free(rsa);
+		return NULL;
+	}
+
+
+	pid = (arc4random() >> 16);
+	
+	snprintf(buf, sizeof(buf), "K%s%s+%03d+%d", zonename,
+		(zonename[strlen(zonename) - 1] == '.') ? "" : ".",
+		algorithm, pid);
+
+	retval = strdup(buf);
+	if (retval == NULL) {
+		dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+		RSA_free(rsa);
+		BN_free(e);
+		return NULL;
+	}
+		
+	snprintf(buf, sizeof(buf), "%s.private", retval);
+
+	f = fopen(buf, "w+");
+	if (f == NULL) {
+		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
+		RSA_free(rsa);
+		BN_free(e);
+		return NULL;
+	}
+
+	fprintf(f, "Private-key-format: v1.3\n");
+	fprintf(f, "Algorithm: %d (%s)\n", algorithm, alg_to_name(algorithm));
+	/* modulus */
+	binlen = BN_bn2bin(rsa->n, (char *)&bin);
+	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	fprintf(f, "Modulus: %s\n", b64);
+	/* public exponent */
+	binlen = BN_bn2bin(rsa->e, (char *)&bin);
+	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	fprintf(f, "PublicExponent: %s\n", b64);
+	/* private exponent */
+	binlen = BN_bn2bin(rsa->d, (char *)&bin);
+	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	fprintf(f, "PrivateExponent: %s\n", b64);
+	/* prime1 */
+	binlen = BN_bn2bin(rsa->p, (char *)&bin);
+	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	fprintf(f, "Prime1: %s\n", b64);
+	/* prime2 */
+	binlen = BN_bn2bin(rsa->q, (char *)&bin);
+	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	fprintf(f, "Prime2: %s\n", b64);
+	/* exponent1 */
+	binlen = BN_bn2bin(rsa->dmp1, (char *)&bin);
+	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	fprintf(f, "Exponent1: %s\n", b64);
+	/* exponent2 */
+	binlen = BN_bn2bin(rsa->dmq1, (char *)&bin);
+	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	fprintf(f, "Exponent2: %s\n", b64);
+	/* coefficient */
+	binlen = BN_bn2bin(rsa->iqmp, (char *)&bin);
+	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	fprintf(f, "Coefficient: %s\n", b64);
+
+	now = time(NULL);
+	tm = gmtime(&now);
+	
+	strftime(buf, sizeof(buf), "%Y%m%d%H%M%S", tm);
+	fprintf(f, "Created: %s\n", buf);
+	fprintf(f, "Publish: %s\n", buf);
+	fprintf(f, "Activate: %s\n", buf);
+	
+	fclose(f);
+	
+	BN_free(e);
+	RSA_free(rsa);
+	
+	return (retval);
+}
+
+char *
+alg_to_name(int algorithm)
+{
+	
+	switch (algorithm) {
+	case ALGORITHM_RSASHA1:
+		return ("RSASHA");
+		break;
+	case ALGORITHM_RSASHA256:
+		return ("RSASHA256");
+		break;
+	case ALGORITHM_RSASHA512:
+		return ("RSASHA512");
+		break;
+	}
+
+	return (NULL);
 }
