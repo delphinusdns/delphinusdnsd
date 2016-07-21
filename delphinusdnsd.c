@@ -34,6 +34,7 @@
 
 extern void 	add_rrlimit(int, u_int16_t *, int, char *);
 extern void 	axfrloop(int *, int, char **, DB *);
+extern struct question	*build_fake_question(char *, int, u_int16_t);
 extern int 	check_rrlimit(int, u_int16_t *, int, char *);
 extern u_int16_t check_qtype(struct domain *, u_int16_t, int, int *);
 extern void 	collects_init(void);
@@ -85,7 +86,6 @@ extern void 	slave_shutdown(void);
 extern int 	get_record_size(DB *, char *, int);
 extern void *	find_substruct(struct domain *, u_int16_t);
 
-struct question		*build_fake_question(char *, int, u_int16_t);
 struct question		*build_question(char *, int, int);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct domain *, struct domain *, u_int8_t, int, int, struct recurses *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
@@ -190,7 +190,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.3 2016/07/21 18:38:44 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.4 2016/07/21 18:43:54 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1501,46 +1501,6 @@ memcasecmp(u_char *b1, u_char *b2, int len)
 }
 	
 
-/*
- * BUILD_FAKE_QUESTION - fill the fake question structure with the DNS query.
- */
-
-struct question *
-build_fake_question(char *name, int namelen, u_int16_t type)
-{
-	struct question *q;
-
-	q = (void *)calloc(1, sizeof(struct question));
-	if (q == NULL) {
-		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-		return NULL;
-	}
-
-	q->hdr = (void *)calloc(1, sizeof(struct dns_question_hdr));
-	if (q->hdr == NULL) {
-		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-		free(q);
-		return NULL;
-	}
-	q->hdr->namelen = namelen;
-	q->hdr->name = (void *) calloc(1, q->hdr->namelen);
-	if (q->hdr->name == NULL) {
-		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-		free(q->hdr);
-		free(q);
-		return NULL;
-	}
-	q->converted_name = NULL;
-
-	/* fill our name into the dns header struct */
-	
-	memcpy(q->hdr->name, name, q->hdr->namelen);
-	
-	q->hdr->qtype = type;
-	q->hdr->qclass = htons(DNS_CLASS_IN);
-
-	return (q);
-}
 
 /*
  * GET_SOA - get authoritative soa for a particular domain

@@ -39,6 +39,7 @@ int get_record_size(DB *, char *, int);
 void * find_substruct(struct domain *, u_int16_t);
 struct domain * 	lookup_zone(DB *, struct question *, int *, int *, char *);
 u_int16_t check_qtype(struct domain *, u_int16_t, int, int *);
+struct question		*build_fake_question(char *, int, u_int16_t);
 
 extern void 	dolog(int, char *, ...);
 
@@ -626,4 +627,45 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 	}
 
 	return (returnval);
+}
+
+/*
+ * BUILD_FAKE_QUESTION - fill the fake question structure with the DNS query.
+ */
+
+struct question *
+build_fake_question(char *name, int namelen, u_int16_t type)
+{
+	struct question *q;
+
+	q = (void *)calloc(1, sizeof(struct question));
+	if (q == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	q->hdr = (void *)calloc(1, sizeof(struct dns_question_hdr));
+	if (q->hdr == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		free(q);
+		return NULL;
+	}
+	q->hdr->namelen = namelen;
+	q->hdr->name = (void *) calloc(1, q->hdr->namelen);
+	if (q->hdr->name == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		free(q->hdr);
+		free(q);
+		return NULL;
+	}
+	q->converted_name = NULL;
+
+	/* fill our name into the dns header struct */
+	
+	memcpy(q->hdr->name, name, q->hdr->namelen);
+	
+	q->hdr->qtype = type;
+	q->hdr->qclass = htons(DNS_CLASS_IN);
+
+	return (q);
 }
