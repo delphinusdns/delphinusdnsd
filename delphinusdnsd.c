@@ -35,6 +35,7 @@
 extern void 	add_rrlimit(int, u_int16_t *, int, char *);
 extern void 	axfrloop(int *, int, char **, DB *);
 extern int 	check_rrlimit(int, u_int16_t *, int, char *);
+extern u_int16_t check_qtype(struct domain *, u_int16_t, int, int *);
 extern void 	collects_init(void);
 extern void 	dolog(int, char *, ...);
 extern int 	find_filter(struct sockaddr_storage *, int);
@@ -47,6 +48,7 @@ extern void 	init_region(void);
 extern void 	init_filter(void);
 extern void 	init_notifyslave(void);
 extern void 	init_whitelist(void);
+extern struct domain * 	lookup_zone(DB *, struct question *, int *, int *, char *);
 extern void 	recurseloop(int sp, int *, DB *);
 extern void 	receivelog(char *, int);
 extern int 	reply_a(struct sreply *, DB *);
@@ -87,12 +89,10 @@ struct question		*build_fake_question(char *, int, u_int16_t);
 struct question		*build_question(char *, int, int);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct domain *, struct domain *, u_int8_t, int, int, struct recurses *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
-u_int16_t		check_qtype(struct domain *, u_int16_t, int, int *);
 int			free_question(struct question *);
 char 			*get_dns_type(int dnstype);
 struct domain * 	get_soa(DB *, struct question *);
 int			lookup_type(int);
-struct domain * 	lookup_zone(DB *, struct question *, int *, int *, char *);
 void			mainloop(struct cfg *);
 void 			master_reload(int);
 void 			master_shutdown(int);
@@ -190,7 +190,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.2 2016/07/06 05:21:54 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.3 2016/07/21 18:38:44 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1500,150 +1500,6 @@ memcasecmp(u_char *b1, u_char *b2, int len)
 	return 1;	/* XXX */
 }
 	
-
-/*
- * LOOKUP_ZONE - look up a zone filling sd and returning RR TYPE, if error
- *		 occurs returns -1, and sets errno on what type of error.
- */
-
-
-struct domain *
-lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, char *replystring)
-{
-
-	struct domain *sd = NULL;
-	struct domain_ns *nsd;
-	int plen, onemore = 0;
-	int ret = 0;
-	int error;
-	int w = 0;
-	int rs;
-
-	char *p;
-	
-	DBT key, data;
-
-	p = question->hdr->name;
-	plen = question->hdr->namelen;
-	onemore = 0;
-
-
-	rs = get_record_size(db, p, plen);
-	if (rs < 0) {
-		*lzerrno = ERR_DROP;
-		*returnval = -1;
-		return (NULL);
-	}
-	if ((sd = (struct domain *)calloc(1, rs)) == NULL) {
-		*lzerrno = ERR_DROP; /* only free on ERR_DROP */
-		*returnval = -1;
-		return (NULL);	
-	}
-
-	*returnval = 0;
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-
-	key.data = (char *)p;
-	key.size = plen;
-
-	data.data = NULL;
-	data.size = rs;
-
-	ret = db->get(db, NULL, &key, &data, 0);
-	if (ret != 0) {
-nsec3:
-		/*
-		 * We have a condition where a record does not exist but we
-		 * move toward the apex of the record, and there may be 
-		 * something.  We return NXDOMAIN if there is an apex with 
-		 * SOA if not then we return REFUSED 
-		 */
-		while (*p != 0) {
-			plen -= (*p + 1);
-			p = (p + (*p + 1));
-
-			free(sd);
-			rs = get_record_size(db, p, plen);
-			if (rs < 0) {
-				*lzerrno = ERR_DROP;
-				*returnval = -1;
-				return (NULL);
-			}
-			if ((sd = (struct domain *)calloc(1, rs)) == NULL) {
-				*lzerrno = ERR_DROP; /* only free on ERR_DROP */
-				*returnval = -1;
-				return (NULL);	
-			}
-
-			memset(&key, 0, sizeof(key));
-			memset(&data, 0, sizeof(data));
-
-			key.data = (char *)p;
-			key.size = plen;
-
-			data.data = NULL;
-			data.size = rs;
-
-			ret = db->get(db, NULL, &key, &data, 0);
-			if (ret == 0)
-				memcpy((char *)sd, (char *)data.data, data.size);
-			if (ret == 0 && (sd->flags & DOMAIN_HAVE_SOA)) {
-				*lzerrno = ERR_NXDOMAIN;
-				*returnval = -1;
-				return (sd);
-			}
-		}
-		*lzerrno = ERR_REFUSED;
-		*returnval = -1;
-		return (sd);
-	}
-	
-	if (data.size != rs) {
-		dolog(LOG_INFO, "btree db is damaged, drop\n");
-		free(sd);
-		sd = NULL;
-		*lzerrno = ERR_DROP;	/* free on ERR_DROP */
-		*returnval = -1;
-		return (NULL);
-	}
-
-	memcpy((char *)sd, (char *)data.data, data.size);
-	snprintf(replystring, DNS_MAXNAME, "%s", sd->zonename);
-
-
-	if (sd->flags & DOMAIN_HAVE_NS) {
-		nsd = (struct domain_ns *)find_substruct(sd, INTERNAL_TYPE_NS);
-		if (w && nsd->ns_type == 0) {	
-			*lzerrno = ERR_NXDOMAIN;
-			*returnval = -1;
-			return (sd);
-		}
-
-		/*
-		 * we're of ns_type > 0, return an NS record
-		 */
-
-		if (nsd->ns_type > 0) {
-			*returnval = DNS_TYPE_NS;
-			*lzerrno = ERR_NOERROR;
-			goto out;
-		}
-	} else if (sd->flags & DOMAIN_HAVE_NSEC3) {
-		goto nsec3;
-	}
-
-	*returnval = check_qtype(sd, ntohs(question->hdr->qtype), 0, &error);
-	if (*returnval == 0) {
-		*lzerrno = ERR_NOERROR;
-		*returnval = -1;
-		return (sd);
-	}
-
-out:
-	return(sd);
-}
 
 /*
  * BUILD_FAKE_QUESTION - fill the fake question structure with the DNS query.
@@ -3494,210 +3350,6 @@ master_reload(int sig)
 	reload = 1;
 }
 
-/*
- * CHECK_QTYPE - check the query type and return appropriately if we have 
- *		 such a record in our DB..
- *		 returns 0 on error, or the DNS TYPE from 1 through 65535
- * 		 when the return is 0 the error variable is set with the error
- *		 code (-1 or -2)
- */
-
-u_int16_t
-check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
-{
-	u_int16_t returnval;
-
-	switch (type) {
-
-	case DNS_TYPE_ANY:
-			returnval = DNS_TYPE_ANY;
-			break;
-
-	case DNS_TYPE_A:
-		if ((sd->flags & DOMAIN_HAVE_A) == DOMAIN_HAVE_A)  {
-			returnval = DNS_TYPE_A;
-			break;
-		} else if ((sd->flags & DOMAIN_HAVE_CNAME) == 						DOMAIN_HAVE_CNAME) {
-			returnval = DNS_TYPE_CNAME;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_AAAA:
-		if ((sd->flags & DOMAIN_HAVE_AAAA) == DOMAIN_HAVE_AAAA)  {
-			returnval = DNS_TYPE_AAAA;
-			break;
-		} else if ((sd->flags & DOMAIN_HAVE_CNAME) == 						DOMAIN_HAVE_CNAME) {
-			returnval = DNS_TYPE_CNAME;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_MX:
-		if ((sd->flags & DOMAIN_HAVE_MX) == 
-				DOMAIN_HAVE_MX)  {
-			returnval = DNS_TYPE_MX;
-			break;
-		} else if ((sd->flags & DOMAIN_HAVE_CNAME) == 						DOMAIN_HAVE_CNAME) {
-			returnval = DNS_TYPE_CNAME;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_PTR:
-		if ((sd->flags & DOMAIN_HAVE_PTR) == DOMAIN_HAVE_PTR)  {
-			returnval = DNS_TYPE_PTR;
-			break;
-		} else if ((sd->flags & DOMAIN_HAVE_CNAME) == 						DOMAIN_HAVE_CNAME) {
-			returnval = DNS_TYPE_CNAME;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-
-	case DNS_TYPE_SOA:
-		if ((sd->flags & DOMAIN_HAVE_SOA) == DOMAIN_HAVE_SOA) {
-
-			returnval = DNS_TYPE_SOA;
-			break;
-		}
-
-		if (nxdomain)
-			*error = -2;
-		else
-			*error = -1;
-
-		return 0;
-
-	case DNS_TYPE_TLSA:
-		if ((sd->flags & DOMAIN_HAVE_TLSA) == DOMAIN_HAVE_TLSA) {
-			returnval = DNS_TYPE_TLSA;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-
-	case DNS_TYPE_SSHFP:
-		if ((sd->flags & DOMAIN_HAVE_SSHFP) == DOMAIN_HAVE_SSHFP) {
-			returnval = DNS_TYPE_SSHFP;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-
-	case DNS_TYPE_SRV:	
-		if ((sd->flags & DOMAIN_HAVE_SRV) == DOMAIN_HAVE_SRV) {
-			returnval = DNS_TYPE_SRV;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-
-	case DNS_TYPE_NAPTR:
-		if ((sd->flags & DOMAIN_HAVE_NAPTR) == DOMAIN_HAVE_NAPTR) {
-				returnval = DNS_TYPE_NAPTR;
-				break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_CNAME:
-		if ((sd->flags & DOMAIN_HAVE_CNAME) == DOMAIN_HAVE_CNAME) {
-				returnval = DNS_TYPE_CNAME;
-				break;
-		}
-
-		*error = -1;
-		return 0;
-
-	case DNS_TYPE_NS:
-		if ((sd->flags & DOMAIN_HAVE_NS) == DOMAIN_HAVE_NS) {
-			returnval = DNS_TYPE_NS;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_TXT:
-		if ((sd->flags & DOMAIN_HAVE_TXT) == DOMAIN_HAVE_TXT)  {
-			returnval = DNS_TYPE_TXT;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_SPF:
-		if ((sd->flags & DOMAIN_HAVE_SPF) == DOMAIN_HAVE_SPF)  {
-			returnval = DNS_TYPE_SPF;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_RRSIG:
-		if ((sd->flags & DOMAIN_HAVE_RRSIG) == DOMAIN_HAVE_RRSIG)  {
-			returnval = DNS_TYPE_RRSIG;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_NSEC3PARAM:
-		if ((sd->flags & DOMAIN_HAVE_NSEC3PARAM) == DOMAIN_HAVE_NSEC3PARAM)  {
-			returnval = DNS_TYPE_NSEC3PARAM;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_NSEC3:
-		if ((sd->flags & DOMAIN_HAVE_NSEC3) == DOMAIN_HAVE_NSEC3)  {
-			returnval = DNS_TYPE_NSEC3;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_NSEC:
-		if ((sd->flags & DOMAIN_HAVE_NSEC) == DOMAIN_HAVE_NSEC)  {
-			returnval = DNS_TYPE_NSEC;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_DS:
-		if ((sd->flags & DOMAIN_HAVE_DS) == DOMAIN_HAVE_DS)  {
-			returnval = DNS_TYPE_DS;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_DNSKEY:
-		if ((sd->flags & DOMAIN_HAVE_DNSKEY) == DOMAIN_HAVE_DNSKEY)  {
-			returnval = DNS_TYPE_DNSKEY;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	default: /* RR's that we don't support, but have a zone for */
-
-		*error = -1;
-		return 0;
-		break;
-	}
-
-	return (returnval);
-}
 
 int
 lookup_type(int internal_type)
