@@ -30,7 +30,10 @@
 #include "ddd-db.h"
 
 #include <openssl/bn.h>
+#include <openssl/obj_mac.h>
 #include <openssl/rsa.h>
+#include <openssl/err.h>
+#include <openssl/sha.h>
 
 int debug = 0;
 int verbose = 0;
@@ -42,7 +45,8 @@ char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *,
 char *	create_key(char *, int, int, int, int);
 void 	dump_db(DB *);
 char * alg_to_name(int);
-int 	calculate_rrsigs(DB *, char *, char *, char *);
+int alg_to_rsa(int);
+int 	calculate_rrsigs(DB *, char *, char *, char *, int);
 u_int keytag(u_char *key, u_int keysize);
 void pack(char *, char *, int);
 void pack32(char *, u_int32_t);
@@ -105,6 +109,7 @@ main(int argc, char *argv[])
 	int create_zsk = 0;
 	int create_ksk = 0;
 	int algorithm = ALGORITHM_RSASHA256;
+	int expiry = 5184000;
 
 	key_t key;
 
@@ -118,17 +123,22 @@ main(int argc, char *argv[])
 	DB_ENV *dbenv;
 
 
-	while ((ch = getopt(argc, argv, "a:B:I:i:Kk:n:o:s:t:Zz:")) != -1) {
+	while ((ch = getopt(argc, argv, "a:B:e:I:i:Kk:n:o:s:t:Zz:")) != -1) {
 		switch (ch) {
 		case 'a':
 			/* algorithm */
-
+			algorithm = atoi(optarg);
 			break;
 	
 		case 'B':
 			/* bits */
 
 			bits = atoi(optarg);
+			break;
+		case 'e':
+			/* expiry */
+		
+			expiry = atoi(optarg);
 			break;
 
 		case 'I':
@@ -267,7 +277,7 @@ main(int argc, char *argv[])
 
 	/* second pass calculate RRSIG's for every RR set */
 
-	if (calculate_rrsigs(db, zonename, zsk_key, ksk_key) < 0) {
+	if (calculate_rrsigs(db, zonename, zsk_key, ksk_key, expiry) < 0) {
 		dolog(LOG_INFO, "calculate rrsigs failed\n");
 		exit(1);
 	}
@@ -275,6 +285,7 @@ main(int argc, char *argv[])
 	/* third pass construct NSEC3 records */	
 
 	/* write new zone file */
+	dump_db(db);
 
 	exit(0);
 }
@@ -330,7 +341,7 @@ dolog(int pri, char *fmt, ...)
 	 *  then print it, otherwise 
 	 */
 
-	if (pri <= LOG_ERR) {
+	if (pri <= LOG_INFO) {
 		vprintf(fmt, ap);
 	}	
 	
@@ -389,7 +400,6 @@ add_dnskey(DB *db, char *zsk_key, char *ksk_key)
 		return -1;
 	}
 
-	dump_db(db);
 
 
 	return 0;
@@ -491,9 +501,56 @@ parse_keyfile(int fd, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t
 void
 dump_db(DB *db)
 {
+	int j, rs;
+
+        DBT key, data;
+        DBC *cursor;
 	
+	struct domain *sdomain, *savesd;
+	
+	if (db->cursor(db, NULL, &cursor, 0) != 0) {
+		dolog(LOG_INFO, "db->cursor: %s\n", strerror(errno));
+		exit(1);
+	}
 
+	memset(&key, 0, sizeof(key));   
+	memset(&data, 0, sizeof(data));
 
+	if (cursor->c_get(cursor, &key, &data, DB_FIRST) != 0) {
+		dolog(LOG_INFO, "cursor->c_get: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	
+	j = 0;
+	do {
+		
+		rs = data.size;
+		if ((sdomain = calloc(1, rs)) == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			exit(1);
+		}
+		if ((savesd = calloc(1, rs)) == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			exit(1);
+		}
+                                
+		memcpy((char *)sdomain, (char *)data.data, data.size);
+		memcpy((char *)savesd, (char *)data.data, data.size);
+
+		printf("name: %s\n", sdomain->zonename);
+
+		if (sdomain->flags & DOMAIN_HAVE_DNSKEY) {
+			printf(" has dnskey\n");
+		}
+		if (sdomain->flags & DOMAIN_HAVE_RRSIG) {
+			printf(" has rrsig\n");
+		}
+
+		j++;
+	} while (cursor->c_get(cursor, &key, &data, DB_NEXT) == 0);
+
+	printf("%d records\n", j);
 }
 
 char *	
@@ -706,17 +763,42 @@ alg_to_name(int algorithm)
 }
 
 int
-calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key)
+alg_to_rsa(int algorithm)
+{
+	
+	switch (algorithm) {
+	case ALGORITHM_RSASHA1:
+		return (NID_sha1);
+		break;
+	case ALGORITHM_RSASHA256:
+		return (NID_sha256WithRSAEncryption);
+		break;
+	case ALGORITHM_RSASHA512:
+		return (NID_sha512WithRSAEncryption);
+		break;
+	}
+
+	return (-1);
+}
+
+int
+calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry)
 {
 	struct question *q;
 	struct domain *sd;
 	struct domain_dnskey *sddk;
 
 	char tmp[4096];
-	char key[4096];
+	char signature[4096];
 	char buf[512];
+	
+	SHA_CTX sha1;
+	SHA256_CTX sha256;
+	SHA512_CTX sha512;
 
 	char *dnsname;
+	char *p;
+	char *key;
 	char *zone;
 	char replystring[512];
 
@@ -725,31 +807,39 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key)
 	uint8_t protocol;
 	uint8_t algorithm;
 
-	int labellen, i, j;
+	int labellen, i;
 	int retval, lzerrno;
 	int keyid;
-	int fd;
-	int keylen;
+	int fd, len;
+	int keylen, siglen;
+	int rsatype;
+	int bufsize;
 
 	RSA *rsa;
+	time_t now;
 
-	/* get apex, in order to sign the zsk */
+	char timebuf[32];
+	u_int64_t expiredon, signedon;
+	struct tm *tm;
 
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
+	now = time(NULL);
+	tm = gmtime(&now);
+	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
+	signedon = atoll(timebuf);
+	now += expiry;
+	tm = gmtime(&now);
+	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
+	expiredon = atoll(timebuf);
+	printf("%s\n", timebuf);
 
-	q = build_fake_question(dnsname, labellen, DNS_TYPE_DNSKEY);
-	if (q == NULL) {
+	key = malloc(10 * 4096);
+	if (key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");
 		return -1;
 	}
 
-	if ((sd = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
-		return -1;
-	}
-
-	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
+	/* get the KSK */
+	snprintf(buf, sizeof(buf), "%s.key", ksk_key);
 	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
 		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
 		return -1;
@@ -764,13 +854,27 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key)
 	close(fd);
 	
 
-	keylen = mybase64_decode(tmp, (char *)&key, sizeof(key));
+#if 0
+	keylen = mybase64_decode(tmp, (char *)key, 4096 * 10);
 	if (keylen == -1) {
 		dolog(LOG_INFO, "decode base64 %s\n", tmp);
 		return -1;
 	}
+#endif
 		
-	
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL)
+		return -1;
+
+	q = build_fake_question(dnsname, labellen, DNS_TYPE_DNSKEY);
+	if (q == NULL) {
+		return -1;
+	}
+
+	if ((sd = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
+		return -1;
+	}
+
 	if (sd->flags & DOMAIN_HAVE_DNSKEY) {
                 if ((sddk = (struct domain_dnskey *)find_substruct(sd, INTERNAL_TYPE_DNSKEY)) == NULL) {
 			dolog(LOG_INFO, "no dnskeys in apex!\n");
@@ -778,34 +882,76 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key)
 		}
 	}
 	
-	for (i = 0, j = -1; i < sddk->dnskey_count; i++) {
-		if (sddk->dnskey[i].flags & DNSKEY_ZONE_KEY)
-			j = i;
+	p = key;
+	for (i = 0; i < sddk->dnskey_count; i++) {
+		pack(p, zonename, strlen(zonename));
+		p += strlen(zonename);
+		pack16(p, htons(DNS_TYPE_DNSKEY));
+		p += 2;
+		pack16(p, htons(DNS_CLASS_IN));
+		p += 2;
+		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
+		p += 4;
+		pack16(p, sddk->dnskey[i].flags);
+		p += 2;
+		pack8(p, sddk->dnskey[i].protocol);
+		p++;
+		pack8(p, sddk->dnskey[i].algorithm);
+		p++;
+		pack(p, sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len);
+		p += sddk->dnskey[i].publickey_len;
 	}
-	if (j == -1) {
-		dolog(LOG_INFO, "no zsk dnskey in apex!\n");
+
+	keylen = (p - key);	
+
+	switch (algorithm) {
+	case ALGORITHM_RSASHA1:
+		SHA1_Init(&sha1);
+		SHA1_Update(&sha1, key, keylen);
+		SHA1_Final((u_char *)&buf, &sha1);
+		bufsize = 20;
+		break;
+	case ALGORITHM_RSASHA256:	
+		SHA256_Init(&sha256);
+		SHA256_Update(&sha256, key, keylen);
+		SHA256_Final((u_char *)&buf, &sha256);
+		bufsize = 32;
+		break;
+	case ALGORITHM_RSASHA512:
+		SHA512_Init(&sha512);
+		SHA512_Update(&sha512, key, keylen);
+		SHA512_Final((u_char *)&buf, &sha512);
+		bufsize = 64;
+		break;
+	default:
 		return -1;
 	}
-	
+		
 	rsa = read_private_key(zonename, keyid, algorithm);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
 	}
 		
+	rsatype = alg_to_rsa(algorithm);
+	if (rsatype == -1) {
+		dolog(LOG_INFO, "algorithm mismatch\n");
+		return -1;
+	}
 
-#if 0
-	RSA_sign(rsatype, key, keylen, &signature, &siglen, rsa);
+	if (RSA_sign(rsatype, (u_char *)buf, bufsize, (u_char *)&signature, &siglen, rsa) != 1) {
+		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
+		return -1;
+	}
 
-	fill_rrsig(zonename, "RRSIG", ttl, "DNSKEY", algorithm, i, sd->ttl[INTERNAL_TYPE_DNSKEY], expiration, inception, keyid, zonename, signature);
-#endif
+	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+	tmp[len] = '\0';
+
+	if (fill_rrsig(zonename, "RRSIG", ttl, "DNSKEY", algorithm, i, sd->ttl[INTERNAL_TYPE_DNSKEY], expiredon, signedon, keyid, zonename, tmp) < 0) {
+		dolog(LOG_INFO, "fill_rrsig\n");
+		return -1;
+	}
 	
-	
-
-
-		
-		
-
 	return 0;
 }
 
@@ -868,7 +1014,6 @@ read_private_key(char *zonename, int keyid, int algorithm)
 {
 	FILE *f;
 	RSA *rsa;
-	BIGNUM *bn;
 
 	char buf[4096];
 	char key[4096];
@@ -916,83 +1061,67 @@ read_private_key(char *zonename, int keyid, int algorithm)
 		} else if ((p = strstr(buf, "Modulus: ")) != NULL) {
 			p += 9;
 	
-			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
-			bn = BN_new();
-			if (bn == NULL) {
-				dolog(LOG_INFO, "out of memory\n");
+			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
+			if ((rsa->n = BN_bin2bn(key, keylen, NULL)) == NULL)  {
+				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
-			}	
-			rsa->n = BN_bin2bn(key, keylen, bn);
+			}
 		} else if ((p = strstr(buf, "PublicExponent: ")) != NULL) {
 			p += 16;	
 
-			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
-			bn = BN_new();
-			if (bn == NULL) {
-				dolog(LOG_INFO, "out of memory\n");
+			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
+			if ((rsa->e = BN_bin2bn(key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
-			}	
-			rsa->e = BN_bin2bn(key, keylen, bn);
+			}
 		} else if ((p = strstr(buf, "PrivateExponent: ")) != NULL) {
 			p += 17;
 
-			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
-			bn = BN_new();
-			if (bn == NULL) {
-				dolog(LOG_INFO, "out of memory\n");
+			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
+			if ((rsa->d = BN_bin2bn(key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
-			}	
-			rsa->d = BN_bin2bn(key, keylen, bn);
+			}
 		} else if ((p = strstr(buf, "Prime1: ")) != NULL) {
 			p += 8;
 
-			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
-			bn = BN_new();
-			if (bn == NULL) {
-				dolog(LOG_INFO, "out of memory\n");
+			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
+			if ((rsa->p = BN_bin2bn(key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
-			}	
-			rsa->p = BN_bin2bn(key, keylen, bn);
+			}
 		} else if ((p = strstr(buf, "Prime2: ")) != NULL) {
 			p += 8;
 
-			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
-			bn = BN_new();
-			if (bn == NULL) {
-				dolog(LOG_INFO, "out of memory\n");
+			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
+			if ((rsa->q = BN_bin2bn(key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
-			}	
-			rsa->q = BN_bin2bn(key, keylen, bn);
+			}
 		} else if ((p = strstr(buf, "Exponent1: ")) != NULL) {
 			p += 11;
 
-			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
-			bn = BN_new();
-			if (bn == NULL) {
-				dolog(LOG_INFO, "out of memory\n");
+			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
+			if ((rsa->dmp1 = BN_bin2bn(key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
-			}	
-			rsa->dmp1 = BN_bin2bn(key, keylen, bn);
+			}
 		} else if ((p = strstr(buf, "Exponent2: ")) != NULL) {
 			p += 11;
 
-			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
-			bn = BN_new();
-			if (bn == NULL) {
-				dolog(LOG_INFO, "out of memory\n");
+			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
+			if ((rsa->dmq1 = BN_bin2bn(key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
-			}	
-			rsa->dmq1 = BN_bin2bn(key, keylen, bn);
+			}
 		} else if ((p = strstr(buf, "Coefficient: ")) != NULL) {
 			p += 13;
 
-			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
-			bn = BN_new();
-			if (bn == NULL) {
-				dolog(LOG_INFO, "out of memory\n");
+			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
+			if ((rsa->iqmp = BN_bin2bn(key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
-			}	
-			rsa->iqmp = BN_bin2bn(key, keylen, bn);
+			}
 		}
 	} /* fgets */
 
