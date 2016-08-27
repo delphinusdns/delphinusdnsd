@@ -37,10 +37,13 @@ int verbose = 0;
 
 void	dolog(int pri, char *fmt, ...);
 int	add_dnskey(DB *, char *, char *);
-char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *);
+char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
 char *	create_key(char *, int, int, int, int);
 void 	dump_db(DB *);
 char * alg_to_name(int);
+int 	calculate_rrsigs(DB *, char *, char *, char *);
+u_int keytag(u_char *key, u_int keysize);
+
 
 #define ALGORITHM_RSASHA1	5		/* rfc 4034 , mandatory */
 #define ALGORITHM_RSASHA256	8		/* rfc 5702 */
@@ -77,6 +80,12 @@ char *versionstring = NULL;
 extern int fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
 extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int      mybase64_decode(char const *, u_char *, size_t);
+extern struct domain *         lookup_zone(DB *, struct question *, int *, int *, char *);
+extern struct question         *build_fake_question(char *, int, u_int16_t);
+extern char * dns_label(char *, int *);
+extern void * find_substruct(struct domain *, u_int16_t);
+
+
 
 int
 main(int argc, char *argv[])
@@ -249,6 +258,11 @@ main(int argc, char *argv[])
 
 	/* second pass calculate RRSIG's for every RR set */
 
+	if (calculate_rrsigs(db, zonename, zsk_key, ksk_key) < 0) {
+		dolog(LOG_INFO, "calculate rrsigs failed\n");
+		exit(1);
+	}
+
 	/* third pass construct NSEC3 records */	
 
 	/* write new zone file */
@@ -326,6 +340,7 @@ add_dnskey(DB *db, char *zsk_key, char *ksk_key)
 	uint16_t flags;
 	uint8_t protocol;
 	uint8_t algorithm;
+	int keyid;
 
 	/* first the zsk */
 	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
@@ -334,7 +349,7 @@ add_dnskey(DB *db, char *zsk_key, char *ksk_key)
 		return -1;
 	}
 
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&key)) == NULL) {
+	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&key, &keyid)) == NULL) {
 		dolog(LOG_INFO, "parse %s\n", buf);
 		close (fd);
 		return -1;
@@ -353,7 +368,7 @@ add_dnskey(DB *db, char *zsk_key, char *ksk_key)
 		return -1;
 	}
 
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&key)) == NULL) {
+	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&key, &keyid)) == NULL) {
 		dolog(LOG_INFO, "parse %s\n", buf);
 		close (fd);
 		return -1;
@@ -372,7 +387,7 @@ add_dnskey(DB *db, char *zsk_key, char *ksk_key)
 }
 
 char *
-parse_keyfile(int fd, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t *algorithm, char *key)
+parse_keyfile(int fd, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t *algorithm, char *key, int *keyid)
 {
 	static char retbuf[256];
 	char buf[8192];
@@ -383,8 +398,18 @@ parse_keyfile(int fd, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t
 		return NULL;
 	
 	while (fgets(buf, sizeof(buf), f) != NULL) {
-		if (buf[0] == ';')
+		if (buf[0] == ';') {
+			if ((p = strstr(buf, "keyid ")) != NULL) {
+				p += 6;
+				q = strchr(p, ' ');
+				if (q == NULL) 
+					return NULL;
+				*q = '\0';
+				*keyid = atoi(p);
+			}
+
 			continue;
+		}
 	}
 
 	/* name */
@@ -475,10 +500,11 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 	int i, binlen, len;
 	uint32_t pid;
 	char *retval;
-	char *p;
+	char *p, *q;
 	time_t now;
 	struct tm *tm;
 	mode_t savemask;
+	int rlen;
 
 	if ((rsa = RSA_new()) == NULL) {
 		dolog(LOG_INFO, "RSA_new: %s\n", strerror(errno));
@@ -518,8 +544,24 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 		return NULL;
 	}
 
-
-	pid = (arc4random() >> 16);
+	/* get the keytag, this is a bit of a hard process */
+	p = (char *)&bin[0];
+	memcpy(p, (char *)&flags, 2);
+	p+=2;
+	*p = 3;
+	p++;
+	*p = algorithm;
+	p++;
+	rlen = 4;
+	q = p;
+	p++;
+	binlen = BN_bn2bin(rsa->e, (char *)p); 
+	*q = binlen;
+	rlen += binlen;
+	p += binlen;
+	binlen = BN_bn2bin(rsa->n, (char *)p);
+	rlen += binlen;
+	pid = keytag(bin, rlen);
 	
 	snprintf(buf, sizeof(buf), "K%s%s+%03d+%d", zonename,
 		(zonename[strlen(zonename) - 1] == '.') ? "" : ".",
@@ -614,7 +656,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 	fprintf(f, "; Publish: %s (%s)\n", buf, bin);
 	fprintf(f, "; Activate: %s (%s)\n", buf, bin);
 
-	/* bogus */
+	/* XXX bogus */
 	/* Thanks for pointing out it's bogus, could have written RFC 3110! */
 	p = &bin[0];
 	binlen = BN_bn2bin(rsa->e, (char *)&bin[1]);
@@ -650,4 +692,109 @@ alg_to_name(int algorithm)
 	}
 
 	return (NULL);
+}
+
+int
+calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key)
+{
+	char tmp[4096];
+	char key[4096];
+	char buf[512];
+
+	char *dnsname;
+	char *zone;
+	int labellen, i;
+	int retval, lzerrno;
+	char replystring[512];
+	struct question *q;
+	struct domain *sd;
+	struct domain_dnskey *sddk;
+
+	uint32_t ttl;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
+	int keyid;
+	int fd;
+	int keylen;
+
+	/* get apex, in order to sign the zsk */
+
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL)
+		return -1;
+
+	q = build_fake_question(dnsname, labellen, DNS_TYPE_DNSKEY);
+	if (q == NULL) {
+		return -1;
+	}
+
+	if ((sd = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
+		return -1;
+	}
+
+	/* get the ZSK */
+	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
+	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
+		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+		return -1;
+	}
+
+	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "parse %s\n", buf);
+		close (fd);
+		return -1;
+	}
+
+	close(fd);
+	
+
+	keylen = mybase64_decode(tmp, (char *)&key, sizeof(key));
+	if (keylen == -1) {
+		dolog(LOG_INFO, "decode base64 %s\n", tmp);
+		return -1;
+	}
+		
+	
+	if (sd->flags & DOMAIN_HAVE_DNSKEY) {
+                if ((sddk = (struct domain_dnskey *)find_substruct(sd, INTERNAL_TYPE_DNSKEY)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in apex!\n");
+                        return -1;
+		}
+	}
+	
+	for (i = 0; i < sddk->dnskey_count; i++) {
+		if (sddk->dnskey[i].flags & DNSKEY_ZONE_KEY)
+			break;
+	}
+	if (i >= sddk->dnskey_count) {
+		dolog(LOG_INFO, "no zsk dnskey in apex!\n");
+		return -1;
+	}
+	
+	
+	
+
+
+		
+		
+
+	return 0;
+}
+
+/* 
+ * From RFC 4034, appendix b 
+ */
+
+u_int 
+keytag(u_char *key, u_int keysize)
+{
+	unsigned long ac;
+	int i;
+	
+	for (ac = 0, i = 0; i < keysize; ++i)
+		ac += (i & 1) ? key[i] : key[i] << 8;
+	ac += (ac >> 16) & 0xffff;
+	
+	return ac & 0xffff;
 }
