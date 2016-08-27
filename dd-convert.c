@@ -35,6 +35,7 @@
 int debug = 0;
 int verbose = 0;
 
+/* prototypes */
 void	dolog(int pri, char *fmt, ...);
 int	add_dnskey(DB *, char *, char *);
 char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
@@ -43,6 +44,12 @@ void 	dump_db(DB *);
 char * alg_to_name(int);
 int 	calculate_rrsigs(DB *, char *, char *, char *);
 u_int keytag(u_char *key, u_int keysize);
+void pack(char *, char *, int);
+void pack32(char *, u_int32_t);
+void pack16(char *, u_int16_t);
+void pack8(char *, u_int8_t);
+RSA * read_private_key(char *, int, int);
+
 
 
 #define ALGORITHM_RSASHA1	5		/* rfc 4034 , mandatory */
@@ -78,12 +85,14 @@ char *versionstring = NULL;
 /* externs */
 
 extern int fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
+extern int fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
 extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int      mybase64_decode(char const *, u_char *, size_t);
 extern struct domain *         lookup_zone(DB *, struct question *, int *, int *, char *);
 extern struct question         *build_fake_question(char *, int, u_int16_t);
 extern char * dns_label(char *, int *);
 extern void * find_substruct(struct domain *, u_int16_t);
+
 
 
 
@@ -546,11 +555,11 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 
 	/* get the keytag, this is a bit of a hard process */
 	p = (char *)&bin[0];
-	memcpy(p, (char *)&flags, 2);
+	pack16(p, ntohs(flags));
 	p+=2;
-	*p = 3;
+	pack8(p, 3);
 	p++;
-	*p = algorithm;
+ 	pack8(p, algorithm);
 	p++;
 	rlen = 4;
 	/* XXX bogus */
@@ -699,26 +708,30 @@ alg_to_name(int algorithm)
 int
 calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key)
 {
+	struct question *q;
+	struct domain *sd;
+	struct domain_dnskey *sddk;
+
 	char tmp[4096];
 	char key[4096];
 	char buf[512];
 
 	char *dnsname;
 	char *zone;
-	int labellen, i;
-	int retval, lzerrno;
 	char replystring[512];
-	struct question *q;
-	struct domain *sd;
-	struct domain_dnskey *sddk;
 
 	uint32_t ttl;
 	uint16_t flags;
 	uint8_t protocol;
 	uint8_t algorithm;
+
+	int labellen, i, j;
+	int retval, lzerrno;
 	int keyid;
 	int fd;
 	int keylen;
+
+	RSA *rsa;
 
 	/* get apex, in order to sign the zsk */
 
@@ -765,15 +778,27 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key)
 		}
 	}
 	
-	for (i = 0; i < sddk->dnskey_count; i++) {
+	for (i = 0, j = 0; i < sddk->dnskey_count; i++) {
 		if (sddk->dnskey[i].flags & DNSKEY_ZONE_KEY)
-			break;
+			j = i;
 	}
-	if (i >= sddk->dnskey_count) {
+	if (j == 0) {
 		dolog(LOG_INFO, "no zsk dnskey in apex!\n");
 		return -1;
 	}
 	
+	rsa = read_private_key(zonename, keyid, algorithm);
+	if (rsa == NULL) {
+		dolog(LOG_INFO, "reading private key failed\n");
+		return -1;
+	}
+		
+
+#if 0
+	RSA_sign(rsatype, key, keylen, &signature, &siglen, rsa);
+
+	fill_rrsig(zonename, "RRSIG", ttl, "DNSKEY", algorithm, i, sd->ttl[INTERNAL_TYPE_DNSKEY], expiration, inception, keyid, zonename, signature);
+#endif
 	
 	
 
@@ -799,4 +824,179 @@ keytag(u_char *key, u_int keysize)
 	ac += (ac >> 16) & 0xffff;
 	
 	return ac & 0xffff;
+}
+
+
+/* pack functions */
+
+void
+pack32(char *buf, u_int32_t value)
+{
+	u_int32_t *p;
+
+	p = (u_int32_t *)buf;
+	*p = value;
+}	
+
+void
+pack16(char *buf, u_int16_t value)
+{
+	u_int16_t *p;
+
+	p = (u_int16_t *)buf;
+	*p = value;
+}
+
+void
+pack8(char *buf, u_int8_t value)
+{
+	u_int8_t *p;
+
+	p = (u_int8_t *)buf;
+	*p = value;
+}
+
+void
+pack(char *buf, char *input, int len)
+{
+	memcpy(buf, input, len);
+}	
+
+
+RSA *
+read_private_key(char *zonename, int keyid, int algorithm)
+{
+	FILE *f;
+	RSA *rsa;
+	BIGNUM *bn;
+
+	char buf[4096];
+	char key[4096];
+	char *p, *q;
+
+	int keylen;
+
+	rsa = RSA_new();
+	if (rsa == NULL) {
+		dolog(LOG_INFO, "RSA creation\n");
+		return NULL;
+	}
+
+	snprintf(buf, sizeof(buf), "K%s%s+%03d+%d.private", zonename,
+		(zonename[strlen(zonename) - 1] == '.') ? "" : ".",
+		algorithm, keyid);
+
+	f = fopen(buf, "r");
+	if (f == NULL) {
+		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
+		return NULL;
+	}
+		
+	while (fgets(buf, sizeof(buf), f) != NULL) {
+		if ((p = strstr(buf, "Private-key-format: ")) != NULL) {
+			p += 20;
+			if (strncmp(p, "v1.3", 4) != 0) {
+				dolog(LOG_INFO, "wrong private key version %s", p);
+				return NULL;
+			}	
+		} else if ((p = strstr(buf, "Algorithm: ")) != NULL) {
+			p += 11;
+
+			q = strchr(p, ' ');
+			if (q == NULL) {
+				dolog(LOG_INFO, "bad parse of private key 1\n");
+				return NULL;
+			}
+			*q = '\0';
+	
+			if (algorithm != atoi(p)) {
+				dolog(LOG_INFO, "ZSK .key and .private file do not agree on algorithm %d\n", atoi(p));
+				return NULL;
+			}
+		} else if ((p = strstr(buf, "Modulus: ")) != NULL) {
+			p += 9;
+	
+			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
+			bn = BN_new();
+			if (bn == NULL) {
+				dolog(LOG_INFO, "out of memory\n");
+				return NULL;
+			}	
+			rsa->n = BN_bin2bn(key, keylen, bn);
+		} else if ((p = strstr(buf, "PublicExponent: ")) != NULL) {
+			p += 16;	
+
+			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
+			bn = BN_new();
+			if (bn == NULL) {
+				dolog(LOG_INFO, "out of memory\n");
+				return NULL;
+			}	
+			rsa->e = BN_bin2bn(key, keylen, bn);
+		} else if ((p = strstr(buf, "PrivateExponent: ")) != NULL) {
+			p += 17;
+
+			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
+			bn = BN_new();
+			if (bn == NULL) {
+				dolog(LOG_INFO, "out of memory\n");
+				return NULL;
+			}	
+			rsa->d = BN_bin2bn(key, keylen, bn);
+		} else if ((p = strstr(buf, "Prime1: ")) != NULL) {
+			p += 8;
+
+			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
+			bn = BN_new();
+			if (bn == NULL) {
+				dolog(LOG_INFO, "out of memory\n");
+				return NULL;
+			}	
+			rsa->p = BN_bin2bn(key, keylen, bn);
+		} else if ((p = strstr(buf, "Prime2: ")) != NULL) {
+			p += 8;
+
+			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
+			bn = BN_new();
+			if (bn == NULL) {
+				dolog(LOG_INFO, "out of memory\n");
+				return NULL;
+			}	
+			rsa->q = BN_bin2bn(key, keylen, bn);
+		} else if ((p = strstr(buf, "Exponent1: ")) != NULL) {
+			p += 11;
+
+			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
+			bn = BN_new();
+			if (bn == NULL) {
+				dolog(LOG_INFO, "out of memory\n");
+				return NULL;
+			}	
+			rsa->dmp1 = BN_bin2bn(key, keylen, bn);
+		} else if ((p = strstr(buf, "Exponent2: ")) != NULL) {
+			p += 11;
+
+			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
+			bn = BN_new();
+			if (bn == NULL) {
+				dolog(LOG_INFO, "out of memory\n");
+				return NULL;
+			}	
+			rsa->dmq1 = BN_bin2bn(key, keylen, bn);
+		} else if ((p = strstr(buf, "Coefficient: ")) != NULL) {
+			p += 13;
+
+			keylen = mybase64_decode(buf, (char *)&key, sizeof(key));
+			bn = BN_new();
+			if (bn == NULL) {
+				dolog(LOG_INFO, "out of memory\n");
+				return NULL;
+			}	
+			rsa->iqmp = BN_bin2bn(key, keylen, bn);
+		}
+	} /* fgets */
+
+	fclose(f);
+	return (rsa);
+	
 }
