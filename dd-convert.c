@@ -553,6 +553,8 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 	*p = algorithm;
 	p++;
 	rlen = 4;
+	/* XXX bogus */
+	/* Thanks for pointing out it's bogus, could have written RFC 3110! */
 	q = p;
 	p++;
 	binlen = BN_bn2bin(rsa->e, (char *)p); 
