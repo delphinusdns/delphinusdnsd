@@ -778,11 +778,11 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key)
 		}
 	}
 	
-	for (i = 0, j = 0; i < sddk->dnskey_count; i++) {
+	for (i = 0, j = -1; i < sddk->dnskey_count; i++) {
 		if (sddk->dnskey[i].flags & DNSKEY_ZONE_KEY)
 			j = i;
 	}
-	if (j == 0) {
+	if (j == -1) {
 		dolog(LOG_INFO, "no zsk dnskey in apex!\n");
 		return -1;
 	}
