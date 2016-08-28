@@ -58,7 +58,7 @@ label_count(char *name)
 {
 	char *labels[255];
 	char **pl;
-	int lc;
+	int lc = 0;
 	char tname[DNS_MAXNAME + 1];	/* 255 bytes  + 1*/
 	char *pt = &tname[0];
 	
