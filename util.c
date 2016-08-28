@@ -33,6 +33,7 @@
 /* prototypes */
 
 
+int label_count(char *);
 char * dns_label(char *, int *);
 void slave_shutdown(void);
 int get_record_size(DB *, char *, int);
@@ -47,6 +48,34 @@ extern void 	dolog(int, char *, ...);
 
 extern int debug;
 extern int *ptr;
+
+/*
+ * LABEL_COUNT - count the labels and return that number, based on dns_label()
+ */
+
+int 
+label_count(char *name)
+{
+	char *labels[255];
+	char **pl;
+	int lc;
+	char tname[DNS_MAXNAME + 1];	/* 255 bytes  + 1*/
+	char *pt = &tname[0];
+	
+	if (name == NULL) 
+		return -1;
+
+#if __linux__
+	strncpy(tname, name, sizeof(tname));
+	tname[sizeof(tname) - 1] = 0;
+#else
+	strlcpy(tname, name, sizeof(tname));
+#endif
+
+	for (pl=labels;pl<&labels[254]&&(*pl=strsep(&pt,"."))!= NULL;pl++,lc++);
+
+	return (lc);
+}
 
 /*
  * DNS_LABEL - build a DNS NAME (with labels) from a canonical name

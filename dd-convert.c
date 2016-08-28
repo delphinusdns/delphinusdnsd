@@ -96,6 +96,7 @@ extern struct domain *         lookup_zone(DB *, struct question *, int *, int *
 extern struct question         *build_fake_question(char *, int, u_int16_t);
 extern char * dns_label(char *, int *);
 extern void * find_substruct(struct domain *, u_int16_t);
+extern int label_count(char *);
 
 
 
@@ -814,6 +815,7 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
+	int labels;
 
 	RSA *rsa;
 	time_t now;
@@ -853,15 +855,12 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 
 	close(fd);
 	
-
-#if 0
-	keylen = mybase64_decode(tmp, (char *)key, 4096 * 10);
-	if (keylen == -1) {
-		dolog(LOG_INFO, "decode base64 %s\n", tmp);
+	labels = label_count(zonename);
+	if (labels < 0) {
+		dolog(LOG_INFO, "label_count");
 		return -1;
 	}
-#endif
-		
+
 	dnsname = dns_label(zonename, &labellen);
 	if (dnsname == NULL)
 		return -1;
@@ -947,7 +946,7 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(zonename, "RRSIG", ttl, "DNSKEY", algorithm, i, sd->ttl[INTERNAL_TYPE_DNSKEY], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(zonename, "RRSIG", ttl, "DNSKEY", algorithm, labels, sd->ttl[INTERNAL_TYPE_DNSKEY], expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
