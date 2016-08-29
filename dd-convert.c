@@ -502,12 +502,18 @@ parse_keyfile(int fd, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t
 void
 dump_db(DB *db)
 {
-	int j, rs;
+	int i, j, rs;
 
         DBT key, data;
         DBC *cursor;
 	
-	struct domain *sdomain, *savesd;
+	struct domain *sdomain;
+	struct domain_rrsig *sdrr;
+	struct domain_dnskey *sddk;
+	struct rrsig *rss;
+	
+	char buf[4096];
+	int len;
 	
 	if (db->cursor(db, NULL, &cursor, 0) != 0) {
 		dolog(LOG_INFO, "db->cursor: %s\n", strerror(errno));
@@ -531,21 +537,52 @@ dump_db(DB *db)
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			exit(1);
 		}
-		if ((savesd = calloc(1, rs)) == NULL) {
-			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-			exit(1);
-		}
-                                
+
 		memcpy((char *)sdomain, (char *)data.data, data.size);
-		memcpy((char *)savesd, (char *)data.data, data.size);
 
 		printf("name: %s\n", sdomain->zonename);
 
 		if (sdomain->flags & DOMAIN_HAVE_DNSKEY) {
 			printf(" has dnskey\n");
+			if ((sddk = (struct domain_dnskey *)find_substruct(sdomain, INTERNAL_TYPE_DNSKEY)) == NULL) {
+				dolog(LOG_INFO, "no dnskeys in zone!\n");
+			}
+			for (i = 0; i < sddk->dnskey_count; i++) {
+				len = mybase64_encode(sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len, buf, sizeof(buf));
+				buf[len] = '\0';
+				printf("%s,dnskey,%d,%d,%d,%d,%s\n", 
+					sdomain->zonename,
+					sdomain->ttl[INTERNAL_TYPE_DNSKEY],
+					sddk->dnskey[i].flags,
+					sddk->dnskey[i].protocol,
+					sddk->dnskey[i].algorithm,
+					buf);
+			}
 		}
 		if (sdomain->flags & DOMAIN_HAVE_RRSIG) {
 			printf(" has rrsig\n");
+			
+                	if ((sdrr = (struct domain_rrsig *)find_substruct(sdomain, INTERNAL_TYPE_RRSIG)) == NULL) {
+				dolog(LOG_INFO, "no rrsigs in zone!\n");
+			}
+
+			if (sdrr->rrsig_dnskey_count > 0) {
+				rss = (struct rrsig *)&sdrr->rrsig_dnskey[0];
+				
+				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+				buf[len] = '\0';
+			}
+
+			printf("%s,rrsig,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->type_covered, rss->algorithm, rss->labels,
+				rss->original_ttl, rss->signature_expiration,
+				rss->signature_inception, rss->key_tag,
+				sdomain->zonename,
+				buf);	
+		
+	
 		}
 
 		j++;
@@ -564,10 +601,11 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 	char buf[512];
 	char bin[4096];
 	char b64[4096];
+	char tmp[4096];
 	int i, binlen, len;
-	uint32_t pid;
+	u_int32_t pid;
 	char *retval;
-	char *p, *q;
+	char *p;
 	time_t now;
 	struct tm *tm;
 	mode_t savemask;
@@ -613,23 +651,30 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 
 	/* get the keytag, this is a bit of a hard process */
 	p = (char *)&bin[0];
-	pack16(p, ntohs(flags));
+	pack16(p, htons(flags));
 	p+=2;
-	pack8(p, 3);
+	pack8(p, 3);	/* protocol always 3 */
 	p++;
  	pack8(p, algorithm);
 	p++;
-	rlen = 4;
-	/* XXX bogus */
-	/* Thanks for pointing out it's bogus, could have written RFC 3110! */
-	q = p;
-	p++;
-	binlen = BN_bn2bin(rsa->e, (char *)p); 
-	*q = binlen;
-	rlen += binlen;
+	binlen = BN_bn2bin(rsa->e, (char *)tmp); 
+	/* RFC 3110 */
+	if (binlen < 256) {
+		*p = binlen;
+		p++;
+	} else {
+		*p = 0;
+		p++;
+		pack16(p, htons(binlen));
+		p += 2;
+	}
+	
+	pack(p, tmp, binlen);
 	p += binlen;
-	binlen = BN_bn2bin(rsa->n, (char *)p);
-	rlen += binlen;
+	binlen = BN_bn2bin(rsa->n, (char *)tmp);
+	pack(p, tmp, binlen);
+	p += binlen;
+	rlen = (p - &bin[0]);
 	pid = keytag(bin, rlen);
 	
 	snprintf(buf, sizeof(buf), "K%s%s+%03d+%d", zonename,
@@ -717,7 +762,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 		return NULL;
 	}
 	
-	fprintf(f, "; This is a %s key, keyid %d, for %s%s\n", (flags == 257) ? "key-signing" : "zone-signing", pid, zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".");
+	fprintf(f, "; This is a %s key, keyid %u, for %s%s\n", (flags == 257) ? "key-signing" : "zone-signing", pid, zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".");
 
 	strftime(buf, sizeof(buf), "%Y%m%d%H%M%S", tm);
 	strftime(bin, sizeof(bin), "%c", tm);
@@ -725,16 +770,24 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 	fprintf(f, "; Publish: %s (%s)\n", buf, bin);
 	fprintf(f, "; Activate: %s (%s)\n", buf, bin);
 
-	/* XXX bogus */
-	/* Thanks for pointing out it's bogus, could have written RFC 3110! */
+	/* RFC 3110, section 2 */
 	p = &bin[0];
-	binlen = BN_bn2bin(rsa->e, (char *)&bin[1]);
-	len = binlen;
-	*p = len;
-	len++;
-	binlen = BN_bn2bin(rsa->n, (char *)&bin[len]);
-	len += binlen;
-	binlen = len;
+	binlen = BN_bn2bin(rsa->e, (char *)tmp);
+	if (binlen < 256) {
+		*p = binlen;
+		p++;
+	} else {
+		*p = 0;
+		p++;
+		pack16(p, htons(binlen));
+		p += 2;
+	}
+	pack(p, tmp, binlen);
+	p += binlen;
+	binlen = BN_bn2bin(rsa->n, (char *)tmp);
+	pack(p, tmp, binlen);
+	p += binlen; 
+	binlen = (p - &bin[0]);
 	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "%s%s %d IN DNSKEY %d 3 %d %s\n", zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".", ttl, flags, algorithm, b64);
 
@@ -772,10 +825,10 @@ alg_to_rsa(int algorithm)
 		return (NID_sha1);
 		break;
 	case ALGORITHM_RSASHA256:
-		return (NID_sha256WithRSAEncryption);
+		return (NID_sha256);
 		break;
 	case ALGORITHM_RSASHA512:
-		return (NID_sha512WithRSAEncryption);
+		return (NID_sha512);
 		break;
 	}
 
@@ -792,6 +845,7 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 	char tmp[4096];
 	char signature[4096];
 	char buf[512];
+	char shabuf[64];
 	
 	SHA_CTX sha1;
 	SHA256_CTX sha256;
@@ -823,6 +877,9 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 	char timebuf[32];
 	u_int64_t expiredon, signedon;
 	struct tm *tm;
+	u_int32_t expiredon2, signedon2;
+
+	memset(&shabuf, 0, sizeof(shabuf));
 
 	now = time(NULL);
 	tm = gmtime(&now);
@@ -832,7 +889,9 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 	tm = gmtime(&now);
 	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
 	expiredon = atoll(timebuf);
-	printf("%s\n", timebuf);
+
+	signedon = 20160821133855;
+	expiredon = 20161020133855;
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -854,6 +913,23 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 	}
 
 	close(fd);
+
+	/* check the keytag supplied */
+	p = key;
+	pack16(p, htons(flags));
+	p += 2;
+	pack8(p, protocol);
+	p++;
+	pack8(p, algorithm);
+	p++;
+	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+	pack(p, signature, keylen);
+	p += keylen;
+	keylen = (p - key);
+	if (keyid != keytag(key, keylen)) {
+		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+		return -1;
+	}
 	
 	labels = label_count(zonename);
 	if (labels < 0) {
@@ -882,16 +958,47 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 	}
 	
 	p = key;
+
+	pack16(p, htons(DNS_TYPE_DNSKEY));
+	p += 2;
+	pack8(p, algorithm);
+	p++;
+	pack8(p, labels);
+	p++;
+	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
+	p += 4;
+		
+	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+	strptime(timebuf, "%Y%m%d%H%M%S", tm);
+	expiredon2 = mktime(tm);
+	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+	strptime(timebuf, "%Y%m%d%H%M%S", tm);
+	signedon2 = mktime(tm);
+
+	pack32(p, htonl(expiredon2));
+	p += 4;
+	pack32(p, htonl(signedon2));	
+	p += 4;
+	pack16(p, htons(keyid));
+	p += 2;
+	pack(p, dnsname, labellen);
+	p += labellen;
+
+	/* no signature here */	
+
+	
 	for (i = 0; i < sddk->dnskey_count; i++) {
-		pack(p, zonename, strlen(zonename));
-		p += strlen(zonename);
+		pack(p, dnsname, labellen);
+		p += labellen;
 		pack16(p, htons(DNS_TYPE_DNSKEY));
 		p += 2;
 		pack16(p, htons(DNS_CLASS_IN));
 		p += 2;
 		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
 		p += 4;
-		pack16(p, sddk->dnskey[i].flags);
+		pack16(p, htons(2 + 1 + 1 + sddk->dnskey[i].publickey_len));
+		p += 2;
+		pack16(p, htons(sddk->dnskey[i].flags));
 		p += 2;
 		pack8(p, sddk->dnskey[i].protocol);
 		p++;
@@ -900,26 +1007,44 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 		pack(p, sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len);
 		p += sddk->dnskey[i].publickey_len;
 	}
-
 	keylen = (p - key);	
+
+#if 1
+	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+	for (i = 0; i < keylen; i++) {
+		write(fd, (char *)&key[i], 1);
+	}
+	close(fd);
+	
+#endif
 
 	switch (algorithm) {
 	case ALGORITHM_RSASHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)&buf, &sha1);
+		SHA1_Final((u_char *)shabuf, &sha1);
 		bufsize = 20;
 		break;
 	case ALGORITHM_RSASHA256:	
 		SHA256_Init(&sha256);
 		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)&buf, &sha256);
+		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
+
+#if 1
+		printf("keylen = %d\n", keylen);
+		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+		for (i = 0; i < bufsize; i++) {
+			write(fd, (char *)&shabuf[i], 1);
+		}
+		close(fd);
+#endif
+
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)&buf, &sha512);
+		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
 	default:
@@ -938,7 +1063,7 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 		return -1;
 	}
 
-	if (RSA_sign(rsatype, (u_char *)buf, bufsize, (u_char *)&signature, &siglen, rsa) != 1) {
+	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
 		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
 		return -1;
 	}
@@ -961,7 +1086,7 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 u_int 
 keytag(u_char *key, u_int keysize)
 {
-	unsigned long ac;
+	u_long ac;
 	int i;
 	
 	for (ac = 0, i = 0; i < keysize; ++i)
