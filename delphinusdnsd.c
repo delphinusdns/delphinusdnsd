@@ -43,6 +43,7 @@ extern int 	find_filter(struct sockaddr_storage *, int);
 extern int 	find_recurse(struct sockaddr_storage *, int);
 extern u_int8_t find_region(struct sockaddr_storage *, int);
 extern int 	find_whitelist(struct sockaddr_storage *, int);
+extern char *	get_dns_type(int, int);
 extern void 	init_dnssec(void);
 extern void 	init_recurse(void);
 extern void 	init_region(void);
@@ -90,7 +91,6 @@ struct question		*build_question(char *, int, int);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct domain *, struct domain *, u_int8_t, int, int, struct recurses *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
 int			free_question(struct question *);
-char 			*get_dns_type(int dnstype);
 struct domain * 	get_soa(DB *, struct question *);
 int			lookup_type(int);
 void			mainloop(struct cfg *);
@@ -109,35 +109,6 @@ void 			slave_signal(int);
 
 #define PIDFILE "/var/run/delphinusdnsd.pid"
 #define MYDB_PATH "/var/db/delphinusdns"
-
-
-struct typetable {
-	char *type;
-	int number;
-} TT[] = {
-	{ "A", DNS_TYPE_A},
-	{ "NS", DNS_TYPE_NS},
-	{ "CNAME", DNS_TYPE_CNAME},
-	{ "SOA", DNS_TYPE_SOA},
-	{ "PTR", DNS_TYPE_PTR},
-	{ "MX", DNS_TYPE_MX},
-	{ "TXT", DNS_TYPE_TXT},
-	{ "AAAA", DNS_TYPE_AAAA},
-	{ "ANY", DNS_TYPE_ANY },
-	{ "SRV", DNS_TYPE_SRV },
-	{ "SPF", DNS_TYPE_SPF },
-	{ "SSHFP", DNS_TYPE_SSHFP },
-	{ "NAPTR", DNS_TYPE_NAPTR },
-	{ "RRSIG", DNS_TYPE_RRSIG },
-	{ "DNSKEY", DNS_TYPE_DNSKEY },
-	{ "NSEC", DNS_TYPE_NSEC },
-	{ "DS", DNS_TYPE_DS },
-	{ "NSEC3", DNS_TYPE_NSEC3 },
-	{ "NSEC3PARAM", DNS_TYPE_NSEC3PARAM },
-	{ "TLSA", DNS_TYPE_TLSA },
-	{ NULL, 0}
-};
-
 
 /* global variables */
 
@@ -190,7 +161,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.4 2016/07/21 18:43:54 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.5 2016/08/30 00:12:12 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1573,34 +1544,6 @@ get_soa(DB *db, struct question *question)
 }
 
 /*
- * GET_DNS_TYPE - take integer and compare to table, then spit back a static
- * 		  string with the result.  This function can't fail.
- */
-
-char *
-get_dns_type(int dnstype)
-{
-	static char type[128];
-	struct typetable *t;
-
-	t = TT;
-
-	while (t->type != NULL) {
-		if (dnstype == t->number)
-			break;	
-	
-		t = (t + 1);
-	}
-
-	if (t->type == NULL) {
-		snprintf(type, sizeof(type) - 1, "%u", dnstype);
-	} else
-		snprintf(type, sizeof(type) - 1, "%s(%u)", t->type, dnstype);
-
-	return (type);	
-}	
-
-/*
  * MAINLOOP - does the polling of tcp & udp descriptors and if ready receives the 
  * 		requests, builds the question and calls for replies, loops
  *
@@ -2377,7 +2320,7 @@ tcpnxdomain:
 			
 		tcpout:
 				if (lflag)
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s answering \"%s\" (%d/%d)\n", tnp->so, tnp->ident, tnp->address, tnp->region, question->converted_name, get_dns_type(ntohs(question->hdr->qtype)), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", replystring, len, slen);
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s answering \"%s\" (%d/%d)\n", tnp->so, tnp->ident, tnp->address, tnp->region, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", replystring, len, slen);
 
 
 				if (fakequestion != NULL) {
@@ -3020,12 +2963,12 @@ udpnxdomain:
 			
 		udpout:
 				if (lflag) {
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d) for \"%s\" type=%s class=%u, %s%sanswering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, received_ttl, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype)), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, " : ""), (question->dnssecok ? "dnssecok, " : "") , replystring, len, slen);
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d) for \"%s\" type=%s class=%u, %s%sanswering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, received_ttl, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, " : ""), (question->dnssecok ? "dnssecok, " : "") , replystring, len, slen);
 
 				}
 
 				if (logging.active == 1 && logging.bind == 0) {
-					remotelog(lfd, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d) for \"%s\" type=%s class=%u, %s%sanswering \"%s\" (%d/%d)", so, cfg->ident[i], address, received_ttl, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype)), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, ": ""), (question->dnssecok ? "dnssecok" : ""), replystring, len, slen);
+					remotelog(lfd, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d) for \"%s\" type=%s class=%u, %s%sanswering \"%s\" (%d/%d)", so, cfg->ident[i], address, received_ttl, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, ": ""), (question->dnssecok ? "dnssecok" : ""), replystring, len, slen);
 				}
 
 				if (fakequestion != NULL) {

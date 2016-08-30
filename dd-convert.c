@@ -53,6 +53,7 @@ void pack32(char *, u_int32_t);
 void pack16(char *, u_int16_t);
 void pack8(char *, u_int8_t);
 RSA * read_private_key(char *, int, int);
+u_int64_t timethuman(time_t);
 
 
 
@@ -97,6 +98,7 @@ extern struct question         *build_fake_question(char *, int, u_int16_t);
 extern char * dns_label(char *, int *);
 extern void * find_substruct(struct domain *, u_int16_t);
 extern int label_count(char *);
+extern char *get_dns_type(int, int);
 
 
 
@@ -573,12 +575,15 @@ dump_db(DB *db)
 				buf[len] = '\0';
 			}
 
-			printf("%s,rrsig,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s\n", 
+			printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,%s\n", 
 				sdomain->zonename,
 				sdomain->ttl[INTERNAL_TYPE_RRSIG],
-				rss->type_covered, rss->algorithm, rss->labels,
-				rss->original_ttl, rss->signature_expiration,
-				rss->signature_inception, rss->key_tag,
+				get_dns_type(rss->type_covered, 0), 
+				rss->algorithm, rss->labels,
+				rss->original_ttl, 
+				timethuman(rss->signature_expiration),
+				timethuman(rss->signature_inception), 
+				rss->key_tag,
 				sdomain->zonename,
 				buf);	
 		
@@ -1252,4 +1257,18 @@ read_private_key(char *zonename, int keyid, int algorithm)
 	fclose(f);
 	return (rsa);
 	
+}
+
+u_int64_t
+timethuman(time_t timet)
+{
+	char timebuf[512];
+	struct tm *tm;
+	u_int64_t retbuf;
+
+	tm = gmtime((time_t *)&timet);
+	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
+	retbuf = atoll(timebuf);
+
+	return(retbuf);
 }

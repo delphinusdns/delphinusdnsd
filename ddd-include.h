@@ -65,6 +65,7 @@
 #include <ifaddrs.h>
 #include <dirent.h>
 #include <signal.h>
+#include <time.h>
 
 #ifdef __linux__
 #include <grp.h>

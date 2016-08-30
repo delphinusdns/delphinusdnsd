@@ -43,11 +43,40 @@ u_int16_t check_qtype(struct domain *, u_int16_t, int, int *);
 struct question		*build_fake_question(char *, int, u_int16_t);
 
 extern void 	dolog(int, char *, ...);
+char 			*get_dns_type(int, int);
 
 /* externs */
 
 extern int debug;
 extern int *ptr;
+
+/* internals */
+struct typetable {
+	char *type;
+	int number;
+} TT[] = {
+	{ "A", DNS_TYPE_A},
+	{ "NS", DNS_TYPE_NS},
+	{ "CNAME", DNS_TYPE_CNAME},
+	{ "SOA", DNS_TYPE_SOA},
+	{ "PTR", DNS_TYPE_PTR},
+	{ "MX", DNS_TYPE_MX},
+	{ "TXT", DNS_TYPE_TXT},
+	{ "AAAA", DNS_TYPE_AAAA},
+	{ "ANY", DNS_TYPE_ANY },
+	{ "SRV", DNS_TYPE_SRV },
+	{ "SPF", DNS_TYPE_SPF },
+	{ "SSHFP", DNS_TYPE_SSHFP },
+	{ "NAPTR", DNS_TYPE_NAPTR },
+	{ "RRSIG", DNS_TYPE_RRSIG },
+	{ "DNSKEY", DNS_TYPE_DNSKEY },
+	{ "NSEC", DNS_TYPE_NSEC },
+	{ "DS", DNS_TYPE_DS },
+	{ "NSEC3", DNS_TYPE_NSEC3 },
+	{ "NSEC3PARAM", DNS_TYPE_NSEC3PARAM },
+	{ "TLSA", DNS_TYPE_TLSA },
+	{ NULL, 0}
+};
 
 /*
  * LABEL_COUNT - count the labels and return that number, based on dns_label()
@@ -698,3 +727,36 @@ build_fake_question(char *name, int namelen, u_int16_t type)
 
 	return (q);
 }
+
+/*
+ * GET_DNS_TYPE - take integer and compare to table, then spit back a static
+ * 		  string with the result.  This function can't fail.
+ */
+
+char *
+get_dns_type(int dnstype, int withbracket)
+{
+	static char type[128];
+	struct typetable *t;
+
+	t = TT;
+
+	while (t->type != NULL) {
+		if (dnstype == t->number)
+			break;	
+	
+		t = (t + 1);
+	}
+
+	if (t->type == NULL) {
+		snprintf(type, sizeof(type) - 1, "%u", dnstype);
+	} else {
+		if (withbracket)
+			snprintf(type, sizeof(type) - 1, "%s(%u)", t->type, dnstype);
+		else
+			snprintf(type, sizeof(type) - 1, "%s", t->type);
+	}
+
+	return (type);	
+}	
+
