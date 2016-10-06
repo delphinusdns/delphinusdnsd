@@ -895,8 +895,10 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
 	expiredon = atoll(timebuf);
 
+#if 0
 	signedon = 20160821133855;
 	expiredon = 20161020133855;
+#endif
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -975,10 +977,10 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
 	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = mktime(tm);
+	expiredon2 = timegm(tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
 	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = mktime(tm);
+	signedon2 = timegm(tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -990,7 +992,6 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 	p += labellen;
 
 	/* no signature here */	
-
 	
 	for (i = 0; i < sddk->dnskey_count; i++) {
 		pack(p, dnsname, labellen);
@@ -1014,7 +1015,7 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 	}
 	keylen = (p - key);	
 
-#if 1
+#if 0
 	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
 	for (i = 0; i < keylen; i++) {
 		write(fd, (char *)&key[i], 1);
@@ -1036,7 +1037,7 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
 
-#if 1
+#if 0
 		printf("keylen = %d\n", keylen);
 		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
 		for (i = 0; i < bufsize; i++) {
