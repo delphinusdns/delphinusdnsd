@@ -755,7 +755,8 @@ hash_name(char *name, int len, struct nsec3param *n3p)
 		SHA1_Final(md, &ctx);
 	}
 
-	return (base32hex_encode(md, sizeof(md)));	
+	
+	return(base32hex_encode(md, sizeof(md)));
 }
 
 void

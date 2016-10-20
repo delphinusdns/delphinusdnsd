@@ -46,6 +46,7 @@ char *	create_key(char *, int, int, int, int);
 void 	dump_db(DB *);
 char * alg_to_name(int);
 int alg_to_rsa(int);
+int 	construct_nsec3(DB *, char *, int, char *);
 int 	calculate_rrsigs(DB *, char *, char *, char *, int);
 u_int keytag(u_char *key, u_int keysize);
 void pack(char *, char *, int);
@@ -91,6 +92,9 @@ char *versionstring = NULL;
 
 extern int fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
 extern int fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
+extern int fill_nsec3param(char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
+extern int fill_nsec3(char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
+
 extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int      mybase64_decode(char const *, u_char *, size_t);
 extern struct domain *         lookup_zone(DB *, struct question *, int *, int *, char *);
@@ -99,7 +103,7 @@ extern char * dns_label(char *, int *);
 extern void * find_substruct(struct domain *, u_int16_t);
 extern int label_count(char *);
 extern char *get_dns_type(int, int);
-
+extern char * hash_name(char *, int, struct nsec3param *);
 
 
 
@@ -113,9 +117,11 @@ main(int argc, char *argv[])
 	int create_ksk = 0;
 	int algorithm = ALGORITHM_RSASHA256;
 	int expiry = 5184000;
+	int iterations = 10;
 
 	key_t key;
 
+	char *salt = "-";
 	char *zonefile = NULL;
 	char *zonename = NULL;
 	
@@ -146,7 +152,7 @@ main(int argc, char *argv[])
 
 		case 'I':
 			/* NSEC3 iterations */
-
+			iterations = atoi(optarg);	
 			break;
 
 		case 'i':
@@ -178,6 +184,11 @@ main(int argc, char *argv[])
 		
 			/* output file */
 
+			break;
+
+		case 's':
+			/* salt */
+			salt = optarg;
 			break;
 
 		case 't':
@@ -278,14 +289,19 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-	/* second pass calculate RRSIG's for every RR set */
+	/* second pass construct NSEC3 records */	
+
+	if (construct_nsec3(db, zonename, iterations, salt) < 0) {
+		dolog(LOG_INFO, "construct nsec3 failed\n");
+		exit(1);
+	}
+
+	/* third  pass calculate RRSIG's for every RR set */
 
 	if (calculate_rrsigs(db, zonename, zsk_key, ksk_key, expiry) < 0) {
 		dolog(LOG_INFO, "calculate rrsigs failed\n");
 		exit(1);
 	}
-
-	/* third pass construct NSEC3 records */	
 
 	/* write new zone file */
 	dump_db(db);
@@ -1272,4 +1288,208 @@ timethuman(time_t timet)
 	retbuf = atoll(timebuf);
 
 	return(retbuf);
+}
+
+int
+construct_nsec3(DB *db, char *zone, int iterations, char *salt)
+{
+
+        DBT key, data;
+        DBC *cursor;
+	
+	struct domain *sd;
+	struct question *q;
+#if 0
+	struct domain_rrsig *sdrr; 
+	struct domain_dnskey *sddk;
+	struct rrsig *rss;
+	int len;
+#endif
+	struct nsec3param n3p;
+	struct domain_nsec3param *sdn3p;
+	
+	char replystring[512];
+	char buf[4096];
+	char bitmap[4096];
+	char *dnsname;
+	char *hashname = NULL;
+
+	int labellen;
+	int retval, lzerrno;
+	u_int32_t ttl = 0;
+
+	int j, rs;
+
+	TAILQ_HEAD(listhead, mynsec3) head;
+
+	struct mynsec3 {
+		char *hashname;
+		char *bitmap;
+		TAILQ_ENTRY(mynsec3) entries;
+	} *n1, *n2, *np;
+		
+		
+	TAILQ_INIT(&head);
+
+	/* fill nsec3param */
+	
+	if (fill_nsec3param(zone, "nsec3param", 0, 1, 0, iterations, salt) < 0) {
+		printf("fill_nsec3param failed\n");
+		return -1;
+	}
+
+	dnsname = dns_label(zone, &labellen);
+	if (dnsname == NULL)
+		return -1;
+
+	q = build_fake_question(dnsname, labellen, DNS_TYPE_NSEC3PARAM);
+	if (q == NULL) {
+		return -1;
+	}
+
+	if ((sd = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
+		return -1;
+	}
+
+	/* RFC 5155 page 3 */
+	ttl = sd->ttl[INTERNAL_TYPE_SOA];
+
+        if ((sdn3p = find_substruct(sd, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
+                return -1;
+        }
+
+	n3p.algorithm = 1;	/* still in conformance with above */
+	n3p.flags = 0;
+	n3p.iterations = sdn3p->nsec3param.iterations;
+	n3p.saltlen = sdn3p->nsec3param.saltlen;
+	memcpy(&n3p.salt, sdn3p->nsec3param.salt, n3p.saltlen);
+
+	/* set cursor on database */
+	
+	if (db->cursor(db, NULL, &cursor, 0) != 0) {
+		dolog(LOG_INFO, "db->cursor: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	memset(&key, 0, sizeof(key));   
+	memset(&data, 0, sizeof(data));
+
+	if (cursor->c_get(cursor, &key, &data, DB_FIRST) != 0) {
+		dolog(LOG_INFO, "cursor->c_get: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	
+	j = 0;
+	do {
+		
+		rs = data.size;
+		if ((sd = calloc(1, rs)) == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			exit(1);
+		}
+
+		memcpy((char *)sd, (char *)data.data, data.size);
+
+		
+		hashname = hash_name(sd->zone, sd->zonelen, &n3p);
+		if (hashname == NULL) {
+			dolog(LOG_INFO, "hash_name return NULL");
+			return -1;
+		}
+		
+		bitmap[0] = '\0';
+		if (sd->flags & DOMAIN_HAVE_A)
+			strlcat(bitmap, "A ", sizeof(bitmap));	
+		if (sd->flags & DOMAIN_HAVE_NS)
+			strlcat(bitmap, "NS ", sizeof(bitmap));	
+		if (sd->flags & DOMAIN_HAVE_CNAME)
+			strlcat(bitmap, "CNAME ", sizeof(bitmap));	
+		if (sd->flags & DOMAIN_HAVE_SOA)
+			strlcat(bitmap, "SOA ", sizeof(bitmap));	
+		if (sd->flags & DOMAIN_HAVE_PTR)
+			strlcat(bitmap, "PTR ", sizeof(bitmap));	
+		if (sd->flags & DOMAIN_HAVE_MX)
+			strlcat(bitmap, "MX ", sizeof(bitmap));	
+		if (sd->flags & DOMAIN_HAVE_TXT)
+			strlcat(bitmap, "TXT ", sizeof(bitmap));	
+		if (sd->flags & DOMAIN_HAVE_AAAA)
+			strlcat(bitmap, "AAAA ", sizeof(bitmap));	
+		if (sd->flags & DOMAIN_HAVE_SRV)
+			strlcat(bitmap, "SRV ", sizeof(bitmap));	
+		if (sd->flags & DOMAIN_HAVE_NAPTR)
+			strlcat(bitmap, "NAPTR ", sizeof(bitmap));	
+		if (sd->flags & DOMAIN_HAVE_DS)
+			strlcat(bitmap, "DS ", sizeof(bitmap));	
+		if (sd->flags & DOMAIN_HAVE_SSHFP)
+			strlcat(bitmap, "SSHFP ", sizeof(bitmap));	
+
+		/* they all have RRSIG */
+		strlcat(bitmap, "RRSIG ", sizeof(bitmap));	
+
+		if (sd->flags & DOMAIN_HAVE_DNSKEY)
+			strlcat(bitmap, "DNSKEY ", sizeof(bitmap));	
+
+		if (sd->flags & DOMAIN_HAVE_NSEC3)
+			strlcat(bitmap, "NSEC3 ", sizeof(bitmap));	
+
+		if (sd->flags & DOMAIN_HAVE_NSEC3PARAM)
+			strlcat(bitmap, "NSEC3PARAM ", sizeof(bitmap));	
+
+		if (sd->flags & DOMAIN_HAVE_TLSA)
+			strlcat(bitmap, "TLSA ", sizeof(bitmap));	
+
+		if (sd->flags & DOMAIN_HAVE_SPF)
+			strlcat(bitmap, "SPF ", sizeof(bitmap));	
+
+#if 0
+		printf("%s %s\n", buf, bitmap);
+#endif
+
+		n1 = malloc(sizeof(struct mynsec3));
+		if (n1 == NULL) {
+			dolog(LOG_INFO, "out of memory");
+			return -1;
+		}
+		
+		n1->hashname = strdup(hashname);
+		n1->bitmap = strdup(bitmap);	
+		if (n1->hashname == NULL || n1->bitmap == NULL) {
+			dolog(LOG_INFO, "out of memory");
+			return -1;
+		}
+	
+		if (TAILQ_EMPTY(&head))
+			TAILQ_INSERT_TAIL(&head, n1, entries);
+		else {
+			TAILQ_FOREACH(n2, &head, entries) {
+				if (strcmp(n1->hashname, n2->hashname) < 0)
+					break;
+			}
+
+			if (n2 != NULL) 
+				TAILQ_INSERT_BEFORE(n2, n1, entries);
+			else
+				TAILQ_INSERT_TAIL(&head, n1, entries);
+		}
+
+	} while (cursor->c_get(cursor, &key, &data, DB_NEXT) == 0);
+
+	TAILQ_FOREACH(n2, &head, entries) {
+		np = TAILQ_NEXT(n2, entries);
+		if (np == NULL)
+			np = TAILQ_FIRST(&head);
+
+#if 0
+		printf("%s next: %s %s\n", n2->hashname, np->hashname, n2->bitmap);
+#endif
+		snprintf(buf, sizeof(buf), "%s.%s.", n2->hashname, zone);
+		fill_nsec3(buf, "nsec3", ttl, n3p.algorithm, n3p.flags, n3p.iterations, n3p.salt, np->hashname, n2->bitmap);
+	}
+
+#if 0
+	printf("%d records\n", j);
+#endif
+	
+	return 0;
 }

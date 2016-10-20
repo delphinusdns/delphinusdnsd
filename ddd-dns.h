@@ -163,6 +163,8 @@ struct dns_question_hdr {
 #define DNS_TYPE_MX	15
 #define DNS_TYPE_TXT	16
 
+#define DNS_TYPE_AAAA	28 		/* quad A - RFC 3596 */
+
 #define DNS_TYPE_SRV	33		/* RFC 2782, page 8 */
 #define DNS_TYPE_NAPTR	35		/* RFC 2915, page 3 */
 #define DNS_TYPE_OPT	41		/* RFC 6891, page 7 */
@@ -189,8 +191,6 @@ struct dns_question_hdr {
 #define DNS_TYPE_DELEGATE 	0xfffd		/* ns delegations */
 #define DNS_TYPE_HINT		0xfffc		/* root hint */
 
-/* quad A - RFC 3596 */
-#define DNS_TYPE_AAAA	28
 
 
 /* DNS CLASSES - RFC 1035 page 13 */
