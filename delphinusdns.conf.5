@@ -191,11 +191,11 @@ line = ( version | axfrport | include | zone | region |
 	axfr | notify | whitelist | filter | recurse | logging 
         | comment | options )
 
-version = "version" ("number") semicolon
+version = "version" ("number") ;
 
-axfrport = "axfrport" ("port number") semicolon
+axfrport = "axfrport" ("port number") ; 
 
-include = "include" ("filename") semicolon
+include = "include" ("filename") ; 
 
 zone = "zone" ("string") [ "{" zonedata "}" ]
 zonedata = { [hostname] [ "," dnstype] [ "," ttl ] ["," variablednsdata] }
@@ -209,7 +209,7 @@ ttl = number
 
 region = "region" ("string") [ "{" cidrlist "}"
 
-cidrlist = { [ cidr-address ] semicolon ... }
+cidrlist = { [ cidr-address ] ; ... }
 
 axfr = "axfr-for" ("string") [ "{" cidrlist "}" ]
 
@@ -223,22 +223,22 @@ recurse = "recurse-for" ("string") [ "{" cidrlist "}" ]
 
 logging = "logging" ("string") [ "{" logstatements "}" ]
 logstatements = ( "logbind" | "logpasswd" | "logport" | "loghost" ) 
-logbind = "logbind" ("string") semicolon
-logpasswd = "logpasswd" ("string") semicolon
-logport = "logport" number semicolon
-loghost = "loghost" cidr-address semicolon
+logbind = "logbind" ("string") ; 
+logpasswd = "logpasswd" ("string") ; 
+logport = "logport" number ;
+loghost = "loghost" cidr-address ; 
 
-comment = ( semicolon | pound ) line
+comment = ( ; | pound ) line
 
 options = "options" ("string") [ "{" optionlist "}" ]
 optionlist = ( optrecurse | optinterface | optfork | optport | 
 		optratelimit | optbind | optdnssec )
-optrecurse = "recurse" semicolon 
-optinterface = "interface" ("string") semicolon
-optfork = "fork" number semicolon
-optratelimit = "ratelimit-pps" number semicolon
-optbind = "bind" cidr-address semicolon
-optdnssec = "dnssec" semicolon
+optrecurse = "recurse" ;
+optinterface = "interface" ("string") ;
+optfork = "fork" number ; 
+optratelimit = "ratelimit-pps" number ; 
+optbind = "bind" cidr-address ;
+optdnssec = "dnssec" ; 
 .Ed
 .Sh FILES
 .Pa /etc/delphinusdns.conf
