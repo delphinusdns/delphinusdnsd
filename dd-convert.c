@@ -55,6 +55,8 @@ void pack16(char *, u_int16_t);
 void pack8(char *, u_int8_t);
 RSA * read_private_key(char *, int, int);
 u_int64_t timethuman(time_t);
+char * bitmap2human(char *, int);
+char * bin2hex(char *, int);
 
 
 
@@ -104,6 +106,7 @@ extern void * find_substruct(struct domain *, u_int16_t);
 extern int label_count(char *);
 extern char *get_dns_type(int, int);
 extern char * hash_name(char *, int, struct nsec3param *);
+extern char * base32hex_encode(u_char *input, int len);
 
 
 
@@ -528,6 +531,7 @@ dump_db(DB *db)
 	struct domain *sdomain;
 	struct domain_rrsig *sdrr;
 	struct domain_dnskey *sddk;
+	struct domain_nsec3 *sdn3;
 	struct rrsig *rss;
 	
 	char buf[4096];
@@ -576,6 +580,23 @@ dump_db(DB *db)
 					sddk->dnskey[i].algorithm,
 					buf);
 			}
+		}
+		if (sdomain->flags & DOMAIN_HAVE_NSEC3) {
+			printf("has nsec3\n");
+			if ((sdn3 = (struct domain_nsec3 *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3)) == NULL) {
+				dolog(LOG_INFO, "no nsec3 in zone!\n");
+			}
+			
+			printf("%s,nsec3,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\"\n",
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_NSEC3],
+				sdn3->nsec3.algorithm,
+				sdn3->nsec3.flags,
+				sdn3->nsec3.iterations,
+				(*sdn3->nsec3.salt == '\0') ? "-" : bin2hex(sdn3->nsec3.salt, sdn3->nsec3.saltlen),
+				base32hex_encode(sdn3->nsec3.next, sdn3->nsec3.nextlen),
+				bitmap2human(sdn3->nsec3.bitmap, sdn3->nsec3.bitmap_len));
+
 		}
 		if (sdomain->flags & DOMAIN_HAVE_RRSIG) {
 			printf(" has rrsig\n");
@@ -1492,4 +1513,103 @@ construct_nsec3(DB *db, char *zone, int iterations, char *salt)
 #endif
 	
 	return 0;
+}
+
+char *
+bin2hex(char *bin, int len)
+{
+	static char hex[4096];
+	char *p;
+	int i;
+
+	p = &hex[0];
+
+	for (i = 0; i < len; i++) {
+		snprintf(p, sizeof(hex), "%02x", bin[i] & 0xff);
+		p += 2;
+	}
+
+	*p = '\0';
+
+	return ((char *)&hex);
+}
+
+char *
+bitmap2human(char *bitmap, int len)
+{
+	static char human[4096];
+	char expanded_bitmap[32];
+	u_int16_t bit;
+	int i, j, block, bitlen;
+	int x;
+	char *p;
+
+	memset(&human, 0, sizeof(human));
+
+	for (i = 0, p = bitmap; i < len;) {
+		block = *p;
+		p++;
+		i++;
+		memset(&expanded_bitmap, 0, sizeof(expanded_bitmap));
+		bitlen = *p;
+		p++;
+		i++;
+		memcpy(&expanded_bitmap, p, bitlen);
+		p += bitlen;
+		i += bitlen;
+		for (j = 0; j < 32; j++) {
+			if (expanded_bitmap[j] & 0x80) {
+				x = 0;
+				bit = (block * 255) + ((j * 8) + x);
+				strlcat(human, get_dns_type(bit, 0), sizeof(human));
+				strlcat(human, " ", sizeof(human));
+			}
+			if (expanded_bitmap[j] & 0x40) {
+				x = 1;
+				bit = (block * 255) + ((j * 8) + x);
+				strlcat(human, get_dns_type(bit, 0), sizeof(human));
+				strlcat(human, " ", sizeof(human));
+			}
+			if (expanded_bitmap[j] & 0x20) {
+				x = 2;
+				bit = (block * 255) + ((j * 8) + x);
+				strlcat(human, get_dns_type(bit, 0), sizeof(human));
+				strlcat(human, " ", sizeof(human));
+			}
+			if (expanded_bitmap[j] & 0x10) {
+				x = 3;
+				bit = (block * 255) + ((j * 8) + x);
+				strlcat(human, get_dns_type(bit, 0), sizeof(human));
+				strlcat(human, " ", sizeof(human));
+			}
+			if (expanded_bitmap[j] & 0x8) {
+				x = 4;
+				bit = (block * 255) + ((j * 8) + x);
+				strlcat(human, get_dns_type(bit, 0), sizeof(human));
+				strlcat(human, " ", sizeof(human));
+			}
+			if (expanded_bitmap[j] & 0x4) {
+				x = 5;
+				bit = (block * 255) + ((j * 8) + x);
+				strlcat(human, get_dns_type(bit, 0), sizeof(human));
+				strlcat(human, " ", sizeof(human));
+			}
+			if (expanded_bitmap[j] & 0x2) {
+				x = 6;
+				bit = (block * 255) + ((j * 8) + x);
+				strlcat(human, get_dns_type(bit, 0), sizeof(human));
+				strlcat(human, " ", sizeof(human));
+			}
+			if (expanded_bitmap[j] & 0x1) {
+				x = 7;
+				bit = (block * 255) + ((j * 8) + x);
+				strlcat(human, get_dns_type(bit, 0), sizeof(human));
+				strlcat(human, " ", sizeof(human));
+			}
+
+		}
+	}
+		
+
+	return ((char *)&human);
 }
