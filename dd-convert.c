@@ -1610,6 +1610,8 @@ bitmap2human(char *bitmap, int len)
 		}
 	}
 		
+	if (human[strlen(human) - 1] == ' ')
+		human[strlen(human) - 1] = '\0';
 
 	return ((char *)&human);
 }
