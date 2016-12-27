@@ -628,21 +628,23 @@ dump_db(DB *db)
 			}
 
 			if ((sdomain->flags & DOMAIN_HAVE_DNSKEY) && sdrr->rrsig_dnskey_count > 0) {
-				rss = (struct rrsig *)&sdrr->rrsig_dnskey[0];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
+				for (i = 0; i < sdrr->rrsig_dnskey_count; i++) {
+					rss = (struct rrsig *)&sdrr->rrsig_dnskey[i];
+					len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+					buf[len] = '\0';
 
-				printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-					sdomain->zonename,
-					sdomain->ttl[INTERNAL_TYPE_RRSIG],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
+					printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+						sdomain->zonename,
+						sdomain->ttl[INTERNAL_TYPE_RRSIG],
+						get_dns_type(rss->type_covered, 0), 
+						rss->algorithm, rss->labels,
+						rss->original_ttl, 
+						timethuman(rss->signature_expiration),
+						timethuman(rss->signature_inception), 
+						rss->key_tag,
+						convert_name(rss->signers_name, rss->signame_len),
+						buf);	
+				}
 			}
 
 			if (sdomain->flags & DOMAIN_HAVE_A) {
@@ -1256,6 +1258,173 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 
 	/* get the KSK */
 	snprintf(buf, sizeof(buf), "%s.key", ksk_key);
+	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
+		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+		return -1;
+	}
+
+	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "parse %s\n", buf);
+		close (fd);
+		return -1;
+	}
+
+	close(fd);
+
+	/* check the keytag supplied */
+	p = key;
+	pack16(p, htons(flags));
+	p += 2;
+	pack8(p, protocol);
+	p++;
+	pack8(p, algorithm);
+	p++;
+	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+	pack(p, signature, keylen);
+	p += keylen;
+	keylen = (p - key);
+	if (keyid != keytag(key, keylen)) {
+		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+		return -1;
+	}
+	
+	labels = label_count(sd->zonename);
+	if (labels < 0) {
+		dolog(LOG_INFO, "label_count");
+		return -1;
+	}
+
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL)
+		return -1;
+
+	if (sd->flags & DOMAIN_HAVE_DNSKEY) {
+                if ((sddk = (struct domain_dnskey *)find_substruct(sd, INTERNAL_TYPE_DNSKEY)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in apex!\n");
+                        return -1;
+		}
+	}
+	
+	p = key;
+
+	pack16(p, htons(DNS_TYPE_DNSKEY));
+	p += 2;
+	pack8(p, algorithm);
+	p++;
+	pack8(p, labels);
+	p++;
+	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
+	p += 4;
+		
+	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+	strptime(timebuf, "%Y%m%d%H%M%S", tm);
+	expiredon2 = timegm(tm);
+	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+	strptime(timebuf, "%Y%m%d%H%M%S", tm);
+	signedon2 = timegm(tm);
+
+	pack32(p, htonl(expiredon2));
+	p += 4;
+	pack32(p, htonl(signedon2));	
+	p += 4;
+	pack16(p, htons(keyid));
+	p += 2;
+	pack(p, dnsname, labellen);
+	p += labellen;
+
+	/* no signature here */	
+	
+	for (i = 0; i < sddk->dnskey_count; i++) {
+		pack(p, dnsname, labellen);
+		p += labellen;
+		pack16(p, htons(DNS_TYPE_DNSKEY));
+		p += 2;
+		pack16(p, htons(DNS_CLASS_IN));
+		p += 2;
+		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
+		p += 4;
+		pack16(p, htons(2 + 1 + 1 + sddk->dnskey[i].publickey_len));
+		p += 2;
+		pack16(p, htons(sddk->dnskey[i].flags));
+		p += 2;
+		pack8(p, sddk->dnskey[i].protocol);
+		p++;
+		pack8(p, sddk->dnskey[i].algorithm);
+		p++;
+		pack(p, sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len);
+		p += sddk->dnskey[i].publickey_len;
+	}
+	keylen = (p - key);	
+
+#if 0
+	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+	for (i = 0; i < keylen; i++) {
+		write(fd, (char *)&key[i], 1);
+	}
+	close(fd);
+	
+#endif
+
+	switch (algorithm) {
+	case ALGORITHM_RSASHA1:
+		SHA1_Init(&sha1);
+		SHA1_Update(&sha1, key, keylen);
+		SHA1_Final((u_char *)shabuf, &sha1);
+		bufsize = 20;
+		break;
+	case ALGORITHM_RSASHA256:	
+		SHA256_Init(&sha256);
+		SHA256_Update(&sha256, key, keylen);
+		SHA256_Final((u_char *)shabuf, &sha256);
+		bufsize = 32;
+
+#if 0
+		printf("keylen = %d\n", keylen);
+		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+		for (i = 0; i < bufsize; i++) {
+			write(fd, (char *)&shabuf[i], 1);
+		}
+		close(fd);
+#endif
+
+		break;
+	case ALGORITHM_RSASHA512:
+		SHA512_Init(&sha512);
+		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Final((u_char *)shabuf, &sha512);
+		bufsize = 64;
+		break;
+	default:
+		return -1;
+	}
+		
+	rsa = read_private_key(zonename, keyid, algorithm);
+	if (rsa == NULL) {
+		dolog(LOG_INFO, "reading private key failed\n");
+		return -1;
+	}
+		
+	rsatype = alg_to_rsa(algorithm);
+	if (rsatype == -1) {
+		dolog(LOG_INFO, "algorithm mismatch\n");
+		return -1;
+	}
+
+	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
+		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
+		return -1;
+	}
+
+	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+	tmp[len] = '\0';
+
+	if (fill_rrsig(sd->zonename, "RRSIG", ttl, "DNSKEY", algorithm, labels, sd->ttl[INTERNAL_TYPE_DNSKEY], expiredon, signedon, keyid, zonename, tmp) < 0) {
+		dolog(LOG_INFO, "fill_rrsig\n");
+		return -1;
+	}
+
+	/* now work out the ZSK */
+	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
 	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
 		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
 		return -1;
