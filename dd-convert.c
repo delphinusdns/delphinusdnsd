@@ -593,7 +593,7 @@ dump_db(DB *db)
 				sdn3->nsec3.algorithm,
 				sdn3->nsec3.flags,
 				sdn3->nsec3.iterations,
-				(*sdn3->nsec3.salt == '\0') ? "-" : bin2hex(sdn3->nsec3.salt, sdn3->nsec3.saltlen),
+				(sdn3->nsec3.saltlen == 0) ? "-" : bin2hex(sdn3->nsec3.salt, sdn3->nsec3.saltlen),
 				base32hex_encode(sdn3->nsec3.next, sdn3->nsec3.nextlen),
 				bitmap2human(sdn3->nsec3.bitmap, sdn3->nsec3.bitmap_len));
 
@@ -1505,7 +1505,7 @@ construct_nsec3(DB *db, char *zone, int iterations, char *salt)
 		printf("%s next: %s %s\n", n2->hashname, np->hashname, n2->bitmap);
 #endif
 		snprintf(buf, sizeof(buf), "%s.%s.", n2->hashname, zone);
-		fill_nsec3(buf, "nsec3", ttl, n3p.algorithm, n3p.flags, n3p.iterations, n3p.salt, np->hashname, n2->bitmap);
+		fill_nsec3(buf, "nsec3", ttl, n3p.algorithm, n3p.flags, n3p.iterations, salt, np->hashname, n2->bitmap);
 	}
 
 #if 0
@@ -1522,14 +1522,13 @@ bin2hex(char *bin, int len)
 	char *p;
 	int i;
 
+	memset(&hex, 0, sizeof(hex));
 	p = &hex[0];
 
 	for (i = 0; i < len; i++) {
 		snprintf(p, sizeof(hex), "%02x", bin[i] & 0xff);
 		p += 2;
 	}
-
-	*p = '\0';
 
 	return ((char *)&hex);
 }
