@@ -532,6 +532,7 @@ dump_db(DB *db)
 	struct domain_rrsig *sdrr;
 	struct domain_dnskey *sddk;
 	struct domain_nsec3 *sdn3;
+	struct domain_nsec3param *sdn3param;
 	struct rrsig *rss;
 	
 	char buf[4096];
@@ -580,6 +581,20 @@ dump_db(DB *db)
 					sddk->dnskey[i].algorithm,
 					buf);
 			}
+		}
+		if (sdomain->flags & DOMAIN_HAVE_NSEC3PARAM) {
+			printf("has nsec3param\n");
+			if ((sdn3param = (struct domain_nsec3param *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
+				dolog(LOG_INFO, "no nsec3param in zone!\n");
+			}
+			
+			printf("%s,nsec3param,%d,%d,%d,%d,\"%s\"\n",
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_NSEC3PARAM],
+				sdn3param->nsec3param.algorithm,
+				sdn3param->nsec3param.flags,
+				sdn3param->nsec3param.iterations,
+				(sdn3param->nsec3param.saltlen == 0) ? "-" : bin2hex(sdn3param->nsec3param.salt, sdn3param->nsec3param.saltlen));
 		}
 		if (sdomain->flags & DOMAIN_HAVE_NSEC3) {
 			printf("has nsec3\n");
