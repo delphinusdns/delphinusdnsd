@@ -43,7 +43,7 @@ void	dolog(int pri, char *fmt, ...);
 int	add_dnskey(DB *, char *, char *);
 char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
 char *	create_key(char *, int, int, int, int);
-void 	dump_db(DB *);
+int 	dump_db(DB *, FILE *, char *);
 char * alg_to_name(int);
 int alg_to_rsa(int);
 int 	construct_nsec3(DB *, char *, int, char *);
@@ -67,7 +67,7 @@ RSA * read_private_key(char *, int, int);
 u_int64_t timethuman(time_t);
 char * bitmap2human(char *, int);
 char * bin2hex(char *, int);
-
+int print_sd(FILE *, struct domain *);
 
 
 #define ALGORITHM_RSASHA1	5		/* rfc 4034 , mandatory */
@@ -128,6 +128,8 @@ extern char * base32hex_encode(u_char *input, int len);
 int
 main(int argc, char *argv[])
 {
+	FILE *of = stdout;
+
 	int ch;
 	int ret, bits = 2048;
 	int ttl = 86400;
@@ -199,8 +201,14 @@ main(int argc, char *argv[])
 			break;
 
 		case 'o':
-		
 			/* output file */
+			if (optarg[0] == '-')
+				break;
+ 
+			if ((of = fopen(optarg, "w")) == NULL) {
+				perror("fopen");
+				exit(1);
+			}
 
 			break;
 
@@ -246,7 +254,9 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
+#if DEBUG
 	printf("zonefile is %s\n", zonefile);
+#endif
 
 	/* open the database(s) */
 	if ((ret = db_env_create(&dbenv, 0)) != 0) {
@@ -322,7 +332,8 @@ main(int argc, char *argv[])
 	}
 
 	/* write new zone file */
-	dump_db(db);
+	if (dump_db(db, of, zonename) < 0)
+		exit (1);
 
 	exit(0);
 }
@@ -535,23 +546,38 @@ parse_keyfile(int fd, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t
 	return (&retbuf[0]);	
 }
 
-void
-dump_db(DB *db)
+int
+dump_db(DB *db, FILE *of, char *zonename)
 {
-	int i, j, rs;
+	int j, rs;
 
         DBT key, data;
         DBC *cursor;
 	
+	struct question *q;
 	struct domain *sdomain;
-	struct domain_rrsig *sdrr;
-	struct domain_dnskey *sddk;
-	struct domain_nsec3 *sdn3;
-	struct domain_nsec3param *sdn3param;
-	struct rrsig *rss;
 	
-	char buf[4096];
-	int len;
+	char replystring[512];
+	char *dnsname;
+	int labellen;
+	int lzerrno, retval;
+
+	fprintf(of, "zone \"%s\" {\n", zonename);
+
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL)
+		return -1;
+
+	q = build_fake_question(dnsname, labellen, DNS_TYPE_SOA);
+	if (q == NULL) {
+		return -1;
+	}
+
+	if ((sdomain = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
+		return -1;
+	}
+
+	print_sd(of, sdomain);
 	
 	if (db->cursor(db, NULL, &cursor, 0) != 0) {
 		dolog(LOG_INFO, "db->cursor: %s\n", strerror(errno));
@@ -578,251 +604,21 @@ dump_db(DB *db)
 
 		memcpy((char *)sdomain, (char *)data.data, data.size);
 
-		printf("name: %s\n", sdomain->zonename);
+		if (strcmp(sdomain->zonename, zonename) == 0)
+			continue;
 
-		if (sdomain->flags & DOMAIN_HAVE_DNSKEY) {
-			printf(" has dnskey\n");
-			if ((sddk = (struct domain_dnskey *)find_substruct(sdomain, INTERNAL_TYPE_DNSKEY)) == NULL) {
-				dolog(LOG_INFO, "no dnskeys in zone!\n");
-			}
-			for (i = 0; i < sddk->dnskey_count; i++) {
-				len = mybase64_encode(sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len, buf, sizeof(buf));
-				buf[len] = '\0';
-				printf("%s,dnskey,%d,%d,%d,%d,%s\n", 
-					sdomain->zonename,
-					sdomain->ttl[INTERNAL_TYPE_DNSKEY],
-					sddk->dnskey[i].flags,
-					sddk->dnskey[i].protocol,
-					sddk->dnskey[i].algorithm,
-					buf);
-			}
-		}
-		if (sdomain->flags & DOMAIN_HAVE_NSEC3PARAM) {
-			printf("has nsec3param\n");
-			if ((sdn3param = (struct domain_nsec3param *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
-				dolog(LOG_INFO, "no nsec3param in zone!\n");
-			}
-			
-			printf("%s,nsec3param,%d,%d,%d,%d,\"%s\"\n",
-				sdomain->zonename,
-				sdomain->ttl[INTERNAL_TYPE_NSEC3PARAM],
-				sdn3param->nsec3param.algorithm,
-				sdn3param->nsec3param.flags,
-				sdn3param->nsec3param.iterations,
-				(sdn3param->nsec3param.saltlen == 0) ? "-" : bin2hex(sdn3param->nsec3param.salt, sdn3param->nsec3param.saltlen));
-		}
-		if (sdomain->flags & DOMAIN_HAVE_NSEC3) {
-			printf("has nsec3\n");
-			if ((sdn3 = (struct domain_nsec3 *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3)) == NULL) {
-				dolog(LOG_INFO, "no nsec3 in zone!\n");
-			}
-			
-			printf("%s,nsec3,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\"\n",
-				sdomain->zonename,
-				sdomain->ttl[INTERNAL_TYPE_NSEC3],
-				sdn3->nsec3.algorithm,
-				sdn3->nsec3.flags,
-				sdn3->nsec3.iterations,
-				(sdn3->nsec3.saltlen == 0) ? "-" : bin2hex(sdn3->nsec3.salt, sdn3->nsec3.saltlen),
-				base32hex_encode(sdn3->nsec3.next, sdn3->nsec3.nextlen),
-				bitmap2human(sdn3->nsec3.bitmap, sdn3->nsec3.bitmap_len));
+		print_sd(of, sdomain);
 
-		}
-		if (sdomain->flags & DOMAIN_HAVE_RRSIG) {
-			printf(" has rrsig\n");
-			
-                	if ((sdrr = (struct domain_rrsig *)find_substruct(sdomain, INTERNAL_TYPE_RRSIG)) == NULL) {
-				dolog(LOG_INFO, "no rrsigs in zone!\n");
-			}
-
-			if ((sdomain->flags & DOMAIN_HAVE_DNSKEY) && sdrr->rrsig_dnskey_count > 0) {
-				for (i = 0; i < sdrr->rrsig_dnskey_count; i++) {
-					rss = (struct rrsig *)&sdrr->rrsig_dnskey[i];
-					len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-					buf[len] = '\0';
-
-					printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-						sdomain->zonename,
-						sdomain->ttl[INTERNAL_TYPE_RRSIG],
-						get_dns_type(rss->type_covered, 0), 
-						rss->algorithm, rss->labels,
-						rss->original_ttl, 
-						timethuman(rss->signature_expiration),
-						timethuman(rss->signature_inception), 
-						rss->key_tag,
-						convert_name(rss->signers_name, rss->signame_len),
-						buf);	
-				}
-			}
-			if (sdomain->flags & DOMAIN_HAVE_SOA) {
-				rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_SOA];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
-
-				printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-					sdomain->zonename,
-					sdomain->ttl[INTERNAL_TYPE_RRSIG],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
-			}
-
-			if (sdomain->flags & DOMAIN_HAVE_TXT) {
-				rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_TXT];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
-
-				printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-					sdomain->zonename,
-					sdomain->ttl[INTERNAL_TYPE_RRSIG],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
-			}
-
-			if (sdomain->flags & DOMAIN_HAVE_AAAA) {
-				rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_AAAA];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
-
-				printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-					sdomain->zonename,
-					sdomain->ttl[INTERNAL_TYPE_RRSIG],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
-			}
-
-			if (sdomain->flags & DOMAIN_HAVE_NSEC3PARAM) {
-				rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NSEC3PARAM];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
-
-				printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-					sdomain->zonename,
-					sdomain->ttl[INTERNAL_TYPE_RRSIG],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
-			}
-
-			if (sdomain->flags & DOMAIN_HAVE_SPF) {
-				rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_SPF];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
-
-				printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-					sdomain->zonename,
-					sdomain->ttl[INTERNAL_TYPE_RRSIG],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
-			}
-
-
-			if (sdomain->flags & DOMAIN_HAVE_CNAME) {
-				rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_CNAME];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
-
-				printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-					sdomain->zonename,
-					sdomain->ttl[INTERNAL_TYPE_RRSIG],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
-			}
-
-
-			if (sdomain->flags & DOMAIN_HAVE_NS) {
-				rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NS];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
-
-				printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-					sdomain->zonename,
-					sdomain->ttl[INTERNAL_TYPE_RRSIG],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
-			}
-
-			if (sdomain->flags & DOMAIN_HAVE_MX) {
-				rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_MX];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
-
-				printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-					sdomain->zonename,
-					sdomain->ttl[INTERNAL_TYPE_RRSIG],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
-			}
-
-			if (sdomain->flags & DOMAIN_HAVE_A) {
-				rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_A];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
-
-				printf("%s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-					sdomain->zonename,
-					sdomain->ttl[INTERNAL_TYPE_RRSIG],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
-			}
-		}
 
 		j++;
 	} while (cursor->c_get(cursor, &key, &data, DB_NEXT) == 0);
 
+	fprintf(of, "}\n");
+
+#if DEBUG
 	printf("%d records\n", j);
+#endif
+	return (0);
 }
 
 char *	
@@ -4160,4 +3956,326 @@ bitmap2human(char *bitmap, int len)
 		human[strlen(human) - 1] = '\0';
 
 	return ((char *)&human);
+}
+
+int
+print_sd(FILE *of, struct domain *sdomain)
+{
+	int i, len;
+
+	struct domain_soa *sdsoa;
+	struct domain_ns *sdns;
+	struct domain_mx *sdmx;
+	struct domain_a *sda;
+	struct domain_rrsig *sdrr;
+	struct domain_dnskey *sddk;
+	struct domain_nsec3 *sdn3;
+	struct domain_nsec3param *sdn3param;
+	struct rrsig *rss;
+	
+	char buf[4096];
+
+	if (sdomain->flags & DOMAIN_HAVE_SOA) {
+		if ((sdsoa = (struct domain_soa *)find_substruct(sdomain, INTERNAL_TYPE_SOA)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in zone!\n");
+			return -1;
+		}
+		fprintf(of, "  %s,soa,%d,%s,%s,%d,%d,%d,%d,%d\n", 
+			sdomain->zonename,
+			sdomain->ttl[INTERNAL_TYPE_A],
+			convert_name(sdsoa->soa.nsserver, sdsoa->soa.nsserver_len),
+			convert_name(sdsoa->soa.responsible_person, sdsoa->soa.rp_len),
+			sdsoa->soa.serial, sdsoa->soa.refresh, sdsoa->soa.retry, 
+			sdsoa->soa.expire, sdsoa->soa.minttl);
+	}
+	if (sdomain->flags & DOMAIN_HAVE_NS) {
+		if ((sdns = (struct domain_ns *)find_substruct(sdomain, INTERNAL_TYPE_NS)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in zone!\n");
+			return -1;
+		}
+		for (i = 0; i < sdns->ns_count; i++) {
+			fprintf(of, "  %s,ns,%d,%s\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_A],
+				convert_name(sdns->ns[i].nsserver, sdns->ns[i].nslen));
+		}
+	}
+	if (sdomain->flags & DOMAIN_HAVE_MX) {
+		if ((sdmx = (struct domain_mx *)find_substruct(sdomain, INTERNAL_TYPE_MX)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in zone!\n");
+			return -1;
+		}
+		for (i = 0; i < sdmx->mx_count; i++) {
+			fprintf(of, "  %s,mx,%d,%d,%s\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_A],
+				sdmx->mx[i].preference,
+				convert_name(sdmx->mx[i].exchange, sdmx->mx[i].exchangelen));
+		}
+	}
+	if (sdomain->flags & DOMAIN_HAVE_A) {
+		if ((sda = (struct domain_a *)find_substruct(sdomain, INTERNAL_TYPE_A)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in zone!\n");
+			return -1;
+		}
+		for (i = 0; i < sda->a_count; i++) {
+			inet_ntop(AF_INET, &sda->a[i], buf, sizeof(buf));
+			fprintf(of, "  %s,a,%d,%s\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_A],
+				buf);
+		}
+	}
+	if (sdomain->flags & DOMAIN_HAVE_DNSKEY) {
+#if DEBUG
+		printf(" has dnskey\n");
+#endif
+		if ((sddk = (struct domain_dnskey *)find_substruct(sdomain, INTERNAL_TYPE_DNSKEY)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in zone!\n");
+			return -1;
+		}
+		for (i = 0; i < sddk->dnskey_count; i++) {
+			len = mybase64_encode(sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len, buf, sizeof(buf));
+			buf[len] = '\0';
+			fprintf(of, "  %s,dnskey,%d,%d,%d,%d,%s\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_DNSKEY],
+				sddk->dnskey[i].flags,
+				sddk->dnskey[i].protocol,
+				sddk->dnskey[i].algorithm,
+				buf);
+		}
+	}
+	if (sdomain->flags & DOMAIN_HAVE_NSEC3PARAM) {
+#if DEBUG
+		printf("has nsec3param\n");
+#endif
+		if ((sdn3param = (struct domain_nsec3param *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
+			dolog(LOG_INFO, "no nsec3param in zone!\n");
+			return -1;
+		}
+		
+		fprintf(of, "  %s,nsec3param,%d,%d,%d,%d,\"%s\"\n",
+			sdomain->zonename,
+			sdomain->ttl[INTERNAL_TYPE_NSEC3PARAM],
+			sdn3param->nsec3param.algorithm,
+			sdn3param->nsec3param.flags,
+			sdn3param->nsec3param.iterations,
+			(sdn3param->nsec3param.saltlen == 0) ? "-" : bin2hex(sdn3param->nsec3param.salt, sdn3param->nsec3param.saltlen));
+	}
+	if (sdomain->flags & DOMAIN_HAVE_NSEC3) {
+#if DEBUG
+		printf("has nsec3\n");
+#endif
+		if ((sdn3 = (struct domain_nsec3 *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3)) == NULL) {
+			dolog(LOG_INFO, "no nsec3 in zone!\n");
+			return -1;
+		}
+		
+		fprintf(of, "  %s,nsec3,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\"\n",
+			sdomain->zonename,
+			sdomain->ttl[INTERNAL_TYPE_NSEC3],
+			sdn3->nsec3.algorithm,
+			sdn3->nsec3.flags,
+			sdn3->nsec3.iterations,
+			(sdn3->nsec3.saltlen == 0) ? "-" : bin2hex(sdn3->nsec3.salt, sdn3->nsec3.saltlen),
+			base32hex_encode(sdn3->nsec3.next, sdn3->nsec3.nextlen),
+			bitmap2human(sdn3->nsec3.bitmap, sdn3->nsec3.bitmap_len));
+
+	}
+	if (sdomain->flags & DOMAIN_HAVE_RRSIG) {
+#if DEBUG
+		printf(" has rrsig\n");
+#endif
+		
+		if ((sdrr = (struct domain_rrsig *)find_substruct(sdomain, INTERNAL_TYPE_RRSIG)) == NULL) {
+			dolog(LOG_INFO, "no rrsigs in zone!\n");
+			return -1;
+		}
+
+		if ((sdomain->flags & DOMAIN_HAVE_DNSKEY) && sdrr->rrsig_dnskey_count > 0) {
+			for (i = 0; i < sdrr->rrsig_dnskey_count; i++) {
+				rss = (struct rrsig *)&sdrr->rrsig_dnskey[i];
+				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+				buf[len] = '\0';
+
+				fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+					sdomain->zonename,
+					sdomain->ttl[INTERNAL_TYPE_RRSIG],
+					get_dns_type(rss->type_covered, 0), 
+					rss->algorithm, rss->labels,
+					rss->original_ttl, 
+					timethuman(rss->signature_expiration),
+					timethuman(rss->signature_inception), 
+					rss->key_tag,
+					convert_name(rss->signers_name, rss->signame_len),
+					buf);	
+			}
+		}
+		if (sdomain->flags & DOMAIN_HAVE_SOA) {
+			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_SOA];
+			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+			buf[len] = '\0';
+
+			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				get_dns_type(rss->type_covered, 0), 
+				rss->algorithm, rss->labels,
+				rss->original_ttl, 
+				timethuman(rss->signature_expiration),
+				timethuman(rss->signature_inception), 
+				rss->key_tag,
+				convert_name(rss->signers_name, rss->signame_len),
+				buf);	
+		}
+
+		if (sdomain->flags & DOMAIN_HAVE_TXT) {
+			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_TXT];
+			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+			buf[len] = '\0';
+
+			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				get_dns_type(rss->type_covered, 0), 
+				rss->algorithm, rss->labels,
+				rss->original_ttl, 
+				timethuman(rss->signature_expiration),
+				timethuman(rss->signature_inception), 
+				rss->key_tag,
+				convert_name(rss->signers_name, rss->signame_len),
+				buf);	
+		}
+
+		if (sdomain->flags & DOMAIN_HAVE_AAAA) {
+			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_AAAA];
+			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+			buf[len] = '\0';
+
+			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				get_dns_type(rss->type_covered, 0), 
+				rss->algorithm, rss->labels,
+				rss->original_ttl, 
+				timethuman(rss->signature_expiration),
+				timethuman(rss->signature_inception), 
+				rss->key_tag,
+				convert_name(rss->signers_name, rss->signame_len),
+				buf);	
+		}
+
+		if (sdomain->flags & DOMAIN_HAVE_NSEC3PARAM) {
+			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NSEC3PARAM];
+			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+			buf[len] = '\0';
+
+			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				get_dns_type(rss->type_covered, 0), 
+				rss->algorithm, rss->labels,
+				rss->original_ttl, 
+				timethuman(rss->signature_expiration),
+				timethuman(rss->signature_inception), 
+				rss->key_tag,
+				convert_name(rss->signers_name, rss->signame_len),
+				buf);	
+		}
+
+		if (sdomain->flags & DOMAIN_HAVE_SPF) {
+			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_SPF];
+			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+			buf[len] = '\0';
+
+			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				get_dns_type(rss->type_covered, 0), 
+				rss->algorithm, rss->labels,
+				rss->original_ttl, 
+				timethuman(rss->signature_expiration),
+				timethuman(rss->signature_inception), 
+				rss->key_tag,
+				convert_name(rss->signers_name, rss->signame_len),
+				buf);	
+		}
+
+
+		if (sdomain->flags & DOMAIN_HAVE_CNAME) {
+			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_CNAME];
+			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+			buf[len] = '\0';
+
+			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				get_dns_type(rss->type_covered, 0), 
+				rss->algorithm, rss->labels,
+				rss->original_ttl, 
+				timethuman(rss->signature_expiration),
+				timethuman(rss->signature_inception), 
+				rss->key_tag,
+				convert_name(rss->signers_name, rss->signame_len),
+				buf);	
+		}
+
+
+		if (sdomain->flags & DOMAIN_HAVE_NS) {
+			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NS];
+			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+			buf[len] = '\0';
+
+			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				get_dns_type(rss->type_covered, 0), 
+				rss->algorithm, rss->labels,
+				rss->original_ttl, 
+				timethuman(rss->signature_expiration),
+				timethuman(rss->signature_inception), 
+				rss->key_tag,
+				convert_name(rss->signers_name, rss->signame_len),
+				buf);	
+		}
+
+		if (sdomain->flags & DOMAIN_HAVE_MX) {
+			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_MX];
+			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+			buf[len] = '\0';
+
+			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				get_dns_type(rss->type_covered, 0), 
+				rss->algorithm, rss->labels,
+				rss->original_ttl, 
+				timethuman(rss->signature_expiration),
+				timethuman(rss->signature_inception), 
+				rss->key_tag,
+				convert_name(rss->signers_name, rss->signame_len),
+				buf);	
+		}
+
+		if (sdomain->flags & DOMAIN_HAVE_A) {
+			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_A];
+			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+			buf[len] = '\0';
+
+			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				get_dns_type(rss->type_covered, 0), 
+				rss->algorithm, rss->labels,
+				rss->original_ttl, 
+				timethuman(rss->signature_expiration),
+				timethuman(rss->signature_inception), 
+				rss->key_tag,
+				convert_name(rss->signers_name, rss->signame_len),
+				buf);	
+		}
+	}
+
+	return 0;
 }

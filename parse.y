@@ -103,7 +103,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.41 2016/07/19 08:44:59 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.42 2016/12/28 14:48:41 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -1254,7 +1254,9 @@ parse_file(DB *db, char *filename)
         errors = file->errors;
         popfile();
 
+#if DEBUG
 	dolog(LOG_INFO, "configuration file read\n");
+#endif
 	
 	return 0;
 }
@@ -2137,10 +2139,14 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
         }
 
 	if (rr->internal_type == INTERNAL_TYPE_DNSKEY) {
+#if DEBUG
 		printf("filling hackaround type dnskey\n");
+#endif
 		rrsig = &ssd_rrsig->rrsig_dnskey[ssd_rrsig->rrsig_dnskey_count++];
 	} else {
+#if DEBUG
 		printf("filling internal type %d\n", rr->internal_type);
+#endif
 		rrsig = &ssd_rrsig->rrsig[rr->internal_type];
 	}
 
