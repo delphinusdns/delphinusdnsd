@@ -3967,6 +3967,8 @@ print_sd(FILE *of, struct domain *sdomain)
 	struct domain_ns *sdns;
 	struct domain_mx *sdmx;
 	struct domain_a *sda;
+	struct domain_aaaa *sdaaaa;
+	struct domain_cname *sdcname;
 	struct domain_rrsig *sdrr;
 	struct domain_dnskey *sddk;
 	struct domain_nsec3 *sdn3;
@@ -3982,7 +3984,7 @@ print_sd(FILE *of, struct domain *sdomain)
 		}
 		fprintf(of, "  %s,soa,%d,%s,%s,%d,%d,%d,%d,%d\n", 
 			sdomain->zonename,
-			sdomain->ttl[INTERNAL_TYPE_A],
+			sdomain->ttl[INTERNAL_TYPE_SOA],
 			convert_name(sdsoa->soa.nsserver, sdsoa->soa.nsserver_len),
 			convert_name(sdsoa->soa.responsible_person, sdsoa->soa.rp_len),
 			sdsoa->soa.serial, sdsoa->soa.refresh, sdsoa->soa.retry, 
@@ -3996,7 +3998,7 @@ print_sd(FILE *of, struct domain *sdomain)
 		for (i = 0; i < sdns->ns_count; i++) {
 			fprintf(of, "  %s,ns,%d,%s\n", 
 				sdomain->zonename,
-				sdomain->ttl[INTERNAL_TYPE_A],
+				sdomain->ttl[INTERNAL_TYPE_NS],
 				convert_name(sdns->ns[i].nsserver, sdns->ns[i].nslen));
 		}
 	}
@@ -4008,10 +4010,20 @@ print_sd(FILE *of, struct domain *sdomain)
 		for (i = 0; i < sdmx->mx_count; i++) {
 			fprintf(of, "  %s,mx,%d,%d,%s\n", 
 				sdomain->zonename,
-				sdomain->ttl[INTERNAL_TYPE_A],
+				sdomain->ttl[INTERNAL_TYPE_MX],
 				sdmx->mx[i].preference,
 				convert_name(sdmx->mx[i].exchange, sdmx->mx[i].exchangelen));
 		}
+	}
+	if (sdomain->flags & DOMAIN_HAVE_CNAME) {
+		if ((sdcname = (struct domain_cname *)find_substruct(sdomain, INTERNAL_TYPE_CNAME)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in zone!\n");
+			return -1;
+		}
+		fprintf(of, "  %s,cname,%d,%s\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_CNAME],
+				convert_name(sdcname->cname, sdcname->cnamelen));
 	}
 	if (sdomain->flags & DOMAIN_HAVE_A) {
 		if ((sda = (struct domain_a *)find_substruct(sdomain, INTERNAL_TYPE_A)) == NULL) {
@@ -4023,6 +4035,19 @@ print_sd(FILE *of, struct domain *sdomain)
 			fprintf(of, "  %s,a,%d,%s\n", 
 				sdomain->zonename,
 				sdomain->ttl[INTERNAL_TYPE_A],
+				buf);
+		}
+	}
+	if (sdomain->flags & DOMAIN_HAVE_AAAA) {
+		if ((sdaaaa = (struct domain_aaaa *)find_substruct(sdomain, INTERNAL_TYPE_AAAA)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in zone!\n");
+			return -1;
+		}
+		for (i = 0; i < sdaaaa->aaaa_count; i++) {
+			inet_ntop(AF_INET6, &sdaaaa->aaaa[i], buf, sizeof(buf));
+			fprintf(of, "  %s,aaaa,%d,%s\n", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_AAAA],
 				buf);
 		}
 	}
