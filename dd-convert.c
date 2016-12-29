@@ -4205,6 +4205,7 @@ print_sd(FILE *of, struct domain *sdomain)
 	struct domain_aaaa *sdaaaa;
 	struct domain_cname *sdcname;
 	struct domain_ptr *sdptr;
+	struct domain_txt *sdtxt;
 	struct domain_rrsig *sdrr;
 	struct domain_dnskey *sddk;
 	struct domain_nsec3 *sdn3;
@@ -4261,6 +4262,19 @@ print_sd(FILE *of, struct domain *sdomain)
 				sdomain->ttl[INTERNAL_TYPE_CNAME],
 				convert_name(sdcname->cname, sdcname->cnamelen));
 	}
+	if (sdomain->flags & DOMAIN_HAVE_TXT) {
+		if ((sdtxt = (struct domain_txt *)find_substruct(sdomain, INTERNAL_TYPE_TXT)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in zone!\n");
+			return -1;
+		}
+		fprintf(of, "  %s,txt,%d,\"", 
+				sdomain->zonename,
+				sdomain->ttl[INTERNAL_TYPE_TXT]);
+		for (i = 0; i < sdtxt->txtlen; i++) {
+			fprintf(of, "%c", sdtxt->txt[i]);
+		}
+		fprintf(of, "\"\n");
+	}
 	if (sdomain->flags & DOMAIN_HAVE_PTR) {
 		if ((sdptr = (struct domain_ptr *)find_substruct(sdomain, INTERNAL_TYPE_PTR)) == NULL) {
 			dolog(LOG_INFO, "no dnskeys in zone!\n");
@@ -4268,7 +4282,7 @@ print_sd(FILE *of, struct domain *sdomain)
 		}
 		fprintf(of, "  %s,ptr,%d,%s\n", 
 				sdomain->zonename,
-				sdomain->ttl[INTERNAL_TYPE_CNAME],
+				sdomain->ttl[INTERNAL_TYPE_PTR],
 				convert_name(sdptr->ptr, sdptr->ptrlen));
 	}
 	if (sdomain->flags & DOMAIN_HAVE_A) {
