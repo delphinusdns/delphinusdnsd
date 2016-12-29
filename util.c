@@ -79,29 +79,23 @@ struct typetable {
 };
 
 /*
- * LABEL_COUNT - count the labels and return that number, based on dns_label()
+ * LABEL_COUNT - count the labels and return that number
  */
 
 int 
 label_count(char *name)
 {
-	char *labels[255];
-	char **pl;
 	int lc = 0;
-	char tname[DNS_MAXNAME + 1];	/* 255 bytes  + 1*/
-	char *pt = &tname[0];
+	char *p;
 	
 	if (name == NULL) 
 		return -1;
 
-#if __linux__
-	strncpy(tname, name, sizeof(tname));
-	tname[sizeof(tname) - 1] = 0;
-#else
-	strlcpy(tname, name, sizeof(tname));
-#endif
-
-	for (pl=labels;pl<&labels[254]&&(*pl=strsep(&pt,"."))!= NULL;pl++,lc++);
+	p = name;
+	while (*p != '\0') {
+		lc++;
+		p += (*p + 1);
+	}
 
 	return (lc);
 }
@@ -120,7 +114,7 @@ dns_label(char *name, int *returnlen)
 	char *dnslabel, *p;
 	char *labels[255];
 	char **pl;
-	char tname[DNS_MAXNAME + 1];	/* 255 bytes  + 1*/
+	static char tname[DNS_MAXNAME + 1];	/* 255 bytes  + 1*/
 	char *pt = &tname[0];
 
 
