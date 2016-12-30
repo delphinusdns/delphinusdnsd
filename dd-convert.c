@@ -39,13 +39,14 @@ int debug = 0;
 int verbose = 0;
 
 /* prototypes */
+
 void	dolog(int pri, char *fmt, ...);
 int	add_dnskey(DB *, char *, char *);
 char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
 char *	create_key(char *, int, int, int, int);
 int 	dump_db(DB *, FILE *, char *);
-char * alg_to_name(int);
-int alg_to_rsa(int);
+char * 	alg_to_name(int);
+int 	alg_to_rsa(int);
 int 	construct_nsec3(DB *, char *, int, char *);
 int 	calculate_rrsigs(DB *, char *, char *, char *, int);
 int	sign_dnskey(DB *, char *, char *, char *, int, struct domain *);
@@ -64,17 +65,18 @@ int	sign_nsec3param(DB *, char *, char *, int, struct domain *);
 int	sign_naptr(DB *, char *, char *, int, struct domain *);
 int	sign_sshfp(DB *, char *, char *, int, struct domain *);
 int	sign_tlsa(DB *, char *, char *, int, struct domain *);
-u_int keytag(u_char *key, u_int keysize);
-void pack(char *, char *, int);
-void pack32(char *, u_int32_t);
-void pack16(char *, u_int16_t);
-void pack8(char *, u_int8_t);
-RSA * read_private_key(char *, int, int);
+int 	create_ds(DB *, char *, char *);
+u_int 	keytag(u_char *key, u_int keysize);
+void 	pack(char *, char *, int);
+void 	pack32(char *, u_int32_t);
+void 	pack16(char *, u_int16_t);
+void 	pack8(char *, u_int8_t);
+RSA * 	read_private_key(char *, int, int);
 u_int64_t timethuman(time_t);
-char * bitmap2human(char *, int);
-char * bin2hex(char *, int);
-int print_sd(FILE *, struct domain *);
-void usage(void);
+char * 	bitmap2human(char *, int);
+char * 	bin2hex(char *, int);
+int 	print_sd(FILE *, struct domain *);
+void 	usage(void);
 
 
 #define ALGORITHM_RSASHA1	5		/* rfc 4034 , mandatory */
@@ -314,7 +316,6 @@ main(int argc, char *argv[])
 
 	/* now we start reading our configfile */
 		
-	
 	if (parse_file(db, zonefile) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
 		exit(1);
@@ -348,6 +349,10 @@ main(int argc, char *argv[])
 	}
 
 	/* calculate ds */
+	if (create_ds(db, zonename, ksk_key) < 0) {
+		dolog(LOG_INFO, "create_ds failed\n");
+		exit(1);
+	}
 
 	/* write new zone file */
 	if (dump_db(db, of, zonename) < 0)
@@ -4781,6 +4786,167 @@ sign_a(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	
 	return 0;
 }
+
+int
+create_ds(DB *db, char *zonename, char *ksk_key)
+{
+	FILE *f;
+
+	struct domain *sd;
+	//struct domain_ds *sdds;	
+	struct domain_dnskey *sddk;
+
+	char *mytmp;
+	char tmp[4096];
+	char signature[4096];
+	char buf[512];
+	char shabuf[64];
+	
+	SHA_CTX sha1;
+//	SHA256_CTX sha256;
+
+	char *dnsname;
+	char *p;
+	char *key;
+	char *zone;
+
+	uint32_t ttl = 3600;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
+
+	int labellen, i;
+	int keyid;
+	int fd;
+	int keylen;
+	int bufsize;
+	int labels;
+
+	struct question *qp;
+	int retval, lzerrno;
+	char replystring[512];
+
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL) {
+		dolog(LOG_INFO, "dnsname == NULL\n");
+		return -1;
+	}
+
+	qp = build_fake_question(dnsname, labellen, DNS_TYPE_SOA);
+	if (qp == NULL) {
+		dolog(LOG_INFO, "qp == NULL\n");
+		return -1;
+	}
+
+	if ((sd = lookup_zone(db, qp, &retval, &lzerrno, (char *)&replystring)) == NULL) {
+		dolog(LOG_INFO, "sd == NULL\n");
+		return -1;
+	}
+
+	memset(&shabuf, 0, sizeof(shabuf));
+
+	key = malloc(10 * 4096);
+	if (key == NULL) {
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+
+	/* get the KSK */
+	snprintf(buf, sizeof(buf), "%s.key", ksk_key);
+	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
+		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+		return -1;
+	}
+
+	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "parse %s\n", buf);
+		close (fd);
+		return -1;
+	}
+
+	close(fd);
+
+	/* check the keytag supplied */
+	p = key;
+	pack16(p, htons(flags));
+	p += 2;
+	pack8(p, protocol);
+	p++;
+	pack8(p, algorithm);
+	p++;
+	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+	pack(p, signature, keylen);
+	p += keylen;
+	keylen = (p - key);
+	if (keyid != keytag(key, keylen)) {
+		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+		return -1;
+	}
+	
+	labels = label_count(sd->zone);
+	if (labels < 0) {
+		dolog(LOG_INFO, "label_count");
+		return -1;
+	}
+
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL)
+		return -1;
+
+	if (sd->flags & DOMAIN_HAVE_DNSKEY) {
+                if ((sddk = (struct domain_dnskey *)find_substruct(sd, INTERNAL_TYPE_DNSKEY)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in apex!\n");
+                        return -1;
+		}
+	}
+	
+	keylen = (p - key);	
+
+	/* work out the digest */
+
+	p = key;
+	pack(p, sd->zone, sd->zonelen);
+	p += sd->zonelen;
+	pack16(p, htons(sddk->dnskey[i].flags));
+	p += 2;
+	pack8(p, sddk->dnskey[i].protocol);
+	p++;
+	pack8(p, sddk->dnskey[i].algorithm);
+	p++;
+	pack(p, sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len);
+	p += sddk->dnskey[i].publickey_len;
+	
+	keylen = (p - key);
+
+	SHA1_Init(&sha1);
+	SHA1_Update(&sha1, key, keylen);
+	SHA1_Final((u_char *)shabuf, &sha1);
+	bufsize = 20;
+
+	mytmp = bin2hex(shabuf, bufsize);
+	if (mytmp == NULL) {
+		dolog(LOG_INFO, "bin2hex shabuf\n");
+		return -1;
+	}
+		
+	
+	snprintf(buf, sizeof(buf), "dsset-%s", convert_name(sd->zone, sd->zonelen));
+	f = fopen(buf, "w");
+	if (f == NULL) {
+		dolog(LOG_INFO, "fopen dsset\n");
+		return -1;
+	}
+
+	fprintf(f, "%s\t\tIN DS %u %d 1 %s\n", convert_name(sd->zone, sd->zonelen), keyid, algorithm, mytmp);
+	fclose(f);
+
+
+	return 0;
+}
+
+/* 
+ * From RFC 4034, appendix b 
+ */
 
 int
 sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, struct domain *sd)
