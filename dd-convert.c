@@ -86,6 +86,7 @@ int print_sd(FILE *, struct domain *);
 #define	SIGNEDON				20161230073133
 #define EXPIREDON 				20170228073133
 
+
 /* glue */
 int insert_axfr(char *, char *);
 int insert_region(char *, char *);
@@ -109,6 +110,7 @@ int lflag = 0;
 int icount = 0;
 int vslen = 0;
 char *versionstring = NULL;
+u_int64_t expiredon, signedon;
 
 /* externs */
 
@@ -336,6 +338,8 @@ main(int argc, char *argv[])
 		dolog(LOG_INFO, "calculate rrsigs failed\n");
 		exit(1);
 	}
+
+	/* calculate ds */
 
 	/* write new zone file */
 	if (dump_db(db, of, zonename) < 0)
@@ -883,6 +887,26 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 	struct domain *sd;
 	int j, rs;
 
+	time_t now;
+	char timebuf[32];
+	struct tm *tm;
+
+	/* set expiredon and signedon */
+
+	now = time(NULL);
+	tm = gmtime(&now);
+	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
+	signedon = atoll(timebuf);
+	now += expiry;
+	tm = gmtime(&now);
+	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
+	expiredon = atoll(timebuf);
+
+#if PROVIDED_SIGNTIME
+        signedon = SIGNEDON;
+        expiredon = EXPIREDON;
+#endif
+
 	/* set cursor on database */
 	
 	if (db->cursor(db, NULL, &cursor, 0) != 0) {
@@ -1002,29 +1026,12 @@ sign_soa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -1093,11 +1100,11 @@ sign_soa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -1248,29 +1255,12 @@ sign_txt(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -1339,11 +1329,11 @@ sign_txt(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -1481,29 +1471,12 @@ sign_aaaa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -1572,11 +1545,11 @@ sign_aaaa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -1713,29 +1686,12 @@ sign_nsec3(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -1804,11 +1760,11 @@ sign_nsec3(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -1968,29 +1924,12 @@ sign_nsec3param(DB *db, char *zonename, char *zsk_key, int expiry, struct domain
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -2059,11 +1998,11 @@ sign_nsec3param(DB *db, char *zonename, char *zsk_key, int expiry, struct domain
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -2214,29 +2153,12 @@ sign_spf(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -2305,11 +2227,11 @@ sign_spf(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -2448,29 +2370,12 @@ sign_cname(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -2539,11 +2444,11 @@ sign_cname(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -2679,29 +2584,12 @@ sign_ptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -2770,11 +2658,11 @@ sign_ptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -2910,29 +2798,12 @@ sign_naptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -3001,11 +2872,11 @@ sign_naptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -3164,29 +3035,12 @@ sign_srv(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -3255,11 +3109,11 @@ sign_srv(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -3403,29 +3257,12 @@ sign_sshfp(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -3494,11 +3331,11 @@ sign_sshfp(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -3639,29 +3476,12 @@ sign_tlsa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -3730,11 +3550,11 @@ sign_tlsa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -3878,29 +3698,12 @@ sign_ns(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -3969,11 +3772,11 @@ sign_ns(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -4110,29 +3913,12 @@ sign_mx(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -4201,11 +3987,11 @@ sign_mx(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -4345,29 +4131,12 @@ sign_a(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -4436,11 +4205,11 @@ sign_a(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -4573,29 +4342,12 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 	int labels;
 
 	RSA *rsa;
-	time_t now;
 
 	char timebuf[32];
-	u_int64_t expiredon, signedon;
-	struct tm *tm;
+	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
-
-	now = time(NULL);
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	signedon = atoll(timebuf);
-	now += expiry;
-	tm = gmtime(&now);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	expiredon = atoll(timebuf);
-
-#if PROVIDED_SIGNTIME
-        signedon = SIGNEDON;
-        expiredon = EXPIREDON;
-#endif
-
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
@@ -4664,11 +4416,11 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -4765,12 +4517,6 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-#if 0
-	if (fill_rrsig(sd->zonename, "RRSIG", ttl, "DNSKEY", algorithm, labels, sd->ttl[INTERNAL_TYPE_DNSKEY], expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
-#endif
 	if (fill_rrsig(sd->zonename, "RRSIG", ttl, "DNSKEY", algorithm, labels, 		ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
@@ -4837,11 +4583,11 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	expiredon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
 	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", tm);
-	signedon2 = timegm(tm);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
 	pack32(p, htonl(expiredon2));
 	p += 4;
@@ -4938,12 +4684,6 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-#if 0
-	if (fill_rrsig(sd->zonename, "RRSIG", ttl, "DNSKEY", algorithm, labels, sd->ttl[INTERNAL_TYPE_DNSKEY], expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
-#endif
 	if (fill_rrsig(sd->zonename, "RRSIG", ttl, "DNSKEY", algorithm, labels, 			ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
