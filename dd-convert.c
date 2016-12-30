@@ -1207,6 +1207,8 @@ sign_soa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		return -1;
 	}
 
+	RSA_free(rsa);
+
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
@@ -1423,6 +1425,8 @@ sign_txt(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		return -1;
 	}
 
+	RSA_free(rsa);
+
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
@@ -1637,6 +1641,8 @@ sign_aaaa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
 		return -1;
 	}
+
+	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -1875,6 +1881,8 @@ sign_nsec3(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		return -1;
 	}
 
+	RSA_free(rsa);
+
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
@@ -2105,6 +2113,8 @@ sign_nsec3param(DB *db, char *zonename, char *zsk_key, int expiry, struct domain
 		return -1;
 	}
 
+	RSA_free(rsa);
+
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
@@ -2321,6 +2331,8 @@ sign_spf(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		return -1;
 	}
 
+	RSA_free(rsa);
+
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
@@ -2536,6 +2548,8 @@ sign_cname(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		return -1;
 	}
 
+	RSA_free(rsa);
+
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
@@ -2749,6 +2763,8 @@ sign_ptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
 		return -1;
 	}
+
+	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -2987,6 +3003,8 @@ sign_naptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		return -1;
 	}
 
+	RSA_free(rsa);
+
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
@@ -3208,6 +3226,8 @@ sign_srv(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		return -1;
 	}
 
+	RSA_free(rsa);
+
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
@@ -3427,6 +3447,8 @@ sign_sshfp(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
 		return -1;
 	}
+
+	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -3649,6 +3671,8 @@ sign_tlsa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		return -1;
 	}
 
+	RSA_free(rsa);
+
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
@@ -3864,6 +3888,8 @@ sign_ns(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
 		return -1;
 	}
+
+	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -4082,6 +4108,8 @@ sign_mx(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		return -1;
 	}
 
+	RSA_free(rsa);
+
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
@@ -4297,6 +4325,8 @@ sign_a(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
 		return -1;
 	}
+
+	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -4514,6 +4544,8 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 		return -1;
 	}
 
+	RSA_free(rsa);
+
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
@@ -4680,6 +4712,8 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
 		return -1;
 	}
+
+	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
