@@ -4803,7 +4803,7 @@ create_ds(DB *db, char *zonename, char *ksk_key)
 	char shabuf[64];
 	
 	SHA_CTX sha1;
-//	SHA256_CTX sha256;
+	SHA256_CTX sha256;
 
 	char *dnsname;
 	char *p;
@@ -4902,6 +4902,11 @@ create_ds(DB *db, char *zonename, char *ksk_key)
 	
 	keylen = (p - key);	
 
+	for (i = 0; i < sddk->dnskey_count; i++) {
+		if (sddk->dnskey[i].flags == 257)
+			break;
+	}
+
 	/* work out the digest */
 
 	p = key;
@@ -4929,6 +4934,9 @@ create_ds(DB *db, char *zonename, char *ksk_key)
 		return -1;
 	}
 		
+	for (p = mytmp; *p; p++) {
+		*p = toupper(*p);
+	}
 	
 	snprintf(buf, sizeof(buf), "dsset-%s", convert_name(sd->zone, sd->zonelen));
 	f = fopen(buf, "w");
@@ -4938,6 +4946,25 @@ create_ds(DB *db, char *zonename, char *ksk_key)
 	}
 
 	fprintf(f, "%s\t\tIN DS %u %d 1 %s\n", convert_name(sd->zone, sd->zonelen), keyid, algorithm, mytmp);
+
+
+	SHA256_Init(&sha256);
+	SHA256_Update(&sha256, key, keylen);
+	SHA256_Final((u_char *)shabuf, &sha256);
+	bufsize = 32;
+
+	mytmp = bin2hex(shabuf, bufsize);
+	if (mytmp == NULL) {
+		dolog(LOG_INFO, "bin2hex shabuf\n");
+		return -1;
+	}
+	
+	for (p = mytmp; *p; p++) {
+		*p = toupper(*p);
+	}
+
+	fprintf(f, "%s\t\tIN DS %u %d 2 %s\n", convert_name(sd->zone, sd->zonelen), keyid, algorithm, mytmp);
+
 	fclose(f);
 
 
