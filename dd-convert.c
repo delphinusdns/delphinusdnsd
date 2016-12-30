@@ -60,6 +60,7 @@ int	sign_aaaa(DB *, char *, char *, int, struct domain *);
 int	sign_ptr(DB *, char *, char *, int, struct domain *);
 int	sign_nsec3(DB *, char *, char *, int, struct domain *);
 int	sign_nsec3param(DB *, char *, char *, int, struct domain *);
+int	sign_naptr(DB *, char *, char *, int, struct domain *);
 u_int keytag(u_char *key, u_int keysize);
 void pack(char *, char *, int);
 void pack32(char *, u_int32_t);
@@ -79,8 +80,8 @@ int print_sd(FILE *, struct domain *);
 #define RSA_F5			0x100000001
 
 #define PROVIDED_SIGNTIME			1
-#define	SIGNEDON				20161129083129
-#define EXPIREDON 				20170128083129
+#define	SIGNEDON				20161230073133
+#define EXPIREDON 				20170228073133
 
 /* glue */
 int insert_axfr(char *, char *);
@@ -940,6 +941,9 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 				return -1;
 		if (sd->flags & DOMAIN_HAVE_PTR)
 			if (sign_ptr(db, zonename, zsk_key, expiry, sd) < 0)
+				return -1;
+		if (sd->flags & DOMAIN_HAVE_NAPTR)
+			if (sign_naptr(db, zonename, zsk_key, expiry, sd) < 0)
 				return -1;
 
 		j++;
@@ -2857,6 +2861,260 @@ sign_ptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	return 0;
 }
 
+/*
+ * create a RRSIG for a NAPTR record
+ */
+
+int
+sign_naptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+{
+	struct domain_naptr *sdnaptr;
+
+	char tmp[4096];
+	char signature[4096];
+	char buf[512];
+	char shabuf[64];
+	
+	SHA_CTX sha1;
+	SHA256_CTX sha256;
+	SHA512_CTX sha512;
+
+	char *dnsname;
+	char *p;
+	char *key;
+	char *zone;
+
+	uint32_t ttl;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
+
+	int labellen, i;
+	int keyid;
+	int fd, len;
+	int keylen, siglen;
+	int rsatype;
+	int bufsize;
+	int labels;
+
+	RSA *rsa;
+	time_t now;
+
+	char timebuf[32];
+	u_int64_t expiredon, signedon;
+	struct tm *tm;
+	u_int32_t expiredon2, signedon2;
+
+	memset(&shabuf, 0, sizeof(shabuf));
+
+	now = time(NULL);
+	tm = gmtime(&now);
+	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
+	signedon = atoll(timebuf);
+	now += expiry;
+	tm = gmtime(&now);
+	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
+	expiredon = atoll(timebuf);
+
+#if PROVIDED_SIGNTIME
+        signedon = SIGNEDON;
+        expiredon = EXPIREDON;
+#endif
+
+
+	key = malloc(10 * 4096);
+	if (key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");
+		return -1;
+	}
+
+	/* get the ZSK */
+	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
+	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
+		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+		return -1;
+	}
+
+	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "parse %s\n", buf);
+		close (fd);
+		return -1;
+	}
+
+	close(fd);
+
+	/* check the keytag supplied */
+	p = key;
+	pack16(p, htons(flags));
+	p += 2;
+	pack8(p, protocol);
+	p++;
+	pack8(p, algorithm);
+	p++;
+	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+	pack(p, signature, keylen);
+	p += keylen;
+	keylen = (p - key);
+	if (keyid != keytag(key, keylen)) {
+		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+		return -1;
+	}
+	
+	labels = label_count(sd->zone);
+	if (labels < 0) {
+		dolog(LOG_INFO, "label_count");
+		return -1;
+	}
+
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL)
+		return -1;
+
+	if (sd->flags & DOMAIN_HAVE_NAPTR) {
+                if ((sdnaptr = (struct domain_naptr *)find_substruct(sd, INTERNAL_TYPE_NAPTR)) == NULL) {
+			dolog(LOG_INFO, "no NAPTR records but have flags!\n");
+                        return -1;
+		}
+	}
+	
+	p = key;
+
+	pack16(p, htons(DNS_TYPE_NAPTR));
+	p += 2;
+	pack8(p, algorithm);
+	p++;
+	pack8(p, labels);
+	p++;
+	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_NAPTR]));
+	p += 4;
+		
+	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+	strptime(timebuf, "%Y%m%d%H%M%S", tm);
+	expiredon2 = timegm(tm);
+	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+	strptime(timebuf, "%Y%m%d%H%M%S", tm);
+	signedon2 = timegm(tm);
+
+	pack32(p, htonl(expiredon2));
+	p += 4;
+	pack32(p, htonl(signedon2));	
+	p += 4;
+	pack16(p, htons(keyid));
+	p += 2;
+	pack(p, dnsname, labellen);
+	p += labellen;
+
+	/* no signature here */	
+	/* XXX this should probably be done on a canonical sorted records */
+	
+	for (i = 0; i < sdnaptr->naptr_count; i++) {
+		pack(p, sd->zone, sd->zonelen);
+		p += sd->zonelen;
+		pack16(p, htons(DNS_TYPE_NAPTR));
+		p += 2;
+		pack16(p, htons(DNS_CLASS_IN));
+		p += 2;
+		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_NAPTR]));
+		p += 4;
+		pack16(p, htons(2 + 2 + 1 + sdnaptr->naptr[i].flagslen + 1 + sdnaptr->naptr[i].serviceslen + 1 + sdnaptr->naptr[i].regexplen + sdnaptr->naptr[i].replacementlen));
+		p += 2;
+		pack16(p, htons(sdnaptr->naptr[i].order));
+		p += 2;
+		pack16(p, htons(sdnaptr->naptr[i].preference));
+		p += 2;
+
+		pack8(p, sdnaptr->naptr[i].flagslen);
+		p++;
+		pack(p, sdnaptr->naptr[i].flags, sdnaptr->naptr[i].flagslen);
+		p += sdnaptr->naptr[i].flagslen;
+
+		pack8(p, sdnaptr->naptr[i].serviceslen);
+		p++;
+		pack(p, sdnaptr->naptr[i].services, sdnaptr->naptr[i].serviceslen);
+		p += sdnaptr->naptr[i].serviceslen;
+
+		pack8(p, sdnaptr->naptr[i].regexplen);
+		p++;
+		pack(p, sdnaptr->naptr[i].regexp, sdnaptr->naptr[i].regexplen);
+		p += sdnaptr->naptr[i].regexplen;
+
+		pack(p, sdnaptr->naptr[i].replacement, sdnaptr->naptr[i].replacementlen);
+		p += sdnaptr->naptr[i].replacementlen;
+		
+	}
+
+	keylen = (p - key);	
+
+#if 0
+	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+	for (i = 0; i < keylen; i++) {
+		write(fd, (char *)&key[i], 1);
+	}
+	close(fd);
+	
+#endif
+
+	switch (algorithm) {
+	case ALGORITHM_RSASHA1:
+		SHA1_Init(&sha1);
+		SHA1_Update(&sha1, key, keylen);
+		SHA1_Final((u_char *)shabuf, &sha1);
+		bufsize = 20;
+		break;
+	case ALGORITHM_RSASHA256:	
+		SHA256_Init(&sha256);
+		SHA256_Update(&sha256, key, keylen);
+		SHA256_Final((u_char *)shabuf, &sha256);
+		bufsize = 32;
+
+#if 0
+		printf("keylen = %d\n", keylen);
+		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+		for (i = 0; i < bufsize; i++) {
+			write(fd, (char *)&shabuf[i], 1);
+		}
+		close(fd);
+#endif
+
+		break;
+	case ALGORITHM_RSASHA512:
+		SHA512_Init(&sha512);
+		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Final((u_char *)shabuf, &sha512);
+		bufsize = 64;
+		break;
+	default:
+		return -1;
+	}
+		
+	rsa = read_private_key(zonename, keyid, algorithm);
+	if (rsa == NULL) {
+		dolog(LOG_INFO, "reading private key failed\n");
+		return -1;
+	}
+		
+	rsatype = alg_to_rsa(algorithm);
+	if (rsatype == -1) {
+		dolog(LOG_INFO, "algorithm mismatch\n");
+		return -1;
+	}
+
+	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
+		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
+		return -1;
+	}
+
+	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+	tmp[len] = '\0';
+
+	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_NAPTR], "NAPTR", algorithm, labels, sd->ttl[INTERNAL_TYPE_NAPTR], expiredon, signedon, keyid, zonename, tmp) < 0) {
+		dolog(LOG_INFO, "fill_rrsig\n");
+		return -1;
+	}
+	
+	return 0;
+}
+
 
 
 /*
@@ -4466,7 +4724,7 @@ bitmap2human(char *bitmap, int len)
 int
 print_sd(FILE *of, struct domain *sdomain)
 {
-	int i, len;
+	int i, x, len;
 
 	struct domain_soa *sdsoa;
 	struct domain_ns *sdns;
@@ -4477,6 +4735,7 @@ print_sd(FILE *of, struct domain *sdomain)
 	struct domain_ptr *sdptr;
 	struct domain_txt *sdtxt;
 	struct domain_spf *sdspf;
+	struct domain_naptr *sdnaptr;
 	struct domain_rrsig *sdrr;
 	struct domain_dnskey *sddk;
 	struct domain_nsec3 *sdn3;
@@ -4545,6 +4804,32 @@ print_sd(FILE *of, struct domain *sdomain)
 			fprintf(of, "%c", sdspf->spf[i]);
 		}
 		fprintf(of, "\"\n");
+	}
+	if (sdomain->flags & DOMAIN_HAVE_NAPTR) {
+		if ((sdnaptr = (struct domain_naptr *)find_substruct(sdomain, INTERNAL_TYPE_NAPTR)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in zone!\n");
+			return -1;
+		}
+		for (i = 0; i < sdnaptr->naptr_count; i++) {
+			fprintf(of, "  %s,naptr,%d,%d,%d,\"", 
+				convert_name(sdomain->zone, sdomain->zonelen),
+				sdomain->ttl[INTERNAL_TYPE_NAPTR],
+				sdnaptr->naptr[i].order,
+				sdnaptr->naptr[i].preference);
+			
+			for (x = 0; x < sdnaptr->naptr[i].flagslen; x++) {
+				fprintf(of, "%c", sdnaptr->naptr[i].flags[x]);
+			}
+			fprintf(of, "\",\"");
+			for (x = 0; x < sdnaptr->naptr[i].serviceslen; x++) {
+				fprintf(of, "%c", sdnaptr->naptr[i].services[x]);
+			}
+			fprintf(of, "\",\"");
+			for (x = 0; x < sdnaptr->naptr[i].regexplen; x++) {
+				fprintf(of, "%c", sdnaptr->naptr[i].regexp[x]);
+			}
+			fprintf(of, "\",%s\n", convert_name(sdnaptr->naptr[i].replacement, sdnaptr->naptr[i].replacementlen));
+		}
 	}
 	if (sdomain->flags & DOMAIN_HAVE_TXT) {
 		if ((sdtxt = (struct domain_txt *)find_substruct(sdomain, INTERNAL_TYPE_TXT)) == NULL) {
@@ -4697,6 +4982,25 @@ print_sd(FILE *of, struct domain *sdomain)
 				convert_name(rss->signers_name, rss->signame_len),
 				buf);	
 		}
+
+		if (sdomain->flags & DOMAIN_HAVE_NAPTR) {
+			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NAPTR];
+			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+			buf[len] = '\0';
+
+			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+				convert_name(sdomain->zone, sdomain->zonelen),
+				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				get_dns_type(rss->type_covered, 0), 
+				rss->algorithm, rss->labels,
+				rss->original_ttl, 
+				timethuman(rss->signature_expiration),
+				timethuman(rss->signature_inception), 
+				rss->key_tag,
+				convert_name(rss->signers_name, rss->signame_len),
+				buf);	
+		}
+
 
 		if (sdomain->flags & DOMAIN_HAVE_TXT) {
 			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_TXT];
