@@ -4897,6 +4897,10 @@ read_private_key(char *zonename, int keyid, int algorithm)
 	} /* fgets */
 
 	fclose(f);
+
+	explicit_bzero(buf, sizeof(buf));
+	explicit_bzero(key, sizeof(key));
+
 	return (rsa);
 	
 }
