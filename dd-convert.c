@@ -1457,8 +1457,8 @@ sign_aaaa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	SHA512_CTX sha512;
 
 	char *dnsname;
-	char *p;
-	char *key;
+	char *p, *q;
+	char *key, *tmpkey;
 	char *zone;
 
 	uint32_t ttl;
@@ -1479,12 +1479,26 @@ sign_aaaa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
+	TAILQ_HEAD(listhead, canonical) head;
 
+        struct canonical {
+                char *data;
+                int len;
+                TAILQ_ENTRY(canonical) entries;
+        } *c1, *c2, *cp;
+
+
+        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
-		dolog(LOG_INFO, "out of memory\n");
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
 		return -1;
 	}
 
@@ -1565,22 +1579,62 @@ sign_aaaa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	p += labellen;
 
 	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
 	
 	for (i = 0; i < sdaaaa->aaaa_count; i++) {
-		pack(p, sd->zone, sd->zonelen);
-		p += sd->zonelen;
-		pack16(p, htons(DNS_TYPE_AAAA));
-		p += 2;
-		pack16(p, htons(DNS_CLASS_IN));
-		p += 2;
-		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_AAAA]));
-		p += 4;
-		pack16(p, htons(sizeof(struct in6_addr)));
-		p += 2;
-		pack(p, (char *)&sdaaaa->aaaa[i], sizeof(struct in6_addr));
-		p += sizeof(struct in6_addr);
+		q = tmpkey;
+		pack(q, sd->zone, sd->zonelen);
+		q += sd->zonelen;
+		pack16(q, htons(DNS_TYPE_AAAA));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_AAAA]));
+		q += 4;
+		pack16(q, htons(sizeof(struct in6_addr)));
+		q += 2;
+		pack(q, (char *)&sdaaaa->aaaa[i], sizeof(struct in6_addr));
+		q += sizeof(struct in6_addr);
+
+	        c1 = malloc(sizeof(struct canonical));
+                if (c1 == NULL) {
+                        dolog(LOG_INFO, "c1 out of memory\n");
+                        return -1;
+                }
+
+                c1->len = (q - tmpkey);
+                c1->data = malloc(c1->len);
+                if (c1->data == NULL) {
+                        dolog(LOG_INFO, "c1->data out of memory\n");
+                        return -1;
+                }
+
+                memcpy(c1->data, tmpkey, c1->len);
+
+                if (TAILQ_EMPTY(&head))
+                        TAILQ_INSERT_TAIL(&head, c1, entries);
+                else {
+                        TAILQ_FOREACH(c2, &head, entries) {
+                                if (c1->len < c2->len)
+                                        break;
+                                else if (c2->len == c1->len &&
+                                        memcmp(c1->data, c2->data, c1->len) < 0)
+                                        break;
+                        }
+
+                        if (c2 != NULL)
+                                TAILQ_INSERT_BEFORE(c2, c1, entries);
+                        else
+                                TAILQ_INSERT_TAIL(&head, c1, entries);
+                }
 	}
+
+	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+                pack(p, c2->data, c2->len);
+                p += c2->len;
+
+                TAILQ_REMOVE(&head, c2, entries);
+        }
+
 	keylen = (p - key);	
 
 #if 0
@@ -2796,8 +2850,8 @@ sign_naptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	SHA512_CTX sha512;
 
 	char *dnsname;
-	char *p;
-	char *key;
+	char *p, *q;
+	char *key, *tmpkey;
 	char *zone;
 
 	uint32_t ttl;
@@ -2818,12 +2872,26 @@ sign_naptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
+        TAILQ_HEAD(listhead, canonical) head;
 
+        struct canonical {
+                char *data;
+                int len;
+                TAILQ_ENTRY(canonical) entries;
+        } *c1, *c2, *cp;
+
+
+        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
-		dolog(LOG_INFO, "out of memory\n");
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
 		return -1;
 	}
 
@@ -2907,40 +2975,79 @@ sign_naptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	/* XXX this should probably be done on a canonical sorted records */
 	
 	for (i = 0; i < sdnaptr->naptr_count; i++) {
-		pack(p, sd->zone, sd->zonelen);
-		p += sd->zonelen;
-		pack16(p, htons(DNS_TYPE_NAPTR));
-		p += 2;
-		pack16(p, htons(DNS_CLASS_IN));
-		p += 2;
-		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_NAPTR]));
-		p += 4;
-		pack16(p, htons(2 + 2 + 1 + sdnaptr->naptr[i].flagslen + 1 + sdnaptr->naptr[i].serviceslen + 1 + sdnaptr->naptr[i].regexplen + sdnaptr->naptr[i].replacementlen));
-		p += 2;
-		pack16(p, htons(sdnaptr->naptr[i].order));
-		p += 2;
-		pack16(p, htons(sdnaptr->naptr[i].preference));
-		p += 2;
+		q = tmpkey;
+		pack(q, sd->zone, sd->zonelen);
+		q += sd->zonelen;
+		pack16(q, htons(DNS_TYPE_NAPTR));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_NAPTR]));
+		q += 4;
+		pack16(q, htons(2 + 2 + 1 + sdnaptr->naptr[i].flagslen + 1 + sdnaptr->naptr[i].serviceslen + 1 + sdnaptr->naptr[i].regexplen + sdnaptr->naptr[i].replacementlen));
+		q += 2;
+		pack16(q, htons(sdnaptr->naptr[i].order));
+		q += 2;
+		pack16(q, htons(sdnaptr->naptr[i].preference));
+		q += 2;
 
-		pack8(p, sdnaptr->naptr[i].flagslen);
-		p++;
-		pack(p, sdnaptr->naptr[i].flags, sdnaptr->naptr[i].flagslen);
-		p += sdnaptr->naptr[i].flagslen;
+		pack8(q, sdnaptr->naptr[i].flagslen);
+		q++;
+		pack(q, sdnaptr->naptr[i].flags, sdnaptr->naptr[i].flagslen);
+		q += sdnaptr->naptr[i].flagslen;
 
-		pack8(p, sdnaptr->naptr[i].serviceslen);
-		p++;
-		pack(p, sdnaptr->naptr[i].services, sdnaptr->naptr[i].serviceslen);
-		p += sdnaptr->naptr[i].serviceslen;
+		pack8(q, sdnaptr->naptr[i].serviceslen);
+		q++;
+		pack(q, sdnaptr->naptr[i].services, sdnaptr->naptr[i].serviceslen);
+		q += sdnaptr->naptr[i].serviceslen;
 
-		pack8(p, sdnaptr->naptr[i].regexplen);
-		p++;
-		pack(p, sdnaptr->naptr[i].regexp, sdnaptr->naptr[i].regexplen);
-		p += sdnaptr->naptr[i].regexplen;
+		pack8(q, sdnaptr->naptr[i].regexplen);
+		q++;
+		pack(q, sdnaptr->naptr[i].regexp, sdnaptr->naptr[i].regexplen);
+		q += sdnaptr->naptr[i].regexplen;
 
-		pack(p, sdnaptr->naptr[i].replacement, sdnaptr->naptr[i].replacementlen);
-		p += sdnaptr->naptr[i].replacementlen;
-		
+		pack(q, sdnaptr->naptr[i].replacement, sdnaptr->naptr[i].replacementlen);
+		q += sdnaptr->naptr[i].replacementlen;
+
+		c1 = malloc(sizeof(struct canonical));
+                if (c1 == NULL) {
+                        dolog(LOG_INFO, "c1 out of memory\n");
+                        return -1;
+                }
+
+                c1->len = (q - tmpkey);
+                c1->data = malloc(c1->len);
+                if (c1->data == NULL) {
+                        dolog(LOG_INFO, "c1->data out of memory\n");
+                        return -1;
+                }
+
+                memcpy(c1->data, tmpkey, c1->len);
+
+                if (TAILQ_EMPTY(&head))
+                        TAILQ_INSERT_TAIL(&head, c1, entries);
+                else {
+                        TAILQ_FOREACH(c2, &head, entries) {
+                                if (c1->len < c2->len)
+                                        break;
+                                else if (c2->len == c1->len &&
+                                        memcmp(c1->data, c2->data, c1->len) < 0)
+                                        break;
+                        }
+
+                        if (c2 != NULL)
+                                TAILQ_INSERT_BEFORE(c2, c1, entries);
+                        else
+                                TAILQ_INSERT_TAIL(&head, c1, entries);
+                }
 	}
+
+        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+                pack(p, c2->data, c2->len);
+                p += c2->len;
+
+                TAILQ_REMOVE(&head, c2, entries);
+        }
 
 	keylen = (p - key);	
 
@@ -3035,8 +3142,8 @@ sign_srv(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	SHA512_CTX sha512;
 
 	char *dnsname;
-	char *p;
-	char *key;
+	char *p, *q;
+	char *key, *tmpkey;
 	char *zone;
 
 	uint32_t ttl;
@@ -3057,12 +3164,26 @@ sign_srv(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
+        TAILQ_HEAD(listhead, canonical) head;
 
+        struct canonical {
+                char *data;
+                int len;
+                TAILQ_ENTRY(canonical) entries;
+        } *c1, *c2, *cp;
+
+
+        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
-		dolog(LOG_INFO, "out of memory\n");
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
 		return -1;
 	}
 
@@ -3146,25 +3267,67 @@ sign_srv(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	/* XXX this should probably be done on a canonical sorted records */
 	
 	for (i = 0; i < sdsrv->srv_count; i++) {
-		pack(p, sd->zone, sd->zonelen);
-		p += sd->zonelen;
-		pack16(p, htons(DNS_TYPE_SRV));
-		p += 2;
-		pack16(p, htons(DNS_CLASS_IN));
-		p += 2;
-		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_SRV]));
-		p += 4;
-		pack16(p, htons(2 + 2 + 2 + sdsrv->srv[i].targetlen));
-		p += 2;
-		pack16(p, htons(sdsrv->srv[i].priority));
-		p += 2;
-		pack16(p, htons(sdsrv->srv[i].weight));
-		p += 2;
-		pack16(p, htons(sdsrv->srv[i].port));
-		p += 2;
-		pack(p, sdsrv->srv[i].target, sdsrv->srv[i].targetlen);
-		p += sdsrv->srv[i].targetlen;
+		q = tmpkey;
+		pack(q, sd->zone, sd->zonelen);
+		q += sd->zonelen;
+		pack16(q, htons(DNS_TYPE_SRV));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_SRV]));
+		q += 4;
+		pack16(q, htons(2 + 2 + 2 + sdsrv->srv[i].targetlen));
+		q += 2;
+		pack16(q, htons(sdsrv->srv[i].priority));
+		q += 2;
+		pack16(q, htons(sdsrv->srv[i].weight));
+		q += 2;
+		pack16(q, htons(sdsrv->srv[i].port));
+		q += 2;
+		pack(q, sdsrv->srv[i].target, sdsrv->srv[i].targetlen);
+		q += sdsrv->srv[i].targetlen;
+		
+		c1 = malloc(sizeof(struct canonical));
+                if (c1 == NULL) {
+                        dolog(LOG_INFO, "c1 out of memory\n");
+                        return -1;
+                }
+
+                c1->len = (q - tmpkey);
+                c1->data = malloc(c1->len);
+                if (c1->data == NULL) {
+                        dolog(LOG_INFO, "c1->data out of memory\n");
+                        return -1;
+                }
+
+                memcpy(c1->data, tmpkey, c1->len);
+
+                if (TAILQ_EMPTY(&head))
+                        TAILQ_INSERT_TAIL(&head, c1, entries);
+                else {
+                        TAILQ_FOREACH(c2, &head, entries) {
+                                if (c1->len < c2->len)
+                                        break;
+                                else if (c2->len == c1->len &&
+                                        memcmp(c1->data, c2->data, c1->len) < 0)
+                                        break;
+                        }
+
+                        if (c2 != NULL)
+                                TAILQ_INSERT_BEFORE(c2, c1, entries);
+                        else
+                                TAILQ_INSERT_TAIL(&head, c1, entries);
+                }
+
 	}
+
+        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+                pack(p, c2->data, c2->len);
+                p += c2->len;
+
+                TAILQ_REMOVE(&head, c2, entries);
+        }
+
 	keylen = (p - key);	
 
 #if 0
@@ -3259,8 +3422,8 @@ sign_sshfp(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	SHA512_CTX sha512;
 
 	char *dnsname;
-	char *p;
-	char *key;
+	char *p, *q;
+	char *key, *tmpkey;
 	char *zone;
 
 	uint32_t ttl;
@@ -3281,12 +3444,26 @@ sign_sshfp(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
+        TAILQ_HEAD(listhead, canonical) head;
 
+        struct canonical {
+                char *data;
+                int len;
+                TAILQ_ENTRY(canonical) entries;
+        } *c1, *c2, *cp;
+
+
+        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
-		dolog(LOG_INFO, "out of memory\n");
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
 		return -1;
 	}
 
@@ -3370,23 +3547,64 @@ sign_sshfp(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	/* XXX this should probably be done on a canonical sorted records */
 	
 	for (i = 0; i < sdsshfp->sshfp_count; i++) {
-		pack(p, sd->zone, sd->zonelen);
-		p += sd->zonelen;
-		pack16(p, htons(DNS_TYPE_SSHFP));
-		p += 2;
-		pack16(p, htons(DNS_CLASS_IN));
-		p += 2;
-		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_SSHFP]));
-		p += 4;
-		pack16(p, htons(1 + 1 + sdsshfp->sshfp[i].fplen));
-		p += 2;
-		pack8(p, sdsshfp->sshfp[i].algorithm);
-		p++;
-		pack8(p, sdsshfp->sshfp[i].fptype);
-		p++;
-		pack(p, sdsshfp->sshfp[i].fingerprint, sdsshfp->sshfp[i].fplen);
-		p += sdsshfp->sshfp[i].fplen;
+		q = tmpkey;
+		pack(q, sd->zone, sd->zonelen);
+		q += sd->zonelen;
+		pack16(q, htons(DNS_TYPE_SSHFP));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_SSHFP]));
+		q += 4;
+		pack16(q, htons(1 + 1 + sdsshfp->sshfp[i].fplen));
+		q += 2;
+		pack8(q, sdsshfp->sshfp[i].algorithm);
+		q++;
+		pack8(q, sdsshfp->sshfp[i].fptype);
+		q++;
+		pack(q, sdsshfp->sshfp[i].fingerprint, sdsshfp->sshfp[i].fplen);
+		q += sdsshfp->sshfp[i].fplen;
+
+		c1 = malloc(sizeof(struct canonical));
+                if (c1 == NULL) {
+                        dolog(LOG_INFO, "c1 out of memory\n");
+                        return -1;
+                }
+
+                c1->len = (q - tmpkey);
+                c1->data = malloc(c1->len);
+                if (c1->data == NULL) {
+                        dolog(LOG_INFO, "c1->data out of memory\n");
+                        return -1;
+                }
+
+                memcpy(c1->data, tmpkey, c1->len);
+
+                if (TAILQ_EMPTY(&head))
+                        TAILQ_INSERT_TAIL(&head, c1, entries);
+                else {
+                        TAILQ_FOREACH(c2, &head, entries) {
+                                if (c1->len < c2->len)
+                                        break;
+                                else if (c2->len == c1->len &&
+                                        memcmp(c1->data, c2->data, c1->len) < 0)
+                                        break;
+                        }
+
+                        if (c2 != NULL)
+                                TAILQ_INSERT_BEFORE(c2, c1, entries);
+                        else
+                                TAILQ_INSERT_TAIL(&head, c1, entries);
+                }
 	}
+
+        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+                pack(p, c2->data, c2->len);
+                p += c2->len;
+
+                TAILQ_REMOVE(&head, c2, entries);
+        }
+
 	keylen = (p - key);	
 
 #if 0
@@ -3480,8 +3698,8 @@ sign_tlsa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	SHA512_CTX sha512;
 
 	char *dnsname;
-	char *p;
-	char *key;
+	char *p, *q;
+	char *key, *tmpkey;
 	char *zone;
 
 	uint32_t ttl;
@@ -3502,12 +3720,26 @@ sign_tlsa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
+        TAILQ_HEAD(listhead, canonical) head;
 
+        struct canonical {
+                char *data;
+                int len;
+                TAILQ_ENTRY(canonical) entries;
+        } *c1, *c2, *cp;
+
+
+        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
-		dolog(LOG_INFO, "out of memory\n");
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
 		return -1;
 	}
 
@@ -3591,25 +3823,66 @@ sign_tlsa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	/* XXX this should probably be done on a canonical sorted records */
 	
 	for (i = 0; i < sdtlsa->tlsa_count; i++) {
-		pack(p, sd->zone, sd->zonelen);
-		p += sd->zonelen;
-		pack16(p, htons(DNS_TYPE_TLSA));
-		p += 2;
-		pack16(p, htons(DNS_CLASS_IN));
-		p += 2;
-		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_TLSA]));
-		p += 4;
-		pack16(p, htons(1 + 1 + 1 + sdtlsa->tlsa[i].datalen));
-		p += 2;
-		pack8(p, sdtlsa->tlsa[i].usage);
-		p++;
-		pack8(p, sdtlsa->tlsa[i].selector);
-		p++;
-		pack8(p, sdtlsa->tlsa[i].matchtype);
-		p++;
-		pack(p, sdtlsa->tlsa[i].data, sdtlsa->tlsa[i].datalen);
-		p += sdtlsa->tlsa[i].datalen;
+		q = tmpkey;
+		pack(q, sd->zone, sd->zonelen);
+		q += sd->zonelen;
+		pack16(q, htons(DNS_TYPE_TLSA));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_TLSA]));
+		q += 4;
+		pack16(q, htons(1 + 1 + 1 + sdtlsa->tlsa[i].datalen));
+		q += 2;
+		pack8(q, sdtlsa->tlsa[i].usage);
+		q++;
+		pack8(q, sdtlsa->tlsa[i].selector);
+		q++;
+		pack8(q, sdtlsa->tlsa[i].matchtype);
+		q++;
+		pack(q, sdtlsa->tlsa[i].data, sdtlsa->tlsa[i].datalen);
+		q += sdtlsa->tlsa[i].datalen;
+
+                c1 = malloc(sizeof(struct canonical));
+                if (c1 == NULL) {
+                        dolog(LOG_INFO, "c1 out of memory\n");
+                        return -1;
+                }
+
+                c1->len = (q - tmpkey);
+                c1->data = malloc(c1->len);
+                if (c1->data == NULL) {
+                        dolog(LOG_INFO, "c1->data out of memory\n");
+                        return -1;
+                }
+
+                memcpy(c1->data, tmpkey, c1->len);
+
+                if (TAILQ_EMPTY(&head))
+                        TAILQ_INSERT_TAIL(&head, c1, entries);
+                else {
+                        TAILQ_FOREACH(c2, &head, entries) {
+                                if (c1->len < c2->len)
+                                        break;
+                                else if (c2->len == c1->len &&
+                                        memcmp(c1->data, c2->data, c1->len) < 0)
+                                        break;
+                        }
+
+                        if (c2 != NULL)
+                                TAILQ_INSERT_BEFORE(c2, c1, entries);
+                        else
+                                TAILQ_INSERT_TAIL(&head, c1, entries);
+                }
 	}
+
+        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+                pack(p, c2->data, c2->len);
+                p += c2->len;
+
+                TAILQ_REMOVE(&head, c2, entries);
+        }
+
 	keylen = (p - key);	
 
 #if 0
@@ -3704,8 +3977,8 @@ sign_ns(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	SHA512_CTX sha512;
 
 	char *dnsname;
-	char *p;
-	char *key;
+	char *p, *q;
+	char *key, *tmpkey;
 	char *zone;
 
 	uint32_t ttl;
@@ -3726,12 +3999,26 @@ sign_ns(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
+        TAILQ_HEAD(listhead, canonical) head;
 
+        struct canonical {
+                char *data;
+                int len;
+                TAILQ_ENTRY(canonical) entries;
+        } *c1, *c2, *cp;
+
+
+        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
-		dolog(LOG_INFO, "out of memory\n");
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
 		return -1;
 	}
 
@@ -3815,19 +4102,59 @@ sign_ns(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	/* XXX this should probably be done on a canonical sorted records */
 	
 	for (i = 0; i < sdns->ns_count; i++) {
-		pack(p, sd->zone, sd->zonelen);
-		p += sd->zonelen;
-		pack16(p, htons(DNS_TYPE_NS));
-		p += 2;
-		pack16(p, htons(DNS_CLASS_IN));
-		p += 2;
-		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_NS]));
-		p += 4;
-		pack16(p, htons(sdns->ns[i].nslen));
-		p += 2;
-		memcpy(p, sdns->ns[i].nsserver, sdns->ns[i].nslen);
-		p += sdns->ns[i].nslen;
+		q = tmpkey;
+		pack(q, sd->zone, sd->zonelen);
+		q += sd->zonelen;
+		pack16(q, htons(DNS_TYPE_NS));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_NS]));
+		q += 4;
+		pack16(q, htons(sdns->ns[i].nslen));
+		q += 2;
+		memcpy(q, sdns->ns[i].nsserver, sdns->ns[i].nslen);
+		q += sdns->ns[i].nslen;
+
+               c1 = malloc(sizeof(struct canonical));
+                if (c1 == NULL) {
+                        dolog(LOG_INFO, "c1 out of memory\n");
+                        return -1;
+                }
+
+                c1->len = (q - tmpkey);
+                c1->data = malloc(c1->len);
+                if (c1->data == NULL) {
+                        dolog(LOG_INFO, "c1->data out of memory\n");
+                        return -1;
+                }
+
+                memcpy(c1->data, tmpkey, c1->len);
+
+                if (TAILQ_EMPTY(&head))
+                        TAILQ_INSERT_TAIL(&head, c1, entries);
+                else {
+                        TAILQ_FOREACH(c2, &head, entries) {
+                                if (c1->len < c2->len)
+                                        break;
+                                else if (c2->len == c1->len &&
+                                        memcmp(c1->data, c2->data, c1->len) < 0)
+                                        break;
+                        }
+
+                        if (c2 != NULL)
+                                TAILQ_INSERT_BEFORE(c2, c1, entries);
+                        else
+                                TAILQ_INSERT_TAIL(&head, c1, entries);
+                }
 	}
+
+        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+                pack(p, c2->data, c2->len);
+                p += c2->len;
+
+                TAILQ_REMOVE(&head, c2, entries);
+        }
 	keylen = (p - key);	
 
 #if 0
@@ -3921,8 +4248,8 @@ sign_mx(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	SHA512_CTX sha512;
 
 	char *dnsname;
-	char *p;
-	char *key;
+	char *p, *q;
+	char *key, *tmpkey;
 	char *zone;
 
 	uint32_t ttl;
@@ -3943,12 +4270,26 @@ sign_mx(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
+        TAILQ_HEAD(listhead, canonical) head;
 
+        struct canonical {
+                char *data;
+                int len;
+                TAILQ_ENTRY(canonical) entries;
+        } *c1, *c2, *cp;
+
+
+        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
-		dolog(LOG_INFO, "out of memory\n");
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
 		return -1;
 	}
 
@@ -4032,21 +4373,61 @@ sign_mx(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	/* XXX this should probably be done on a canonical sorted records */
 	
 	for (i = 0; i < sdmx->mx_count; i++) {
-		pack(p, sd->zone, sd->zonelen);
-		p += sd->zonelen;
-		pack16(p, htons(DNS_TYPE_MX));
-		p += 2;
-		pack16(p, htons(DNS_CLASS_IN));
-		p += 2;
-		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_MX]));
-		p += 4;
-		pack16(p, htons(2 + sdmx->mx[i].exchangelen));
-		p += 2;
-		pack16(p, htons(sdmx->mx[i].preference));
-		p += 2;
-		memcpy(p, sdmx->mx[i].exchange, sdmx->mx[i].exchangelen);
-		p += sdmx->mx[i].exchangelen;
+		q = tmpkey;
+		pack(q, sd->zone, sd->zonelen);
+		q += sd->zonelen;
+		pack16(q, htons(DNS_TYPE_MX));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_MX]));
+		q += 4;
+		pack16(q, htons(2 + sdmx->mx[i].exchangelen));
+		q += 2;
+		pack16(q, htons(sdmx->mx[i].preference));
+		q += 2;
+		memcpy(q, sdmx->mx[i].exchange, sdmx->mx[i].exchangelen);
+		q += sdmx->mx[i].exchangelen;
+
+                c1 = malloc(sizeof(struct canonical));
+                if (c1 == NULL) {
+                        dolog(LOG_INFO, "c1 out of memory\n");
+                        return -1;
+                }
+
+                c1->len = (q - tmpkey);
+                c1->data = malloc(c1->len);
+                if (c1->data == NULL) {
+                        dolog(LOG_INFO, "c1->data out of memory\n");
+                        return -1;
+                }
+
+                memcpy(c1->data, tmpkey, c1->len);
+
+                if (TAILQ_EMPTY(&head))
+                        TAILQ_INSERT_TAIL(&head, c1, entries);
+                else {
+                        TAILQ_FOREACH(c2, &head, entries) {
+                                if (c1->len < c2->len)
+                                        break;
+                                else if (c2->len == c1->len &&
+                                        memcmp(c1->data, c2->data, c1->len) < 0)
+                                        break;
+                        }
+
+                        if (c2 != NULL)
+                                TAILQ_INSERT_BEFORE(c2, c1, entries);
+                        else
+                                TAILQ_INSERT_TAIL(&head, c1, entries);
+                }
 	}
+
+        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+                pack(p, c2->data, c2->len);
+                p += c2->len;
+
+                TAILQ_REMOVE(&head, c2, entries);
+        }
 	keylen = (p - key);	
 
 #if 0
@@ -4141,8 +4522,8 @@ sign_a(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	SHA512_CTX sha512;
 
 	char *dnsname;
-	char *p;
-	char *key;
+	char *p, *q;
+	char *key, *tmpkey;
 	char *zone;
 
 	uint32_t ttl;
@@ -4163,12 +4544,26 @@ sign_a(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
+        TAILQ_HEAD(listhead, canonical) head;
 
+        struct canonical {
+                char *data;
+                int len;
+                TAILQ_ENTRY(canonical) entries;
+        } *c1, *c2, *cp;
+
+
+        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
-		dolog(LOG_INFO, "out of memory\n");
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
 		return -1;
 	}
 
@@ -4252,19 +4647,59 @@ sign_a(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	/* XXX this should probably be done on a canonical sorted records */
 	
 	for (i = 0; i < sda->a_count; i++) {
-		pack(p, sd->zone, sd->zonelen);
-		p += sd->zonelen;
-		pack16(p, htons(DNS_TYPE_A));
-		p += 2;
-		pack16(p, htons(DNS_CLASS_IN));
-		p += 2;
-		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_A]));
-		p += 4;
-		pack16(p, htons(sizeof(in_addr_t)));
-		p += 2;
-		pack32(p, sda->a[i]);
-		p += 4;
+		q = tmpkey;
+		pack(q, sd->zone, sd->zonelen);
+		q += sd->zonelen;
+		pack16(q, htons(DNS_TYPE_A));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_A]));
+		q += 4;
+		pack16(q, htons(sizeof(in_addr_t)));
+		q += 2;
+		pack32(q, sda->a[i]);
+		q += 4;
+
+                c1 = malloc(sizeof(struct canonical));
+                if (c1 == NULL) {
+                        dolog(LOG_INFO, "c1 out of memory\n");
+                        return -1;
+                }
+
+                c1->len = (q - tmpkey);
+                c1->data = malloc(c1->len);
+                if (c1->data == NULL) {
+                        dolog(LOG_INFO, "c1->data out of memory\n");
+                        return -1;
+                }
+
+                memcpy(c1->data, tmpkey, c1->len);
+
+                if (TAILQ_EMPTY(&head))
+                        TAILQ_INSERT_TAIL(&head, c1, entries);
+                else {
+                        TAILQ_FOREACH(c2, &head, entries) {
+                                if (c1->len < c2->len)
+                                        break;
+                                else if (c2->len == c1->len &&
+                                        memcmp(c1->data, c2->data, c1->len) < 0)
+                                        break;
+                        }
+
+                        if (c2 != NULL)
+                                TAILQ_INSERT_BEFORE(c2, c1, entries);
+                        else
+                                TAILQ_INSERT_TAIL(&head, c1, entries);
+                }
 	}
+
+        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+                pack(p, c2->data, c2->len);
+                p += c2->len;
+
+                TAILQ_REMOVE(&head, c2, entries);
+        }
 	keylen = (p - key);	
 
 #if 0
@@ -4354,8 +4789,8 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 	SHA512_CTX sha512;
 
 	char *dnsname;
-	char *p;
-	char *key;
+	char *p, *q;
+	char *key, *tmpkey;
 	char *zone;
 
 	uint32_t ttl = 3600;
@@ -4377,11 +4812,26 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
+	TAILQ_HEAD(listhead, canonical) head;
+
+	struct canonical {
+		char *data;
+		int len;
+		TAILQ_ENTRY(canonical) entries;
+	} *c1, *c2, *cp;
+		
+		
+	TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
 	if (key == NULL) {
-		dolog(LOG_INFO, "out of memory\n");
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
 		return -1;
 	}
 
@@ -4464,24 +4914,66 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 	/* no signature here */	
 	
 	for (i = 0; i < sddk->dnskey_count; i++) {
-		pack(p, dnsname, labellen);
-		p += labellen;
-		pack16(p, htons(DNS_TYPE_DNSKEY));
-		p += 2;
-		pack16(p, htons(DNS_CLASS_IN));
-		p += 2;
-		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
-		p += 4;
-		pack16(p, htons(2 + 1 + 1 + sddk->dnskey[i].publickey_len));
-		p += 2;
-		pack16(p, htons(sddk->dnskey[i].flags));
-		p += 2;
-		pack8(p, sddk->dnskey[i].protocol);
-		p++;
-		pack8(p, sddk->dnskey[i].algorithm);
-		p++;
-		pack(p, sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len);
-		p += sddk->dnskey[i].publickey_len;
+		q = tmpkey;
+		pack(q, dnsname, labellen);
+		q += labellen;
+		pack16(q, htons(DNS_TYPE_DNSKEY));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
+		q += 4;
+		pack16(q, htons(2 + 1 + 1 + sddk->dnskey[i].publickey_len));
+		q += 2;
+		pack16(q, htons(sddk->dnskey[i].flags));
+		q += 2;
+		pack8(q, sddk->dnskey[i].protocol);
+		q++;
+		pack8(q, sddk->dnskey[i].algorithm);
+		q++;
+		pack(q, sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len);
+		q += sddk->dnskey[i].publickey_len;
+
+
+		c1 = malloc(sizeof(struct canonical));
+		if (c1 == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return -1;
+		}
+
+		c1->len = (q - tmpkey);
+		c1->data = malloc(c1->len);
+		if (c1->data == NULL) {
+			dolog(LOG_INFO, "c1->data out of memory\n");
+			return -1;
+		}
+	
+		memcpy(c1->data, tmpkey, c1->len);
+
+		if (TAILQ_EMPTY(&head))
+			TAILQ_INSERT_TAIL(&head, c1, entries);
+		else {
+			TAILQ_FOREACH(c2, &head, entries) {
+				if (c1->len < c2->len)
+					break;
+				else if (c2->len == c1->len && 
+					memcmp(c1->data, c2->data, c1->len) < 0)
+					break;
+			}
+
+			if (c2 != NULL) 
+				TAILQ_INSERT_BEFORE(c2, c1, entries);
+			else
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+		}
+
+	}
+
+	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+		pack(p, c2->data, c2->len);
+		p += c2->len;
+
+		TAILQ_REMOVE(&head, c2, entries);
 	}
 	keylen = (p - key);	
 
@@ -4633,25 +5125,66 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 	/* no signature here */	
 	
 	for (i = 0; i < sddk->dnskey_count; i++) {
-		pack(p, dnsname, labellen);
-		p += labellen;
-		pack16(p, htons(DNS_TYPE_DNSKEY));
-		p += 2;
-		pack16(p, htons(DNS_CLASS_IN));
-		p += 2;
-		pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
-		p += 4;
-		pack16(p, htons(2 + 1 + 1 + sddk->dnskey[i].publickey_len));
-		p += 2;
-		pack16(p, htons(sddk->dnskey[i].flags));
-		p += 2;
-		pack8(p, sddk->dnskey[i].protocol);
-		p++;
-		pack8(p, sddk->dnskey[i].algorithm);
-		p++;
-		pack(p, sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len);
-		p += sddk->dnskey[i].publickey_len;
+		q = tmpkey;
+		pack(q, dnsname, labellen);
+		q += labellen;
+		pack16(q, htons(DNS_TYPE_DNSKEY));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
+		q += 4;
+		pack16(q, htons(2 + 1 + 1 + sddk->dnskey[i].publickey_len));
+		q += 2;
+		pack16(q, htons(sddk->dnskey[i].flags));
+		q += 2;
+		pack8(q, sddk->dnskey[i].protocol);
+		q++;
+		pack8(q, sddk->dnskey[i].algorithm);
+		q++;
+		pack(q, sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len);
+		q += sddk->dnskey[i].publickey_len;
+
+		c1 = malloc(sizeof(struct canonical));
+                if (c1 == NULL) {
+                        dolog(LOG_INFO, "c1 out of memory\n");
+                        return -1;
+                }
+
+                c1->len = (q - tmpkey);
+                c1->data = malloc(c1->len);
+                if (c1->data == NULL) {
+                        dolog(LOG_INFO, "c1->data out of memory\n");
+                        return -1;
+                }
+
+                memcpy(c1->data, tmpkey, c1->len);
+
+                if (TAILQ_EMPTY(&head))
+                        TAILQ_INSERT_TAIL(&head, c1, entries);
+                else {
+                        TAILQ_FOREACH(c2, &head, entries) {
+                                if (c1->len < c2->len)
+                                        break;
+                                else if (c2->len == c1->len &&
+                                        memcmp(c1->data, c2->data, c1->len) < 0)
+                                        break;
+                        }
+
+                        if (c2 != NULL)
+                                TAILQ_INSERT_BEFORE(c2, c1, entries);
+                        else
+                                TAILQ_INSERT_TAIL(&head, c1, entries);
+                }
 	}
+
+	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+                pack(p, c2->data, c2->len);
+                p += c2->len;
+
+                TAILQ_REMOVE(&head, c2, entries);
+        }
+
 	keylen = (p - key);	
 
 #if 0
