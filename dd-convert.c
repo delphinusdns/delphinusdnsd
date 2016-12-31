@@ -5975,6 +5975,7 @@ print_sd(FILE *of, struct domain *sdomain)
 	struct domain_srv *sdsrv;
 	struct domain_rrsig *sdrr;
 	struct domain_dnskey *sddk;
+	struct domain_ds *sdds;
 	struct domain_nsec3 *sdn3;
 	struct domain_nsec3param *sdn3param;
 	struct domain_sshfp *sdsshfp;
@@ -6019,6 +6020,21 @@ print_sd(FILE *of, struct domain *sdomain)
 				sdomain->ttl[INTERNAL_TYPE_MX],
 				sdmx->mx[i].preference,
 				convert_name(sdmx->mx[i].exchange, sdmx->mx[i].exchangelen));
+		}
+	}
+	if (sdomain->flags & DOMAIN_HAVE_DS) {
+		if ((sdds = (struct domain_ds *)find_substruct(sdomain, INTERNAL_TYPE_DS)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in zone!\n");
+			return -1;
+		}
+		for (i = 0; i < sdds->ds_count; i++) {
+			fprintf(of, "  %s,ds,%d,%d,%d,%d,\"%s\"\n", 
+				convert_name(sdomain->zone, sdomain->zonelen),
+				sdomain->ttl[INTERNAL_TYPE_DS],
+				sdds->ds[i].key_tag,
+				sdds->ds[i].algorithm,
+				sdds->ds[i].digest_type,
+				bin2hex(sdds->ds[i].digest, sdds->ds[i].digestlen));
 		}
 	}
 	if (sdomain->flags & DOMAIN_HAVE_CNAME) {
