@@ -1,4 +1,4 @@
-$Id: README,v 1.11 2016/01/01 08:24:31 pjp Exp $
+$Id: README,v 1.12 2017/01/02 17:20:26 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -11,11 +11,11 @@ $Id: README,v 1.11 2016/01/01 08:24:31 pjp Exp $
 4. COMPATIBILITY
 5. EXAMPLES
 6. DNSSEC
- 6.1 Preparing your computer for DNSSEC
- 6.2 Signing your zone with dd-convert.rb
- 6.3 re-signing with existing keys
- 6.4 What to do with the .signed file
- 6.5 How can I sub-delegate a zone with DNSSEC
+ 6.1 Signing your zone with dd-convert
+ 6.2 re-signing with existing keys
+ 6.3 What to do with the .signed file
+ 6.4 How can I sub-delegate a zone with DNSSEC
+ 6.5 What happened to dd-convert.rb
 7. WHAT IT CAN'T DO
 
 1. README 
@@ -203,30 +203,15 @@ in the directory "examples" are a few examples from working configs.
 DNSSEC is added hostmaster commitment.  You will have to re-sign your zone at
 periodic intervals.  This can be automated though.
 
-6.1 Preparing your computer for DNSSEC
---------------------------------------
-
-What you need is the ISC Bind package or port.  In particular you need the 
-programs dnssec-signzone and dnssec-keygen.
-
-Also what you need to do is install ruby version 2.1 if you haven't already 
-and then install the ruby gems dns-zone and etc, like so:
-
-	gem install dns-zone --version '0.2.0'
-	gem install etc
-	
-After that the dd-convert.rb which is in this install directory will function 
-right.
-
-6.2 Signing your zone with dd-convert.rb
-----------------------------------------
+6.1 Signing your zone with dd-convert
+-------------------------------------
 
 The very first time you'll want to create ZSK and KSK keys.  They are the
 zone signing and key signing keys respectively.  Every DNSSEC zone has at
-least one of these.  To create these with dd-convert.rb I use -Z and -K
+least one of these.  To create these with dd-convert I use -Z and -K
 options.  Here is an example:
 
-	./dd-convert.rb -Z -K -i centroid.eu -n centroid.eu
+	dd-convert -Z -K -i centroid.eu -n centroid.eu -o centroid.eu.signed
 
 What this does is it creates the keys and signs the zone 'centroid.eu' with
 the zonename centroid.eu.  No trailing dots are needed.  The output will be
@@ -236,30 +221,31 @@ alpha$ ls K*
 Kcentroid.eu.+008+04815.key             Kcentroid.eu.+008+40405.key
 Kcentroid.eu.+008+04815.private         Kcentroid.eu.+008+40405.private
 
-This is the output format of dnssec-keygen utility and format is simple:
+This is a compatible output format of dnssec-keygen utility from BIND and 
+format is simple:
 
 K for key, centroid.eu. for the zone name, +008 for the algorithm used in
 this case it's rsasha256 and lastly a unique identifier for the key.  
 
 Keep these keys in a private place and only pull them out when you are going
-to re-sign the zone, as shown in #6.3.  Also, and this is important, save the
+to re-sign the zone, as shown in #6.2.  Also, and this is important, save the
 output of dd-convert.rb so that you know which is the ZSK and which is the
 KSK.
 
-6.3 re-signing with existing keys
+6.2 re-signing with existing keys
 ---------------------------------
 
 In order to do the monthly re-signing you must know which key is the ZSK and
 which is the KSK.  The initial -Z -K options of dd-convert.rb will tell which
 one is which.
 
-	./dd-convert.rb -z Kcentroid.eu.+008+04815 -k Kcentroid.eu.+008+40405 \
-		-i centroid.eu -n centroid.eu
+	dd-convert -z Kcentroid.eu.+008+04815 -k Kcentroid.eu.+008+40405 \
+		-i centroid.eu -n centroid.eu -o centroid.eu.signed
 
 Note, this will overwrite any centroid.eu.signed file.
 
 
-6.4 What to do with the .signed file
+6.3 What to do with the .signed file
 ------------------------------------
 
 Install the .signed file as your zone.  I personally use include's in my 
@@ -273,12 +259,28 @@ It's up to you to upload DS or DNSKEY (which can derive DS keys) to your
 registrar and from there to your parent zone.
 
 
-6.5 How can I sub-delegate a zone with DNSSEC
+6.4 How can I sub-delegate a zone with DNSSEC
 ---------------------------------------------
 
-You can't in delphinusdnsd 1.0.0.  Sorry.  You'll have to delegate non-signed
-or keep DNSSEC off.  Patches sent in are always welcome to make this work.
-Maybe for 1.1.0.
+At version 1.1.0 i have never tested this.  In theory you should be able to 
+sign a zone containing a DS resource record.  Since I haven't tested this I
+cannot say if this will work.
+
+
+6.5 What algorithms are supported with dd-convert
+-------------------------------------------------
+
+Currently only 3 algorithms are supported.   There is RSASHA1-NSEC3-SHA1 
+which has algorithm 7, there is RSASHA256 which has algorithm 8 (the default), 
+and there is RSASHA512 which has algorithm 10.
+
+6.6 What happened to dd-convert.rb
+----------------------------------
+
+The BIND reliant dd-convert.rb has been replaced with a native C program called
+dd-convert.c starting from version 1.1.0.  If you must have the .rb utility you
+can always get it from the 1.0.2 download which should never go away as long
+as I live.
 
 
 7. WHAT IT CAN'T DO
