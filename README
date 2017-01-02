@@ -1,4 +1,4 @@
-$Id: README,v 1.14 2017/01/02 18:43:58 pjp Exp $
+$Id: README,v 1.15 2017/01/02 19:20:21 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -15,7 +15,8 @@ $Id: README,v 1.14 2017/01/02 18:43:58 pjp Exp $
  6.2 re-signing with existing keys
  6.3 What to do with the .signed file
  6.4 How can I sub-delegate a zone with DNSSEC
- 6.5 What happened to dd-convert.rb
+ 6.5 What algorithms are supported with dd-convert
+ 6.6 What happened to dd-convert.rb
 7. WHAT IT CAN'T DO
 
 1. README 
@@ -222,15 +223,14 @@ K for key, centroid.eu. for the zone name, +008 for the algorithm used in
 this case it's rsasha256 and lastly a unique identifier for the key.  
 
 Keep these keys in a private place and only pull them out when you are going
-to re-sign the zone, as shown in #6.2.  Also, and this is important, save the
-output of dd-convert.rb so that you know which is the ZSK and which is the
-KSK.
+to re-sign the zone, as shown in #6.2.  The K* files should say inside which
+is the ZSK and which is the KSK.
 
 6.2 re-signing with existing keys
 ---------------------------------
 
 In order to do the monthly re-signing you must know which key is the ZSK and
-which is the KSK.  The initial -Z -K options of dd-convert.rb will tell which
+which is the KSK.  The initial -Z -K options of dd-convert will tell which
 one is which.
 
 	dd-convert -z Kcentroid.eu.+008+04815 -k Kcentroid.eu.+008+40405 \
@@ -247,8 +247,9 @@ configfile so that this is managed easy.  Then restart delphinusdnsd after
 setting the 'dnssec' option.  Your zone should talk DNSSEC, after you upload
 the KSK to your registrar.  They'll likely want the DNSKEY and in some cases
 grab it themselves over the insecure channel.  My registrar joker.com did 
-this.  Other than that the dnssec-keysign program that dd-convert.rb uses 
-creates a dsset-centroid.eu. file which has the uploadable DS keys in it.
+this.  Other than that dd-convert creates a dsset-centroid.eu. file which 
+has the uploadable DS keys in it.
+
 It's up to you to upload DS or DNSKEY (which can derive DS keys) to your 
 registrar and from there to your parent zone.
 
@@ -271,7 +272,7 @@ and there is RSASHA512 which has algorithm 10.
 6.6 What happened to dd-convert.rb
 ----------------------------------
 
-The BIND reliant dd-convert.rb has been replaced with a native C program called
+The BIND-reliant dd-convert.rb has been replaced with a native C program called
 dd-convert.c starting from version 1.1.0.  If you must have the .rb utility you
 can always get it from the 1.0.2 download which should never go away as long
 as I live.
