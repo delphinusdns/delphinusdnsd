@@ -80,7 +80,7 @@ int 	print_sd(FILE *, struct domain *);
 void 	usage(void);
 
 
-#define ALGORITHM_RSASHA1	5		/* rfc 4034 , mandatory */
+#define ALGORITHM_RSASHA1-NSEC3-SHA1 7 		/* rfc 5155 */
 #define ALGORITHM_RSASHA256	8		/* rfc 5702 */
 #define ALGORITHM_RSASHA512	10		/* rfc 5702 */
 
@@ -688,7 +688,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 	BN_GENCB_set_old(&cb, NULL, NULL);
 	
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		break;
 	case ALGORITHM_RSASHA256:
 		break;
@@ -859,9 +859,8 @@ alg_to_name(int algorithm)
 {
 	
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
-		return ("RSASHA");
-		break;
+	case ALGORITHM_RSASHA1-NSEC3-SHA1: 
+		return ("RSASHA1-NSEC3-SHA1");
 	case ALGORITHM_RSASHA256:
 		return ("RSASHA256");
 		break;
@@ -878,7 +877,7 @@ alg_to_rsa(int algorithm)
 {
 	
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		return (NID_sha1);
 		break;
 	case ALGORITHM_RSASHA256:
@@ -1175,7 +1174,7 @@ sign_soa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -1393,7 +1392,7 @@ sign_txt(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -1664,7 +1663,7 @@ sign_aaaa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -1903,7 +1902,7 @@ sign_nsec3(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -2135,7 +2134,7 @@ sign_nsec3param(DB *db, char *zonename, char *zsk_key, int expiry, struct domain
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -2353,7 +2352,7 @@ sign_spf(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -2570,7 +2569,7 @@ sign_cname(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -2786,7 +2785,7 @@ sign_ptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -3078,7 +3077,7 @@ sign_naptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -3357,7 +3356,7 @@ sign_srv(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -3634,7 +3633,7 @@ sign_sshfp(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -3912,7 +3911,7 @@ sign_tlsa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -4189,7 +4188,7 @@ sign_ds(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -4461,7 +4460,7 @@ sign_ns(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -4734,7 +4733,7 @@ sign_mx(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -5006,7 +5005,7 @@ sign_a(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -5469,7 +5468,7 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -5679,7 +5678,7 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 #endif
 
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1:
+	case ALGORITHM_RSASHA1-NSEC3-SHA1:
 		SHA1_Init(&sha1);
 		SHA1_Update(&sha1, key, keylen);
 		SHA1_Final((u_char *)shabuf, &sha1);
@@ -6850,7 +6849,7 @@ print_sd(FILE *of, struct domain *sdomain)
 void
 usage(void)
 {
-	fprintf(stderr, "usage: dd-convert [-hKZ] [-a algorithm] [-B bits] [-e date] [-I iterations] [-i inputfile] [-k KSK] [-n zonename] [-o output] [-s salt] [-t ttl] [-z ZSK]\n");
+	fprintf(stderr, "usage: dd-convert [-hKZ] [-a algorithm] [-B bits] [-e seconds] [-I iterations] [-i inputfile] [-k KSK] [-n zonename] [-o output] [-s salt] [-t ttl] [-z ZSK]\n");
 	fprintf(stderr, "\t-h\t\tthis help usage.\n");
 	fprintf(stderr, "\t-K\t\tcreate a new KSK key.\n");
 	fprintf(stderr, "\t-Z\t\tcreate a new ZSK key.\n");
