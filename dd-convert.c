@@ -1644,7 +1644,11 @@ sign_aaaa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                 }
 	}
 
+#ifdef __linux__
+	TAILQ_FOREACH(c2, &head, entries) {
+#else
 	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -3058,7 +3062,11 @@ sign_naptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                 }
 	}
 
+#ifdef __linux__
+        TAILQ_FOREACH(c2, &head, entries) {
+#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -3337,7 +3345,11 @@ sign_srv(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	}
 
+#ifdef __linux__
+        TAILQ_FOREACH(c2, &head, entries) {
+#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -3614,7 +3626,11 @@ sign_sshfp(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                 }
 	}
 
+#ifdef __linux__
+        TAILQ_FOREACH(c2, &head, entries) {
+#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -3892,7 +3908,11 @@ sign_tlsa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                 }
 	}
 
+#ifdef __linux__
+        TAILQ_FOREACH(c2, &head, entries) {
+#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -4170,7 +4190,11 @@ sign_ds(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                 }
 	}
 
+#ifdef __linux__
+        TAILQ_FOREACH(c2, &head, entries) {
+#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -4442,7 +4466,11 @@ sign_ns(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                 }
 	}
 
+#ifdef __linux__
+        TAILQ_FOREACH(c2, &head, entries) {
+#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -4715,7 +4743,11 @@ sign_mx(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                 }
 	}
 
+#ifdef __linux__
+        TAILQ_FOREACH(c2, &head, entries) {
+#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -4987,7 +5019,11 @@ sign_a(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                 }
 	}
 
+#ifdef __linux__
+        TAILQ_FOREACH(c2, &head, entries) {
+#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -5450,7 +5486,11 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 
 	}
 
-	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#ifdef __linux__
+        TAILQ_FOREACH(c2, &head, entries) {
+#else
+        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
 		pack(p, c2->data, c2->len);
 		p += c2->len;
 
@@ -5659,7 +5699,11 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
                 }
 	}
 
-	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#ifdef __linux__
+        TAILQ_FOREACH(c2, &head, entries) {
+#else
+        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -5912,8 +5956,13 @@ read_private_key(char *zonename, int keyid, int algorithm)
 
 	fclose(f);
 
+#if __linux__
+	memset(buf, 0, sizeof(buf));
+	memset(key, 0, sizeof(key));
+#else
 	explicit_bzero(buf, sizeof(buf));
 	explicit_bzero(key, sizeof(key));
+#endif
 
 	return (rsa);
 	

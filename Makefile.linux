@@ -1,38 +1,75 @@
 CC=gcc
 #CFLAGS=-DDEBUG
 CFLAGS=
-LDADD= -ldb -lresolv -lcrypto -lrt
+LDADD= -ldb -lresolv -lcrypto -lrt -lbsd
 YACC=bison
 AR=ar
 
 
+all: delphinusdnsd dd-convert
 
-build:
+delphinusdnsd: additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o
+	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o $(LDADD)
+
+dd-convert:  dd-convert.o util.o dnssec.o parse.o base64.o
+	$(CC) $(CFLAGS) -o dd-convert/dd-convert dd-convert.o util.o dnssec.o base64.o parse.o $(LDADD)
+	
+
+dd-convert.o: dd-convert.c
+	$(CC) $(CFLAGS) -c dd-convert.c
+
+parse.o: parse.y
 	$(YACC) $(CFLAGS) -y -d parse.y
 	mv -f y.tab.c parse.c
-	$(CC) $(CFLAGS) -c additional.c
-	$(CC) $(CFLAGS) -c main.c
 	$(CC) $(CFLAGS) -c parse.c
+	
+additional.o: additional.c
+	$(CC) $(CFLAGS) -c additional.c
+
+delphinusdnsd.o: delphinusdnsd.c
+	$(CC) $(CFLAGS) -c delphinusdnsd.c
+
+reply.o: reply.c
 	$(CC) $(CFLAGS) -c reply.c
+
+region.o: region.c
 	$(CC) $(CFLAGS) -c region.c
+
+log.o: log.c
 	$(CC) $(CFLAGS) -c log.c
+
+axfr.o:  axfr.c
 	$(CC) $(CFLAGS) -c axfr.c
+
+filter.o: filter.c
 	$(CC) $(CFLAGS) -c filter.c
+
+ratelimit.o: ratelimit.c
 	$(CC) $(CFLAGS) -c ratelimit.c
+
+whitelist.o:  whitelist.c
 	$(CC) $(CFLAGS) -c whitelist.c
+
+base64.o: base64.c
 	$(CC) $(CFLAGS) -c base64.c
+
+dnssec.o: dnssec.c
 	$(CC) $(CFLAGS) -c dnssec.c
-	$(AR) -x libressllibcrypto.a arc4random.o 
-	$(AR) -x libressllibcrypto.a getentropy_linux.o
-	$(AR) -x libressllibcrypto.a libcompatnoopt_la-explicit_bzero.o
-	$(CC) $(CFLAGS) -o delphinusdnsd additional.o main.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o arc4random.o getentropy_linux.o libcompatnoopt_la-explicit_bzero.o $(LDADD)
+
+util.o:  util.c
+	$(CC) $(CFLAGS) -c util.c
 
 
-install:
-	test -f delphinusdnsd && install -m 555 delphinusdnsd /usr/local/sbin/
+install: install-delphinusdnsd install-dd-convert
+
+install-dd-convert:
+	test -f dd-convert/dd-convert && install -m 555 dd-convert/dd-convert /usr/local/sbin/
+
+install-delphinusdnsd:
+	test -f delphinusdnsd/delphinusdnsd && install -m 555 delphinusdnsd/delphinusdnsd /usr/local/sbin/
 	mkdir -p /usr/local/man/man8 && install -m 444 delphinusdnsd.8 /usr/local/man/man8
 	mkdir -p /usr/local/man/man5 && install -m 444 delphinusdns.conf.5 /usr/local/man/man5
 
 
 clean:
-	rm -f *.o delphinusdnsd
+	rm -f *.o delphinusdnsd/delphinusdnsd dd-convert/dd-convert
