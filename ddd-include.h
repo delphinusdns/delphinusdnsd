@@ -69,6 +69,9 @@
 
 #ifdef __linux__
 #include <grp.h>
+#include <bsd/stdlib.h>
+#include <bsd/string.h>
+#include <bsd/unistd.h>
 #endif
 
 #ifndef NTOHS

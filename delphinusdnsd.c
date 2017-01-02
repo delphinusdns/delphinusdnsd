@@ -161,7 +161,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.5 2016/08/30 00:12:12 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.6 2017/01/02 18:18:27 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -858,7 +858,7 @@ main(int argc, char *argv[])
 				close(uafd[j]);
 			}
 
-#if !defined __linux__ && !defined __APPLE__
+#if !defined __APPLE__
 			setproctitle("AXFR engine on port %d", axfrport);
 #endif
 
@@ -3108,7 +3108,7 @@ setup_master(DB *db, DB_ENV *dbenv, char **av)
 	pid_t pid;
 	int fd, ret;
 	
-#if !defined __linux__ && !defined __APPLE__
+#if !defined __APPLE__
 	setproctitle("delphinusdnsd master");
 #endif
 

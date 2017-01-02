@@ -1,4 +1,4 @@
-$Id: README,v 1.12 2017/01/02 17:20:26 pjp Exp $
+$Id: README,v 1.13 2017/01/02 18:18:27 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -69,8 +69,7 @@ In Linux MINT you need to apt-get install build-essential.
 ## configure the platform
 $ ./configure
 ## this will install the development programs you'll need (as root)
-$ apt-get install bison cvs gcc libdb5.3-dev libssl-dev dnssec-tools
-$ apt-get install ruby-2.0
+$ apt-get install bison cvs gcc libdb5.3-dev libssl-dev libbsd-dev
 ## add a privsep user with a chroot directory (option -m) (as root)
 $ useradd -m _ddd
 ## create the db directory (as root)

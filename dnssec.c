@@ -95,12 +95,7 @@ insert_apex(char *zonename, char *zone, int zonelen)
 		return -1;
 	}
 
-#ifdef __linux__
-	strncpy(dn->zonename, zonename, DNS_MAXNAME + 1);
-	dn->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy(dn->zonename, zonename, DNS_MAXNAME + 1);
-#endif
 
 	if (zonelen > DNS_MAXNAME) {
 		free (dn);
@@ -133,12 +128,7 @@ insert_nsec3(char *zonename, char *domainname, char *dname, int dnamelen)
 	if (n3 == NULL)
 		return -1;
 
-#ifdef __linux__
-	strncpy(n3->domainname, domainname, DNS_MAXNAME + 1);
-	n3->domainname[DNS_MAXNAME] = '\0';
-#else
 	strlcpy(n3->domainname, domainname, DNS_MAXNAME + 1);
-#endif
 	
 	if (dnamelen > DNS_MAXNAME) {
 		free (n3);
@@ -295,19 +285,9 @@ find_nsec(char *name, int namelen, struct domain *sd, DB *db)
 	}
 
 	dn = (struct domainnames *)table;
-#ifdef __linux__
-	strncpy(dn->name, sd->zonename, DNS_MAXNAME + 1);
-	dn->name[DNS_MAXNAME] = '\0';
-#else
 	strlcpy(dn->name, sd->zonename, DNS_MAXNAME + 1);
-#endif
 	nsecname = convert_name(sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
-#ifdef __linux__
-	strncpy(dn->next, nsecname, DNS_MAXNAME + 1);
-	dn->next[DNS_MAXNAME] = '\0';
-#else
 	strlcpy(dn->next, nsecname, DNS_MAXNAME + 1);
-#endif
 	
 	rs = get_record_size(db, sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
 	if (rs < 0) {
@@ -372,19 +352,9 @@ find_nsec(char *name, int namelen, struct domain *sd, DB *db)
 		dn = ((struct domainnames *)table) + i;
 		
 		free (nsecname);
-#ifdef __linux__
-		strncpy(dn->name, sd0->zonename, DNS_MAXNAME + 1);
-		dn->name[DNS_MAXNAME] = '\0';
-#else
 		strlcpy(dn->name, sd0->zonename, DNS_MAXNAME + 1);
-#endif
 		nsecname = convert_name(sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
-#ifdef __linux__
-		strncpy(dn->next, nsecname, DNS_MAXNAME + 1);
-		dn->next[DNS_MAXNAME] = '\0';
-#else
 		strlcpy(dn->next, nsecname, DNS_MAXNAME + 1);
-#endif
 		
 		rs = get_record_size(db, sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
 		if (rs < 0) {
@@ -433,15 +403,8 @@ find_nsec(char *name, int namelen, struct domain *sd, DB *db)
 
 	free (nsecname);
 	dn = ((struct domainnames *)table) + i;
-#ifdef __linux__
-	strncpy(dn->next, ".", DNS_MAXNAME + 1);
-	dn->next[DNS_MAXNAME] = '\0';
-	strncpy(dn->name, humanname, DNS_MAXNAME + 1);
-	dn->name[DNS_MAXNAME] = '\0';
-#else
 	strlcpy(dn->next, ".", DNS_MAXNAME + 1);
 	strlcpy(dn->name, humanname, DNS_MAXNAME + 1);
-#endif
 
 	i++;
 

@@ -103,7 +103,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.42 2016/12/28 14:48:41 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.43 2017/01/02 18:18:27 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -1492,7 +1492,7 @@ yylex()
 #endif
 
 			free (yylval.v.string);
-#if ! defined __linux__ && ! defined __APPLE__ && ! defined __NetBSD__
+#if ! defined __APPLE__ && ! defined __NetBSD__
 			yylval.v.intval = strtonum(buf, 0, 0x7fffffffffffffff, &errstr);
 #else
 			yylval.v.intval = atoll(buf);
@@ -1723,12 +1723,7 @@ fill_cname(char *name, char *type, int myttl, char *hostname)
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -1820,12 +1815,7 @@ fill_ptr(char *name, char *type, int myttl, char *hostname)
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -1920,12 +1910,7 @@ fill_spf(char *name, char *type, int myttl, char *msg)
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -2002,12 +1987,7 @@ fill_dnskey(char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t p
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -2098,12 +2078,7 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 		return (-1);
 	}
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -2249,12 +2224,7 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -2351,12 +2321,7 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -2457,12 +2422,7 @@ fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_i
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -2551,12 +2511,7 @@ fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitma
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -2663,12 +2618,7 @@ fill_naptr(char *name, char *type, int myttl, int order, int preference, char *f
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -2773,12 +2723,7 @@ fill_txt(char *name, char *type, int myttl, char *msg)
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -2860,12 +2805,7 @@ fill_tlsa(char *name, char *type, int myttl, uint8_t usage, uint8_t selector, ui
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -2977,12 +2917,7 @@ fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerp
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -3093,12 +3028,7 @@ fill_srv(char *name, char *type, int myttl, int priority, int weight, int port, 
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -3202,12 +3132,7 @@ fill_mx(char *name, char *type, int myttl, int priority, char *mxhost)
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -3304,12 +3229,7 @@ fill_a(char *name, char *type, int myttl, char *a)
 		return (-1);
 	}
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -3405,12 +3325,7 @@ fill_aaaa(char *name, char *type, int myttl, char *aaaa)
 	}
 
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -3515,12 +3430,7 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 		return (-1);
 	}
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -3638,12 +3548,7 @@ fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int seria
 		return (-1);
 	}
 
-#ifdef __linux__
-	strncpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	ssd->zonename[DNS_MAXNAME] = '\0';
-#else
 	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-#endif
 	memcpy(ssd->zone, converted_name, converted_namelen);
 	ssd->zonelen = converted_namelen;
 
@@ -3927,19 +3832,14 @@ temp_inet_net_pton_ipv6(const char *src, void *dst, size_t size)
         int     bits;
         char    buf[sizeof("xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:255:255:255:255/128")];
         char            *sep;
-#if defined __OpenBSD__ || defined __FreeBSD__
+#if defined __OpenBSD__ || defined __FreeBSD__ || defined __linux__
         const char      *errstr;
 #endif
 
-#ifndef __linux__
         if (strlcpy(buf, src, sizeof buf) >= sizeof buf) {
                 errno = EMSGSIZE;
                 return (-1);
         }
-#else
-	strncpy(buf, src, sizeof(buf));
-	buf[sizeof(buf) - 1] = '\0';
-#endif
 
         sep = strchr(buf, '/');
         if (sep != NULL)
@@ -3953,7 +3853,7 @@ temp_inet_net_pton_ipv6(const char *src, void *dst, size_t size)
         if (sep == NULL)
                 return 128;
 
-#if ! defined __linux__ && ! defined __APPLE__ && ! defined __NetBSD__
+#if ! defined __APPLE__ && ! defined __NetBSD__
         bits = strtonum(sep, 0, 128, &errstr);
         if (errstr)
                 return (-1);

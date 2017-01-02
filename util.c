@@ -121,12 +121,7 @@ dns_label(char *name, int *returnlen)
 	if (name == NULL) 
 		return NULL;
 
-#if __linux__
-	strncpy(tname, name, sizeof(tname));
-	tname[sizeof(tname) - 1] = 0;
-#else
 	strlcpy(tname, name, sizeof(tname));
-#endif
 
 	len = strlen(tname);
 	if (tname[len - 1] == '.') 
@@ -149,13 +144,7 @@ dns_label(char *name, int *returnlen)
 	for (i = 0, p = dnslabel; i < lc; i++) {
 		len = strlen(labels[i]);
 		*p++ = len;
-#if __linux__
-		/* XXX */
-		strncpy(p, labels[i], newlen - (p - dnslabel) + 1);
-		p[newlen - (p - dnslabel)] = 0;
-#else
 		strlcpy(p, labels[i], newlen - (p - dnslabel) + 1);
-#endif
 		p += len;
 	}
 
