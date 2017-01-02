@@ -1,8 +1,9 @@
 Changes in RELEASE_1_1 from RELEASE_1_0
 
-- dd-convert.c writen to replace dd-convert.rb.  It now supports TLSA RR's as
-an added bonus.
-- manpage for dd-convert.8
+- dd-convert.c written to replace dd-convert.rb.  It now supports TLSA RR's as
+an added bonus.  This utility does not rely on any external (BIND) tools except
+for the linkage against openssl/libressl.
+- manpage for dd-convert
 
 Changes in RELEASE_1_0 from BETA_9
 
