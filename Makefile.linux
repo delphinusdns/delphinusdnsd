@@ -64,6 +64,7 @@ install: install-delphinusdnsd install-dd-convert
 
 install-dd-convert:
 	test -f dd-convert/dd-convert && install -m 555 dd-convert/dd-convert /usr/local/sbin/
+	mkdir -p /usr/local/man/man8 && install -m 444 dd-convert.8 /usr/local/man/man8
 
 install-delphinusdnsd:
 	test -f delphinusdnsd/delphinusdnsd && install -m 555 delphinusdnsd/delphinusdnsd /usr/local/sbin/
