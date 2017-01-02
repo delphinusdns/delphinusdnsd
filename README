@@ -1,4 +1,4 @@
-$Id: README,v 1.13 2017/01/02 18:18:27 pjp Exp $
+$Id: README,v 1.14 2017/01/02 18:43:58 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -58,11 +58,6 @@ config once.
 
 3.1 Linux
 ---------
-
-In Linux we rely on LibreSSL 2.2.4, you must download it (configure will 
-tell you from where in ./configure) and place it in the directory besides 
-delphinusdnsd root directory.  You do not have to install it but you have 
-to './configure && make check' at least.
 
 In Linux MINT you need to apt-get install build-essential.
 
