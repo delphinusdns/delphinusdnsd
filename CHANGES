@@ -1,5 +1,9 @@
 Changes in RELEASE_1_1 from RELEASE_1_0
 
+- dd-convert.c writen to replace dd-convert.rb.  It now supports TLSA RR's as
+an added bonus.
+- manpage for dd-convert.8
+
 Changes in RELEASE_1_0 from BETA_9
 
 - name change from wildcarddnsd to delphinusdnsd
