@@ -65,6 +65,7 @@ int	sign_nsec3param(DB *, char *, char *, int, struct domain *);
 int	sign_naptr(DB *, char *, char *, int, struct domain *);
 int	sign_sshfp(DB *, char *, char *, int, struct domain *);
 int	sign_tlsa(DB *, char *, char *, int, struct domain *);
+int	sign_ds(DB *, char *, char *, int, struct domain *);
 int 	create_ds(DB *, char *, char *);
 u_int 	keytag(u_char *key, u_int keysize);
 void 	pack(char *, char *, int);
@@ -993,6 +994,9 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 				return -1;
 		if (sd->flags & DOMAIN_HAVE_TLSA)
 			if (sign_tlsa(db, zonename, zsk_key, expiry, sd) < 0)
+				return -1;
+		if (sd->flags & DOMAIN_HAVE_DS)
+			if (sign_ds(db, zonename, zsk_key, expiry, sd) < 0)
 				return -1;
 
 		j++;
@@ -3970,6 +3974,283 @@ sign_tlsa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	return 0;
 }
 
+/*
+ * create a RRSIG for an DS record
+ */
+
+int
+sign_ds(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+{
+	struct domain_ds *sdds;
+
+	char tmp[4096];
+	char signature[4096];
+	char buf[512];
+	char shabuf[64];
+	
+	SHA_CTX sha1;
+	SHA256_CTX sha256;
+	SHA512_CTX sha512;
+
+	char *dnsname;
+	char *p, *q;
+	char *key, *tmpkey;
+	char *zone;
+
+	uint32_t ttl;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
+
+	int labellen, i;
+	int keyid;
+	int fd, len;
+	int keylen, siglen;
+	int rsatype;
+	int bufsize;
+	int labels;
+
+	RSA *rsa;
+
+	char timebuf[32];
+	struct tm tm;
+	u_int32_t expiredon2, signedon2;
+        TAILQ_HEAD(listhead, canonical) head;
+
+        struct canonical {
+                char *data;
+                int len;
+                TAILQ_ENTRY(canonical) entries;
+        } *c1, *c2, *cp;
+
+
+        TAILQ_INIT(&head);
+	memset(&shabuf, 0, sizeof(shabuf));
+
+	key = malloc(10 * 4096);
+	if (key == NULL) {
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
+		return -1;
+	}
+
+	/* get the ZSK */
+	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
+	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
+		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+		return -1;
+	}
+
+	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "parse %s\n", buf);
+		close (fd);
+		return -1;
+	}
+
+	close(fd);
+
+	/* check the keytag supplied */
+	p = key;
+	pack16(p, htons(flags));
+	p += 2;
+	pack8(p, protocol);
+	p++;
+	pack8(p, algorithm);
+	p++;
+	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+	pack(p, signature, keylen);
+	p += keylen;
+	keylen = (p - key);
+	if (keyid != keytag(key, keylen)) {
+		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+		return -1;
+	}
+	
+	labels = label_count(sd->zone);
+	if (labels < 0) {
+		dolog(LOG_INFO, "label_count");
+		return -1;
+	}
+
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL)
+		return -1;
+
+	if (sd->flags & DOMAIN_HAVE_DS) {
+                if ((sdds = (struct domain_ds *)find_substruct(sd, INTERNAL_TYPE_DS)) == NULL) {
+			dolog(LOG_INFO, "no DS records but have flags!\n");
+                        return -1;
+		}
+	}
+	
+	p = key;
+
+	pack16(p, htons(DNS_TYPE_DS));
+	p += 2;
+	pack8(p, algorithm);
+	p++;
+	pack8(p, labels);
+	p++;
+	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DS]));
+	p += 4;
+		
+	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
+	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
+
+	pack32(p, htonl(expiredon2));
+	p += 4;
+	pack32(p, htonl(signedon2));	
+	p += 4;
+	pack16(p, htons(keyid));
+	p += 2;
+	pack(p, dnsname, labellen);
+	p += labellen;
+
+	/* no signature here */	
+	/* XXX this should probably be done on a canonical sorted records */
+	
+	for (i = 0; i < sdds->ds_count; i++) {
+		q = tmpkey;
+		pack(q, sd->zone, sd->zonelen);
+		q += sd->zonelen;
+		pack16(q, htons(DNS_TYPE_DS));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_DS]));
+		q += 4;
+		pack16(q, htons(2 + 1 + 1 + sdds->ds[i].digestlen));
+		q += 2;
+		pack16(q, htons(sdds->ds[i].key_tag));
+		q += 2;
+		pack8(q, sdds->ds[i].algorithm);
+		q++;
+		pack8(q, sdds->ds[i].digest_type);
+		q++;
+		pack(q, sdds->ds[i].digest, sdds->ds[i].digestlen);
+		q += sdds->ds[i].digestlen;
+
+               c1 = malloc(sizeof(struct canonical));
+                if (c1 == NULL) {
+                        dolog(LOG_INFO, "c1 out of memory\n");
+                        return -1;
+                }
+
+                c1->len = (q - tmpkey);
+                c1->data = malloc(c1->len);
+                if (c1->data == NULL) {
+                        dolog(LOG_INFO, "c1->data out of memory\n");
+                        return -1;
+                }
+
+                memcpy(c1->data, tmpkey, c1->len);
+
+                if (TAILQ_EMPTY(&head))
+                        TAILQ_INSERT_TAIL(&head, c1, entries);
+                else {
+                        TAILQ_FOREACH(c2, &head, entries) {
+                                if (c1->len < c2->len)
+                                        break;
+                                else if (c2->len == c1->len &&
+                                        memcmp(c1->data, c2->data, c1->len) < 0)
+                                        break;
+                        }
+
+                        if (c2 != NULL)
+                                TAILQ_INSERT_BEFORE(c2, c1, entries);
+                        else
+                                TAILQ_INSERT_TAIL(&head, c1, entries);
+                }
+	}
+
+        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+                pack(p, c2->data, c2->len);
+                p += c2->len;
+
+                TAILQ_REMOVE(&head, c2, entries);
+        }
+	keylen = (p - key);	
+
+#if 0
+	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+	for (i = 0; i < keylen; i++) {
+		write(fd, (char *)&key[i], 1);
+	}
+	close(fd);
+	
+#endif
+
+	switch (algorithm) {
+	case ALGORITHM_RSASHA1:
+		SHA1_Init(&sha1);
+		SHA1_Update(&sha1, key, keylen);
+		SHA1_Final((u_char *)shabuf, &sha1);
+		bufsize = 20;
+		break;
+	case ALGORITHM_RSASHA256:	
+		SHA256_Init(&sha256);
+		SHA256_Update(&sha256, key, keylen);
+		SHA256_Final((u_char *)shabuf, &sha256);
+		bufsize = 32;
+
+#if 0
+		printf("keylen = %d\n", keylen);
+		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+		for (i = 0; i < bufsize; i++) {
+			write(fd, (char *)&shabuf[i], 1);
+		}
+		close(fd);
+#endif
+
+		break;
+	case ALGORITHM_RSASHA512:
+		SHA512_Init(&sha512);
+		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Final((u_char *)shabuf, &sha512);
+		bufsize = 64;
+		break;
+	default:
+		return -1;
+	}
+		
+	rsa = read_private_key(zonename, keyid, algorithm);
+	if (rsa == NULL) {
+		dolog(LOG_INFO, "reading private key failed\n");
+		return -1;
+	}
+		
+	rsatype = alg_to_rsa(algorithm);
+	if (rsatype == -1) {
+		dolog(LOG_INFO, "algorithm mismatch\n");
+		return -1;
+	}
+
+	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
+		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
+		return -1;
+	}
+
+	RSA_free(rsa);
+
+	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+	tmp[len] = '\0';
+
+	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_DS], "DS", algorithm, labels, sd->ttl[INTERNAL_TYPE_DS], expiredon, signedon, keyid, zonename, tmp) < 0) {
+		dolog(LOG_INFO, "fill_rrsig\n");
+		return -1;
+	}
+	
+	return 0;
+}
+
 
 /*
  * create a RRSIG for an NS record
@@ -6281,6 +6562,28 @@ print_sd(FILE *of, struct domain *sdomain)
 				convert_name(rss->signers_name, rss->signame_len),
 				buf);	
 		}
+
+		if (sdomain->flags & DOMAIN_HAVE_DS) {
+			for (i = 0; i < sdrr->rrsig_ds_count; i++) {
+				rss = (struct rrsig *)&sdrr->rrsig_ds[i];
+				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+				buf[len] = '\0';
+
+				fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+					convert_name(sdomain->zone, sdomain->zonelen),
+					sdomain->ttl[INTERNAL_TYPE_RRSIG],
+					get_dns_type(rss->type_covered, 0), 
+					rss->algorithm, rss->labels,
+					rss->original_ttl, 
+					timethuman(rss->signature_expiration),
+					timethuman(rss->signature_inception), 
+					rss->key_tag,
+					convert_name(rss->signers_name, rss->signame_len),
+					buf);	
+			}
+		}
+
+
 
 		if (sdomain->flags & DOMAIN_HAVE_TLSA) {
 			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_TLSA];
