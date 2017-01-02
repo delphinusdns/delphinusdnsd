@@ -1,9 +1,17 @@
 The TODO's here are for delphinusdnsd which is the successor of wildcarddnsd.
 Please see http://delphinusdns.centroid.eu for updates/news.
 
+For 1.2.0 release
+- sign zones immediately at startup which doesn't require a zonesigner
+  this would be coupled with a dynamic dns system which automatically adds/up-
+  dates	new NSEC3 and RRSIG's for new records.
+- TSIG support would still be nice
+- allow AXFR to bind to port 53 and pass it from main engine to axfr engine
+  via descriptor passing
+
 For 1.1.0 release
 
-- either a zonesigner (instead of relying on BIND's) or 
+- either a zonesigner (instead of relying on BIND's) or   [DONE]
 - signing zones immediately at startup which doesn't require a zonesigner
 - TSIG support would still be nice
 - allow AXFR to bind to port 53 and pass it from main engine to axfr engine
