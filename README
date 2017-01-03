@@ -1,4 +1,4 @@
-$Id: README,v 1.15 2017/01/02 19:20:21 pjp Exp $
+$Id: README,v 1.16 2017/01/03 10:37:32 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -115,7 +115,7 @@ in your /etc/rc.conf and reboot the jail.
 ## configure the platform
 $ sh configure
 ## this will install the development programs you'll need (as root)
-$ pkg_add db-4.6.21p0v0 isc-bind
+$ pkg_add db-4.6.21p0v0 
 ## add a privsep user (_ddd) with a chroot directory (as root)
 $ vipw
 ## or
@@ -150,17 +150,8 @@ $ make install
 3.5 Mac OS X
 ------------
 
-## configure for Mac OS X
-$ sh configure
-## Installed berkeley db 4.8 through Mac Ports.
-$ sudo port install db48
-## The binary is made with nobody as the unprivileged user
-$ make
-## cp the binary into /usr/local/sbin/
-$ sudo cp delphinusdnsd /usr/local/sbin/
-## make the /var/db/delphinusdns directory
-$ mkdir -p /var/db/delphinusdns
-## done, create config file and start delphinusdnsd
+Mac OS X port has been dropped in version 1.1.0.  If anyone wants to revive
+it they can send patches for the Makefile.
 
 
 4. COMPATIBILITY
@@ -173,11 +164,11 @@ FreeBSD 10        |        yes         |       yes           | version 5   |
 ------------------+--------------------+---------------------+-------------+
 NetBSD 6.1.5      |        yes*        |       yes           | version 5   |
 ------------------+--------------------+---------------------+-------------+
-OpenBSD 5.6       |        yes         |       yes           | version 4.6 |
+OpenBSD 6.0       |        yes         |       yes           | version 4.6 |
 ------------------+--------------------+---------------------+-------------+
 Linux 		  |        yes         |       yes           | version 5   |
 ------------------+--------------------+---------------------+-------------+
-Mac OS X ElCapitan|        yes         |       yes           | version 4.8 |
+Mac OS X ElCapitan|        no****      |      unknown        | version 4.8 |
 with MacPorts     |                    |                     |		   |	
 ------------------+--------------------+---------------------+-------------+
 Rasbian OS        |        yes ***     |       yes           | version 5   |
@@ -186,6 +177,7 @@ Rasbian OS        |        yes ***     |       yes           | version 5   |
 * there was a period in time that NetBSD didn't compile
 ** All Operating Systems require Berkeley DB 4.6 or higher.
 *** Raspbian OS (Raspberry Pi) only has support for Berkeley DB 5.0 or higher
+**** Mac OS X support has been dropped in version 1.1.0
 
 5. EXAMPLES
 -----------
