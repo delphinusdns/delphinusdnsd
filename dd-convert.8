@@ -43,6 +43,7 @@
 .Op Fl o Ar outputfile
 .Op Fl s Ar salt
 .Op Fl t Ar ttl
+.Op Fl v
 .Op Fl z Ar ZSKfile
 .Op Fl Z
 .Sh DESCRIPTION
@@ -122,6 +123,11 @@ same as anything that requires salt.  The input is in hexadecimal.
 .Fl t
 .Ar ttl
 is the time to live for created DNSKEY resource records.  Default is 3600.
+.It Xo
+.Fl v
+prints the version of 
+.Nm 
+and exits.
 .It Xo
 .Fl z
 .Ar ZSKfile

@@ -139,8 +139,13 @@ u_int16_t port = 53;
 u_int32_t cachesize = 0;
 char *bind_list[255];
 char *interface_list[255];
+#ifndef DD_VERSION
 char *versionstring = "delphinusdnsd -current";
 uint8_t vslen = 22;
+#else
+char *versionstring = DD_VERSION;
+uint8_t vslen = DD_VERSION_LEN;
+#endif
 int *ptr = NULL;
 
 /* singly linked list for tcp operations */
@@ -161,7 +166,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.6 2017/01/02 18:18:27 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.7 2017/01/03 08:36:38 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop

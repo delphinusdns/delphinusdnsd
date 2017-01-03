@@ -28,6 +28,7 @@
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
+#include "ddd-config.h"
 
 #include <openssl/bn.h>
 #include <openssl/obj_mac.h>
@@ -164,7 +165,7 @@ main(int argc, char *argv[])
 	DB_ENV *dbenv;
 
 
-	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:n:o:s:t:Zz:")) != -1) {
+	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:n:o:s:t:vZz:")) != -1) {
 		switch (ch) {
 		case 'a':
 			/* algorithm */
@@ -238,6 +239,12 @@ main(int argc, char *argv[])
 			ttl = atoi(optarg);
 
 			break;
+
+		case 'v':
+			/* version */
+
+			printf("%s\n", DD_CONVERT_VERSION);
+			exit(0);
 
 		case 'Z':
 			/* create ZSK */
