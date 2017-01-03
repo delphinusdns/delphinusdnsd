@@ -12,8 +12,6 @@ OBJDIR=.
 BINDIR=/usr/local/sbin
 MANDIR=/usr/local/man/man
 
-NOMAN=1
-#MAN= delphinusdnsd.8
-#MAN+= delphinusdns.conf.5
+MAN= dd-convert.8
 
 .include <bsd.prog.mk>
