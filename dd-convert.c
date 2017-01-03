@@ -78,6 +78,7 @@ u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
 char * 	bin2hex(char *, int);
 int 	print_sd(FILE *, struct domain *);
+void	cleanup(DB *, char *);
 void 	usage(void);
 
 
@@ -161,6 +162,8 @@ main(int argc, char *argv[])
 	
 	char *ksk_key = NULL;
 	char *zsk_key = NULL;
+	char *tmpdir;
+	char tmppath[] = "./tmp.XXXXXXXXXX";
 	
 	DB *db;
 	DB_ENV *dbenv;
@@ -300,7 +303,12 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-	key = ftok("/usr/local/sbin/dd-convert", 1);
+	if ((tmpdir = mkdtemp(tmppath)) == NULL) {
+		perror("mkdtemp");
+		exit(1);
+	}
+
+	key = ftok(tmpdir, 1);
 	if (key == (key_t)-1) {
 		perror("ftok");
 		exit(1);
@@ -311,11 +319,7 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (mkdir("tmp/", 0700) < 0) {
-		perror("mkdir");
-	}
-
-	if ((ret = dbenv->open(dbenv, "tmp", DB_CREATE | \
+	if ((ret = dbenv->open(dbenv, tmpdir, DB_CREATE | \
 		DB_INIT_LOCK | DB_INIT_MPOOL | DB_SYSTEM_MEM, \
 		S_IRUSR | S_IWUSR)) != 0) {
 		fprintf(stderr, "dbenv->open: %s\n", db_strerror(ret));
@@ -375,6 +379,10 @@ main(int argc, char *argv[])
 	/* write new zone file */
 	if (dump_db(db, of, zonename) < 0)
 		exit (1);
+
+
+	/* clean up */
+	cleanup(db, tmpdir);
 
 	exit(0);
 }
@@ -7011,3 +7019,37 @@ usage(void)
 	return;
 }
 	
+void
+cleanup(DB *db, char *tmpdir)
+{
+	DIR *dirp;
+	struct dirent *dp;
+	struct stat sb;
+	
+	db->close(db, 0);
+	if (chdir(tmpdir) < 0) {
+		return;
+	}
+
+	if ((dirp = opendir(".")) == NULL) {
+		return;
+	}
+
+	while ((dp = readdir(dirp)) != NULL) {
+		if (lstat(dp->d_name, &sb) < 0) {
+			closedir(dirp);
+			return;
+		}
+		if (S_ISREG(sb.st_mode)) {
+			if (unlink(dp->d_name) < 0) {
+				closedir(dirp);
+				return;
+			}
+		}
+	}
+	(void)closedir(dirp);
+	chdir("..");
+	rmdir(tmpdir);
+
+	return;
+}

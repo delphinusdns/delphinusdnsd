@@ -139,7 +139,8 @@ Sign a zone with a newly created ZSK keyfile.  It is assumed that LibreSSL
 will create random defaults that are cryptographically strong.
 .El
 .Sh FILES
-.Pa tmp/
+.Pa ./tmp.XXXXXXXXXX	
+a temporary database path (gets cleaned up after successful exit).
 .Sh SEE ALSO
 .Xr delphinusdnsd 8 , 
 .Xr delphinusdns.conf 5 , 
