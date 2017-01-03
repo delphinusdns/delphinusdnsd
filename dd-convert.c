@@ -222,8 +222,12 @@ main(int argc, char *argv[])
 			if (optarg[0] == '-')
 				break;
  
-			lstat(optarg, &sb);
-			if (! S_ISREG(sb.st_mode)) {
+			errno = 0;
+			if (lstat(optarg, &sb) < 0 && errno != ENOENT) {
+				perror("lstat");
+				exit(1);
+			}
+			if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
 				fprintf(stderr, "%s is not a file!\n", optarg);
 				exit(1);
 			}
@@ -770,9 +774,13 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 
 	savemask = umask(077);
 
-	lstat(buf, &sb);
+	errno = 0;
+	if (lstat(buf, &sb) < 0 && errno != ENOENT) {
+		perror("lstat");
+		exit(1);
+	}
 	
-	if (! S_ISREG(sb.st_mode)) {
+	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
 		dolog(LOG_INFO, "%s is not a file!\n", buf);
 		RSA_free(rsa);
 		BN_free(e);
@@ -839,9 +847,13 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 	snprintf(buf, sizeof(buf), "%s.key", retval);
 	umask(savemask);
 
-	lstat(buf, &sb);
+	errno = 0;
+	if (lstat(buf, &sb) < 0 && errno != ENOENT) {
+		perror("lstat");
+		exit(1);
+	}
 	
-	if (! S_ISREG(sb.st_mode)) {
+	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
 		dolog(LOG_INFO, "%s is not a file!\n", buf);
 		RSA_free(rsa);
 		BN_free(e);
@@ -5327,9 +5339,13 @@ create_ds(DB *db, char *zonename, char *ksk_key)
 	
 	snprintf(buf, sizeof(buf), "dsset-%s", convert_name(sd->zone, sd->zonelen));
 
-	lstat(buf, &sb);
+	errno = 0;
+	if (lstat(buf, &sb) < 0 && errno != ENOENT) {
+		perror("lstat");
+		exit(1);
+	}
 	
-	if (! S_ISREG(sb.st_mode)) {
+	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
 		dolog(LOG_INFO, "%s is not a file!\n", buf);
 		return -1;
 	}
