@@ -142,6 +142,7 @@ int
 main(int argc, char *argv[])
 {
 	FILE *of = stdout;
+	struct stat sb;
 
 	int ch;
 	int ret, bits = 2048;
@@ -221,6 +222,11 @@ main(int argc, char *argv[])
 			if (optarg[0] == '-')
 				break;
  
+			lstat(optarg, &sb);
+			if (! S_ISREG(sb.st_mode)) {
+				fprintf(stderr, "%s is not a file!\n", optarg);
+				exit(1);
+			}
 			if ((of = fopen(optarg, "w")) == NULL) {
 				perror("fopen");
 				exit(1);
@@ -678,6 +684,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 	char *p;
 	time_t now;
 	struct tm *tm;
+	struct stat sb;
 	mode_t savemask;
 	int rlen;
 
@@ -763,6 +770,15 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 
 	savemask = umask(077);
 
+	lstat(buf, &sb);
+	
+	if (! S_ISREG(sb.st_mode)) {
+		dolog(LOG_INFO, "%s is not a file!\n", buf);
+		RSA_free(rsa);
+		BN_free(e);
+		return NULL;
+	}
+	
 	f = fopen(buf, "w+");
 	if (f == NULL) {
 		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
@@ -821,8 +837,16 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits)
 
 	
 	snprintf(buf, sizeof(buf), "%s.key", retval);
-
 	umask(savemask);
+
+	lstat(buf, &sb);
+	
+	if (! S_ISREG(sb.st_mode)) {
+		dolog(LOG_INFO, "%s is not a file!\n", buf);
+		RSA_free(rsa);
+		BN_free(e);
+		return NULL;
+	}
 	f = fopen(buf, "w+");
 	if (f == NULL) {
 		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
@@ -5156,8 +5180,8 @@ create_ds(DB *db, char *zonename, char *ksk_key)
 	FILE *f;
 
 	struct domain *sd;
-	//struct domain_ds *sdds;	
 	struct domain_dnskey *sddk;
+	struct stat sb;
 
 	char *mytmp;
 	char tmp[4096];
@@ -5302,6 +5326,14 @@ create_ds(DB *db, char *zonename, char *ksk_key)
 	}
 	
 	snprintf(buf, sizeof(buf), "dsset-%s", convert_name(sd->zone, sd->zonelen));
+
+	lstat(buf, &sb);
+	
+	if (! S_ISREG(sb.st_mode)) {
+		dolog(LOG_INFO, "%s is not a file!\n", buf);
+		return -1;
+	}
+
 	f = fopen(buf, "w");
 	if (f == NULL) {
 		dolog(LOG_INFO, "fopen dsset\n");
