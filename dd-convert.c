@@ -1289,7 +1289,7 @@ sign_soa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -1507,7 +1507,7 @@ sign_txt(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -1782,7 +1782,7 @@ sign_aaaa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -2021,7 +2021,7 @@ sign_nsec3(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -2253,7 +2253,7 @@ sign_nsec3param(DB *db, char *zonename, char *zsk_key, int expiry, struct domain
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -2471,7 +2471,7 @@ sign_spf(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -2688,7 +2688,7 @@ sign_cname(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -2904,7 +2904,7 @@ sign_ptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -3200,7 +3200,7 @@ sign_naptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -3483,7 +3483,7 @@ sign_srv(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -3764,7 +3764,7 @@ sign_sshfp(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -4046,7 +4046,7 @@ sign_tlsa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -4327,7 +4327,7 @@ sign_ds(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -4603,7 +4603,7 @@ sign_ns(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -4880,7 +4880,7 @@ sign_mx(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -5156,7 +5156,7 @@ sign_a(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -5635,7 +5635,7 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
@@ -5849,7 +5849,7 @@ sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, st
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, &key, keylen);
+		SHA512_Update(&sha512, key, keylen);
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
