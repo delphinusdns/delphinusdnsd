@@ -611,7 +611,10 @@ dump_db(DB *db, FILE *of, char *zonename)
 		return -1;
 	}
 
-	print_sd(of, sdomain);
+	if (print_sd(of, sdomain) < 0) {
+		fprintf(stderr, "print_sd error\n");
+		return -1;
+	}
 	
 	if (db->cursor(db, NULL, &cursor, 0) != 0) {
 		dolog(LOG_INFO, "db->cursor: %s\n", strerror(errno));
@@ -641,7 +644,10 @@ dump_db(DB *db, FILE *of, char *zonename)
 		if (strcmp(sdomain->zonename, zonename) == 0)
 			continue;
 
-		print_sd(of, sdomain);
+		if (print_sd(of, sdomain) < 0) {
+			fprintf(stderr, "print_sd error\n");
+			return -1;
+		}
 
 
 		j++;
@@ -954,56 +960,90 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 		memcpy((char *)sd, (char *)data.data, data.size);
 		
 		if (sd->flags & DOMAIN_HAVE_DNSKEY)
-			if (sign_dnskey(db, zonename, zsk_key, ksk_key, expiry, sd) < 0)
+			if (sign_dnskey(db, zonename, zsk_key, ksk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_dnskey error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_A)
-			if (sign_a(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_a(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_a error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_MX)
-			if (sign_mx(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_mx(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_mx error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_NS)
-			if (sign_ns(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_ns(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_ns error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_SOA)
-			if (sign_soa(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_soa(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_soa error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_TXT)
-			if (sign_txt(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_txt(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_txt error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_AAAA)
-			if (sign_aaaa(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_aaaa(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_aaaa error\n");
 				return -1;
-		if (sd->flags & DOMAIN_HAVE_NSEC3)
-			if (sign_nsec3(db, zonename, zsk_key, expiry, sd) < 0)
+			}
+		if (sd->flags & DOMAIN_HAVE_NSEC3) 
+			if (sign_nsec3(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_nsec3 error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_NSEC3PARAM)
-			if (sign_nsec3param(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_nsec3param(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_nsec3param error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_SPF)
-			if (sign_spf(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_spf(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_spf error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_CNAME)
-			if (sign_cname(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_cname(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_cname error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_PTR)
-			if (sign_ptr(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_ptr(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_ptr error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_NAPTR)
-			if (sign_naptr(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_naptr(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_naptr error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_SRV)
-			if (sign_srv(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_srv(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_srv error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_SSHFP)
-			if (sign_sshfp(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_sshfp(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_sshfp error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_TLSA)
-			if (sign_tlsa(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_tlsa(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_tlsa error\n");
 				return -1;
+			}
 		if (sd->flags & DOMAIN_HAVE_DS)
-			if (sign_ds(db, zonename, zsk_key, expiry, sd) < 0)
+			if (sign_ds(db, zonename, zsk_key, expiry, sd) < 0) {
+				fprintf(stderr, "sign_ds error\n");
 				return -1;
+			}
 
 		j++;
 	} while (cursor->c_get(cursor, &key, &data, DB_NEXT) == 0);
