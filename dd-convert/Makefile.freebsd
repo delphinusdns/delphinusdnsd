@@ -1,0 +1,17 @@
+.PATH: ${.CURDIR}/..
+
+PROG=dd-convert
+
+SRCS=dd-convert.c parse.y base64.c dnssec.c util.c
+
+CFLAGS= -Wall -g  -I/usr/local/include/db5 -I${.CURDIR}/..
+LDFLAGS= -Wall -g -L/usr/local/lib/db5
+LDADD= -lcrypto -lssl -ldb
+
+OBJDIR=.
+BINDIR=/usr/local/sbin
+MANDIR=/usr/local/man/man
+
+MAN= dd-convert.8
+
+.include <bsd.prog.mk>

@@ -6059,7 +6059,7 @@ read_private_key(char *zonename, int keyid, int algorithm)
 
 	fclose(f);
 
-#if __linux__
+#if defined __linux__  || defined __FreeBSD__
 	memset(buf, 0, sizeof(buf));
 	memset(key, 0, sizeof(key));
 #else
