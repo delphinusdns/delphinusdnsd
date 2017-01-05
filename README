@@ -1,4 +1,4 @@
-$Id: README,v 1.16 2017/01/03 10:37:32 pjp Exp $
+$Id: README,v 1.17 2017/01/05 09:42:25 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -160,7 +160,7 @@ it they can send patches for the Makefile.
 ------------------+--------------------+---------------------+-------------+
 Operating System**| makes and compiles | responds to queries | Berkeley DB |
 ------------------+--------------------+---------------------+-------------+
-FreeBSD 10        |        yes         |       yes           | version 5   |
+FreeBSD 10.3      |        yes         |       yes           | version 5   |
 ------------------+--------------------+---------------------+-------------+
 NetBSD 6.1.5      |        yes*        |       yes           | version 5   |
 ------------------+--------------------+---------------------+-------------+
