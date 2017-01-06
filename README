@@ -1,4 +1,4 @@
-$Id: README,v 1.18 2017/01/06 11:18:04 pjp Exp $
+$Id: README,v 1.19 2017/01/06 15:54:46 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -45,9 +45,10 @@ can send patches to the author who may implement them into the code.
 3. INSTALL HINTS
 ----------------
 
-To install, type sh ./configure on BSD and just ./configure on Linux.  This
-will copy the proper Makefile to ./Makefile.  Then you would type make, 
-followed by su'ing and make install.  Delphinusdnsd installs to /usr/local/sbin.
+To install, type ./configure on your platform.  This will copy the proper 
+Makefile to ./Makefile and dd-convert and delphinusdnsd.  Then you would type 
+make, followed by su'ing and make install.  Delphinusdnsd installs to 
+/usr/local/sbin.
 
 By default installation the configuration file is not installed you need to
 do this manually.  Also by default the config file is specified as 
