@@ -1,4 +1,4 @@
-$Id: README,v 1.17 2017/01/05 09:42:25 pjp Exp $
+$Id: README,v 1.18 2017/01/06 11:18:04 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -81,7 +81,7 @@ $ make install
 -----------
 
 ## configure the platform
-$ sh configure
+$ ./configure
 ## this will install the development programs you'll need (as root)
 $ cd /usr/ports/databases/db5 && make install clean
 ## add a privsep user (_ddd) with a chroot directory (as root)
@@ -113,7 +113,7 @@ in your /etc/rc.conf and reboot the jail.
 -----------
 
 ## configure the platform
-$ sh configure
+$ ./configure
 ## this will install the development programs you'll need (as root)
 $ pkg_add db-4.6.21p0v0 
 ## add a privsep user (_ddd) with a chroot directory (as root)
@@ -131,10 +131,12 @@ $ make install
 3.4 NetBSD
 ----------
 
-The tests for this were done on NetBSD 6.1.5
+The tests for this were done on NetBSD 7.0.2
 
+## create paths needed
+$ mkdir -p /usr/local/sbin /usr/local/man/man/man5 /usr/local/man/man/man8 /usr/local/man/man/html5/ /usr/local/man/man/html8
 ## configure the platform
-$ sh configure
+$ ./configure
 ## the following will install the development programs you'll need (as root)
 $ cd /usr/pkgsrc/databases/db5 && make install
 ## add a privsep user with a chroot directory (as root)
@@ -162,7 +164,7 @@ Operating System**| makes and compiles | responds to queries | Berkeley DB |
 ------------------+--------------------+---------------------+-------------+
 FreeBSD 10.3      |        yes         |       yes           | version 5   |
 ------------------+--------------------+---------------------+-------------+
-NetBSD 6.1.5      |        yes*        |       yes           | version 5   |
+NetBSD 7.0.2      |        yes*        |       yes           | version 5   |
 ------------------+--------------------+---------------------+-------------+
 OpenBSD 6.0       |        yes         |       yes           | version 4.6 |
 ------------------+--------------------+---------------------+-------------+
