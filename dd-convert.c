@@ -6071,12 +6071,12 @@ read_private_key(char *zonename, int keyid, int algorithm)
 
 	fclose(f);
 
-#if defined __linux__  || defined __FreeBSD__
-	memset(buf, 0, sizeof(buf));
-	memset(key, 0, sizeof(key));
-#else
+#if __OpenBSD__
 	explicit_bzero(buf, sizeof(buf));
 	explicit_bzero(key, sizeof(key));
+#else
+	memset(buf, 0, sizeof(buf));
+	memset(key, 0, sizeof(key));
 #endif
 
 	return (rsa);

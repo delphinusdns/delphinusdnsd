@@ -36,6 +36,8 @@ openbsd() {
 netbsd() {
 	echo configuring for NetBSD
 	cp Makefile.netbsd Makefile
+	cp delphinusdnsd/Makefile.netbsd delphinusdnsd/Makefile
+	cp dd-convert/Makefile.netbsd dd-convert/Makefile
 }
 
 freebsd() {
@@ -43,7 +45,6 @@ freebsd() {
 	cp Makefile.freebsd Makefile
 	cp delphinusdnsd/Makefile.freebsd delphinusdnsd/Makefile
 	cp dd-convert/Makefile.freebsd dd-convert/Makefile
-	
 }
 
 linux() {

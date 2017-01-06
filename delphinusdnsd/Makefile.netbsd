@@ -1,10 +1,14 @@
+.PATH:    ${.CURDIR}/..
+
 PROG=delphinusdnsd
 
-SRCS=main.c parse.y reply.c additional.c region.c log.c axfr.c filter.c ratelimit.c whitelist.c base64.c dnssec.c
+SRCS=delphinusdnsd.c parse.y reply.c additional.c region.c log.c axfr.c filter.c ratelimit.c whitelist.c base64.c dnssec.c util.c
 
-CFLAGS= -Wall -g -I/usr/pkg/include/db5/
-LDFLAGS= -Wall -g -L/usr/pkg/lib -R/usr/pkg/lib
+CFLAGS= -g -I/usr/pkg/include/db5/
+CFLAGS+= -I${.CURDIR}/.. 
+LDFLAGS= -g -L/usr/pkg/lib -R/usr/pkg/lib
 LDADD= -lcrypto -lssl -ldb5
+
 
 OBJDIR=.
 BINDIR=/usr/local/sbin
