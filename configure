@@ -53,8 +53,7 @@ linux() {
 }
 
 darwin() {
-	echo configuring for Darwin
-	cp Makefile.macosx Makefile
+	echo unfortunately mac os x has been disabled
 }
 
 
