@@ -7013,16 +7013,17 @@ print_sd(FILE *of, struct domain *sdomain)
 void
 usage(void)
 {
-	fprintf(stderr, "usage: dd-convert [-hKZ] [-a algorithm] [-B bits] [-e seconds] [-I iterations] [-i inputfile] [-k KSK] [-n zonename] [-o output] [-s salt] [-t ttl] [-z ZSK]\n");
+	fprintf(stderr, "usage: dd-convert [-hKZ] [-a algorithm] [-B bits] [-e seconds] [-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename] [-o output] [-s salt] [-t ttl] [-z ZSK]\n");
 	fprintf(stderr, "\t-h\t\tthis help usage.\n");
 	fprintf(stderr, "\t-K\t\tcreate a new KSK key.\n");
 	fprintf(stderr, "\t-Z\t\tcreate a new ZSK key.\n");
 	fprintf(stderr, "\t-a algorithm	use algorithm (integer)\n");
 	fprintf(stderr, "\t-B bits\t\tuse number of bits (integer)\n");
 	fprintf(stderr, "\t-e seconds\texpiry in seconds\n");
-	fprintf(stderr, "\t-I iteratiosn\tuse (integer) NSEC3 iterations\n");
+	fprintf(stderr, "\t-I iterations\tuse (integer) NSEC3 iterations\n");
 	fprintf(stderr, "\t-i inputfile\tuse the inputfile of unsigned zone\n");
 	fprintf(stderr, "\t-k KSK\t\tuse provided KSK key-signing keyname\n");
+	fprintf(stderr, "\t-m mask\t\trun the following masked functions\n");
 	fprintf(stderr, "\t-n zonename\trun for zonename zone\n");
 	fprintf(stderr, "\t-o output\toutput to file, may be '-' for stdout\n");
 	fprintf(stderr, "\t-s salt\t\tsalt for NSEC3 (in hexadecimal)\n");
