@@ -1,4 +1,4 @@
-.\" Copyright (c) 2014-2015 Peter J. Philipp
+.\" Copyright (c) 2014-2017 Peter J. Philipp
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -180,8 +180,42 @@ zone "root hints" {
 	M.ROOT-SERVERS.NET.,a,3600000,202.12.27.33
 	M.ROOT-SERVERS.NET.,aaaa,3600000,2001:dc3::35
 }
+.Ed
+Here is a sample 
+.Nm
+file suited for DNSSEC:
+.Bd -literal
+version "7";
+options "some options" {
+        ratelimit-pps 12;
+        bind 127.0.0.1;
+        bind ::1;
+        bind 10.110.99.87;
+        port 32253;
+        log;
+        dnssec;
+        versionstring "delphinusdnsd 1.1.0";
+}
+axfr-for "these hosts" {
+        ::1/128;
+        127.0.0.1/32;
+        10.110.99.88/32;
+}
+
+axfrport "10053";
+
+notify "these hosts" {
+        10.110.99.88;
+        ::1;
+}
+
+include "/etc/delphinusdns/centroid.eu.signed";
+include "/etc/delphinusdns/virgostar.net.signed";
+include "/etc/delphinusdns/solarscale.de.signed";
 
 .Ed
+Then the included files are output of
+.Xr dd-convert 8
 .Sh GRAMMAR
 Syntax for 
 .Nm
@@ -243,6 +277,7 @@ optdnssec = "dnssec" ;
 .Sh FILES
 .Pa /etc/delphinusdns.conf
 .Sh SEE ALSO
+.Xr dd-convert 8 , 
 .Xr delphinusdnsd 8
 .Sh AUTHORS
 This software and manual was written by
