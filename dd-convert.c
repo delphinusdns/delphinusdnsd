@@ -88,7 +88,7 @@ void 	usage(void);
 
 #define RSA_F5			0x100000001
 
-#define PROVIDED_SIGNTIME			1
+#define PROVIDED_SIGNTIME			0
 #define	SIGNEDON				20161230073133
 #define EXPIREDON 				20170228073133
 
