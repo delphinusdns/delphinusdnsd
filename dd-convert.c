@@ -92,6 +92,16 @@ void 	usage(void);
 #define	SIGNEDON				20161230073133
 #define EXPIREDON 				20170228073133
 
+/* define masks */
+
+#define MASK_PARSE_BINDFILE		0x1
+#define MASK_PARSE_FILE			0x2
+#define MASK_ADD_DNSKEY			0x4
+#define MASK_CONSTRUCT_NSEC3		0x8
+#define MASK_CALCULATE_RRSIGS		0x10
+#define MASK_CREATE_DS			0x20
+#define MASK_DUMP_DB			0x40
+#define MASK_DUMP_BIND			0x80
 
 /* glue */
 int insert_axfr(char *, char *);
@@ -153,12 +163,14 @@ main(int argc, char *argv[])
 	int algorithm = ALGORITHM_RSASHA256;
 	int expiry = 5184000;
 	int iterations = 10;
+	u_int32_t mask = (MASK_PARSE_FILE | MASK_ADD_DNSKEY | MASK_CONSTRUCT_NSEC3 | MASK_CALCULATE_RRSIGS | MASK_CREATE_DS | MASK_DUMP_DB);
 
 	key_t key;
 
 	char *salt = "-";
 	char *zonefile = NULL;
 	char *zonename = NULL;
+	char *ep;
 	
 	char *ksk_key = NULL;
 	char *zsk_key = NULL;
@@ -169,7 +181,7 @@ main(int argc, char *argv[])
 	DB_ENV *dbenv;
 
 
-	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:n:o:s:t:vZz:")) != -1) {
+	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:m:n:o:s:t:vZz:")) != -1) {
 		switch (ch) {
 		case 'a':
 			/* algorithm */
@@ -211,6 +223,11 @@ main(int argc, char *argv[])
 			/* use KSK key */
 			ksk_key = optarg;
 
+			break;
+
+		case 'm':
+			/* mask */
+			mask = strtoull(optarg, &ep, 16); 
 			break;
 
 		case 'n':
@@ -338,7 +355,7 @@ main(int argc, char *argv[])
 
 	/* now we start reading our configfile */
 		
-	if (parse_file(db, zonefile) < 0) {
+	if ((mask & MASK_PARSE_FILE) && parse_file(db, zonefile) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
 		exit(1);
 	}
@@ -346,38 +363,33 @@ main(int argc, char *argv[])
 	/* three passes to "sign" our zones */
 	/* first pass, add dnskey records, on apex */
 
-	if (zsk_key == NULL && ksk_key == NULL) {
-		dolog(LOG_INFO, "no ksk or zsk keys specified\n");
-		exit(1);
-	}
-
-	if (add_dnskey(db, zsk_key, ksk_key) < 0) {
+	if ((mask & MASK_ADD_DNSKEY) && add_dnskey(db, zsk_key, ksk_key) < 0) {
 		dolog(LOG_INFO, "add_dnskey failed\n");
 		exit(1);
 	}
 
 	/* second pass construct NSEC3 records */	
 
-	if (construct_nsec3(db, zonename, iterations, salt) < 0) {
+	if ((mask & MASK_CONSTRUCT_NSEC3) && construct_nsec3(db, zonename, iterations, salt) < 0) {
 		dolog(LOG_INFO, "construct nsec3 failed\n");
 		exit(1);
 	}
 
 	/* third  pass calculate RRSIG's for every RR set */
 
-	if (calculate_rrsigs(db, zonename, zsk_key, ksk_key, expiry) < 0) {
+	if ((mask & MASK_CALCULATE_RRSIGS) && calculate_rrsigs(db, zonename, zsk_key, ksk_key, expiry) < 0) {
 		dolog(LOG_INFO, "calculate rrsigs failed\n");
 		exit(1);
 	}
 
 	/* calculate ds */
-	if (create_ds(db, zonename, ksk_key) < 0) {
+	if ((mask & MASK_CREATE_DS) && create_ds(db, zonename, ksk_key) < 0) {
 		dolog(LOG_INFO, "create_ds failed\n");
 		exit(1);
 	}
 
 	/* write new zone file */
-	if (dump_db(db, of, zonename) < 0)
+	if ((mask & MASK_DUMP_DB) && dump_db(db, of, zonename) < 0)
 		exit (1);
 
 

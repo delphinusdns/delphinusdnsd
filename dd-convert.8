@@ -39,6 +39,7 @@
 .Op Fl I Ar iterations
 .Op Fl k Ar KSKfile
 .Op Fl K
+.Op Fl m Ar mask
 .Op Fl n Ar zonename
 .Op Fl o Ar outputfile
 .Op Fl s Ar salt
@@ -102,6 +103,17 @@ the KSK file.  Roll-overs are not yet supported.
 .Fl K
 Sign a zone with a newly created KSK keyfile.  It is assumed that LibreSSL will
 create random defaults that are cryptographically strong.
+.It Xo
+.Fl m
+.Ar mask
+is a neat way to not execute components in
+.Nm .
+The mask values are as follows: MASK_PARSE_FILE (0x2), MASK_ADD_DNSKEY (0x4),
+MASK_CONSTRUCT_NSEC3 (0x8), MASK_CALCULATE_RRSIGS (0x10), MASK_CREATE_DS (0x20)
+MASK_DUMP_DB (0x40).  0x1 and 0x80 are reserved for possible BIND zone file
+parsing and dumping.  As an example you may specify 42 as a mask and it would
+only parse a delphinusdnsd zonefile and dump it back out as delphinusdnsd
+format (without comments).  By default a mask of 0x7E exists.
 .It Xo
 .Fl n
 .Ar zonename
