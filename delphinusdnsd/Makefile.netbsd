@@ -2,7 +2,7 @@
 
 PROG=delphinusdnsd
 
-SRCS=delphinusdnsd.c parse.y reply.c additional.c region.c log.c axfr.c filter.c ratelimit.c whitelist.c base64.c dnssec.c util.c
+SRCS=delphinusdnsd.c parse.y reply.c additional.c region.c log.c axfr.c filter.c ratelimit.c whitelist.c base64.c dnssec.c util.c ent.c
 
 CFLAGS= -g -I/usr/pkg/include/db5/
 CFLAGS+= -I${.CURDIR}/.. 

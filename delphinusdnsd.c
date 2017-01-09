@@ -35,6 +35,7 @@
 extern void 	add_rrlimit(int, u_int16_t *, int, char *);
 extern void 	axfrloop(int *, int, char **, DB *);
 extern struct question	*build_fake_question(char *, int, u_int16_t);
+extern int 	check_ent(char *, int);
 extern int 	check_rrlimit(int, u_int16_t *, int, char *);
 extern u_int16_t check_qtype(struct domain *, u_int16_t, int, int *);
 extern void 	collects_init(void);
@@ -47,6 +48,7 @@ extern char *	get_dns_type(int, int);
 extern void 	init_dnssec(void);
 extern void 	init_recurse(void);
 extern void 	init_region(void);
+extern int	init_entlist(DB *);
 extern void 	init_filter(void);
 extern void 	init_notifyslave(void);
 extern void 	init_whitelist(void);
@@ -57,6 +59,7 @@ extern int 	reply_a(struct sreply *, DB *);
 extern int 	reply_aaaa(struct sreply *, DB *);
 extern int 	reply_any(struct sreply *);
 extern int 	reply_badvers(struct sreply *);
+extern int	reply_nodata(struct sreply *);
 extern int 	reply_cname(struct sreply *);
 extern int 	reply_fmterror(struct sreply *);
 extern int 	reply_notimpl(struct sreply *);
@@ -118,6 +121,7 @@ extern int axfrport;
 extern int ratelimit;
 extern int ratelimit_packets_per_second;
 extern int whitelist;
+extern int dnssec;
 
 static int reload = 0;
 static int mshutdown = 0;
@@ -166,7 +170,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.7 2017/01/03 08:36:38 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.8 2017/01/09 14:26:50 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -411,6 +415,12 @@ main(int argc, char *argv[])
 
 	if (parse_file(db, conffile) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
+		slave_shutdown();
+		exit(1);
+	}
+
+	if (init_entlist(db) < 0) {
+		dolog(LOG_INFO, "creating entlist failed\n");
 		slave_shutdown();
 		exit(1);
 	}
@@ -1934,12 +1944,26 @@ mainloop(struct cfg *cfg)
 						goto tcpout;
 						break;
 					case ERR_NXDOMAIN:
-						goto tcpnxdomain;
+						/* check if our question is for an ENT */
+						if (check_ent(question->hdr->name, question->hdr->namelen) == 1) {
+							if (dnssec) {
+								goto tcpnoerror;
+							} else {
+								snprintf(replystring, DNS_MAXNAME, "NODATA");
+								build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+								slen = reply_nodata(&sreply);
+								goto tcpout;
+								break;
+							}	
+						} else {
+							goto tcpnxdomain;
+						}
 					case ERR_NOERROR:
 						/*
  						 * this is hackish not sure if this should be here
 						 */
 
+tcpnoerror:
 						snprintf(replystring, DNS_MAXNAME, "NOERROR");
 
 						/*
@@ -1968,6 +1992,19 @@ mainloop(struct cfg *cfg)
 
 				switch (type0) {
 				case 0:
+					/* check for ents */
+					if (check_ent(question->hdr->name, question->hdr->namelen) == 1) {
+						if (dnssec) {
+							goto tcpnoerror;
+						} else {
+							snprintf(replystring, DNS_MAXNAME, "NODATA");
+							build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+							slen = reply_nodata(&sreply);
+							goto tcpout;
+						}	
+					}
+
+
 					/*
 					 * lookup_zone could not find an RR for the
 					 * question at all -> nxdomain
@@ -2572,11 +2609,26 @@ axfrentry:
 						goto udpout;
 						break;
 					case ERR_NXDOMAIN:
-						goto udpnxdomain;
+						/* check if our question is for an ENT */
+						if (check_ent(question->hdr->name, question->hdr->namelen) == 1) {
+							if (dnssec) {
+								goto udpnoerror;
+							} else {
+								snprintf(replystring, DNS_MAXNAME, "NODATA");
+								build_reply(&sreply, so, buf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+								slen = reply_nodata(&sreply);
+								goto udpout;
+								break;
+							}	
+						} else {
+							goto udpnxdomain;
+						}
 					case ERR_NOERROR:
 							/*
 							 * this is hackish not sure if this should be here
 							 */
+
+udpnoerror:
 
 							snprintf(replystring, DNS_MAXNAME, "NOERROR");
 
@@ -2605,6 +2657,17 @@ axfrentry:
 				switch (type0) {
 				case 0:
 udpnxdomain:
+						if (check_ent(question->hdr->name, question->hdr->namelen) == 1) {
+							if (dnssec) {
+								goto udpnoerror;
+							} else {
+								snprintf(replystring, DNS_MAXNAME, "NODATA");
+								build_reply(&sreply, so, buf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+								slen = reply_nodata(&sreply);
+								goto udpout;
+							}	
+						}
+
 						/*
 						 * lookup_zone could not find an RR for the
 						 * question at all -> nxdomain
