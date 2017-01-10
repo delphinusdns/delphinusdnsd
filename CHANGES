@@ -5,6 +5,7 @@ an added bonus.  This utility does not rely on any external (BIND) tools except
 for the linkage against openssl/libressl.
 - manpage for dd-convert
 - Mac OS X port has been dropped
+- RFC 8020 compliance with empty non-terminal names starting this release
 
 Changes in RELEASE_1_0 from BETA_9
 
