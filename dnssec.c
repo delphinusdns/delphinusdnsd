@@ -241,7 +241,6 @@ find_match_nsec3(char *zonename, int zonelen, char *hashname)
 	dolog(LOG_INFO, "resolved at %s\n", n3->domainname);
 #endif
 
-	/* NOTREACHED */
 	return (n3->domainname);
 }
 
