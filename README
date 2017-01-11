@@ -1,4 +1,4 @@
-$Id: README,v 1.19 2017/01/06 15:54:46 pjp Exp $
+$Id: README,v 1.20 2017/01/11 15:42:24 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -278,3 +278,7 @@ as I live.
 
 * Solaris.  Unless you port some functions to solaris it won't compile on
 there.
+
+* DNSSEC key rollover - we'll have to wait another year at least.  This is ok
+though partially because the DNSSEC root zone was not rolled over for a long 
+time, either, so going by their example.
