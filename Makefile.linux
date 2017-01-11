@@ -11,8 +11,8 @@ all: delphinusdnsd dd-convert
 delphinusdnsd: additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o
 	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o $(LDADD)
 
-dd-convert:  dd-convert.o util.o dnssec.o parse.o base64.o
-	$(CC) $(CFLAGS) -o dd-convert/dd-convert dd-convert.o util.o dnssec.o base64.o parse.o $(LDADD)
+dd-convert:  dd-convert.o util.o dnssec.o parse.o base64.o ent.o
+	$(CC) $(CFLAGS) -o dd-convert/dd-convert dd-convert.o util.o dnssec.o base64.o parse.o ent.o $(LDADD)
 	
 
 dd-convert.o: dd-convert.c
