@@ -6,6 +6,7 @@ for the linkage against openssl/libressl.
 - manpage for dd-convert
 - Mac OS X port has been dropped
 - RFC 8020 compliance with empty non-terminal names starting this release
+- Linux now depends on libbsd
 
 Changes in RELEASE_1_0 from BETA_9
 
