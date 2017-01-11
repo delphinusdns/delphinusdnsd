@@ -2,7 +2,7 @@
 
 PROG=dd-convert
 
-SRCS=dd-convert.c parse.y base64.c dnssec.c util.c
+SRCS=dd-convert.c parse.y base64.c dnssec.c util.c ent.c
 
 CFLAGS= -g -I/usr/pkg/include/db5/
 CFLAGS+= -I${.CURDIR}/..

@@ -44,6 +44,7 @@ struct question		*build_fake_question(char *, int, u_int16_t);
 
 extern void 	dolog(int, char *, ...);
 char 			*get_dns_type(int, int);
+int 			memcasecmp(u_char *, u_char *, int);
 
 /* externs */
 
@@ -743,3 +744,34 @@ get_dns_type(int dnstype, int withbracket)
 	return (type);	
 }	
 
+/* 
+ * MEMCASECMP - 	check if buffer is identical to another buffer with 
+ *			one exception if a character is alphabetic it's 
+ *			compared to it's lower case value so that heLLo is 
+ * 			the same as hello
+ */
+
+int
+memcasecmp(u_char *b1, u_char *b2, int len)
+{
+	int i;
+	int identical = 1;
+
+	for (i = 0; i < len; i++) {
+		int c0, c1;
+	
+		c0 = b1[i];
+		c1 = b2[i];
+
+		if ((isalpha(c0) ? tolower(c0) : c0) != 
+			(isalpha(c1) ? tolower(c1) : c1)) {
+			identical = 0;
+			break;
+		}
+	}
+
+	if (identical) 
+		return 0;
+
+	return 1;	/* XXX */
+}

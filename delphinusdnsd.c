@@ -53,6 +53,7 @@ extern void 	init_filter(void);
 extern void 	init_notifyslave(void);
 extern void 	init_whitelist(void);
 extern struct domain * 	lookup_zone(DB *, struct question *, int *, int *, char *);
+extern int 	memcasecmp(u_char *, u_char *, int);
 extern void 	recurseloop(int sp, int *, DB *);
 extern void 	receivelog(char *, int);
 extern int 	reply_a(struct sreply *, DB *);
@@ -99,7 +100,6 @@ int			lookup_type(int);
 void			mainloop(struct cfg *);
 void 			master_reload(int);
 void 			master_shutdown(int);
-int 			memcasecmp(u_char *, u_char *, int);
 void 			recurseheader(struct srecurseheader *, int, struct sockaddr_storage *, struct sockaddr_storage *, int);
 void 			setup_master(DB *, DB_ENV *, char **);
 void 			slave_signal(int);
@@ -170,7 +170,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.8 2017/01/09 14:26:50 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.9 2017/01/11 10:14:35 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1454,38 +1454,6 @@ out:
 	return (offset);
 }
 
-/* 
- * MEMCASECMP - 	check if buffer is identical to another buffer with 
- *			one exception if a character is alphabetic it's 
- *			compared to it's lower case value so that heLLo is 
- * 			the same as hello
- */
-
-int
-memcasecmp(u_char *b1, u_char *b2, int len)
-{
-	int i;
-	int identical = 1;
-
-	for (i = 0; i < len; i++) {
-		int c0, c1;
-	
-		c0 = b1[i];
-		c1 = b2[i];
-
-		if ((isalpha(c0) ? tolower(c0) : c0) != 
-			(isalpha(c1) ? tolower(c1) : c1)) {
-			identical = 0;
-			break;
-		}
-	}
-
-	if (identical) 
-		return 0;
-
-	return 1;	/* XXX */
-}
-	
 
 
 /*

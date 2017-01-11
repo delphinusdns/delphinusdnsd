@@ -38,6 +38,7 @@ int insert_apex(char *zonename, char *zone, int zonelen);
 int insert_nsec3(char *zonename, char *domainname, char *dname, int dnamelen);
 char * find_next_closer_nsec3(char *zonename, int zonelen, char *hashname);
 char * find_match_nsec3(char *zonename, int zonelen, char *hashname);
+char * find_match_nsec3_ent(char *zonename, int zonelen, char *hashname);
 struct domain * find_nsec(char *name, int namelen, struct domain *sd, DB *db);
 struct domain * find_nsec3_match_qname(char *name, int namelen, struct domain *sd, DB *db);
 struct domain * find_nsec3_match_closest(char *name, int namelen, struct domain *sd, DB *db);
@@ -60,7 +61,8 @@ extern int              checklabel(DB *, struct domain *, struct domain *, struc
 extern struct question  *build_fake_question(char *, int, u_int16_t);
 extern int              free_question(struct question *);
 extern void *           find_substruct(struct domain *, u_int16_t);
-
+extern int		check_ent(char *, int);
+extern int 		memcasecmp(u_char *, u_char *, int);
 
 SLIST_HEAD(listhead, dnssecentry) dnssechead;
 
@@ -207,6 +209,48 @@ find_next_closer_nsec3(char *zonename, int zonelen, char *hashname)
 
 	/* NOTREACHED */
 	return (NULL);
+}
+
+char * 
+find_match_nsec3_ent(char *zonename, int zonelen, char *hashname)
+{
+	int hashlen;
+	int count;
+
+	hashlen = strlen(hashname);
+
+	SLIST_FOREACH(dnp, &dnssechead, dnssec_entry) {
+		if (zonelen == dnp->zonelen && 
+			(memcasecmp(dnp->zone, zonename, zonelen) == 0))
+			break;
+	}
+
+	if (dnp == NULL)
+		return NULL;
+
+	/* we have found the zone, now find the next closer hash for nsec3 */
+
+	count = 0;
+	TAILQ_FOREACH(n3, &dnp->nsec3head, nsec3_entries) {
+		if (strncasecmp(hashname, n3->domainname, hashlen) < 0) {
+			if (count == 0) 
+				n3 = TAILQ_LAST(&dnp->nsec3head, a);
+			else
+				n3 = TAILQ_PREV(n3,  a, nsec3_entries);
+			break;
+		} 
+		count++;
+	}
+	
+	if (n3 == NULL) {
+		return NULL;
+	}
+
+#ifdef DEBUG
+	dolog(LOG_INFO, "resolved at %s\n", n3->domainname);
+#endif
+
+	return (n3->domainname);
 }
 
 char * 
@@ -1194,8 +1238,11 @@ find_nsec3_match_qname(char *name, int namelen, struct domain *sd, DB *db)
 #if DEBUG
 	dolog(LOG_INFO, "hashname  = %s\n", hashname);
 #endif
-	
-	dname = find_match_nsec3(sd->zone, sd->zonelen, hashname);
+
+	if (check_ent(name, namelen)) 
+		dname = find_match_nsec3_ent(sd->zone, sd->zonelen, hashname);	
+	else
+		dname = find_match_nsec3(sd->zone, sd->zonelen, hashname);
 	
 	if (dname == NULL)
 		return NULL;
