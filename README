@@ -1,4 +1,4 @@
-$Id: README,v 1.20 2017/01/11 15:42:24 pjp Exp $
+$Id: README,v 1.21 2017/01/23 12:55:27 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -225,8 +225,8 @@ is the ZSK and which is the KSK.
 ---------------------------------
 
 In order to do the monthly re-signing you must know which key is the ZSK and
-which is the KSK.  The initial -Z -K options of dd-convert will tell which
-one is which.
+which is the KSK.  The K*.key files will tell you which is the ZSK and which
+is the KSK.
 
 	dd-convert -z Kcentroid.eu.+008+04815 -k Kcentroid.eu.+008+40405 \
 		-i centroid.eu -n centroid.eu -o centroid.eu.signed
