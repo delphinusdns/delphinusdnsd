@@ -1,4 +1,4 @@
-.\" Copyright (c) 2005-2015 Peter J. Philipp
+.\" Copyright (c) 2005-2017 Peter J. Philipp
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 19, 2015
+.Dd January 23, 2017
 .Dt DELPHINUSDNSD 8
 .Os 
 .Sh NAME
@@ -47,10 +47,8 @@ is the daemon that runs Delphinus DNS.
 The options are as follows:
 .Pp
 .Bl -tag -width Ds
-.It Xo
-.Fl b
+.It Fl b
 .Ar address
-.Xc
 Adds an 
 .Ar address 
 that
@@ -60,27 +58,21 @@ should
 to.  This option can be repeated multiple times to add more. May
 not be used in conjunction with 
 .Fl i .
-.It Xo
-.Fl c
+.It Fl c
 .Ar size
 Specifies a size in bytes for the SYSV shared memory cache that DB4 is
 using.
-.It Xo
-.Fl d
+.It Fl d
 Turn on debug mode.  
 .Nm 
 does not fork into the background with this.  Messages are printed in the 
 foreground.
-.It Xo
-.Fl f
+.It Fl f
 .Ar file
-.Xc
 The configuration file to be used is found at 
 .Ar file .
-.It Xo
-.Fl i
+.It Fl i
 .Ar interface
-.Xc
 The particular
 .Ar interface 
 that 
@@ -90,16 +82,13 @@ used in conjunction with
 .Fl b .
 .It Fl l
 Turn logging of queries on.
-.It Xo
-.Fl n
+.It Fl n
 .Ar instances
 is the number of instances plus one that should be forked for 
 .Nm .
 This may be good for multi-cpu/core boxes.
-.It Xo
-.Fl p
+.It Fl p
 .Ar port
-.Xc
 Specifies the 
 .Ar port
 that 
@@ -108,9 +97,7 @@ should listen on.  This can be useful when using
 .Nm 
 with 
 .Xr pf 4 
-.It Xo
-.Fl v
-.Xc
+.It Fl v
 Be more verbose in debug mode.  This shows configfile parsing logic.
 .El
 .Sh FILES

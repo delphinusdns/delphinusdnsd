@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 2, 2017
+.Dd January 23, 2017
 .Dt DD-CONVERT 8
 .Os 
 .Sh NAME
@@ -58,53 +58,43 @@ signing, unless the ruby utility proves better.
 The options are as follows:
 .Pp
 .Bl -tag -width Ds
-.It Xo
-.Fl a
+.It Fl a
 .Ar algorithm
-.Xc
 specifies the algorithm to use represented as an integer.  There currently is
 only 3 algorithms possible and they are of RSA types.  There is 
 RSASHA1-NSEC3-SHA1
 which has algorithm 7, there is RSASHA256 which has algorithm 8 (the default), 
 and there is RSASHA512 which has algorithm 10.
-.It Xo
-.Fl B
+.It Fl B
 .Ar bits
 Specifies the number of bits used with the algorithm.  The default value is
 2048.
-.It Xo
-.Fl e
+.It Fl e
 .Ar seconds
 Specifies how many seconds into the future the expiry time of the signed zone
 will be.  By default this is 5184000 seconds.  To re-sign a zone with a
 different signtime than what the current available time (now) is, you'll have
 to recompile the binary with PROVIDED_SIGNTIME set to 1.
-.It Xo
-.Fl h
+.It Fl h
 Provides a usage output.
-.It Xo
-.Fl i
+.It Fl i
 .Ar inputfile
 Specifies an inputfile, used in conjunction with the
 .Fl n
 option which specifies the name of the zone.
-.It Xo
-.Fl I 
+.It Fl I 
 .Ar iterations
 This is the number of iterations used with the NSEC3 resource record hash that 
 .Nm
  produces.
-.It Xo
-.Fl k
+.It Fl k
 .Ar KSKfile
 When re-signing a zone with a provided KSK keyfile use this option to specify
 the KSK file.  Roll-overs are not yet supported.
-.It Xo
-.Fl K
+.It Fl K
 Sign a zone with a newly created KSK keyfile.  It is assumed that LibreSSL will
 create random defaults that are cryptographically strong.
-.It Xo
-.Fl m
+.It Fl m
 .Ar mask
 is a neat way to not execute components in
 .Nm .
@@ -114,39 +104,32 @@ MASK_DUMP_DB (0x40).  0x1 and 0x80 are reserved for possible BIND zone file
 parsing and dumping.  As an example you may specify 42 as a mask and it would
 only parse a delphinusdnsd zonefile and dump it back out as delphinusdnsd
 format (without comments).  By default a mask of 0x7E exists.
-.It Xo
-.Fl n
+.It Fl n
 .Ar zonename
 This option in conjunction with the 
 Fl i
 option must be provided.  Otherwise dd-convert will not know what to sign.
-.It Xo
-.Fl o
+.It Fl o
 .Ar outputfile
 When this option is not specified dd-convert will output to standard output.  A
 - provided to this option will also output to standard output otherwise it will
 be output to the specified file.
-.It Xo
-.Fl s
+.It Fl s
 .Ar salt
 is the salt for the NSEC3 hash.  This is a security option that applies the
 same as anything that requires salt.  The input is in hexadecimal.
-.It Xo
-.Fl t
+.It Fl t
 .Ar ttl
 is the time to live for created DNSKEY resource records.  Default is 3600.
-.It Xo
-.Fl v
+.It Fl v
 prints the version of 
 .Nm 
 and exits.
-.It Xo
-.Fl z
+.It Fl z
 .Ar ZSKfile
 When re-signing a zone with a provided ZSK keyfile use this option to 
 specify the KSK file.  Roll-overs are not yet supported.
-.It Xo
-.Fl Z
+.It Fl Z
 Sign a zone with a newly created ZSK keyfile.  It is assumed that LibreSSL
 will create random defaults that are cryptographically strong.
 .El
