@@ -72,7 +72,6 @@ extern int 	reply_naptr(struct sreply *, DB *);
 extern int 	reply_ns(struct sreply *, DB *);
 extern int 	reply_ptr(struct sreply *);
 extern int 	reply_refused(struct sreply *);
-extern int 	reply_spf(struct sreply *);
 extern int 	reply_srv(struct sreply *, DB *);
 extern int 	reply_sshfp(struct sreply *);
 extern int 	reply_tlsa(struct sreply *);
@@ -144,8 +143,8 @@ u_int32_t cachesize = 0;
 char *bind_list[255];
 char *interface_list[255];
 #ifndef DD_VERSION
-char *versionstring = "delphinusdnsd -current";
-uint8_t vslen = 22;
+char *versionstring = "delphinusdnsd-current";
+uint8_t vslen = 21;
 #else
 char *versionstring = DD_VERSION;
 uint8_t vslen = DD_VERSION_LEN;
@@ -170,7 +169,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.9 2017/01/11 10:14:35 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.10 2017/03/14 08:23:09 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -1273,7 +1272,6 @@ compress_label(u_char *buf, u_int16_t offset, int labellen)
 			p += 16;		/* sizeof 4 * 32 bit */
 			break;
 		case DNS_TYPE_TXT:
-		case DNS_TYPE_SPF:
 			p += *p;
 			p++;
 			break;
@@ -2287,18 +2285,6 @@ tcpnxdomain:
 					}
 					break;
 
-				case DNS_TYPE_SPF:
-					if (type0 == DNS_TYPE_SPF) {
-
-						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, tnp->region, istcp, 	
-							0, NULL, replybuf);
-
-						slen = reply_spf(&sreply);
-					}
-					break;
-
-
 				default:
 
 					/*
@@ -2958,16 +2944,7 @@ udpnxdomain:
 						slen = reply_txt(&sreply);
 					}
 					break;
-				case DNS_TYPE_SPF:
-					if (type0 == DNS_TYPE_SPF) {
 
-						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_spf(&sreply);
-					}
-					break;
 				default:
 
 					/*
@@ -3309,7 +3286,6 @@ lookup_type(int internal_type)
 	array[INTERNAL_TYPE_PTR] = DOMAIN_HAVE_PTR;
 	array[INTERNAL_TYPE_RRSIG] = -1;
 	array[INTERNAL_TYPE_SOA] = DOMAIN_HAVE_SOA;
-	array[INTERNAL_TYPE_SPF] = DOMAIN_HAVE_SPF;
 	array[INTERNAL_TYPE_SRV] = DOMAIN_HAVE_SRV;
 	array[INTERNAL_TYPE_SSHFP] = DOMAIN_HAVE_SSHFP;
 	array[INTERNAL_TYPE_TLSA] = DOMAIN_HAVE_TLSA;

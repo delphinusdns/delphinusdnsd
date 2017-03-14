@@ -96,8 +96,6 @@ zone "centroid.eu" {
 	centroid.eu,mx,3600,10,proteus.solarscale.de.
 	centroid.eu,aaaa,3600,2001:a60:f074::8
 	;
-	centroid.eu,spf,3600,"v=spf1 ip4:200.46.208.61 ~all"
-	; 
 	;
 	; NAPTR trial
 	centroid.eu,naptr,3600,10,10,"u","E2U+sip","!^.*$!sip:1234@sip.example.com!",centroid.eu
@@ -236,7 +234,7 @@ zonedata = { [hostname] [ "," dnstype] [ "," ttl ] ["," variablednsdata] }
 hostname = string
 dnstype = ( 	"a" | "aaaa" | "cname" | "dnskey" | "ds" | "mx" | "naptr" |
 		"ns" | "nsec" | "nsec3" | "nsec3param" | "ptr" | "rrsig" |
-		"soa" | "spf" | "srv" | "sshfp" | "tlsa" | "txt" |
+		"soa" | "srv" | "sshfp" | "tlsa" | "txt" |
 		"delegate" | "hint" )
 
 ttl = number

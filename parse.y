@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2015 Peter J. Philipp.  All rights reserved.
+ * Copyright (c) 2014-2017 Peter J. Philipp.  All rights reserved.
  * Copyright (c) 2008 Gilles Chehade <gilles@poolp.org>
  * Copyright (c) 2008 Pierre-Yves Ritschard <pyr@openbsd.org>
  * Copyright (c) 2002, 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -103,7 +103,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.43 2017/01/02 18:18:27 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.44 2017/03/14 08:23:09 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -131,7 +131,6 @@ int 		fill_mx(char *, char *, int, int, char *);
 int 		fill_naptr(char *, char *, int, int, int, char *, char *, char *, char *);
 int 		fill_ns(char *, char *, int, char *);
 int 		fill_soa(char *, char *, int, char *, char *, int, int, int, int, int);
-int 		fill_spf(char *, char *, int, char *);
 int 		fill_sshfp(char *, char *, int, int, int, char *);
 int 		fill_srv(char *, char *, int, int, int, int, char *);
 int 		fill_tlsa(char *, char *,int, uint8_t, uint8_t, uint8_t, char *);
@@ -184,7 +183,6 @@ struct rrtab {
  { "ptr",       DNS_TYPE_PTR,		INTERNAL_TYPE_PTR },
  { "rrsig", 	DNS_TYPE_RRSIG, 	-1 },
  { "soa",       DNS_TYPE_SOA, 		INTERNAL_TYPE_SOA },
- { "spf",	DNS_TYPE_SPF,		INTERNAL_TYPE_SPF },
  { "srv",       DNS_TYPE_SRV, 		INTERNAL_TYPE_SRV },
  { "sshfp", 	DNS_TYPE_SSHFP,		INTERNAL_TYPE_SSHFP },
  { "tlsa", 	DNS_TYPE_TLSA,		INTERNAL_TYPE_TLSA },
@@ -518,16 +516,9 @@ zonestatement:
 
 				if (debug)
 					printf(" %s TXT -> %s\n", $1, $7);
-			} else if (strcasecmp($3, "spf") == 0) {
-				if (fill_spf($1, $3, $5, $7) < 0) {	
-					return -1;
-				}
-
-				if (debug)
-					printf(" %s SPF -> %s\n", $1, $7);
 			} else {
 				if (debug)
-					printf("another txt/spf like record I don't know?\n");
+					printf("another txt like record I don't know?\n");
 				return (-1);
 			}
 
@@ -1858,88 +1849,6 @@ fill_ptr(char *name, char *type, int myttl, char *hostname)
 	ssd->flags |= DOMAIN_HAVE_PTR;
 
 	set_record(ssd, rs,  converted_name, converted_namelen);
-	
-	if (converted_name)
-		free (converted_name);
-
-	free (sdomain);
-	
-	return (0);
-
-}
-
-/* based on fill_txt */
-int
-fill_spf(char *name, char *type, int myttl, char *msg)
-{
-	DB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_spf *ssd_spf;
-	int converted_namelen;
-	char *converted_name;
-	int len, i, rs;
-
-	for (i = 0; i < strlen(name); i++) {
-		name[i] = tolower((int)name[i]);
-	}
-
-	if ((len = strlen(msg)) > 255) {
-		dolog(LOG_ERR, "SPF record too long line %d\n", file->lineno);
-		return (-1);
-	}
-
-	converted_name = check_rr(name, type, DNS_TYPE_SPF, &converted_namelen);
-	if (converted_name == NULL) {
-		return -1;
-	}
-
-        rs = get_record_size(db, converted_name, converted_namelen);
-        if (rs < 0) {
-                return (-1);
-        }
-
-        if ((sdomain = calloc(1, rs)) == NULL) {
-                return -1;
-        }
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd->ttl[INTERNAL_TYPE_SPF] = myttl;
-
-        ssd_spf = (struct domain_spf *) find_substruct(ssd, INTERNAL_TYPE_SPF);
-        if (ssd_spf == NULL) {
-                rs += sizeof(struct domain_spf);
-#ifdef __OpenBSD__
-                tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-                if (tp == NULL)
-                        return -1;
-                sdomain = tp;
-                ssd_spf = (sdomain + (rs - sizeof(struct domain_spf)));
-                memset((char *)ssd_spf, 0, sizeof(struct domain_spf));
-		ssd = (struct domain *)sdomain;
-		ssd_spf->len = sizeof(struct domain_spf);
-		ssd_spf->type = INTERNAL_TYPE_SPF;
-        }
-
-	memcpy(ssd_spf->spf, msg, len);
-	ssd_spf->spflen = len;
-
-	ssd->flags |= DOMAIN_HAVE_SPF;
-
-	set_record(ssd, rs, converted_name, converted_namelen);
 	
 	if (converted_name)
 		free (converted_name);

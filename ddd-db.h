@@ -48,18 +48,17 @@
 #define INTERNAL_TYPE_CNAME	5
 #define INTERNAL_TYPE_PTR	6
 #define INTERNAL_TYPE_TXT	7
-#define INTERNAL_TYPE_SPF	8
-#define INTERNAL_TYPE_SRV	9
-#define INTERNAL_TYPE_SSHFP	10
-#define INTERNAL_TYPE_NAPTR	11
-#define INTERNAL_TYPE_DNSKEY	12
-#define INTERNAL_TYPE_DS	13
-#define INTERNAL_TYPE_NSEC	14
-#define INTERNAL_TYPE_RRSIG	15
-#define INTERNAL_TYPE_NSEC3	16
-#define INTERNAL_TYPE_NSEC3PARAM 17
-#define INTERNAL_TYPE_TLSA	18
-#define INTERNAL_TYPE_MAX	19
+#define INTERNAL_TYPE_SRV	8	
+#define INTERNAL_TYPE_SSHFP	9
+#define INTERNAL_TYPE_NAPTR	10
+#define INTERNAL_TYPE_DNSKEY	11
+#define INTERNAL_TYPE_DS	12
+#define INTERNAL_TYPE_NSEC	13
+#define INTERNAL_TYPE_RRSIG	14
+#define INTERNAL_TYPE_NSEC3	15
+#define INTERNAL_TYPE_NSEC3PARAM 16
+#define INTERNAL_TYPE_TLSA	17
+#define INTERNAL_TYPE_MAX	18
 
 /* db stuff */
 
@@ -199,16 +198,15 @@ struct domain {
 #define DOMAIN_HAVE_NS		0x40
 #define DOMAIN_HAVE_TXT		0x80
 #define DOMAIN_HAVE_SRV		0x100
-#define DOMAIN_HAVE_SPF		0x200
-#define DOMAIN_HAVE_SSHFP	0x400
-#define DOMAIN_HAVE_NAPTR	0x800
-#define DOMAIN_HAVE_DNSKEY	0x1000
-#define DOMAIN_HAVE_DS		0x2000
-#define DOMAIN_HAVE_NSEC	0x4000
-#define DOMAIN_HAVE_RRSIG	0x8000
-#define DOMAIN_HAVE_NSEC3	0x10000
-#define DOMAIN_HAVE_NSEC3PARAM	0x20000
-#define DOMAIN_HAVE_TLSA	0x40000
+#define DOMAIN_HAVE_SSHFP	0x200
+#define DOMAIN_HAVE_NAPTR	0x400
+#define DOMAIN_HAVE_DNSKEY	0x800
+#define DOMAIN_HAVE_DS		0x1000
+#define DOMAIN_HAVE_NSEC	0x2000
+#define DOMAIN_HAVE_RRSIG	0x4000
+#define DOMAIN_HAVE_NSEC3	0x8000
+#define DOMAIN_HAVE_NSEC3PARAM	0x10000
+#define DOMAIN_HAVE_TLSA	0x20000
 	u_int32_t ttl[INTERNAL_TYPE_MAX];	/* time to lives */
 	time_t created;			/* time created, for dynamic zones */
 } __attribute__((packed));
@@ -290,13 +288,6 @@ struct domain_txt {
 	u_int32_t len;
 	char txt[DNS_MAXNAME];			/* TXT string */
 	int txtlen;				/* len of TXT */
-} __attribute__((packed));
-
-struct domain_spf {
-	u_int16_t type;
-	u_int32_t len;
-	char spf[DNS_MAXNAME];			/* SPF string */
-	int spflen;				/* len of SPF */
 } __attribute__((packed));
 
 struct domain_srv {

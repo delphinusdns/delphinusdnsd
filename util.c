@@ -66,7 +66,6 @@ struct typetable {
 	{ "AAAA", DNS_TYPE_AAAA},
 	{ "ANY", DNS_TYPE_ANY },
 	{ "SRV", DNS_TYPE_SRV },
-	{ "SPF", DNS_TYPE_SPF },
 	{ "SSHFP", DNS_TYPE_SSHFP },
 	{ "NAPTR", DNS_TYPE_NAPTR },
 	{ "RRSIG", DNS_TYPE_RRSIG },
@@ -258,10 +257,6 @@ find_substruct(struct domain *ssd, u_int16_t type)
 		break;
 	case INTERNAL_TYPE_TXT:
 		if (! (ssd->flags & DOMAIN_HAVE_TXT))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_SPF:
-		if (! (ssd->flags & DOMAIN_HAVE_SPF))
 			return NULL;
 		break;
 	case INTERNAL_TYPE_SRV:
@@ -600,14 +595,6 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 	case DNS_TYPE_TXT:
 		if ((sd->flags & DOMAIN_HAVE_TXT) == DOMAIN_HAVE_TXT)  {
 			returnval = DNS_TYPE_TXT;
-			break;
-		}
-
-		*error = -1;
-		return 0;
-	case DNS_TYPE_SPF:
-		if ((sd->flags & DOMAIN_HAVE_SPF) == DOMAIN_HAVE_SPF)  {
-			returnval = DNS_TYPE_SPF;
 			break;
 		}
 
