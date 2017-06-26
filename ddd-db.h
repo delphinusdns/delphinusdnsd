@@ -28,6 +28,9 @@
 #ifndef _DB_H
 #define _DB_H
 
+#include <sys/types.h>
+#include <limits.h>
+
 #define CONFFILE "/etc/delphinusdns.conf"
 #define DEFAULT_SOCKET 64
 
@@ -431,6 +434,43 @@ struct logging {
 	char *logpasswd;
 };
 
+
+typedef struct {
+	size_t size;
+	char *data;
+} ddDBT;
+
+typedef struct __dddb {
+	int (*put)(struct __dddb *, ddDBT *, ddDBT *);
+	int (*get)(struct __dddb *, ddDBT *, ddDBT *);
+	int (*close)(struct __dddb *);
+	int (*remove)(struct __dddb *, ddDBT *);
+	size_t offset;
+	size_t size;
+	char *nodes;
+} ddDB; 
+
+
+#define SIZENODE ( sizeof(struct domain) + sizeof(struct domain_soa) + \
+		sizeof(struct domain_rrsig) + sizeof(struct domain_a) + \
+		sizeof(struct domain_aaaa) + sizeof(struct domain_mx) + \
+		sizeof(struct domain_ns) + sizeof(struct domain_cname) + \
+		sizeof(struct domain_ptr) + sizeof(struct domain_txt) +  \
+		sizeof(struct domain_srv) + sizeof(struct domain_sshfp) + \
+		sizeof(struct domain_tlsa) + sizeof(struct domain_naptr) + \
+		sizeof(struct domain_dnskey) + sizeof(struct domain_nsec) + \
+		sizeof(struct domain_nsec3) + \
+		sizeof(struct domain_nsec3param) + sizeof(struct domain_ds) )
+
+struct node {
+        RB_ENTRY(node) entry;		/* the node entry */
+	char domainname[256];		/* domain name key name */
+        int len;			/* length of domain name */
+	char *data;			/* data it points to */
+	size_t datalen;			/* the length of the data */
+};
+
+
 struct cfg {
 	int udp[DEFAULT_SOCKET];	/* udp sockets */
 	int tcp[DEFAULT_SOCKET];	/* tcp socket */
@@ -439,12 +479,19 @@ struct cfg {
 	int recurse;			/* recurse socket */
 	int log;			/* logging socket */
 	int sockcount;			/* set sockets */
-	DB *db;				/* database */
+	ddDB *db;			/* database */
 };
+
 	
-	
-int parse_file(DB *db, char *);
-DB * opendatabase(DB *);
+ddDB * dddbopen(void);
+int dddbget(ddDB *, ddDBT *, ddDBT *);
+int dddbput(ddDB *, ddDBT *, ddDBT *);
+int dddbclose(ddDB *);
+
+#define DDDB_NOTFOUND 	(-1)
+
+int parse_file(ddDB *db, char *);
+ddDB * opendatabase(ddDB *);
 
 
 #endif /* _DB_H */

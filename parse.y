@@ -40,7 +40,7 @@ extern int 	insert_whitelist(char *, char *);
 extern void 	slave_shutdown(void);
 extern int 	mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int 	mybase64_decode(char const *, u_char *, size_t);
-extern int 	get_record_size(DB *, char *, int);
+extern int 	get_record_size(ddDB *, char *, int);
 extern void *	find_substruct(struct domain *, u_int16_t);
 void 		yyerror(const char *);
 
@@ -103,12 +103,12 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.44 2017/03/14 08:23:09 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.45 2017/06/26 20:28:50 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
 static uint64_t confstatus = 0;
-static DB *mydb;
+static ddDB *mydb;
 static char *current_zone = NULL;
 
 YYSTYPE yylval;
@@ -116,7 +116,7 @@ YYSTYPE yylval;
 
 char *converted_name;
 int converted_namelen;
-DBT key, data;
+ddDBT key, data;
 struct logging logging;
 int axfrport = 0;
 time_t time_changed;
@@ -153,7 +153,7 @@ int		hex2bin(char *, int, char *);
 int             lgetc(int);
 struct tab * 	lookup(struct tab *, char *);
 int             lungetc(int);
-int 		parse_file(DB *, char *);
+int 		parse_file(ddDB *, char *);
 struct file     *pushfile(const char *, int);
 int             popfile(void);
 struct rrtab 	*rrlookup(char *);
@@ -1222,7 +1222,7 @@ yywrap()
 }
 
 int
-parse_file(DB *db, char *filename)
+parse_file(ddDB *db, char *filename)
 {
 	int errors;
 
@@ -1681,7 +1681,7 @@ check_rr(char *domainname, char *mytype, int itype, int *converted_namelen)
 int
 fill_cname(char *name, char *type, int myttl, char *hostname)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_cname *ssd_cname;
@@ -1773,7 +1773,7 @@ fill_cname(char *name, char *type, int myttl, char *hostname)
 int
 fill_ptr(char *name, char *type, int myttl, char *hostname)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_ptr *ssd_ptr;
@@ -1863,7 +1863,7 @@ fill_ptr(char *name, char *type, int myttl, char *hostname)
 int		
 fill_dnskey(char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t protocol, u_int8_t algorithm, char *pubkey)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_dnskey *ssd_dnskey;
@@ -1950,7 +1950,7 @@ fill_dnskey(char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t p
 int
 fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t algorithm, u_int8_t labels, u_int32_t original_ttl, u_int64_t sig_expiration, u_int64_t sig_inception, u_int16_t keytag, char *signers_name, char *signature)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_rrsig *ssd_rrsig;
@@ -2099,7 +2099,7 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 int
 fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algorithm, u_int8_t digesttype, char *digest)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_ds *ssd_ds;
@@ -2188,7 +2188,7 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 int
 fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt, char *nextname, char *bitmap)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_nsec3 *ssd_nsec3;
@@ -2296,7 +2296,7 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 int
 fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_nsec3param *ssd_nsec3param;
@@ -2383,7 +2383,7 @@ fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_i
 int
 fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitmap)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_nsec *ssd_nsec;
@@ -2483,7 +2483,7 @@ fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitma
 int
 fill_naptr(char *name, char *type, int myttl, int order, int preference, char *flags, char *services, char *regexp, char *replacement)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_naptr *ssd_naptr;
@@ -2593,7 +2593,7 @@ fill_naptr(char *name, char *type, int myttl, int order, int preference, char *f
 int
 fill_txt(char *name, char *type, int myttl, char *msg)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_txt *ssd_txt;
@@ -2679,7 +2679,7 @@ fill_txt(char *name, char *type, int myttl, char *msg)
 int
 fill_tlsa(char *name, char *type, int myttl, uint8_t usage, uint8_t selector, uint8_t matchtype, char *data)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_tlsa *ssd_tlsa;
@@ -2791,7 +2791,7 @@ fill_tlsa(char *name, char *type, int myttl, uint8_t usage, uint8_t selector, ui
 int
 fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerprint)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_sshfp *ssd_sshfp;
@@ -2902,7 +2902,7 @@ fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerp
 int
 fill_srv(char *name, char *type, int myttl, int priority, int weight, int port, char *srvhost)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_srv *ssd_srv;
@@ -3006,7 +3006,7 @@ fill_srv(char *name, char *type, int myttl, int priority, int weight, int port, 
 int
 fill_mx(char *name, char *type, int myttl, int priority, char *mxhost)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_mx *ssd_mx;
@@ -3105,7 +3105,7 @@ fill_mx(char *name, char *type, int myttl, int priority, char *mxhost)
 int
 fill_a(char *name, char *type, int myttl, char *a)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_a *ssd_a;
@@ -3199,7 +3199,7 @@ fill_a(char *name, char *type, int myttl, char *a)
 int
 fill_aaaa(char *name, char *type, int myttl, char *aaaa)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain_aaaa *ssd_aaaa;
 	struct domain *ssd;
@@ -3295,7 +3295,7 @@ fill_aaaa(char *name, char *type, int myttl, char *aaaa)
 int
 fill_ns(char *name, char *type, int myttl, char *nameserver)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_ns *ssd_ns;
@@ -3419,7 +3419,7 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 int
 fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int serial, int refresh, int retry, int expire, int ttl)
 {
-	DB *db = mydb;
+	ddDB *db = mydb;
 	void *sdomain, *tp;
 	struct domain *ssd;
 	struct domain_soa *ssd_soa;
@@ -3541,7 +3541,7 @@ fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int seria
 int
 get_record(struct domain *sdomain, char *converted_name, int converted_namelen)
 {
-	DB *db = mydb; /* XXX */
+	ddDB *db = mydb; /* XXX */
 
 	memset(&key, 0, sizeof(key));
 	memset(&data, 0, sizeof(data));
@@ -3552,7 +3552,7 @@ get_record(struct domain *sdomain, char *converted_name, int converted_namelen)
 	data.data = NULL;
 	data.size = 0;
 
-	if (db->get(db, NULL, &key, &data, 0) == 0) {
+	if (db->get(db, &key, &data) == 0) {
 
 		memcpy((char *)sdomain, (char *)data.data, data.size);
 	} else {
@@ -3569,7 +3569,7 @@ get_record(struct domain *sdomain, char *converted_name, int converted_namelen)
 void
 set_record(struct domain *sdomain, int rs, char *converted_name, int converted_namelen)
 {
-	DB *db = mydb; /* XXX */
+	ddDB *db = mydb; /* XXX */
 	int ret;
 
 	/* everythign in parse.y should get this flag! */
@@ -3584,8 +3584,8 @@ set_record(struct domain *sdomain, int rs, char *converted_name, int converted_n
 	data.data = (void*)sdomain;
 	data.size = rs;
 
-	if ((ret = db->put(db, NULL, &key, &data, 0)) != 0) {
-		dolog(LOG_INFO, "db->put: %s\n" , db_strerror(ret));
+	if ((ret = db->put(db, &key, &data)) != 0) {
+		//dolog(LOG_INFO, "db->put: %s\n" , db_strerror(ret));
 		return;
 	}
 

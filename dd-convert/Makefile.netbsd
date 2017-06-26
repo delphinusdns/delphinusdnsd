@@ -2,12 +2,12 @@
 
 PROG=dd-convert
 
-SRCS=dd-convert.c parse.y base64.c dnssec.c util.c ent.c
+SRCS=dd-convert.c parse.y base64.c dnssec.c util.c ent.c db.c
 
-CFLAGS= -g -I/usr/pkg/include/db5/
+CFLAGS= -g 
 CFLAGS+= -I${.CURDIR}/..
 LDFLAGS= -g -L/usr/pkg/lib -R/usr/pkg/lib
-LDADD= -lcrypto -lssl -ldb5
+LDADD= -lcrypto -lssl 
 
 OBJDIR=.
 BINDIR=/usr/local/sbin

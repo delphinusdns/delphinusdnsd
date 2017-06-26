@@ -39,25 +39,25 @@ int insert_nsec3(char *zonename, char *domainname, char *dname, int dnamelen);
 char * find_next_closer_nsec3(char *zonename, int zonelen, char *hashname);
 char * find_match_nsec3(char *zonename, int zonelen, char *hashname);
 char * find_match_nsec3_ent(char *zonename, int zonelen, char *hashname);
-struct domain * find_nsec(char *name, int namelen, struct domain *sd, DB *db);
-struct domain * find_nsec3_match_qname(char *name, int namelen, struct domain *sd, DB *db);
-struct domain * find_nsec3_match_closest(char *name, int namelen, struct domain *sd, DB *db);
-struct domain * find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, DB *db);
+struct domain * find_nsec(char *name, int namelen, struct domain *sd, ddDB *db);
+struct domain * find_nsec3_match_qname(char *name, int namelen, struct domain *sd, ddDB *db);
+struct domain * find_nsec3_match_closest(char *name, int namelen, struct domain *sd, ddDB *db);
+struct domain * find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, ddDB *db);
 char * convert_name(char *name, int namelen);
 int nsec_comp(const void *a, const void *b);
 int nsec3_comp(const void *a, const void *b);
 int count_dots(char *name);
-struct domain * find_closest_encloser(DB *db, char *name, int namelen);
+struct domain * find_closest_encloser(ddDB *db, char *name, int namelen);
 char * find_next_closer_name(char *, int, char *, int, int *);
 char * hash_name(char *name, int len, struct nsec3param *n3p);
 char * base32hex_encode(u_char *input, int len);
 int 	base32hex_decode(u_char *, u_char *);
 void 	mysetbit(u_char *, int);
 
-extern int              get_record_size(DB *, char *, int);
+extern int              get_record_size(ddDB *, char *, int);
 extern char *           dns_label(char *, int *);
 extern void             dolog(int, char *, ...);
-extern int              checklabel(DB *, struct domain *, struct domain *, struct question *);
+extern int              checklabel(ddDB *, struct domain *, struct domain *, struct question *);
 extern struct question  *build_fake_question(char *, int, u_int16_t);
 extern int              free_question(struct question *);
 extern void *           find_substruct(struct domain *, u_int16_t);
@@ -292,9 +292,9 @@ find_match_nsec3(char *zonename, int zonelen, char *hashname)
 /* FIND_NSEC  */
 /* finds the right nsec domainname in a zone */
 struct domain *
-find_nsec(char *name, int namelen, struct domain *sd, DB *db)
+find_nsec(char *name, int namelen, struct domain *sd, ddDB *db)
 {
-	DBT key, data;
+	ddDBT key, data;
 	char *table, *tmp;
 	char *nsecname;
 	struct domainnames {
@@ -356,7 +356,7 @@ find_nsec(char *name, int namelen, struct domain *sd, DB *db)
 	data.data = NULL;
 	data.size = rs;
 
-	ret = db->get(db, NULL, &key, &data, 0);	
+	ret = db->get(db, &key, &data);	
 	if (ret != 0) {
 		free (nsecname);
 		free (humanname);
@@ -424,7 +424,7 @@ find_nsec(char *name, int namelen, struct domain *sd, DB *db)
 		data.data = NULL;
 		data.size = rs;
 
-		ret = db->get(db, NULL, &key, &data, 0);	
+		ret = db->get(db, &key, &data);	
 		if (ret != 0) {
 			free (humanname);
 			free (table);
@@ -498,7 +498,7 @@ find_nsec(char *name, int namelen, struct domain *sd, DB *db)
 	data.data = NULL;
 	data.size = rs;
 
-	ret = db->get(db, NULL, &key, &data, 0);	
+	ret = db->get(db, &key, &data);	
 	if (ret != 0) {
 		free (backname);
 		free (sd0);
@@ -667,7 +667,7 @@ find_next_closer_name(char *qname, int qlen, char *closestname, int clen, int *r
  */
 
 struct domain *
-find_closest_encloser(DB *db, char *name, int namelen)
+find_closest_encloser(ddDB *db, char *name, int namelen)
 {
 	struct domain *sd = NULL;
 
@@ -675,7 +675,7 @@ find_closest_encloser(DB *db, char *name, int namelen)
 	int ret = 0;
 	int rs;
 	
-	DBT key, data;
+	ddDBT key, data;
 
 	char *p;
 
@@ -706,7 +706,7 @@ find_closest_encloser(DB *db, char *name, int namelen)
 		data.data = NULL;
 		data.size = rs;
 
-		ret = db->get(db, NULL, &key, &data, 0);
+		ret = db->get(db, &key, &data);
 		if (ret != 0) {
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
@@ -929,9 +929,9 @@ base32hex_encode(u_char *input, int len)
  */
 
 struct domain *
-find_nsec3_match_closest(char *name, int namelen, struct domain *sd, DB *db)
+find_nsec3_match_closest(char *name, int namelen, struct domain *sd, ddDB *db)
 {
-	DBT key, data;
+	ddDBT key, data;
 
 	char *hashname;
 	char *backname;
@@ -999,7 +999,7 @@ find_nsec3_match_closest(char *name, int namelen, struct domain *sd, DB *db)
 	data.data = NULL;
 	data.size = rs;
 
-	ret = db->get(db, NULL, &key, &data, 0);	
+	ret = db->get(db, &key, &data);	
 	if (ret != 0) {
 		free (backname);
 		free (sd0);
@@ -1021,9 +1021,9 @@ find_nsec3_match_closest(char *name, int namelen, struct domain *sd, DB *db)
  * 
  */
 struct domain *
-find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, DB *db)
+find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, ddDB *db)
 {
-	DBT key, data;
+	ddDBT key, data;
 
 	char *hashname;
 	char *backname;
@@ -1094,7 +1094,7 @@ find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, DB *db)
 	data.data = NULL;
 	data.size = rs;
 
-	ret = db->get(db, NULL, &key, &data, 0);	
+	ret = db->get(db, &key, &data);	
 	if (ret != 0) {
 		free (backname);
 		free (sd0);
@@ -1116,9 +1116,9 @@ find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, DB *db)
  * 
  */
 struct domain *
-find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, DB *db)
+find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, ddDB *db)
 {
-	DBT key, data;
+	ddDBT key, data;
 
 	char *hashname;
 	char *backname;
@@ -1189,7 +1189,7 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, DB *db)
 	data.data = NULL;
 	data.size = rs;
 
-	ret = db->get(db, NULL, &key, &data, 0);	
+	ret = db->get(db, &key, &data);	
 	if (ret != 0) {
 		free (backname);
 		free (sd0);
@@ -1213,9 +1213,9 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, DB *db)
  */
 
 struct domain *
-find_nsec3_match_qname(char *name, int namelen, struct domain *sd, DB *db)
+find_nsec3_match_qname(char *name, int namelen, struct domain *sd, ddDB *db)
 {
-	DBT key, data;
+	ddDBT key, data;
 
 	char *hashname;
 	char *backname;
@@ -1275,7 +1275,7 @@ find_nsec3_match_qname(char *name, int namelen, struct domain *sd, DB *db)
 	data.data = NULL;
 	data.size = rs;
 
-	ret = db->get(db, NULL, &key, &data, 0);	
+	ret = db->get(db, &key, &data);	
 	if (ret != 0) {
 		free (backname);
 		free (sd0);

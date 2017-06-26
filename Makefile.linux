@@ -1,18 +1,18 @@
 CC=gcc
 #CFLAGS=-DDEBUG
 CFLAGS=
-LDADD= -ldb -lresolv -lcrypto -lrt -lbsd
+LDADD= -lresolv -lcrypto -lrt -lbsd 
 YACC=bison
 AR=ar
 
 
 all: delphinusdnsd dd-convert
 
-delphinusdnsd: additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o
-	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o $(LDADD)
+delphinusdnsd: additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o db.o
+	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o db.o $(LDADD)
 
 dd-convert:  dd-convert.o util.o dnssec.o parse.o base64.o ent.o
-	$(CC) $(CFLAGS) -o dd-convert/dd-convert dd-convert.o util.o dnssec.o base64.o parse.o ent.o $(LDADD)
+	$(CC) $(CFLAGS) -o dd-convert/dd-convert dd-convert.o util.o dnssec.o base64.o parse.o ent.o db.o $(LDADD)
 	
 
 dd-convert.o: dd-convert.c

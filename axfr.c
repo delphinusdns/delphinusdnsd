@@ -30,12 +30,12 @@
 #include "ddd-db.h"
 
 
-void	axfrloop(int *, int, char **, DB *);
-void	axfr_connection(int, char *, int, DB *);
-int	build_header(DB *, char *, char *, struct question *, int);
-int	build_soa(DB *, char *, int, struct domain *, struct question *);
-int	checklabel(DB *, struct domain *, struct domain *, struct question *);
-void	gather_notifydomains(DB *);
+void	axfrloop(int *, int, char **, ddDB *);
+void	axfr_connection(int, char *, int, ddDB *);
+int	build_header(ddDB *, char *, char *, struct question *, int);
+int	build_soa(ddDB *, char *, int, struct domain *, struct question *);
+int	checklabel(ddDB *, struct domain *, struct domain *, struct question *);
+void	gather_notifydomains(ddDB *);
 void	init_axfr(void);
 void	init_notifyslave(void);
 int	insert_axfr(char *, char *);
@@ -44,12 +44,12 @@ void	notifypacket(int, void *, void *, int);
 void	notifyslaves(int *);
 void	reap(int);
 
-extern int 		get_record_size(DB *, char *, int);
+extern int 		get_record_size(ddDB *, char *, int);
 extern in_addr_t 	getmask(int);
 extern int 		getmask6(int, struct sockaddr_in6 *);
 extern void		reply_fmterror(struct sreply *);
 extern void		reply_nxdomain(struct sreply *);
-extern struct domain *	get_soa(DB *, struct question *);
+extern struct domain *	get_soa(ddDB *, struct question *);
 extern void *		find_substruct(struct domain *, u_int16_t);
 extern int		compress_label(u_char *, int, int);
 extern u_int16_t	create_anyreply(struct sreply *, char *, int, int, int);
@@ -99,8 +99,13 @@ static struct notifyentry {
 	SLIST_ENTRY(notifyentry) notify_entry;
 } *notn2, *notnp;
 
+extern int domaincmp(struct node *e1, struct node *e2);
+RB_HEAD(domaintree, node) rbhead;
+RB_PROTOTYPE_STATIC(domaintree, node, entry, domaincmp)
+RB_GENERATE_STATIC(domaintree, node, entry, domaincmp)
 
-static const char rcsid[] = "$Id: axfr.c,v 1.8 2016/07/06 05:12:50 pjp Exp $";
+
+static const char rcsid[] = "$Id: axfr.c,v 1.9 2017/06/26 20:28:50 pjp Exp $";
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list
@@ -296,7 +301,7 @@ insert_notifyslave(char *address, char *prefixlen)
 }
 
 void 
-axfrloop(int *afd, int sockcount, char **ident, DB *db)
+axfrloop(int *afd, int sockcount, char **ident, ddDB *db)
 {
 	fd_set rset;
 
@@ -638,7 +643,7 @@ axfrloop(int *afd, int sockcount, char **ident, DB *db)
  */
 
 void
-axfr_connection(int so, char *address, int is_ipv6, DB *db)
+axfr_connection(int so, char *address, int is_ipv6, ddDB *db)
 {
 
 	char buf[4000];
@@ -656,14 +661,14 @@ axfr_connection(int so, char *address, int is_ipv6, DB *db)
 
 	u_int16_t *tmp;
 	
+	struct node *n, *nx;
 	struct dns_header *dh, *odh;
 	struct sreply sreply;
 	struct question *question, *fq;
 	struct domain *soa = NULL, *sdomain = NULL, *nsdomain = NULL, *savesd = NULL;
 	struct domain_ns *savesdns;
 
-	DBT key, data;
-	DBC *cursor;
+	ddDBT key, data;
 
 	for (;;) {
 		len = recv(so, p + offset, sizeof(buf) - offset, 0);
@@ -756,7 +761,7 @@ axfr_connection(int so, char *address, int is_ipv6, DB *db)
 		data.data = NULL;
 		data.size = rs;
 
-		ret = db->get(db, NULL, &key, &data, 0);
+		ret = db->get(db, &key, &data);
 		
 		if (ret != 0) {
 			sdomain = get_soa(db, question);
@@ -830,22 +835,11 @@ axfr_connection(int so, char *address, int is_ipv6, DB *db)
 		outlen = build_soa(db, (reply + 2), outlen, soa, question);
 		rrcount = 1;
 		
-		if (db->cursor(db, NULL, &cursor, 0) != 0) {
-			dolog(LOG_INFO, "db->cursor: %s\n", strerror(errno));
-			goto drop;
-		}
-		
 		memset(&key, 0, sizeof(key));	
 		memset(&data, 0, sizeof(data));
 		
-
-		if (cursor->c_get(cursor, &key, &data, DB_FIRST) != 0) {
-			dolog(LOG_INFO, "cursor->c_get: %s\n", strerror(errno));
-			goto drop;	
-		}
-
-		do {
-			rs = data.size;
+		RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+			rs = n->datalen;
 			if ((sdomain = calloc(1, rs)) == NULL) {
 				dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 				goto drop;
@@ -855,8 +849,8 @@ axfr_connection(int so, char *address, int is_ipv6, DB *db)
 				goto drop;
 			}
 				
-			memcpy((char *)sdomain, (char *)data.data, data.size);
-			memcpy((char *)savesd, (char *)data.data, data.size);
+			memcpy((char*)sdomain,(char*)n->data, rs);
+			memcpy((char*)savesd,(char*)n->data, rs);
 
 			if (checklabel(db, sdomain, soa, question)) {
 				fq = build_fake_question(sdomain->zone, sdomain->zonelen, 0);
@@ -892,7 +886,7 @@ axfr_connection(int so, char *address, int is_ipv6, DB *db)
 						data.data = NULL;
 						data.size = rs;
 	
-						ret = db->get(db, NULL, &key, &data, 0);
+						ret = db->get(db, &key, &data);
 						if (ret != 0) {		
 							free_question(fq);
 							continue;
@@ -957,9 +951,7 @@ axfr_connection(int so, char *address, int is_ipv6, DB *db)
 				free(savesd);
 				savesd = NULL;
 			}
-		} while (cursor->c_get(cursor, &key, &data, DB_NEXT) == 0);
-
-		cursor->c_close(cursor);
+		}  /* RB_FOREACH */
 
 		outlen = build_soa(db, (reply + 2), outlen, soa, question);
 		rrcount++;
@@ -1030,7 +1022,7 @@ reap(int sig)
  */
 
 int 
-build_header(DB *db, char *reply, char *buf, struct question *q, int answercount)
+build_header(ddDB *db, char *reply, char *buf, struct question *q, int answercount)
 {
 	struct dns_header *odh;
 	u_int16_t outlen;
@@ -1065,7 +1057,7 @@ build_header(DB *db, char *reply, char *buf, struct question *q, int answercount
  */
 
 int
-build_soa(DB *db, char *reply, int offset, struct domain *sd, struct question *q)
+build_soa(ddDB *db, char *reply, int offset, struct domain *sd, struct question *q)
 {
 	char *p;
 	char *label;
@@ -1180,14 +1172,14 @@ build_soa(DB *db, char *reply, int offset, struct domain *sd, struct question *q
 }
 
 int
-checklabel(DB *db, struct domain *sd, struct domain *soa, struct question *q)
+checklabel(ddDB *db, struct domain *sd, struct domain *soa, struct question *q)
 {
 	struct domain *tmpsd;
 	char *p;
 	int plen, ret;
 	int rs;
 
-	DBT key, data;
+	ddDBT key, data;
 
 	if (memcmp(sd, soa, sizeof(struct domain)) == 0)	
 		return 1;
@@ -1218,8 +1210,8 @@ checklabel(DB *db, struct domain *sd, struct domain *soa, struct question *q)
 		data.data = NULL;
 		data.size = rs;
 	
-		ret = db->get(db, NULL, &key, &data, 0);
-		if (ret == DB_NOTFOUND) {
+		ret = db->get(db, &key, &data);
+		if (ret == DDDB_NOTFOUND) {
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
 
@@ -1262,10 +1254,9 @@ checklabel(DB *db, struct domain *sd, struct domain *soa, struct question *q)
 }
 
 void 
-gather_notifydomains(DB *db)
+gather_notifydomains(ddDB *db)
 {
-	DBT key, data;
-	DBC *cursor;
+	ddDBT key, data;
 	
 	time_t now, soatime;
 	struct tm *tm;
@@ -1273,6 +1264,7 @@ gather_notifydomains(DB *db)
 	char timestring[128];
 	char buf[128];
 
+	struct node *n, *nx;
 	struct domain *sd;
 	struct domain_soa *sdsoa = NULL;
 
@@ -1287,23 +1279,11 @@ gather_notifydomains(DB *db)
 
 	now = time(NULL);
 
-	if (db->cursor(db, NULL, &cursor, 0) != 0) {
-		dolog(LOG_INFO, "db->cursor: %s\n", strerror(errno));
-		return;
-	}
-	
 	memset(&key, 0, sizeof(key));	
 	memset(&data, 0, sizeof(data));
 	
-
-	if (cursor->c_get(cursor, &key, &data, DB_FIRST) != 0) {
-		dolog(LOG_INFO, "cursor->c_get: %s\n", strerror(errno));
-		cursor->c_close(cursor);
-		return;
-	}
-
-	do {
-		sd = (struct domain *)data.data;
+	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+		sd = (struct domain *)n->data;
 
 		if ((sd->flags & DOMAIN_HAVE_SOA) == DOMAIN_HAVE_SOA) {
 			sdsoa = (struct domain_soa *)find_substruct(sd, INTERNAL_TYPE_SOA);
@@ -1346,9 +1326,7 @@ gather_notifydomains(DB *db)
 
 		memset(&key, 0, sizeof(key));	
 		memset(&data, 0, sizeof(data));
-	} while (cursor->c_get(cursor, &key, &data, DB_NEXT) == 0);
-
-	cursor->c_close(cursor);
+	} 
 
 	return;
 }

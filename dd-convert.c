@@ -42,31 +42,31 @@ int verbose = 0;
 /* prototypes */
 
 void	dolog(int pri, char *fmt, ...);
-int	add_dnskey(DB *, char *, char *);
+int	add_dnskey(ddDB *, char *, char *);
 char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
 char *	create_key(char *, int, int, int, int);
-int 	dump_db(DB *, FILE *, char *);
+int 	dump_db(ddDB *, FILE *, char *);
 char * 	alg_to_name(int);
 int 	alg_to_rsa(int);
-int 	construct_nsec3(DB *, char *, int, char *);
-int 	calculate_rrsigs(DB *, char *, char *, char *, int);
-int	sign_dnskey(DB *, char *, char *, char *, int, struct domain *);
-int 	sign_a(DB *, char *, char *, int, struct domain *);
-int 	sign_mx(DB *, char *, char *, int, struct domain *);
-int 	sign_ns(DB *, char *, char *, int, struct domain *);
-int 	sign_srv(DB *, char *, char *, int, struct domain *);
-int 	sign_cname(DB *, char *, char *, int, struct domain *);
-int 	sign_soa(DB *, char *, char *, int, struct domain *);
-int	sign_txt(DB *, char *, char *, int, struct domain *);
-int	sign_aaaa(DB *, char *, char *, int, struct domain *);
-int	sign_ptr(DB *, char *, char *, int, struct domain *);
-int	sign_nsec3(DB *, char *, char *, int, struct domain *);
-int	sign_nsec3param(DB *, char *, char *, int, struct domain *);
-int	sign_naptr(DB *, char *, char *, int, struct domain *);
-int	sign_sshfp(DB *, char *, char *, int, struct domain *);
-int	sign_tlsa(DB *, char *, char *, int, struct domain *);
-int	sign_ds(DB *, char *, char *, int, struct domain *);
-int 	create_ds(DB *, char *, char *);
+int 	construct_nsec3(ddDB *, char *, int, char *);
+int 	calculate_rrsigs(ddDB *, char *, char *, char *, int);
+int	sign_dnskey(ddDB *, char *, char *, char *, int, struct domain *);
+int 	sign_a(ddDB *, char *, char *, int, struct domain *);
+int 	sign_mx(ddDB *, char *, char *, int, struct domain *);
+int 	sign_ns(ddDB *, char *, char *, int, struct domain *);
+int 	sign_srv(ddDB *, char *, char *, int, struct domain *);
+int 	sign_cname(ddDB *, char *, char *, int, struct domain *);
+int 	sign_soa(ddDB *, char *, char *, int, struct domain *);
+int	sign_txt(ddDB *, char *, char *, int, struct domain *);
+int	sign_aaaa(ddDB *, char *, char *, int, struct domain *);
+int	sign_ptr(ddDB *, char *, char *, int, struct domain *);
+int	sign_nsec3(ddDB *, char *, char *, int, struct domain *);
+int	sign_nsec3param(ddDB *, char *, char *, int, struct domain *);
+int	sign_naptr(ddDB *, char *, char *, int, struct domain *);
+int	sign_sshfp(ddDB *, char *, char *, int, struct domain *);
+int	sign_tlsa(ddDB *, char *, char *, int, struct domain *);
+int	sign_ds(ddDB *, char *, char *, int, struct domain *);
+int 	create_ds(ddDB *, char *, char *);
 u_int 	keytag(u_char *key, u_int keysize);
 void 	pack(char *, char *, int);
 void 	pack32(char *, u_int32_t);
@@ -77,7 +77,7 @@ u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
 char * 	bin2hex(char *, int);
 int 	print_sd(FILE *, struct domain *);
-void	cleanup(DB *, char *);
+void	cleanup(ddDB *, char *);
 void 	usage(void);
 
 
@@ -137,7 +137,7 @@ extern char * convert_name(char *name, int namelen);
 
 extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int      mybase64_decode(char const *, u_char *, size_t);
-extern struct domain *         lookup_zone(DB *, struct question *, int *, int *, char *);
+extern struct domain *         lookup_zone(ddDB *, struct question *, int *, int *, char *);
 extern struct question         *build_fake_question(char *, int, u_int16_t);
 extern char * dns_label(char *, int *);
 extern void * find_substruct(struct domain *, u_int16_t);
@@ -145,6 +145,10 @@ extern int label_count(char *);
 extern char *get_dns_type(int, int);
 extern char * hash_name(char *, int, struct nsec3param *);
 extern char * base32hex_encode(u_char *input, int len);
+
+extern int domaincmp(struct node *e1, struct node *e2);
+RB_HEAD(domaintree, node) rbhead;
+RB_GENERATE_STATIC(domaintree, node, entry, domaincmp)
 
 
 
@@ -155,7 +159,7 @@ main(int argc, char *argv[])
 	struct stat sb;
 
 	int ch;
-	int ret, bits = 2048;
+	int bits = 2048;
 	int ttl = 3600;
 	int create_zsk = 0;
 	int create_ksk = 0;
@@ -163,8 +167,6 @@ main(int argc, char *argv[])
 	int expiry = 5184000;
 	int iterations = 10;
 	u_int32_t mask = (MASK_PARSE_FILE | MASK_ADD_DNSKEY | MASK_CONSTRUCT_NSEC3 | MASK_CALCULATE_RRSIGS | MASK_CREATE_DS | MASK_DUMP_DB);
-
-	key_t key;
 
 	char *salt = "-";
 	char *zonefile = NULL;
@@ -174,10 +176,8 @@ main(int argc, char *argv[])
 	char *ksk_key = NULL;
 	char *zsk_key = NULL;
 	char *tmpdir;
-	char tmppath[] = "./tmp.XXXXXXXXXX";
 	
-	DB *db;
-	DB_ENV *dbenv;
+	ddDB *db;
 
 
 	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:m:n:o:s:t:vZz:")) != -1) {
@@ -314,41 +314,9 @@ main(int argc, char *argv[])
 #endif
 
 	/* open the database(s) */
-	if ((ret = db_env_create(&dbenv, 0)) != 0) {
-		fprintf(stderr, "db_env_create: %s\n", db_strerror(ret));
-		exit(1);
-	}
-
-	if ((tmpdir = mkdtemp(tmppath)) == NULL) {
-		perror("mkdtemp");
-		exit(1);
-	}
-
-	key = ftok(tmpdir, 1);
-	if (key == (key_t)-1) {
-		perror("ftok");
-		exit(1);
-	}
-
-	if ((ret = dbenv->set_shm_key(dbenv, key)) != 0) {
-		fprintf(stderr, "dbenv->set_shm_key failed\n");
-		exit(1);
-	}
-
-	if ((ret = dbenv->open(dbenv, tmpdir, DB_CREATE | \
-		DB_INIT_LOCK | DB_INIT_MPOOL | DB_SYSTEM_MEM, \
-		S_IRUSR | S_IWUSR)) != 0) {
-		fprintf(stderr, "dbenv->open: %s\n", db_strerror(ret));
-		exit(1);
-	}
-
-	if (db_create((DB **)&db, (DB_ENV*)dbenv, 0) != 0) {
-		perror("db_create");
-		exit(1);
-	}
-
-	if (db->open(db, NULL, "ddc.db", NULL, DB_BTREE, DB_CREATE, 0600) != 0) {
-		perror("db->open");
+	db = dddbopen();
+	if (db == NULL) {
+		dolog(LOG_INFO, "dddbopen() failed\n");
 		exit(1);
 	}
 
@@ -458,7 +426,7 @@ dolog(int pri, char *fmt, ...)
 }
 
 int	
-add_dnskey(DB *db, char *zsk_key, char *ksk_key)
+add_dnskey(ddDB *db, char *zsk_key, char *ksk_key)
 {
 	char key[4096];
 	char buf[512];
@@ -607,13 +575,13 @@ parse_keyfile(int fd, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t
 }
 
 int
-dump_db(DB *db, FILE *of, char *zonename)
+dump_db(ddDB *db, FILE *of, char *zonename)
 {
 	int j, rs;
 
-        DBT key, data;
-        DBC *cursor;
+        ddDBT key, data;
 	
+	struct node *n, *nx;
 	struct question *q;
 	struct domain *sdomain;
 	
@@ -645,30 +613,18 @@ dump_db(DB *db, FILE *of, char *zonename)
 		return -1;
 	}
 	
-	if (db->cursor(db, NULL, &cursor, 0) != 0) {
-		dolog(LOG_INFO, "db->cursor: %s\n", strerror(errno));
-		exit(1);
-	}
-
 	memset(&key, 0, sizeof(key));   
 	memset(&data, 0, sizeof(data));
 
-	if (cursor->c_get(cursor, &key, &data, DB_FIRST) != 0) {
-		dolog(LOG_INFO, "cursor->c_get: %s\n", strerror(errno));
-		exit(1);
-	}
-
-	
 	j = 0;
-	do {
-		
-		rs = data.size;
+	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+		rs = n->datalen;
 		if ((sdomain = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			exit(1);
 		}
 
-		memcpy((char *)sdomain, (char *)data.data, data.size);
+		memcpy((char *)sdomain, (char *)n->data, n->datalen);
 
 		if (strcmp(sdomain->zonename, zonename) == 0)
 			continue;
@@ -680,7 +636,7 @@ dump_db(DB *db, FILE *of, char *zonename)
 
 
 		j++;
-	} while (cursor->c_get(cursor, &key, &data, DB_NEXT) == 0);
+	} 
 
 	fprintf(of, "}\n");
 
@@ -960,11 +916,9 @@ alg_to_rsa(int algorithm)
 }
 
 int
-calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry)
+calculate_rrsigs(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry)
 {
-        DBT key, data;
-        DBC *cursor;
-	
+	struct node *n, *nx;
 	struct domain *sd;
 	int j, rs;
 
@@ -988,31 +942,16 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
         expiredon = EXPIREDON;
 #endif
 
-	/* set cursor on database */
-	
-	if (db->cursor(db, NULL, &cursor, 0) != 0) {
-		dolog(LOG_INFO, "db->cursor: %s\n", strerror(errno));
-		exit(1);
-	}
-
-	memset(&key, 0, sizeof(key));   
-	memset(&data, 0, sizeof(data));
-
-	if (cursor->c_get(cursor, &key, &data, DB_FIRST) != 0) {
-		dolog(LOG_INFO, "cursor->c_get: %s\n", strerror(errno));
-		exit(1);
-	}
-
-	
 	j = 0;
-	do {
-		rs = data.size;
+
+	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+		rs = n->datalen;
 		if ((sd = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			exit(1);
 		}
 
-		memcpy((char *)sd, (char *)data.data, data.size);
+		memcpy((char *)sd, (char *)n->data, n->datalen);
 		
 		if (sd->flags & DOMAIN_HAVE_DNSKEY)
 			if (sign_dnskey(db, zonename, zsk_key, ksk_key, expiry, sd) < 0) {
@@ -1096,7 +1035,7 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
 			}
 
 		j++;
-	} while (cursor->c_get(cursor, &key, &data, DB_NEXT) == 0);
+	}
 	
 		
 	return 0;
@@ -1107,7 +1046,7 @@ calculate_rrsigs(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expir
  */
 
 int
-sign_soa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_soa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_soa *sdsoa;
 
@@ -1338,7 +1277,7 @@ sign_soa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_txt(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_txt(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_txt *sdtxt;
 
@@ -1556,7 +1495,7 @@ sign_txt(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_aaaa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_aaaa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_aaaa *sdaaaa;
 
@@ -1831,7 +1770,7 @@ sign_aaaa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_nsec3(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_nsec3(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_nsec3 *sdnsec3;
 
@@ -2071,7 +2010,7 @@ sign_nsec3(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_nsec3param(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_nsec3param(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_nsec3param *sdnsec3;
 
@@ -2302,7 +2241,7 @@ sign_nsec3param(DB *db, char *zonename, char *zsk_key, int expiry, struct domain
  */
 
 int
-sign_cname(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_cname(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_cname *sdc;
 
@@ -2518,7 +2457,7 @@ sign_cname(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_ptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_ptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_ptr *sdptr;
 
@@ -2734,7 +2673,7 @@ sign_ptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_naptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_naptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_naptr *sdnaptr;
 
@@ -3030,7 +2969,7 @@ sign_naptr(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_srv(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_srv(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_srv *sdsrv;
 
@@ -3314,7 +3253,7 @@ sign_srv(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_sshfp(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_sshfp(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_sshfp *sdsshfp;
 
@@ -3594,7 +3533,7 @@ sign_sshfp(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_tlsa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_tlsa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_tlsa *sdtlsa;
 
@@ -3876,7 +3815,7 @@ sign_tlsa(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_ds(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_ds(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_ds *sdds;
 
@@ -4158,7 +4097,7 @@ sign_ds(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_ns(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_ns(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_ns *sdns;
 
@@ -4433,7 +4372,7 @@ sign_ns(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_mx(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_mx(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_mx *sdmx;
 
@@ -4711,7 +4650,7 @@ sign_mx(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_a(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_a(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_a *sda;
 
@@ -4982,7 +4921,7 @@ sign_a(DB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 }
 
 int
-create_ds(DB *db, char *zonename, char *ksk_key)
+create_ds(ddDB *db, char *zonename, char *ksk_key)
 {
 	FILE *f;
 
@@ -5182,7 +5121,7 @@ create_ds(DB *db, char *zonename, char *ksk_key)
  */
 
 int
-sign_dnskey(DB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, struct domain *sd)
+sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, struct domain *sd)
 {
 	struct domain_dnskey *sddk;
 
@@ -5873,20 +5812,13 @@ timethuman(time_t timet)
 }
 
 int
-construct_nsec3(DB *db, char *zone, int iterations, char *salt)
+construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 {
+	struct node *n, *nx;
 
-        DBT key, data;
-        DBC *cursor;
-	
 	struct domain *sd;
 	struct question *q;
-#if 0
-	struct domain_rrsig *sdrr; 
-	struct domain_dnskey *sddk;
-	struct rrsig *rss;
-	int len;
-#endif
+
 	struct nsec3param n3p;
 	struct domain_nsec3param *sdn3p;
 	
@@ -5946,32 +5878,16 @@ construct_nsec3(DB *db, char *zone, int iterations, char *salt)
 	n3p.saltlen = sdn3p->nsec3param.saltlen;
 	memcpy(&n3p.salt, sdn3p->nsec3param.salt, n3p.saltlen);
 
-	/* set cursor on database */
-	
-	if (db->cursor(db, NULL, &cursor, 0) != 0) {
-		dolog(LOG_INFO, "db->cursor: %s\n", strerror(errno));
-		exit(1);
-	}
-
-	memset(&key, 0, sizeof(key));   
-	memset(&data, 0, sizeof(data));
-
-	if (cursor->c_get(cursor, &key, &data, DB_FIRST) != 0) {
-		dolog(LOG_INFO, "cursor->c_get: %s\n", strerror(errno));
-		exit(1);
-	}
-
-	
 	j = 0;
-	do {
-		
-		rs = data.size;
+
+	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+		rs = n->datalen;
 		if ((sd = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			exit(1);
 		}
 
-		memcpy((char *)sd, (char *)data.data, data.size);
+		memcpy((char *)sd, (char *)n->data, n->datalen);
 
 		
 		hashname = hash_name(sd->zone, sd->zonelen, &n3p);
@@ -6052,7 +5968,7 @@ construct_nsec3(DB *db, char *zone, int iterations, char *salt)
 				TAILQ_INSERT_TAIL(&head, n1, entries);
 		}
 
-	} while (cursor->c_get(cursor, &key, &data, DB_NEXT) == 0);
+	}  /* RB_FOREACH_SAFE */
 
 	TAILQ_FOREACH(n2, &head, entries) {
 		np = TAILQ_NEXT(n2, entries);
@@ -6772,13 +6688,12 @@ usage(void)
 }
 	
 void
-cleanup(DB *db, char *tmpdir)
+cleanup(ddDB *db, char *tmpdir)
 {
 	DIR *dirp;
 	struct dirent *dp;
 	struct stat sb;
 	
-	db->close(db, 0);
 	if (chdir(tmpdir) < 0) {
 		return;
 	}

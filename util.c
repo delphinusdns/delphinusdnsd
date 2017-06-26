@@ -36,9 +36,9 @@
 int label_count(char *);
 char * dns_label(char *, int *);
 void slave_shutdown(void);
-int get_record_size(DB *, char *, int);
+int get_record_size(ddDB *, char *, int);
 void * find_substruct(struct domain *, u_int16_t);
-struct domain * 	lookup_zone(DB *, struct question *, int *, int *, char *);
+struct domain * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
 u_int16_t check_qtype(struct domain *, u_int16_t, int, int *);
 struct question		*build_fake_question(char *, int, u_int16_t);
 
@@ -188,10 +188,10 @@ slave_shutdown(void)
  */
 
 int 
-get_record_size(DB *db, char *converted_name, int converted_namelen)
+get_record_size(ddDB *db, char *converted_name, int converted_namelen)
 {
 	struct domain *sdomain;
-	DBT key, data;
+	ddDBT key, data;
 	int ret;
 
 	memset(&key, 0, sizeof(key));
@@ -203,13 +203,10 @@ get_record_size(DB *db, char *converted_name, int converted_namelen)
 	data.data = NULL;
 	data.size = sizeof(struct domain);
 
-	if ((ret = db->get(db, NULL, &key, &data, 0)) == 0) {
+	if ((ret = db->get(db, &key, &data)) == 0) {
 		sdomain = (struct domain *)data.data;
 		return (sdomain->len);
-	} else {
-		if (debug && ret != DB_NOTFOUND )
-			dolog(LOG_INFO, "db->get: %s\n", strerror(errno));
-	}
+	} 
 
 	return sizeof(struct domain);
 }
@@ -324,7 +321,7 @@ find_substruct(struct domain *ssd, u_int16_t type)
 
 
 struct domain *
-lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, char *replystring)
+lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, char *replystring)
 {
 
 	struct domain *sd = NULL;
@@ -337,7 +334,7 @@ lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, cha
 
 	char *p;
 	
-	DBT key, data;
+	ddDBT key, data;
 
 	p = question->hdr->name;
 	plen = question->hdr->namelen;
@@ -367,7 +364,7 @@ lookup_zone(DB *db, struct question *question, int *returnval, int *lzerrno, cha
 	data.data = NULL;
 	data.size = rs;
 
-	ret = db->get(db, NULL, &key, &data, 0);
+	ret = db->get(db, &key, &data);
 	if (ret != 0) {
 nsec3:
 		/*
@@ -402,7 +399,7 @@ nsec3:
 			data.data = NULL;
 			data.size = rs;
 
-			ret = db->get(db, NULL, &key, &data, 0);
+			ret = db->get(db, &key, &data);
 			if (ret == 0)
 				memcpy((char *)sd, (char *)data.data, data.size);
 			if (ret == 0 && (sd->flags & DOMAIN_HAVE_SOA)) {

@@ -35,20 +35,20 @@ int 		getmask6(int, struct sockaddr_in6 *);
 void 		init_region(void);
 int 		insert_region(char *, char *, u_int8_t);
 
-SLIST_HEAD(listhead, entry) head;
+SLIST_HEAD(listhead, regionentry) regionhead;
 
-static struct entry {
+static struct regionentry {
 	char name[INET6_ADDRSTRLEN];
 	int family;
 	struct sockaddr_storage hostmask;
 	struct sockaddr_storage netmask;
 	u_int8_t region; 
 	u_int8_t prefixlen;
-	SLIST_ENTRY(entry) region_entry;
+	SLIST_ENTRY(regionentry) region_entry;
 } *n2, *np;
 
 
-static const char rcsid[] = "$Id: region.c,v 1.3 2016/07/06 05:12:51 pjp Exp $";
+static const char rcsid[] = "$Id: region.c,v 1.4 2017/06/26 20:28:50 pjp Exp $";
 
 /*
  * INIT_REGION - initialize the region singly linked list
@@ -57,14 +57,15 @@ static const char rcsid[] = "$Id: region.c,v 1.3 2016/07/06 05:12:51 pjp Exp $";
 void
 init_region(void)
 {
-	SLIST_INIT(&head);
+	SLIST_INIT(&regionhead);
 	return;
 }
 
 /*
  * INSERT_REGION - insert particular address and prefix length  and region 
  * 			into the
- * 			singly linked list at "head", if the address contains
+ * 			singly linked list at "regionhead", if the address 
+ *			contains
  *			a colon then it is assumed to be an IPv6 address.
  *			return -1 on error, 0 on successful insertion
  */
@@ -78,7 +79,7 @@ insert_region(char *address, char *prefixlen, u_int8_t region)
 	int ret;
 
 	pnum = atoi(prefixlen);
-	n2 = malloc(sizeof(struct entry));      /* Insert after. */
+	n2 = malloc(sizeof(struct regionentry));      /* Insert after. */
 
 	if (strchr(address, ':') != NULL) {
 		n2->family = AF_INET6;
@@ -106,7 +107,7 @@ insert_region(char *address, char *prefixlen, u_int8_t region)
 
 	}
 
-	SLIST_INSERT_HEAD(&head, n2, region_entry);
+	SLIST_INSERT_HEAD(&regionhead, n2, region_entry);
 
 	return (0);
 }
@@ -133,7 +134,7 @@ find_region(struct sockaddr_storage *sst, int family)
 	u_int8_t region = 0xff;
 	u_int8_t prefixlen = 0;
 
-	SLIST_FOREACH(np, &head, region_entry) {
+	SLIST_FOREACH(np, &regionhead, region_entry) {
 		if (np->family == AF_INET) {
 			if (family != AF_INET)
 				continue;

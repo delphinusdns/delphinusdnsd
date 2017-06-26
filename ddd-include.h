@@ -37,6 +37,12 @@
 #include <sys/queue.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
+#if __linux__
+#define __unused 
+#include <bsd/sys/tree.h>
+#else
+#include <sys/tree.h>
+#endif
 
 #include <net/if.h>
 
@@ -60,7 +66,6 @@
 #include <errno.h>
 #include <syslog.h>
 #include <ctype.h>
-#include <db.h>
 #include <pwd.h>
 #include <ifaddrs.h>
 #include <dirent.h>

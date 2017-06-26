@@ -32,7 +32,7 @@
 
 /* prototypes */
 
-extern int     		checklabel(DB *, struct domain *, struct domain *, struct question *);
+extern int     		checklabel(ddDB *, struct domain *, struct domain *, struct question *);
 extern int 		additional_nsec3(char *, int, int, struct domain *, char *, int, int);
 extern int 		additional_a(char *, int, struct domain *, char *, int, int, int *);
 extern int 		additional_aaaa(char *, int, struct domain *, char *, int, int, int *);
@@ -45,52 +45,52 @@ extern struct question 	*build_fake_question(char *, int, u_int16_t);
 extern int 		compress_label(u_char *, int, int);
 extern void 		dolog(int, char *, ...);
 extern int 		free_question(struct question *);
-extern struct domain * 	lookup_zone(DB *, struct question *, int *, int *, char *);
+extern struct domain * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
 extern void 		slave_shutdown(void);
 extern void *		find_substruct(struct domain *, u_int16_t);
-extern int 		get_record_size(DB *, char *, int);
+extern int 		get_record_size(ddDB *, char *, int);
 extern char *		dns_label(char *, int *);
 extern int 		lookup_type(int internal_type);
 
-struct domain 	*Lookup_zone(DB *, char *, u_int16_t, u_int16_t, int);
+struct domain 	*Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int);
-int 		reply_a(struct sreply *, DB *);
-int		reply_nsec3(struct sreply *, DB *);
+int 		reply_a(struct sreply *, ddDB *);
+int		reply_nsec3(struct sreply *, ddDB *);
 int		reply_nsec3param(struct sreply *);
 int		reply_nsec(struct sreply *);
 int		reply_dnskey(struct sreply *);
 int		reply_ds(struct sreply *);
-int		reply_rrsig(struct sreply *, DB *);
-int 		reply_aaaa(struct sreply *, DB *);
-int 		reply_mx(struct sreply *, DB *);
-int 		reply_ns(struct sreply *, DB *);
+int		reply_rrsig(struct sreply *, ddDB *);
+int 		reply_aaaa(struct sreply *, ddDB *);
+int 		reply_mx(struct sreply *, ddDB *);
+int 		reply_ns(struct sreply *, ddDB *);
 int 		reply_notimpl(struct sreply *);
-int 		reply_nxdomain(struct sreply *, DB *);
-int 		reply_noerror(struct sreply *, DB *);
+int 		reply_nxdomain(struct sreply *, ddDB *);
+int 		reply_noerror(struct sreply *, ddDB *);
 int		reply_badvers(struct sreply *);
 int		reply_nodata(struct sreply *);
 int 		reply_soa(struct sreply *);
 int 		reply_ptr(struct sreply *);
 int 		reply_txt(struct sreply *);
 int 		reply_version(struct sreply *);
-int 		reply_srv(struct sreply *, DB *);
-int 		reply_naptr(struct sreply *, DB *);
+int 		reply_srv(struct sreply *, ddDB *);
+int 		reply_naptr(struct sreply *, ddDB *);
 int 		reply_sshfp(struct sreply *);
 int		reply_tlsa(struct sreply *);
 int 		reply_cname(struct sreply *);
 int 		reply_any(struct sreply *);
 int 		reply_refused(struct sreply *);
 int 		reply_fmterror(struct sreply *);
-void 		update_db(DB *, struct domain *);
-struct domain * find_nsec(char *name, int namelen, struct domain *sd, DB *db);
+void 		update_db(ddDB *, struct domain *);
+struct domain * find_nsec(char *name, int namelen, struct domain *sd, ddDB *db);
 int 		nsec_comp(const void *a, const void *b);
 char * 		convert_name(char *name, int namelen);
 int 		count_dots(char *name);
 char * 		base32hex_encode(u_char *input, int len);
-struct domain * find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, DB *db);
-struct domain * find_nsec3_match_closest(char *name, int namelen, struct domain *sd, DB *db);
-struct domain * find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, DB *db);
-struct domain * find_nsec3_match_qname(char *name, int namelen, struct domain *sd, DB *db);
+struct domain * find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, ddDB *db);
+struct domain * find_nsec3_match_closest(char *name, int namelen, struct domain *sd, ddDB *db);
+struct domain * find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, ddDB *db);
+struct domain * find_nsec3_match_qname(char *name, int namelen, struct domain *sd, ddDB *db);
 
 extern int debug, verbose, dnssec;
 extern char *versionstring;
@@ -109,7 +109,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.53 2017/03/14 08:23:09 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.54 2017/06/26 20:28:50 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -117,7 +117,7 @@ static const char rcsid[] = "$Id: reply.c,v 1.53 2017/03/14 08:23:09 pjp Exp $";
  */
 
 int
-reply_a(struct sreply *sreply, DB *db)
+reply_a(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -478,7 +478,7 @@ out:
  */
 
 int
-reply_nsec3(struct sreply *sreply, DB *db)
+reply_nsec3(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -1219,7 +1219,7 @@ out:
 
 
 int		
-reply_rrsig(struct sreply *sreply, DB *db)
+reply_rrsig(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -1384,7 +1384,7 @@ out:
  */
 
 int
-reply_aaaa(struct sreply *sreply, DB *db)
+reply_aaaa(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -1554,7 +1554,7 @@ out:
  */
 
 int
-reply_mx(struct sreply *sreply, DB *db)
+reply_mx(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -1727,7 +1727,7 @@ out:
  */
 
 int
-reply_ns(struct sreply *sreply, DB *db)
+reply_ns(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -3187,7 +3187,7 @@ out:
 
 
 int
-reply_naptr(struct sreply *sreply, DB *db)
+reply_naptr(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -3390,7 +3390,7 @@ out:
 
 
 int
-reply_srv(struct sreply *sreply, DB *db)
+reply_srv(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -3635,7 +3635,7 @@ reply_notimpl(struct sreply  *sreply)
  */
 
 int
-reply_nxdomain(struct sreply *sreply, DB *db)
+reply_nxdomain(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4164,7 +4164,7 @@ reply_fmterror(struct sreply *sreply)
  */
 
 int
-reply_noerror(struct sreply *sreply, DB *db)
+reply_noerror(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4487,11 +4487,11 @@ out:
 }
 
 void
-update_db(DB *db, struct domain *sd)
+update_db(ddDB *db, struct domain *sd)
 {
 	int ret;
 	int i = 0;
-	DBT key, data;
+	ddDBT key, data;
 
 	
 	do {
@@ -4510,7 +4510,7 @@ update_db(DB *db, struct domain *sd)
 		data.data = (char *)sd;
 		data.size = sd->len;
 		
-		ret = db->put(db, NULL, &key, &data, 0);
+		ret = db->put(db, &key, &data);
 	} while (ret != 0);
 
 	return;	
@@ -4521,7 +4521,7 @@ update_db(DB *db, struct domain *sd)
  */
 
 struct domain *
-Lookup_zone(DB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcard)
+Lookup_zone(ddDB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcard)
 {
 	struct domain *sd;
 	struct question *fakequestion;
@@ -4658,6 +4658,7 @@ u_int16_t
 create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int soa)
 {
 	int a_count, aaaa_count, ns_count, mx_count, srv_count, sshfp_count;
+	int tlsa_count, typelen;
 	int ds_count, dnskey_count;
 	int naptr_count, rrsig_count;
 	int internal_type;
@@ -4682,6 +4683,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	struct domain_ns *sdns = NULL;
 	struct domain_mx *sdmx = NULL;
 	struct domain_sshfp *sdsshfp = NULL;
+	struct domain_tlsa *sdtlsa = NULL;
 	struct domain_nsec *sdnsec = NULL;
 	struct domain_rrsig *sdrrsig = NULL;
 	struct domain_ds *sdds = NULL;
@@ -4699,7 +4701,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	u_int16_t *dnskey_flags, *nsec3param_iterations;
 	u_int16_t *nsec3_iterations;
 	u_int8_t *sshfp_alg, *sshfp_fptype, *ds_alg, *ds_digesttype;
-	u_int8_t *dnskey_protocol, *dnskey_alg;
+	u_int8_t *dnskey_protocol, *dnskey_alg, *tlsa_usage, *tlsa_selector;
+	u_int8_t *tlsa_matchtype;
 	u_int8_t *nsec3param_alg, *nsec3param_flags, *nsec3param_saltlen;
 	u_int8_t *nsec3_alg, *nsec3_flags, *nsec3_saltlen, *nsec3_hashlen;
 	char *name, *p;
@@ -5399,6 +5402,73 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		offset += (sdtxt->txtlen + 1);
 
 		answer->rdlength = htons(sdtxt->txtlen + 1);
+
+	}
+	if (sd->flags & DOMAIN_HAVE_TLSA) {
+		if ((sdtlsa = (struct domain_tlsa *)find_substruct(sd, INTERNAL_TYPE_TLSA)) == NULL)
+			return 0;
+
+		tlsa_count = 0;
+		do {
+			if ((offset + q->hdr->namelen) > rlen) {
+				goto truncate;
+			}
+
+			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
+			offset += q->hdr->namelen;
+
+			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+				offset = tmplen;
+			} 
+
+		
+			if (offset + 12 > rlen)
+				goto truncate;
+
+			answer = (struct answer *)&reply[offset];
+
+			answer->type = htons(DNS_TYPE_TLSA);
+			answer->class = htons(DNS_CLASS_IN);
+			answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_TLSA]);
+
+			typelen = sdtlsa->tlsa[tlsa_count].matchtype == 1 ? DNS_TLSA_SIZE_SHA256 : DNS_TLSA_SIZE_SHA512;
+			answer->rdlength = htons((3 * sizeof(u_int8_t)) + typelen);
+
+			offset += 10;		/* up to rdata length */
+			
+			tlsa_usage = (u_int8_t *)&reply[offset];
+			*tlsa_usage = sdtlsa->tlsa[tlsa_count].usage;
+
+			offset++;
+
+			tlsa_selector = (u_int8_t *)&reply[offset];
+			*tlsa_selector = sdtlsa->tlsa[tlsa_count].selector;
+
+			offset++;
+
+			tlsa_matchtype = (u_int8_t *)&reply[offset];
+			*tlsa_matchtype = sdtlsa->tlsa[tlsa_count].matchtype;
+
+			offset++;
+
+			if (offset + sdtlsa->tlsa[tlsa_count].datalen > rlen)
+				goto truncate;
+
+			memcpy((char *)&reply[offset], (char *)sdtlsa->tlsa[tlsa_count].data, sdtlsa->tlsa[tlsa_count].datalen);
+
+			offset += sdtlsa->tlsa[tlsa_count].datalen;
+
+			/* can we afford to write another header? if no truncate */
+			if (sdtlsa->tlsa_count > 1 && (offset + 12 + 3 + sdtlsa->tlsa[tlsa_count].datalen) > rlen) {
+				goto truncate;
+			}
+
+			answer->rdlength = htons(&reply[offset] - answer->rdata);
+		} while (++tlsa_count < RECORD_COUNT && --sdtlsa->tlsa_count);
+
+		NTOHS(odh->answer);
+		odh->answer += tlsa_count;
+		HTONS(odh->answer);
 
 	}
 	if (sd->flags & DOMAIN_HAVE_SSHFP) {

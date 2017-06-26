@@ -33,7 +33,7 @@
 /* prototypes */
 
 extern void 	add_rrlimit(int, u_int16_t *, int, char *);
-extern void 	axfrloop(int *, int, char **, DB *);
+extern void 	axfrloop(int *, int, char **, ddDB *);
 extern struct question	*build_fake_question(char *, int, u_int16_t);
 extern int 	check_ent(char *, int);
 extern int 	check_rrlimit(int, u_int16_t *, int, char *);
@@ -48,59 +48,59 @@ extern char *	get_dns_type(int, int);
 extern void 	init_dnssec(void);
 extern void 	init_recurse(void);
 extern void 	init_region(void);
-extern int	init_entlist(DB *);
+extern int	init_entlist(ddDB *);
 extern void 	init_filter(void);
 extern void 	init_notifyslave(void);
 extern void 	init_whitelist(void);
-extern struct domain * 	lookup_zone(DB *, struct question *, int *, int *, char *);
+extern struct domain * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
 extern int 	memcasecmp(u_char *, u_char *, int);
-extern void 	recurseloop(int sp, int *, DB *);
+extern void 	recurseloop(int sp, int *, ddDB *);
 extern void 	receivelog(char *, int);
-extern int 	reply_a(struct sreply *, DB *);
-extern int 	reply_aaaa(struct sreply *, DB *);
+extern int 	reply_a(struct sreply *, ddDB *);
+extern int 	reply_aaaa(struct sreply *, ddDB *);
 extern int 	reply_any(struct sreply *);
 extern int 	reply_badvers(struct sreply *);
 extern int	reply_nodata(struct sreply *);
 extern int 	reply_cname(struct sreply *);
 extern int 	reply_fmterror(struct sreply *);
 extern int 	reply_notimpl(struct sreply *);
-extern int 	reply_nxdomain(struct sreply *, DB *);
-extern int 	reply_noerror(struct sreply *, DB *);
+extern int 	reply_nxdomain(struct sreply *, ddDB *);
+extern int 	reply_noerror(struct sreply *, ddDB *);
 extern int 	reply_soa(struct sreply *);
-extern int 	reply_mx(struct sreply *, DB *);
-extern int 	reply_naptr(struct sreply *, DB *);
-extern int 	reply_ns(struct sreply *, DB *);
+extern int 	reply_mx(struct sreply *, ddDB *);
+extern int 	reply_naptr(struct sreply *, ddDB *);
+extern int 	reply_ns(struct sreply *, ddDB *);
 extern int 	reply_ptr(struct sreply *);
 extern int 	reply_refused(struct sreply *);
-extern int 	reply_srv(struct sreply *, DB *);
+extern int 	reply_srv(struct sreply *, ddDB *);
 extern int 	reply_sshfp(struct sreply *);
 extern int 	reply_tlsa(struct sreply *);
 extern int 	reply_txt(struct sreply *);
 extern int 	reply_version(struct sreply *);
-extern int      reply_rrsig(struct sreply *, DB *);
+extern int      reply_rrsig(struct sreply *, ddDB *);
 extern int	reply_dnskey(struct sreply *);
 extern int	reply_ds(struct sreply *);
 extern int	reply_nsec(struct sreply *);
-extern int	reply_nsec3(struct sreply *, DB *);
+extern int	reply_nsec3(struct sreply *, ddDB *);
 extern int	reply_nsec3param(struct sreply *);
 extern int 	remotelog(int, char *, ...);
 extern char 	*rrlimit_setup(int);
 extern char 	*dns_label(char *, int *);
 extern void 	slave_shutdown(void);
-extern int 	get_record_size(DB *, char *, int);
+extern int 	get_record_size(ddDB *, char *, int);
 extern void *	find_substruct(struct domain *, u_int16_t);
 
 struct question		*build_question(char *, int, int);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct domain *, struct domain *, u_int8_t, int, int, struct recurses *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
 int			free_question(struct question *);
-struct domain * 	get_soa(DB *, struct question *);
+struct domain * 	get_soa(ddDB *, struct question *);
 int			lookup_type(int);
 void			mainloop(struct cfg *);
 void 			master_reload(int);
 void 			master_shutdown(int);
 void 			recurseheader(struct srecurseheader *, int, struct sockaddr_storage *, struct sockaddr_storage *, int);
-void 			setup_master(DB *, DB_ENV *, char **);
+void 			setup_master(ddDB *, char **);
 void 			slave_signal(int);
 
 /* aliases */
@@ -125,8 +125,6 @@ extern int dnssec;
 static int reload = 0;
 static int mshutdown = 0;
 static int msig;
-static char *database;
-static char mydatabase[512];
 static char *rptr;
 static int ratelimit_backlog;
 
@@ -169,7 +167,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.10 2017/03/14 08:23:09 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.11 2017/06/26 20:28:50 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -184,11 +182,11 @@ main(int argc, char *argv[])
 	static int afd[DEFAULT_SOCKET];
 	static int uafd[DEFAULT_SOCKET];
 	int lfd = -1;
-	int fd, n;
+	int n;
 
 	int ch, i, j;
 	int gai_error;
-	int salen, ret;
+	int salen;
 	int found = 0;
 	int on = 1;
 
@@ -206,11 +204,8 @@ main(int argc, char *argv[])
 	struct sockaddr_in6 *sin6;
 	struct cfg *cfg;
 
-	static DB_ENV *dbenv;
-	static DB *db;
+	static ddDB *db;
 	
-	key_t key;
-
 	if (geteuid() != 0) {
 		fprintf(stderr, "must be started as root\n"); /* .. dolt */
 		exit(1);
@@ -306,88 +301,14 @@ main(int argc, char *argv[])
 
 	*ptr = 0;
 	
-	if ((ret = db_env_create(&dbenv, 0)) != 0) {
-		dolog(LOG_INFO, "db_env_create: %s\n", db_strerror(ret));
+	/* open internal database */
+
+	db = dddbopen();
+	if (db == NULL) {
+		dolog(LOG_INFO, "dddbopen() failed\n");
 		slave_shutdown();
 		exit(1);
 	}
-
-	key = ftok("/usr/local/sbin/delphinusdnsd", 1);
-	if (key == (key_t)-1) {
-		dolog(LOG_INFO, "ftok failed, does /usr/local/sbin/delphinusdnsd exist?\n");
-		slave_shutdown();
-		exit(1);
-	}
-		
-
-	if ((ret = dbenv->set_shm_key(dbenv, key)) != 0) {
-		dolog(LOG_INFO, "dbenv->set_shm_key failed\n");
-		slave_shutdown();
-		exit(1);
-	}
-
-	/* set cache size , if requested */
-
-	if (cachesize) {
-		if ((ret = dbenv->set_cachesize(dbenv, 0, cachesize, 0)) != 0) {
-			dolog(LOG_INFO, "dbenv->set_cachesize: %s\n", 
-				db_strerror(ret));
-			slave_shutdown();
-			exit(1);
-		}
-	}
-
-	(void)mkdir(MYDB_PATH, 0700);
-	snprintf(mydatabase, sizeof(mydatabase), "%s/%ld", 
-		MYDB_PATH, (long)getpid());
-
-	if (mkdir(mydatabase, 0750) < 0) {
-		if (errno != EEXIST) {
-			dolog(LOG_ERR, "mkdir: %s\n", strerror(errno));
-			exit(1);
-		}
-	}
-
-	if ((ret = dbenv->open(dbenv, mydatabase, DB_CREATE | \
-		DB_INIT_LOCK | DB_INIT_MPOOL | DB_SYSTEM_MEM, \
-		S_IRUSR | S_IWUSR)) != 0) {
-		dolog(LOG_INFO, "dbenv->open failed: %s\n", db_strerror(ret));
-		slave_shutdown();
-		exit(1);
-	}
-
-        if (db_create((DB **)&db, (DB_ENV *)dbenv, 0) != 0) {
-                dolog(LOG_INFO, "db_create: %s\n", strerror(errno));
-		slave_shutdown();
-                exit(1);
-        }
-
-	/* 
-	 * we want to run multiple instances of different versions so we'll
-	 * make a temporary database...
-	 */
-
-
-	snprintf(mydatabase, sizeof(mydatabase), "%s/%ld/ddd.db", 
-		MYDB_PATH, (long)getpid());
-
-	(void)unlink(mydatabase);
-
-	database = mydatabase;
-
-
-	fd = open(database, O_WRONLY | O_CREAT, 0600);
-	if (fd < 0) {
-		dolog(LOG_INFO, "open: %s\n", strerror(errno));
-	}
-	close(fd);
-
-        if (db->open(db, NULL, database, NULL, DB_BTREE, DB_CREATE, 0600) != 0) {
-                dolog(LOG_INFO, "db->open: %s\n", strerror(errno));
-                db->close(db, DB_NOSYNC);
-		slave_shutdown();
-                exit(1);
-        }
 
 	/* make a master program that holds the pidfile, boss of ... eek */
 
@@ -399,7 +320,7 @@ main(int argc, char *argv[])
 	case 0:
 		break;
 	default:
-		setup_master(db, dbenv, av);
+		setup_master(db, av);
 		/* NOTREACHED */
 		exit(1);
 	}
@@ -1459,7 +1380,7 @@ out:
  */
 
 struct domain *
-get_soa(DB *db, struct question *question)
+get_soa(ddDB *db, struct question *question)
 {
 	struct domain *sd = NULL;
 
@@ -1467,7 +1388,7 @@ get_soa(DB *db, struct question *question)
 	int ret = 0;
 	int rs;
 	
-	DBT key, data;
+	ddDBT key, data;
 
 	char *p;
 
@@ -1494,7 +1415,7 @@ get_soa(DB *db, struct question *question)
 		data.data = NULL;
 		data.size = rs;
 
-		ret = db->get(db, NULL, &key, &data, 0);
+		ret = db->get(db, &key, &data);
 		if (ret != 0) {
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
@@ -3114,12 +3035,12 @@ recurseheader(struct srecurseheader *rh, int proto, struct sockaddr_storage *src
  */
 
 void 
-setup_master(DB *db, DB_ENV *dbenv, char **av)
+setup_master(ddDB *db, char **av)
 {
-	DB *destroy;
+	//ddDB *destroy;
 	char buf[512];
 	pid_t pid;
-	int fd, ret;
+	int fd;
 	
 #if !defined __APPLE__
 	setproctitle("delphinusdnsd master");
@@ -3155,19 +3076,6 @@ setup_master(DB *db, DB_ENV *dbenv, char **av)
 		if (mshutdown) {
 			dolog(LOG_INFO, "shutting down on signal %d\n", msig);
 			unlink(PIDFILE);
-			db->close(db, 0);
-
-
-		        if (db_create((DB **)&destroy, (DB_ENV *)dbenv, 0) != 0) {
-				dolog(LOG_INFO, "db_create: %s\n", strerror(errno));
-			}
-
-			ret = destroy->remove(destroy, database, NULL, 0);
-			if (ret != 0) {
-				dolog(LOG_INFO, "db->remove: %s\n", db_strerror(ret));
-			}
-
-			dbenv->close(dbenv, 0);
 
 			/* clean up our database */
 			pid = getpid();
@@ -3196,18 +3104,6 @@ setup_master(DB *db, DB_ENV *dbenv, char **av)
 			}
 			
 			unlink(PIDFILE);
-			db->close(db, 0);
-
-		        if (db_create((DB **)&destroy, (DB_ENV *)dbenv, 0) != 0) {
-				dolog(LOG_INFO, "db_create: %s\n", strerror(errno));
-			}
-
-			ret = destroy->remove(destroy, database, NULL, 0);
-			if (ret != 0) {
-				dolog(LOG_INFO, "db->remove: %s\n", db_strerror(ret));
-			}
-
-			dbenv->close(dbenv, 0);
 
 			/* clean up our database */
 			pid = getpid();

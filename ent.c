@@ -34,7 +34,7 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-int		init_entlist(DB *);
+int		init_entlist(ddDB *);
 int 		check_ent(char *, int);
 static int 	ent_contains(char *, int, char *, int);
 
@@ -45,6 +45,7 @@ extern int debug, verbose;
 
 SLIST_HEAD(listhead, ententry) enthead;
 
+
 static struct ententry {
 	char *name;
 	int len;
@@ -53,40 +54,44 @@ static struct ententry {
 } *ent2, *entp;
 
 
-static const char rcsid[] = "$Id: ent.c,v 1.1 2017/01/09 14:26:50 pjp Exp $";
+static const char rcsid[] = "$Id: ent.c,v 1.2 2017/06/26 20:28:50 pjp Exp $";
+
+
+#if 0
+int
+domaincmp(struct node *e1, struct node *e2)
+{
+	if (e1->len < e2->len)
+		return -1;
+	else if (e1->len > e2->len)
+		return 1;
+	else {
+        	return (memcmp(e1->domainname, e2->domainname, e1->len));
+	}
+}
+#endif
+
+extern int domaincmp(struct node *e1, struct node *e2);
+
+
+RB_HEAD(domaintree, node) rbhead;
+RB_PROTOTYPE_STATIC(domaintree, node, entry, domaincmp)
+RB_GENERATE_STATIC(domaintree, node, entry, domaincmp)
 
 /*
  * INIT_ENTLIST - initialize the ent singly linked list
  */
 
 int
-init_entlist(DB *db)
+init_entlist(ddDB *db)
 {
-	DBT key, data;
-	DBC *cursor;
+	struct node *n, *nx;
 	struct domain *sd = NULL;
-	int curs;
 
 	SLIST_INIT(&enthead);
 
-	if (db->cursor(db, NULL, &cursor, 0) != 0) {
-		dolog(LOG_INFO, "db->cursor: %s\n", strerror(errno));
-		return -1;
-	}
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-
-	/* herd all ENT candidates into our ent-list */
-	curs = cursor->c_get(cursor, &key, &data, DB_FIRST);
-	do {
-		
-		if (curs != 0) {
-			dolog(LOG_INFO, "cursor->c_get: %s\n", strerror(errno));
-			return -1;
-		}
-
-		sd = (struct domain *)data.data;
+	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+		sd = (struct domain *)n->data;
 		ent2 = malloc(sizeof(struct ententry));
 		if (ent2 == NULL) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
@@ -105,11 +110,7 @@ init_entlist(DB *db)
 		ent2->flags = sd->flags;	
 
 		SLIST_INSERT_HEAD(&enthead, ent2, ent_entry);
-
-		memset(&key, 0, sizeof(key));
-		memset(&data, 0, sizeof(data));
-		
-	} while ((curs = cursor->c_get(cursor, &key, &data, DB_NEXT)) == 0);
+	} 
 		
 
 	return 0;
