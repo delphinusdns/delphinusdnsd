@@ -1,4 +1,4 @@
-$Id: README,v 1.21 2017/01/23 12:55:27 pjp Exp $
+$Id: README,v 1.22 2017/06/26 20:44:10 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -23,8 +23,8 @@ $Id: README,v 1.21 2017/01/23 12:55:27 pjp Exp $
 ---------
 
 Delphinusdns is a small authoritative nameserver.  It does not recurse nor 
-search.  This program is written to a BSD Style License.  Sleepycat's 
-BerkeleyDB is also used for the main in-memory database.
+search.  This program is written to a BSD Style License.  BSD's tree(3)
+Red Black btree macros are used for the main in-memory database.
 
 2. WHY DELPHINUSDNS?
 -------------------
@@ -66,11 +66,9 @@ In Linux MINT you need to apt-get install build-essential.
 ## configure the platform
 $ ./configure
 ## this will install the development programs you'll need (as root)
-$ apt-get install bison cvs gcc libdb5.3-dev libssl-dev libbsd-dev
+$ apt-get install bison cvs gcc libssl-dev libbsd-dev
 ## add a privsep user with a chroot directory (option -m) (as root)
 $ useradd -m _ddd
-## create the db directory (as root)
-$ mkdir -p /var/db/delphinusdns
 ## make the program
 $ make
 ## install the binary (as root)
@@ -83,31 +81,15 @@ $ make install
 
 ## configure the platform
 $ ./configure
-## this will install the development programs you'll need (as root)
-$ cd /usr/ports/databases/db5 && make install clean
 ## add a privsep user (_ddd) with a chroot directory (as root)
 $ vipw
 ## or
 $ adduser
-## create the db directory (as root)
-$ mkdir -p /var/db/delphinusdns
 ## make the program
 $ make
 ## install the binary (as root)
 $ make install
 ## done, create a config file and start delphinusdnsd
-
-Jail users, if you get a:
-
-Aug 18 13:43:47 io delphinusdnsd[54350]: starting up
-Aug 18 13:43:47 io delphinusdnsd[54350]: dbenv->open failed: Function not implemented
-
-Similar message, that's probably because your jail must be allowing sysvipc.
-Set this:
-
-jail_example_parameters="allow.sysvipc=1"
-
-in your /etc/rc.conf and reboot the jail.
 
 
 3.3 OpenBSD
@@ -115,14 +97,10 @@ in your /etc/rc.conf and reboot the jail.
 
 ## configure the platform
 $ ./configure
-## this will install the development programs you'll need (as root)
-$ pkg_add db-4.6.21p0v0 
 ## add a privsep user (_ddd) with a chroot directory (as root)
 $ vipw
 ## or
 $ adduser
-## create the db directory (as root)
-$ mkdir -p /var/db/delphinusdns
 ## make the program
 $ make
 ## install the binary (as root)
@@ -138,12 +116,8 @@ The tests for this were done on NetBSD 7.0.2
 $ mkdir -p /usr/local/sbin /usr/local/man/man/man5 /usr/local/man/man/man8 /usr/local/man/man/html5/ /usr/local/man/man/html8
 ## configure the platform
 $ ./configure
-## the following will install the development programs you'll need (as root)
-$ cd /usr/pkgsrc/databases/db5 && make install
 ## add a privsep user with a chroot directory (as root)
 $ useradd -m _ddd
-## create the db directory (as root)
-$ mkdir -p /var/db/delphinusdns
 ## make the program
 $ make
 ## install the binary (as root)
@@ -160,26 +134,24 @@ it they can send patches for the Makefile.
 4. COMPATIBILITY
 ----------------
 
-------------------+--------------------+---------------------+-------------+
-Operating System**| makes and compiles | responds to queries | Berkeley DB |
-------------------+--------------------+---------------------+-------------+
-FreeBSD 10.3      |        yes         |       yes           | version 5   |
-------------------+--------------------+---------------------+-------------+
-NetBSD 7.0.2      |        yes*        |       yes           | version 5   |
-------------------+--------------------+---------------------+-------------+
-OpenBSD 6.0       |        yes         |       yes           | version 4.6 |
-------------------+--------------------+---------------------+-------------+
-Linux 		  |        yes         |       yes           | version 5   |
-------------------+--------------------+---------------------+-------------+
-Mac OS X ElCapitan|        no****      |      unknown        | version 4.8 |
-with MacPorts     |                    |                     |		   |	
-------------------+--------------------+---------------------+-------------+
-Rasbian OS        |        yes ***     |       yes           | version 5   |
-------------------+--------------------+---------------------+-------------+
+------------------+--------------------+---------------------+
+Operating System**| makes and compiles | responds to queries |
+------------------+--------------------+---------------------+
+FreeBSD 10.3      |        yes         |       yes           |
+------------------+--------------------+---------------------+
+NetBSD 7.0.2      |        yes*        |       yes           |
+------------------+--------------------+---------------------+
+OpenBSD 6.0       |        yes         |       yes           |
+------------------+--------------------+---------------------+
+Linux 		  |        yes         |       yes           |
+------------------+--------------------+---------------------+
+Mac OS X ElCapitan|        no****      |      unknown        |
+with MacPorts     |                    |                     |
+------------------+--------------------+---------------------+
+Rasbian OS        |        yes         |       yes           |
+------------------+--------------------+---------------------+
 
 * there was a period in time that NetBSD didn't compile
-** All Operating Systems require Berkeley DB 4.6 or higher.
-*** Raspbian OS (Raspberry Pi) only has support for Berkeley DB 5.0 or higher
 **** Mac OS X support has been dropped in version 1.1.0
 
 5. EXAMPLES
