@@ -167,7 +167,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.11 2017/06/26 20:28:50 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.12 2017/06/27 05:41:02 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -205,6 +205,16 @@ main(int argc, char *argv[])
 	struct cfg *cfg;
 
 	static ddDB *db;
+
+#if notyet
+/* currently we get stopped on a setsockopt */
+#if __OpenBSD__
+	if (pledge("stdio inet rpath wpath cpath getpw proc exec id", NULL) < 0) {
+		perror("pledge");
+		exit(1);
+	}
+#endif
+#endif
 	
 	if (geteuid() != 0) {
 		fprintf(stderr, "must be started as root\n"); /* .. dolt */

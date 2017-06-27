@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2016 Peter J. Philipp
+ * Copyright (c) 2016-2017 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -178,6 +178,13 @@ main(int argc, char *argv[])
 	char *tmpdir;
 	
 	ddDB *db;
+
+#if __OpenBSD__
+	if (pledge("stdio rpath wpath cpath", NULL) < 0) {
+		perror("pledge");
+		exit(1);
+	}
+#endif
 
 
 	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:m:n:o:s:t:vZz:")) != -1) {
