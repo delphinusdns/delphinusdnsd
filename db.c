@@ -88,7 +88,7 @@ dddbput(ddDB *db, ddDBT *key, ddDBT *data)
 	if (res == NULL) {
 		/* does not exist, create it */
 		
-		map = (char *)mmap(NULL, SIZENODE, PROT_READ|PROT_WRITE,MAP_ANON|MAP_SHARED,-1, 0);
+		map = (char *)mmap(NULL, SIZENODE, PROT_READ|PROT_WRITE,MAP_ANON,-1, 0);
 		if (map == MAP_FAILED) {
 			errno = EINVAL;
 			return -1;

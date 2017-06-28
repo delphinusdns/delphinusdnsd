@@ -167,7 +167,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.12 2017/06/27 05:41:02 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.13 2017/06/28 09:40:54 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -223,7 +223,7 @@ main(int argc, char *argv[])
 
 	av = argv;
 
-	while ((ch = getopt(argc, argv, "b:c:df:i:ln:p:v")) != -1) {
+	while ((ch = getopt(argc, argv, "b:df:i:ln:p:v")) != -1) {
 		switch (ch) {
 		case 'b':
 			bflag = 1;
@@ -232,13 +232,6 @@ main(int argc, char *argv[])
 				exit(1);
 			}
 			bind_list[bcount++] = optarg;	
-			break;
-		case 'c':
-#if !defined __OpenBSD__ 
-			cachesize = atoi(optarg);
-#else
-			cachesize = strtonum(optarg, 1, 0xffffffff, NULL);
-#endif
 			break;
 		case 'd':
 			debug = 1;
