@@ -167,7 +167,7 @@ static struct tcps {
 } *tn1, *tnp, *tntmp;
 
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.13 2017/06/28 09:40:54 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.14 2017/07/11 15:57:16 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -206,15 +206,6 @@ main(int argc, char *argv[])
 
 	static ddDB *db;
 
-#if notyet
-/* currently we get stopped on a setsockopt */
-#if __OpenBSD__
-	if (pledge("stdio inet rpath wpath cpath getpw proc exec id", NULL) < 0) {
-		perror("pledge");
-		exit(1);
-	}
-#endif
-#endif
 	
 	if (geteuid() != 0) {
 		fprintf(stderr, "must be started as root\n"); /* .. dolt */
@@ -414,10 +405,16 @@ main(int argc, char *argv[])
 				if (setsockopt(udp[i], IPPROTO_IP, IP_TTL,
 					&on, sizeof(on)) < 0) {
 #else
+#ifndef NEEDPLEDGE
 				if (setsockopt(udp[i], IPPROTO_IP, IP_RECVTTL,
 					&on, sizeof(on)) < 0) {
+#else
+				{
 #endif
+#endif
+#ifndef NEEDPLEDGE
 				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+#endif
 				}
 			} else if (res->ai_family == AF_INET6) {
 				/* RFC 3542 page 30 */
@@ -577,10 +574,16 @@ main(int argc, char *argv[])
 				if (setsockopt(udp[i], IPPROTO_IP, IP_TTL,
 					&on, sizeof(on)) < 0) {
 #else
+#ifndef NEEDPLEDGE
 				if (setsockopt(udp[i], IPPROTO_IP, IP_RECVTTL,
 					&on, sizeof(on)) < 0) {
+#else
+				{
 #endif
+#endif
+#ifndef NEEDPLEDGE
 				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+#endif
 				}
 			} else if (pifap->ifa_addr->sa_family == AF_INET6) {
 				/* RFC 3542 page 30 */
@@ -729,6 +732,15 @@ main(int argc, char *argv[])
 		slave_shutdown();
 		exit(1);
 	}
+
+#if __OpenBSD__
+#ifdef NEEDPLEDGE
+	if (pledge("stdio inet rpath wpath cpath getpw proc id", NULL) < 0) {
+		perror("pledge");
+		exit(1);
+	}
+#endif
+#endif
 
 	/*
 	 * add signals
@@ -1475,7 +1487,9 @@ mainloop(struct cfg *cfg)
 
        u_int32_t received_ttl;
 #if defined __FreeBSD__ || defined __OpenBSD__
+#ifndef NEEDPLEDGE
 	u_char *ttlptr;
+#endif
 #else
 	int *ttlptr;
 #endif
@@ -1513,7 +1527,9 @@ mainloop(struct cfg *cfg)
 	struct timeval tv = { 10, 0};
 
 	struct msghdr msgh;
+#ifndef NEEDPLEDGE
 	struct cmsghdr *cmsg;
+#endif
 	struct iovec iov;
 	
 	int flag;
@@ -2298,6 +2314,7 @@ axfrentry:
 
 				received_ttl = 0;
 
+#ifndef NEEDPLEDGE
 				for (cmsg = CMSG_FIRSTHDR(&msgh);
                    			cmsg != NULL;
                    			cmsg = CMSG_NXTHDR(&msgh,cmsg)) {
@@ -2342,6 +2359,7 @@ axfrentry:
 										received_ttl = (u_int)*ttlptr;
                      				}
 				}
+#endif /* NEEDPLEDGE */
 	
 				if (from->sa_family == AF_INET6) {
 					is_ipv6 = 1;
@@ -3044,6 +3062,15 @@ setup_master(ddDB *db, char **av)
 	char buf[512];
 	pid_t pid;
 	int fd;
+
+#if __OpenBSD__
+#ifdef NEEDPLEDGE
+	if (pledge("stdio wpath cpath exec proc", NULL) < 0) {
+		perror("pledge");
+		exit(1);
+	}
+#endif
+#endif
 	
 #if !defined __APPLE__
 	setproctitle("delphinusdnsd master");
@@ -3080,16 +3107,6 @@ setup_master(ddDB *db, char **av)
 			dolog(LOG_INFO, "shutting down on signal %d\n", msig);
 			unlink(PIDFILE);
 
-			/* clean up our database */
-			pid = getpid();
-			snprintf(buf, sizeof(buf), "%s/%lu/__db.001", MYDB_PATH, 
-				(long)getpid());
-			unlink(buf);
-			snprintf(buf, sizeof(buf), "%s/%lu", MYDB_PATH, 
-				(long)getpid());
-			
-			rmdir(buf);
-
 			pid = getpgrp();
 			killpg(pid, msig);
 
@@ -3107,16 +3124,6 @@ setup_master(ddDB *db, char **av)
 			}
 			
 			unlink(PIDFILE);
-
-			/* clean up our database */
-			pid = getpid();
-			snprintf(buf, sizeof(buf), "%s/%lu/__db.001", MYDB_PATH, 
-				(long)getpid());
-			unlink(buf);
-			snprintf(buf, sizeof(buf), "%s/%lu", MYDB_PATH, 
-				(long)getpid());
-			
-			rmdir(buf);
 
 			dolog(LOG_INFO, "restarting on SIGHUP\n");
 

@@ -105,7 +105,7 @@ RB_PROTOTYPE_STATIC(domaintree, node, entry, domaincmp)
 RB_GENERATE_STATIC(domaintree, node, entry, domaincmp)
 
 
-static const char rcsid[] = "$Id: axfr.c,v 1.9 2017/06/26 20:28:50 pjp Exp $";
+static const char rcsid[] = "$Id: axfr.c,v 1.10 2017/07/11 15:57:16 pjp Exp $";
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list
@@ -324,6 +324,16 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db)
 	pid_t pid;
 
 	char address[INET6_ADDRSTRLEN];
+
+#if __OpenBSD__
+#ifdef NEEDPLEDGE
+        if (pledge("stdio inet", NULL) < 0)
+ {
+                perror("pledge");
+                exit(1);
+        }
+#endif
+#endif
 
 	signal(SIGCHLD, reap);
 
