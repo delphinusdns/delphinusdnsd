@@ -473,6 +473,12 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 
 	switch (type) {
 
+	case DNS_TYPE_IXFR:
+			returnval = DNS_TYPE_IXFR;
+			break;
+	case DNS_TYPE_AXFR:
+			returnval = DNS_TYPE_AXFR;
+			break;
 	case DNS_TYPE_ANY:
 			returnval = DNS_TYPE_ANY;
 			break;

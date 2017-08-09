@@ -46,8 +46,8 @@ domaincmp(struct node *e1, struct node *e2)
 
 
 RB_HEAD(domaintree, node) rbhead = RB_INITIALIZER(&rbhead);
-RB_PROTOTYPE(domaintree, node, entry, domaincmp)
-RB_GENERATE(domaintree, node, entry, domaincmp)
+RB_PROTOTYPE(domaintree, node, rbentry, domaincmp)
+RB_GENERATE(domaintree, node, rbentry, domaincmp)
 
 
 

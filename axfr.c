@@ -30,11 +30,12 @@
 #include "ddd-db.h"
 
 
-void	axfrloop(int *, int, char **, ddDB *);
-void	axfr_connection(int, char *, int, ddDB *);
+void	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *ibuf);
+void	axfr_connection(int, char *, int, ddDB *, char *, int);
 int	build_header(ddDB *, char *, char *, struct question *, int);
 int	build_soa(ddDB *, char *, int, struct domain *, struct question *);
 int	checklabel(ddDB *, struct domain *, struct domain *, struct question *);
+int	find_axfr(struct sockaddr_storage *, int);
 void	gather_notifydomains(ddDB *);
 void	init_axfr(void);
 void	init_notifyslave(void);
@@ -101,11 +102,11 @@ static struct notifyentry {
 
 extern int domaincmp(struct node *e1, struct node *e2);
 RB_HEAD(domaintree, node) rbhead;
-RB_PROTOTYPE_STATIC(domaintree, node, entry, domaincmp)
-RB_GENERATE_STATIC(domaintree, node, entry, domaincmp)
+RB_PROTOTYPE_STATIC(domaintree, node, rbentry, domaincmp)
+RB_GENERATE_STATIC(domaintree, node, rbentry, domaincmp)
 
 
-static const char rcsid[] = "$Id: axfr.c,v 1.10 2017/07/11 15:57:16 pjp Exp $";
+static const char rcsid[] = "$Id: axfr.c,v 1.11 2017/08/09 15:34:17 pjp Exp $";
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list
@@ -301,7 +302,7 @@ insert_notifyslave(char *address, char *prefixlen)
 }
 
 void 
-axfrloop(int *afd, int sockcount, char **ident, ddDB *db)
+axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 {
 	fd_set rset;
 
@@ -311,14 +312,18 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db)
 	struct sockaddr_in *sin, *sin2;
 	struct dns_header *dh;
 	struct question *question;
+	struct imsg	imsg;
 
 	int i, so, len;
+	int n;
 	int sel, maxso = 0;
 	int is_ipv6, axfr_acl;
 	int notifyfd[2];
+	int packetlen;
 
 	socklen_t fromlen;
 	char buf[512];
+	char *packet;
 	
 	time_t now;
 	pid_t pid;
@@ -327,7 +332,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db)
 
 #if __OpenBSD__
 #ifdef NEEDPLEDGE
-        if (pledge("stdio inet", NULL) < 0)
+        if (pledge("stdio inet recvfd", NULL) < 0)
  {
                 perror("pledge");
                 exit(1);
@@ -390,6 +395,10 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db)
 			if (maxso < afd[i])
 				maxso = afd[i];
 		}
+
+		FD_SET(ibuf->fd, &rset);
+		if (ibuf->fd > maxso)
+			maxso = ibuf->fd;
 		
 		if (notify) {
 			if (notifyfd[0] > -1) {
@@ -467,7 +476,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db)
 
 				switch (pid = fork()) {
 				case 0:
-					axfr_connection(so, address, is_ipv6, db);
+					axfr_connection(so, address, is_ipv6, db, NULL, 0);
 					exit(0);
 					/*NOTREACHED*/	
 				default:
@@ -478,6 +487,101 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db)
 			} /* if(FD_ISSET..) */
 
 		} /* for (i.. */
+	
+		if (FD_ISSET(ibuf->fd, &rset)) {
+			if ((n = imsg_read(ibuf)) < 0 && errno != EAGAIN) {
+				dolog(LOG_ERR, "imsg read failure %s\n", strerror(errno));
+				continue;
+			}
+
+			if (n == 0) {
+				/* child died? */
+				dolog(LOG_INFO, "sigpipe on child? exiting.\n");
+				exit(1);
+			}
+
+			for(;;) {
+				if ((n = imsg_get(ibuf, &imsg)) < 0) {
+					dolog(LOG_ERR, "imsg read error: %s\n", strerror(errno));
+					break;
+				} else {
+					if (n == 0)
+						break;
+					packetlen = imsg.hdr.len - IMSG_HEADER_SIZE;
+
+					switch (imsg.hdr.type) {
+					case IMSG_XFR_MESSAGE:
+						dolog(LOG_INFO, "received xfr via message passing\n");
+						packet = calloc(1, packetlen);
+						if (packet == NULL) {
+							dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+							break;
+						}
+
+						memcpy(packet, imsg.data, packetlen);
+						so = imsg.fd;
+
+						memset((char *)&from, 0, sizeof(from));
+						fromlen = sizeof(struct sockaddr_storage);
+						if (getpeername(so, (struct sockaddr *)&from, &fromlen) < 0) {
+							dolog(LOG_ERR, "getpeername: %s\n", strerror(errno));
+							close(so);
+							free(packet);
+							break;
+						}
+						if (from.ss_family == AF_INET6) {
+							is_ipv6 = 1;	
+					
+							fromlen = sizeof(struct sockaddr_in6);
+							sin6 = (struct sockaddr_in6 *)&from;
+							inet_ntop(AF_INET6, (void*)&sin6->sin6_addr, (char*)&address, sizeof(address));
+							axfr_acl = find_axfr((struct sockaddr_storage *)sin6, AF_INET6);
+
+						} else if (from.ss_family == AF_INET) {
+							is_ipv6 = 0;
+							
+							fromlen = sizeof(struct sockaddr_in);
+							sin = (struct sockaddr_in *)&from;
+							inet_ntop(AF_INET, (void*)&sin->sin_addr, (char*)&address, sizeof(address));
+
+							axfr_acl = find_axfr((struct sockaddr_storage *)sin, AF_INET);
+
+						} else {
+							dolog(LOG_INFO, "afd accept unknown family %d, close\n", from.ss_family);
+							close(so);
+							free(packet);
+							break;
+						}
+
+						if (! axfr_acl)	{
+							dolog(LOG_INFO, "connection from %s was not in our axfr acl, drop\n", address);
+							close(so);
+							free(packet);
+							break;
+				 		}
+
+						dolog(LOG_INFO, "AXFR connection from %s passed via descriptor-passing\n", address);
+
+						switch (pid = fork()) {
+							case 0:
+								axfr_connection(so, address, is_ipv6, db, packet, packetlen);
+								exit(0);
+								/*NOTREACHED*/	
+							default:
+								close(so);
+								free(packet);
+								break;
+						}
+
+						break;
+					default:
+						dolog(LOG_ERR, "received bad message on AXFR imsg\n");
+						break;
+					}
+					imsg_free(&imsg);
+				} /* else */
+			} /* for (;;) */
+		} /* if (FD_ISSET..) */
 
 		if (notify) {
 			if (notifyfd[0] > -1 && FD_ISSET(notifyfd[0], &rset)) {
@@ -653,7 +757,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db)
  */
 
 void
-axfr_connection(int so, char *address, int is_ipv6, ddDB *db)
+axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int packetlen)
 {
 
 	char buf[4000];
@@ -680,11 +784,24 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db)
 
 	ddDBT key, data;
 
+	if (packetlen > sizeof(buf)) {
+		dolog(LOG_ERR, "buffer size of buf is smaller than given packet, drop\n");
+		close(so);
+		exit(1);
+	}
+
 	for (;;) {
-		len = recv(so, p + offset, sizeof(buf) - offset, 0);
-		if (len <= 0) {
-			close(so);
-			exit(1);
+		if (packetlen == 0) {
+			len = recv(so, p + offset, sizeof(buf) - offset, 0);
+			if (len <= 0) {
+				close(so);
+				exit(1);
+			}
+	
+		} else {
+			len = packetlen;
+			memcpy(p, packet, packetlen);
+			packetlen = 0;
 		}
 		
 		/* 

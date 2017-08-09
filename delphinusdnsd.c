@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2002-2015 Peter J. Philipp
+ * Copyright (c) 2002-2017 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,13 +33,14 @@
 /* prototypes */
 
 extern void 	add_rrlimit(int, u_int16_t *, int, char *);
-extern void 	axfrloop(int *, int, char **, ddDB *);
+extern void 	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *);
 extern struct question	*build_fake_question(char *, int, u_int16_t);
 extern int 	check_ent(char *, int);
 extern int 	check_rrlimit(int, u_int16_t *, int, char *);
 extern u_int16_t check_qtype(struct domain *, u_int16_t, int, int *);
 extern void 	collects_init(void);
 extern void 	dolog(int, char *, ...);
+extern int     	find_axfr(struct sockaddr_storage *, int);
 extern int 	find_filter(struct sockaddr_storage *, int);
 extern int 	find_recurse(struct sockaddr_storage *, int);
 extern u_int8_t find_region(struct sockaddr_storage *, int);
@@ -96,12 +97,13 @@ int 			compress_label(u_char *, u_int16_t, int);
 int			free_question(struct question *);
 struct domain * 	get_soa(ddDB *, struct question *);
 int			lookup_type(int);
-void			mainloop(struct cfg *);
+void			mainloop(struct cfg *, struct imsgbuf **);
 void 			master_reload(int);
 void 			master_shutdown(int);
 void 			recurseheader(struct srecurseheader *, int, struct sockaddr_storage *, struct sockaddr_storage *, int);
-void 			setup_master(ddDB *, char **);
+void 			setup_master(ddDB *, char **, struct imsgbuf *ibuf);
 void 			slave_signal(int);
+void 			tcploop(struct cfg *, struct imsgbuf **);
 
 /* aliases */
 
@@ -149,25 +151,7 @@ uint8_t vslen = DD_VERSION_LEN;
 #endif
 int *ptr = NULL;
 
-/* singly linked list for tcp operations */
-SLIST_HEAD(listhead, tcps) tcpshead;
-
-static struct tcps {
-	char *input;
-	char *ident;
-	char *address;
-	int offset;
-	int length;
-	int maxlen;
-	int so;
-	int isv6;
-	u_int8_t region;
-	time_t time;
-	SLIST_ENTRY(tcps) tcps_entry;
-} *tn1, *tnp, *tntmp;
-
-
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.14 2017/07/11 15:57:16 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.15 2017/08/09 15:34:17 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -203,6 +187,7 @@ main(int argc, char *argv[])
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
 	struct cfg *cfg;
+	struct imsgbuf  **parent_ibuf, **child_ibuf;
 
 	static ddDB *db;
 
@@ -278,6 +263,34 @@ main(int argc, char *argv[])
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		exit(1);
 	}
+	/* imsg structs */
+	
+	parent_ibuf = calloc(3 + nflag, sizeof(struct imsgbuf *));
+	if (parent_ibuf == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	child_ibuf = calloc(3 + nflag, sizeof(struct imsgbuf *));
+	if (child_ibuf == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		exit(1);
+	}
+
+	for (i = 0; i < 3 + nflag; i++) {
+		child_ibuf[i] = calloc(1, sizeof(struct imsgbuf));
+		if (child_ibuf[i] == NULL) {
+			dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+			exit(1);
+		}
+		parent_ibuf[i] = calloc(1, sizeof(struct imsgbuf));
+		if (parent_ibuf[i] == NULL) {
+			dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+			exit(1);
+		}
+	}
+
+		
 		
 	/*
 	 * make a shared memory segment for signaling kills between 
@@ -306,15 +319,25 @@ main(int argc, char *argv[])
 
 	/* make a master program that holds the pidfile, boss of ... eek */
 
+	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]) < 0) {
+		dolog(LOG_INFO, "socketpair() failed\n");
+		slave_shutdown();
+		exit(1);
+	}
+
 	pid = fork();
 	switch (pid) {
 	case -1:
 		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
 		exit(1);
 	case 0:
+		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]);
+		imsg_init(child_ibuf[MY_IMSG_MASTER], cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
 		break;
 	default:
-		setup_master(db, av);
+		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
+		imsg_init(parent_ibuf[MY_IMSG_MASTER], cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]);
+		setup_master(db, av, parent_ibuf[MY_IMSG_MASTER]);
 		/* NOTREACHED */
 		exit(1);
 	}
@@ -458,7 +481,7 @@ main(int argc, char *argv[])
 				exit(1);
 			}
 
-			if (axfrport) {
+			if (axfrport && axfrport != 53) {
 				/* axfr port below */
 				hints.ai_socktype = SOCK_STREAM;
 				hints.ai_protocol = IPPROTO_TCP;
@@ -616,7 +639,7 @@ main(int argc, char *argv[])
 
 
 			/* axfr socket */
-			if (axfrport) {
+			if (axfrport && axfrport != 53) {
 				if ((afd[i] = socket(pifap->ifa_addr->sa_family, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 					dolog(LOG_INFO, "tcp socket: %s\n", strerror(errno));
 					slave_shutdown();
@@ -735,7 +758,7 @@ main(int argc, char *argv[])
 
 #if __OpenBSD__
 #ifdef NEEDPLEDGE
-	if (pledge("stdio inet rpath wpath cpath getpw proc id", NULL) < 0) {
+	if (pledge("stdio inet rpath wpath cpath getpw proc id sendfd recvfd", NULL) < 0) {
 		perror("pledge");
 		exit(1);
 	}
@@ -799,20 +822,32 @@ main(int argc, char *argv[])
 	 */
 
 	if (axfrport) {	
+		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[0]) < 0) {
+			dolog(LOG_INFO, "socketpair() failed\n");
+			slave_shutdown();
+			exit(1);
+		}
 		switch (pid = fork()) {
 		case 0:
 			/* close descriptors that we don't need */
 			for (j = 0; j < i; j++) {
 				close(tcp[j]);
 				close(udp[j]);
-				close(uafd[j]);
+				if (axfrport != 53)
+					close(uafd[j]);
 			}
+			close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]);
 
 #if !defined __APPLE__
 			setproctitle("AXFR engine on port %d", axfrport);
 #endif
 
-			axfrloop(afd, i, ident, db);
+			/* don't need master here */
+			close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
+			close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[1]);
+			imsg_init(parent_ibuf[MY_IMSG_AXFR], cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[0]);
+
+			axfrloop(afd, i, ident, db, parent_ibuf[MY_IMSG_AXFR]);
 			/* NOTREACHED */
 			exit(1);
 		default:
@@ -820,6 +855,9 @@ main(int argc, char *argv[])
 			for (j = 0; j < i; j++) {
 				close(afd[j]);
 			}
+			/* XXX these are reversed because we need to use child_ibuf later */
+			close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[0]);
+			imsg_init(child_ibuf[MY_IMSG_AXFR], cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[1]);
 
 			break;
 		}
@@ -850,7 +888,7 @@ main(int argc, char *argv[])
 				cfg->udp[i] = udp[i];
 				cfg->tcp[i] = tcp[i];
 
-				if (axfrport)
+				if (axfrport && axfrport != 53)
 					cfg->axfr[i] = uafd[i];
 
 				cfg->ident[i] = strdup(ident[i]);
@@ -859,7 +897,7 @@ main(int argc, char *argv[])
 			cfg->log = lfd;
 
 			
-			(void)mainloop(cfg);
+			(void)mainloop(cfg, child_ibuf);
 
 			/* NOTREACHED */
 		default:	
@@ -873,7 +911,7 @@ main(int argc, char *argv[])
 		cfg->udp[i] = udp[i];
 		cfg->tcp[i] = tcp[i];
 
-		if (axfrport)
+		if (axfrport && axfrport != 53)
 			cfg->axfr[i] = uafd[i];
 
 		cfg->ident[i] = strdup(ident[i]);
@@ -881,7 +919,7 @@ main(int argc, char *argv[])
 	cfg->log = lfd;
 
 
-	(void)mainloop(cfg);
+	(void)mainloop(cfg, child_ibuf);
 
 	/* NOTREACHED */
 	return (0);
@@ -1467,9 +1505,11 @@ get_soa(ddDB *db, struct question *question)
  */
 		
 void
-mainloop(struct cfg *cfg)
+mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 {
 	fd_set rset;
+	pid_t pid;
+
 	int sel;
 	int len, slen;
 	int is_ipv6;
@@ -1484,6 +1524,7 @@ mainloop(struct cfg *cfg)
 	int blacklist = 1;
 	int sp; 
 	int lfd;
+	int idata;
 
        u_int32_t received_ttl;
 #if defined __FreeBSD__ || defined __OpenBSD__
@@ -1496,7 +1537,6 @@ mainloop(struct cfg *cfg)
 
 	u_int8_t aregion;			/* region where the address comes from */
 
-	char *pbuf;
 	char buf[4096];
 	char *replybuf = NULL;
 	char address[INET6_ADDRSTRLEN];
@@ -1531,11 +1571,8 @@ mainloop(struct cfg *cfg)
 	struct cmsghdr *cmsg;
 #endif
 	struct iovec iov;
+	struct imsgbuf tcp_ibuf;
 	
-	int flag;
-
-	SLIST_INIT(&tcpshead);
-
 	replybuf = calloc(1, 65536);
 	if (replybuf == NULL) {
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
@@ -1543,65 +1580,61 @@ mainloop(struct cfg *cfg)
 		exit(1);
 	 }
 
+	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]) < 0) {
+		dolog(LOG_INFO, "socketpair() failed\n");
+		slave_shutdown();
+		exit(1);
+	}
+
+	pid = fork();
+	switch (pid) {
+	case -1:
+		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
+		exit(1);
+	case 0:
+		for (i = 0; i < cfg->sockcount; i++)  {
+				close(cfg->udp[i]);
+				close(cfg->axfr[i]);
+		}
+		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
+		close(cfg->my_imsg[MY_IMSG_TCP].imsg_fds[1]);
+		imsg_init(ibuf[MY_IMSG_TCP], cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]);
+		setproctitle("TCP engine");
+		tcploop(cfg, ibuf);
+		/* NOTREACHED */
+		exit(1);
+	default:
+		for (i = 0; i < cfg->sockcount; i++)  {
+				close(cfg->tcp[i]);
+		}
+		close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[0]);
+		close(cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]);
+		imsg_init(&tcp_ibuf, cfg->my_imsg[MY_IMSG_TCP].imsg_fds[1]);
+		break;
+	}
+
 
 	sp = cfg->recurse;
 	lfd = cfg->log;
 
-	/* 
-	 * set descriptors nonblocking, and listen on them
-	 */
-
-	for (i = 0; i < cfg->sockcount; i++) {
-		listen(cfg->tcp[i], 5);
-	}
-	
 	for (;;) {
 		is_ipv6 = 0;
 		maxso = 0;
-		/* 
-		 * check for timeouts 
-		 */
-
-#ifdef __linux__
-		SLIST_FOREACH(tnp, &tcpshead, tcps_entry) {
-#else
-		SLIST_FOREACH_SAFE(tnp, &tcpshead, tcps_entry, tntmp) {
-#endif
-			if ((tnp->time + 10) < time(NULL)) {
-				free(tnp->input);
-				free(tnp->ident);
-				free(tnp->address);
-				close(tnp->so);
-				SLIST_REMOVE(&tcpshead, tnp, tcps, tcps_entry);		
- 				free(tnp);
-			}
-		}
 
 		FD_ZERO(&rset);
 		for (i = 0; i < cfg->sockcount; i++)  {
-			if (maxso < cfg->tcp[i])
-				maxso = cfg->tcp[i];
-	
 			if (maxso < cfg->udp[i])
 				maxso = cfg->udp[i];
 
-			if (axfrport && maxso < cfg->axfr[i])
+			if (axfrport && axfrport != 53 && maxso < cfg->axfr[i])
 				maxso = cfg->axfr[i];
 
-			FD_SET(cfg->tcp[i], &rset);
 			FD_SET(cfg->udp[i], &rset);
 
-			if (axfrport)
+			if (axfrport && axfrport != 53)
 				FD_SET(cfg->axfr[i], &rset);
 		}
 	
-		SLIST_FOREACH(tnp, &tcpshead, tcps_entry) {
-			if (maxso < tnp->so)
-				maxso = tnp->so;
-
-			FD_SET(tnp->so, &rset);
-		}
-
 		if (logging.bind == 1) {
 			if (maxso < lfd)
 				maxso = lfd;
@@ -1619,671 +1652,18 @@ mainloop(struct cfg *cfg)
 		}
 
 		if (sel == 0) {
-#ifdef __linux__
-			SLIST_FOREACH(tnp, &tcpshead, tcps_entry) {
-#else
-			SLIST_FOREACH_SAFE(tnp, &tcpshead, tcps_entry, tntmp) {
-#endif
-				if ((tnp->time + 10) < time(NULL)) {
-					free(tnp->input);
-					free(tnp->ident);
-					free(tnp->address);
-					close(tnp->so);
-					SLIST_REMOVE(&tcpshead, tnp, tcps, tcps_entry);		
-					free(tnp);
-				}
-			}
+			/* send an imsg hello to the root owned process */
+
+			idata = 42;
+			imsg_compose(ibuf[MY_IMSG_MASTER], IMSG_HELLO_MESSAGE, 
+				0, 0, -1, &idata, sizeof(idata));
+			msgbuf_write(&ibuf[MY_IMSG_MASTER]->w);
+
 			continue;
 		}
 			
 		for (i = 0; i < cfg->sockcount; i++) {
-			if (FD_ISSET(cfg->tcp[i], &rset)) {
-				fromlen = sizeof(sockaddr_large);
-
-				so = accept(cfg->tcp[i], (struct sockaddr*)from, &fromlen);
-		
-				if (so < 0) {
-					dolog(LOG_INFO, "tcp accept: %s\n", strerror(errno));
-					continue;
-				}
-
-				if (from->sa_family == AF_INET6) {
-					is_ipv6 = 1;
-
-					fromlen = sizeof(struct sockaddr_in6);
-					sin6 = (struct sockaddr_in6 *)from;
-					inet_ntop(AF_INET6, (void *)&sin6->sin6_addr, (char *)&address, sizeof(address));
-					aregion = find_region((struct sockaddr_storage *)sin6, AF_INET6);
-					filter = find_filter((struct sockaddr_storage *)sin6, AF_INET6);
-					if (whitelist) {
-						blacklist = find_whitelist((struct sockaddr_storage *)sin6, AF_INET6);
-					}
-				} else if (from->sa_family == AF_INET) {
-					is_ipv6 = 0;
-					
-					fromlen = sizeof(struct sockaddr_in);
-					sin = (struct sockaddr_in *)from;
-					inet_ntop(AF_INET, (void *)&sin->sin_addr, (char *)&address, sizeof(address));
-					aregion = find_region((struct sockaddr_storage *)sin, AF_INET);
-					filter = find_filter((struct sockaddr_storage *)sin, AF_INET);
-					if (whitelist) {
-						blacklist = find_whitelist((struct sockaddr_storage *)sin, AF_INET);
-					}
-				} else {
-					dolog(LOG_INFO, "TCP packet received on descriptor %u interface \"%s\" had weird address family (%u), drop\n", so, cfg->ident[i], from->sa_family);
-					close(so);
-					continue;
-				}
-
-
-				if (filter) {
-					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, filter policy\n", so, cfg->ident[i], address);
-					close(so);
-					continue;
-				}
-
-				if (whitelist && blacklist == 0) {
-					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, whitelist policy\n", so, cfg->ident[i], address);
-					close(so);
-					continue;
-				}
-
-
-
-
-				/* 
-				 * make this socket nonblocking 
-				 */
-
-				if ((flag = fcntl(so,  F_GETFL)) < 0) {
-					dolog(LOG_INFO, "fcntl: %s\n", strerror(errno));
-				}
-				flag |= O_NONBLOCK;
-				if (fcntl(so, F_SETFL, flag) < 0) {
-					dolog(LOG_INFO, "fcntl 2: %s\n", strerror(errno));
-				}
-
-
-				/* fill the tcps struct */
-
-				tn1 = malloc(sizeof(struct tcps));
-				if (tn1 == NULL) {
-					dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-					close(so);
-					continue;
-				}
-
-				tn1->input = (char *)malloc(0xffff + 2);
-				if (tn1->input == NULL) {
-					dolog(LOG_INFO, "tcp malloc 2: %s\n", strerror(errno));
-					close(so);
-					continue;
-				}	
-
-				tn1->offset = 0;
-				tn1->length = 0;
-				tn1->maxlen = 0xffff + 2;
-				tn1->so = so;
-				tn1->isv6 = is_ipv6;	
-				tn1->ident = strdup(cfg->ident[i]);
-				tn1->address = strdup(address);
-				tn1->region = aregion;
-				tn1->time = time(NULL);
-
-				SLIST_INSERT_HEAD(&tcpshead, tn1, tcps_entry);
-	
-			} /* FD_ISSET(); */
-		} /* if sockcount */
-
-#ifdef __linux__
-		SLIST_FOREACH(tnp, &tcpshead, tcps_entry) {
-#else
-		SLIST_FOREACH_SAFE(tnp, &tcpshead, tcps_entry, tntmp) {
-#endif
-			if (FD_ISSET(tnp->so, &rset)) {
-					
-				istcp = 1;
-				len = recv(tnp->so, tnp->input + tnp->offset, tnp->maxlen - tnp->offset, 0);
-				if (len < 0) {
-					if (errno == EWOULDBLOCK)
-					continue;
-					else {
-						free(tnp->input);
-						free(tnp->ident);
-						free(tnp->address);
-						close(tnp->so);
-						SLIST_REMOVE(&tcpshead, tnp, tcps, tcps_entry);		
-						free(tnp);
-						continue;
-					}
-				} /* if len */
-
-				if (len == 0) {
-					free(tnp->input);
-					free(tnp->ident);
-					free(tnp->address);
-					close(tnp->so);
-					SLIST_REMOVE(&tcpshead, tnp, tcps, tcps_entry);		
-					free(tnp);
-					continue;
-				}
-
-				tnp->offset += len;
-				tnp->time = time(NULL);
-
-				if (tnp->offset >= 2) {	
-					tnp->length = ntohs(*((u_int16_t *) tnp->input));
-				}
-
-				/*
-				 * only go on if the full packet was written
-				 */
-
-				if (tnp->length + 2 != tnp->offset)
-					continue;
-
-				len = tnp->length;
-				pbuf = tnp->input + 2;
-
-				/* if UDP packet check length for minimum / maximum */
-				if (len > DNS_MAXUDP || len < sizeof(struct dns_header)){
-					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", tnp->so, tnp->ident, tnp->address);
-					goto drop;
-				}
-
-				dh = (struct dns_header *)&pbuf[0];	
-
-				/* check if we're a question or reply, drop replies */
-				if ((ntohs(dh->query) & DNS_REPLY)) {
-					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", tnp->so, tnp->ident, tnp->address);
-					goto drop;
-				}
-
-				/* 
-				 * if questions aren't exactly 1 then drop
-				 */
-
-				if (ntohs(dh->question) != 1) {
-					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", tnp->so, tnp->ident, tnp->address);
-
-					/* format error */
-					build_reply(	&sreply, tnp->so, pbuf, len, NULL, 
-									from, fromlen, NULL, NULL, tnp->region, 
-									istcp, 0, NULL, replybuf);
-
-					slen = reply_fmterror(&sreply);
-					dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", tnp->so, tnp->ident, tnp->address);
-					goto drop;
-				}
-					
-
-				if ((question = build_question(pbuf, len, ntohs(dh->additional))) == NULL) {
-					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", tnp->so, tnp->ident, tnp->address);
-					goto drop;
-				}
-				/* goto drop beyond this point should goto out instead */
-				fakequestion = NULL;
-
-				sd0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring);
-				if (type0 < 0) {
-	
-					switch (lzerrno) {
-					default:
-						dolog(LOG_INFO, "invalid lzerrno! dropping\n");
-						/* FALLTHROUGH */
-					case ERR_DROP:
-						snprintf(replystring, DNS_MAXNAME, "DROP");
-						goto tcpout;
-
-					case ERR_REFUSED:
-						if (ntohs(question->hdr->qclass) == DNS_CLASS_CH &&
-							ntohs(question->hdr->qtype) == DNS_TYPE_TXT &&
-								strcasecmp(question->converted_name, "version.bind.") == 0) {
-								snprintf(replystring, DNS_MAXNAME, "VERSION");
-								build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_version(&sreply);
-								goto tcpout;
-						}
-						snprintf(replystring, DNS_MAXNAME, "REFUSED");
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
-						slen = reply_refused(&sreply);
-						goto tcpout;
-						break;
-					case ERR_NXDOMAIN:
-						/* check if our question is for an ENT */
-						if (check_ent(question->hdr->name, question->hdr->namelen) == 1) {
-							if (dnssec) {
-								goto tcpnoerror;
-							} else {
-								snprintf(replystring, DNS_MAXNAME, "NODATA");
-								build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_nodata(&sreply);
-								goto tcpout;
-								break;
-							}	
-						} else {
-							goto tcpnxdomain;
-						}
-					case ERR_NOERROR:
-						/*
- 						 * this is hackish not sure if this should be here
-						 */
-
-tcpnoerror:
-						snprintf(replystring, DNS_MAXNAME, "NOERROR");
-
-						/*
-						 * lookup an authoritative soa
-						 */
-
-						if (sd0) {
-							free(sd0);
-							sd0 = NULL;
-						}
-
-						sd0 = get_soa(cfg->db, question);
-						if (sd0 != NULL) {
-
-								build_reply(	&sreply, tnp->so, pbuf, len, 
-												question, from, fromlen, 
-												sd0, NULL, tnp->region, istcp, 
-												0, NULL, replybuf);
-
-								slen = reply_noerror(&sreply, cfg->db);
-						}
-						goto tcpout;
-
-					}
-				}
-
-				switch (type0) {
-				case 0:
-					/* check for ents */
-					if (check_ent(question->hdr->name, question->hdr->namelen) == 1) {
-						if (dnssec) {
-							goto tcpnoerror;
-						} else {
-							snprintf(replystring, DNS_MAXNAME, "NODATA");
-							build_reply(&sreply, tnp->so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
-							slen = reply_nodata(&sreply);
-							goto tcpout;
-						}	
-					}
-
-
-					/*
-					 * lookup_zone could not find an RR for the
-					 * question at all -> nxdomain
-					 */
-tcpnxdomain:
-					snprintf(replystring, DNS_MAXNAME, "NXDOMAIN");
-
-					/* 
-					 * lookup an authoritative soa 
-					 */
-					if (sd0 != NULL) {
-			
-							build_reply(	&sreply, tnp->so, pbuf, len, question, 
-											from, fromlen, sd0, NULL, 
-											tnp->region, istcp, 0, NULL,
-											replybuf);
-
-							slen = reply_nxdomain(&sreply, cfg->db);
-					}
-					goto tcpout;
-				case DNS_TYPE_CNAME:
-					csd = (struct domain_cname *)find_substruct(sd0, INTERNAL_TYPE_CNAME);
-					fakequestion = build_fake_question(csd->cname, csd->cnamelen, question->hdr->qtype);
-					if (fakequestion == NULL) {	
-						dolog(LOG_INFO, "fakequestion failed\n");
-						break;
-					}
-
-					sd1 = lookup_zone(cfg->db, fakequestion, &type1, &lzerrno, (char *)&fakereplystring);
-					/* break CNAMES pointing to CNAMES */
-					if (type1 == DNS_TYPE_CNAME)
-						type1 = 0;
-					
-					break;	
-				default:
-
-					break;
-				}
-
-				/*
-				 * Allow CLASS IN, CHAOS and others are
-				 * not implemented and so we build a reply for
-				 * that and go out.
-				 */
-
-				switch (ntohs(question->hdr->qclass)) {
-				case DNS_CLASS_IN:
-					break;
-				default:
-					 build_reply(	&sreply, tnp->so, pbuf, len, question, 
-									from, fromlen, NULL, NULL, tnp->region, 
-									istcp, 0, NULL, replybuf);
-
-					slen = reply_notimpl(&sreply);
-					snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
-					goto tcpout;
-				}
-		
-				switch (ntohs(question->hdr->qtype)) {
-				case DNS_TYPE_A:
-					if (type0 == DNS_TYPE_CNAME) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, 	\
-							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							tnp->region, istcp, 0, NULL, replybuf);
-						slen = reply_cname(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
-
-						build_reply(&sreply, tnp->so, pbuf, len, question, 
-									from, fromlen, sd0, NULL, 
-									tnp->region, istcp, 0, NULL,
-									replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-						break;
-					} else if (type0 == DNS_TYPE_A) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, tnp->region, istcp, 0, 
-							NULL, replybuf);
-						slen = reply_a(&sreply, cfg->db);
-						break;		/* must break here */
-					}
-
-					break;
-
-				case DNS_TYPE_ANY:
-					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_any(&sreply);
-					break;		/* must break here */
-				case DNS_TYPE_NSEC3PARAM:
-					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_nsec3param(&sreply);
-					break;		/* must break here */
-					
-				case DNS_TYPE_NSEC3:
-					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_nxdomain(&sreply, cfg->db);
-					break;		/* must break here */
-					
-				case DNS_TYPE_NSEC:
-					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_nsec(&sreply);
-					break;		/* must break here */
-					
-				case DNS_TYPE_DS:
-					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_ds(&sreply);
-					break;		/* must break here */
-					
-				case DNS_TYPE_DNSKEY:
-					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_dnskey(&sreply);
-					break;		/* must break here */
-					
-				case DNS_TYPE_RRSIG:
-					build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, tnp->region, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_rrsig(&sreply, cfg->db);
-					break;		/* must break here */
-					
-				case DNS_TYPE_AAAA:
-					
-					if (type0 == DNS_TYPE_CNAME) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							tnp->region, istcp, 0, NULL, replybuf);
-						slen = reply_cname(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-						break;
-					 } else if (type0 == DNS_TYPE_AAAA) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, 
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_aaaa(&sreply, cfg->db);
-						break;		/* must break here */
-					}
-
-					break;
-				case DNS_TYPE_MX:
-					
-					if (type0 == DNS_TYPE_CNAME) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							tnp->region, istcp, 0, NULL, replybuf);
-
-						slen = reply_cname(&sreply);
-
-					} else if (type0 == DNS_TYPE_NS) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-
-						break;
-					} else if (type0 == DNS_TYPE_MX) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_mx(&sreply, cfg->db);
-						break;		/* must break here */
-					}
-
-					break;
-				case DNS_TYPE_SOA:
-					if (type0 == DNS_TYPE_SOA) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_soa(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-						break;
-					}
-					break;
-				case DNS_TYPE_NS:
-					if (type0 == DNS_TYPE_NS) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-					}
-					break;
-
-				case DNS_TYPE_TLSA:
-					if (type0 == DNS_TYPE_TLSA) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_tlsa(&sreply);
-					}
-					break;
-
-				case DNS_TYPE_SSHFP:
-					if (type0 == DNS_TYPE_SSHFP) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_sshfp(&sreply);
-					}
-					break;
-
-
-				case DNS_TYPE_SRV:
-					if (type0 == DNS_TYPE_SRV) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_srv(&sreply, cfg->db);
-					}
-					break;
-
-				case DNS_TYPE_NAPTR:
-					if (type0 == DNS_TYPE_NAPTR) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_naptr(&sreply, cfg->db);
-					}
-					break;
-
-				case DNS_TYPE_CNAME:
-					if (type0 == DNS_TYPE_CNAME) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_cname(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-						break;
-					}
-					break;
-
-				case DNS_TYPE_PTR:
-					if (type0 == DNS_TYPE_CNAME) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, ((type1 > 0) ? sd1 : NULL) \
-							, tnp->region, istcp, 0, NULL,
-							replybuf);
-
-						slen = reply_cname(&sreply);
-
-					} else if (type0 == DNS_TYPE_NS) {
-
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-
-						break;
-					} else if (type0 == DNS_TYPE_PTR) {
-
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, 	
-								fromlen, sd0, NULL, tnp->region, istcp, 
-								0, NULL, replybuf);
-
-						slen = reply_ptr(&sreply);
-						break;		/* must break here */
-					}
-					break;
-
-				case DNS_TYPE_TXT:
-					if (type0 == DNS_TYPE_TXT) {
-
-						build_reply(&sreply, tnp->so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, tnp->region, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_txt(&sreply);
-					}
-					break;
-
-				default:
-
-					/*
-					 * ANY unknown RR TYPE gets a NOTIMPL
-					 */
-
-					/*
-					 * except for delegations 
-					 */
-					
-					if (type0 == DNS_TYPE_NS) {
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-
-					} else {
-
-						build_reply(&sreply, tnp->so, pbuf, len, question, from, \
-						fromlen, NULL, NULL, tnp->region, istcp, 
-						0, NULL, replybuf);
-		
-						slen = reply_notimpl(&sreply);
-						snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
-					}
-					break;
-				}
-			
-		tcpout:
-				if (lflag)
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s answering \"%s\" (%d/%d)\n", tnp->so, tnp->ident, tnp->address, tnp->region, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", replystring, len, slen);
-
-
-				if (fakequestion != NULL) {
-					free_question(fakequestion);
-				}
-	
-				free_question(question);
-				
-				if (sd0) {
-					free(sd0);
-					sd0 = NULL;
-				}
-				if (sd1) {
-					free (sd1);
-					sd1 = NULL;
-				}
-
-			}	/* END ISSET */
-
-			memset(tnp->input, 0, tnp->maxlen);
-			tnp->offset = 0;
-
-		} /* SLIST_FOREACH */
-
-		/* UDP marriage */
-		for (i = 0; i < cfg->sockcount; i++) {
-			if (axfrport && FD_ISSET(cfg->axfr[i], &rset)) {
+			if (axfrport && axfrport != 53 && FD_ISSET(cfg->axfr[i], &rset)) {
 				istcp = 0;
 				so = cfg->axfr[i];
 
@@ -3056,12 +2436,19 @@ recurseheader(struct srecurseheader *rh, int proto, struct sockaddr_storage *src
  */
 
 void 
-setup_master(ddDB *db, char **av)
+setup_master(ddDB *db, char **av, struct imsgbuf *ibuf)
 {
-	//ddDB *destroy;
 	char buf[512];
 	pid_t pid;
 	int fd;
+	int sel, max = 0;
+
+	ssize_t n;
+	fd_set rset;
+
+	struct timeval tv;
+	struct domain *idata;
+	struct imsg imsg;
 
 #if __OpenBSD__
 #ifdef NEEDPLEDGE
@@ -3072,9 +2459,15 @@ setup_master(ddDB *db, char **av)
 #endif
 #endif
 	
-#if !defined __APPLE__
+	idata = (struct domain *)calloc(1, SIZENODE); 
+	if (idata == NULL) {
+		dolog(LOG_ERR, "couldn't malloc memory for idata\n");
+		pid = getpgrp();
+		killpg(pid, SIGTERM);
+		exit(1);
+	}
+			
 	setproctitle("delphinusdnsd master");
-#endif
 
 	fd = open(PIDFILE, O_WRONLY | O_APPEND | O_CREAT, 0644);
 	if (fd < 0) {
@@ -3095,46 +2488,87 @@ setup_master(ddDB *db, char **av)
 	signal(SIGQUIT, master_shutdown);
 	signal(SIGHUP, master_reload);
 
+	FD_ZERO(&rset);	
 	for (;;) {
-		sleep(1);
+		tv.tv_sec = 10;
+		tv.tv_usec = 0;
 
-		if (*ptr) {
-			dolog(LOG_INFO, "pid %u died, killing delphinusdnsd\n", *ptr);
-			master_shutdown(SIGTERM);
-		}
-
-		if (mshutdown) {
-			dolog(LOG_INFO, "shutting down on signal %d\n", msig);
-			unlink(PIDFILE);
-
-			pid = getpgrp();
-			killpg(pid, msig);
-
-			exit(0);
-		}
-
-		if (reload) {
-
-			signal(SIGTERM, SIG_IGN);
-
-			pid = getpgrp();
-			killpg(pid, SIGTERM);
-			if (munmap(ptr, sizeof(int)) < 0) {
-				dolog(LOG_ERR, "munmap: %s\n", strerror(errno));
+		FD_SET(ibuf->fd, &rset);
+		if (ibuf->fd > max)
+			max = ibuf->fd;
+	
+		sel = select(max + 1, &rset, NULL, NULL, &tv);
+		/* on signal or timeout check...*/
+		if (sel < 1) {
+			if (*ptr) {
+				dolog(LOG_INFO, "pid %u died, killing delphinusdnsd\n", *ptr);
+				master_shutdown(SIGTERM);
 			}
+
+			if (mshutdown) {
+				dolog(LOG_INFO, "shutting down on signal %d\n", msig);
+				unlink(PIDFILE);
+
+				pid = getpgrp();
+				killpg(pid, msig);
+
+				exit(0);
+			}
+
+			if (reload) {
+				signal(SIGTERM, SIG_IGN);
+
+				pid = getpgrp();
+				killpg(pid, SIGTERM);
+				if (munmap(ptr, sizeof(int)) < 0) {
+					dolog(LOG_ERR, "munmap: %s\n", strerror(errno));
+				}
 			
-			unlink(PIDFILE);
+				unlink(PIDFILE);
 
-			dolog(LOG_INFO, "restarting on SIGHUP\n");
+				dolog(LOG_INFO, "restarting on SIGHUP\n");
 
-			closelog();
-			if (execvp("/usr/local/sbin/delphinusdnsd", av) < 0) {
+				closelog();
+				if (execvp("/usr/local/sbin/delphinusdnsd", av) < 0) {
 					dolog(LOG_ERR, "execvp: %s\n", strerror(errno));
+				}
+				/* NOTREACHED */
+				exit(1);
+			}		
+			continue;
+		}
+	
+		if (FD_ISSET(ibuf->fd, &rset)) {
+
+			if ((n = imsg_read(ibuf)) < 0 && errno != EAGAIN) {
+				dolog(LOG_ERR, "imsg read failure %s\n", strerror(errno));
+				continue;
 			}
-			/* NOTREACHED */
-			exit(1);
-		}	
-	}
+			if (n == 0) {
+				/* child died? */
+				dolog(LOG_INFO, "sigpipe on child?  exiting.\n");
+				exit(1);
+			}
+
+			for (;;) {
+				if ((n = imsg_get(ibuf, &imsg)) < 0) {
+					dolog(LOG_ERR, "imsg read error: %s\n", strerror(errno));
+					break;
+				} else {
+					if (n == 0)
+						break;
+
+					switch(imsg.hdr.type) {
+					case IMSG_HELLO_MESSAGE:
+						/* dolog(LOG_DEBUG, "received hello from child\n"); */
+						break;
+					}
+
+					imsg_free(&imsg);
+				}
+			} /* for (;;) */
+		} /* FD_ISSET... */
+	} /* for (;;) */
 
 	/* NOTREACHED */
 }
@@ -3201,4 +2635,710 @@ lookup_type(int internal_type)
 		return -1;
 
 	return(array[internal_type]);
+}
+
+/*
+ * TCPLOOP - does the polling of tcp descriptors and if ready receives the 
+ * 		requests, builds the question and calls for replies, loops
+ *
+ */
+		
+void
+tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
+{
+	fd_set rset;
+	int sel;
+	int len, slen, length;
+	int is_ipv6;
+	int i;
+	int istcp = 1;
+	int maxso;
+	int so;
+	int type0, type1;
+	int lzerrno;
+	int filter = 0;
+	int blacklist = 1;
+	int axfr_acl = 0;
+	int sp; 
+	int lfd;
+
+	u_int8_t aregion;			/* region where the address comes from */
+
+	char *pbuf;
+	char buf[4096];
+	char *replybuf = NULL;
+	char address[INET6_ADDRSTRLEN];
+	char replystring[DNS_MAXNAME + 1];
+	char fakereplystring[DNS_MAXNAME + 1];
+
+	union {
+		struct sockaddr sa;
+		struct sockaddr_in sin;
+		struct sockaddr_in6 sin6;
+	} sockaddr_large;
+
+	socklen_t fromlen = sizeof(sockaddr_large);
+
+	struct sockaddr *from = (void *)&sockaddr_large;
+	struct sockaddr_in *sin;
+	struct sockaddr_in6 *sin6;
+
+	struct dns_header *dh;
+	struct question *question = NULL, *fakequestion = NULL;
+	struct domain *sd0 = NULL, *sd1 = NULL;
+	struct domain_cname *csd;
+	
+	struct sreply sreply;
+	struct timeval tv = { 10, 0};
+
+#ifndef NEEDPLEDGE
+	struct cmsghdr *cmsg;
+#endif
+	replybuf = calloc(1, 65536);
+	if (replybuf == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		slave_shutdown();
+		exit(1);
+	}
+
+
+	sp = cfg->recurse;
+	lfd = cfg->log;
+
+	/* 
+	 * set descriptors nonblocking, and listen on them
+	 */
+
+	for (i = 0; i < cfg->sockcount; i++) {
+		listen(cfg->tcp[i], 5);
+	}
+	
+	for (;;) {
+		is_ipv6 = 0;
+		maxso = 0;
+
+		FD_ZERO(&rset);
+		for (i = 0; i < cfg->sockcount; i++)  {
+			if (maxso < cfg->tcp[i])
+				maxso = cfg->tcp[i];
+	
+			FD_SET(cfg->tcp[i], &rset);
+		}
+	
+		tv.tv_sec = 10;
+		tv.tv_usec = 0;
+
+		sel = select(maxso + 1, &rset, NULL, NULL, &tv);
+
+		if (sel < 0) {
+			dolog(LOG_INFO, "select: %s\n", strerror(errno));
+			continue;
+		}
+
+		if (sel == 0) {
+			continue;
+		}
+			
+		for (i = 0; i < cfg->sockcount; i++) {
+			if (FD_ISSET(cfg->tcp[i], &rset)) {
+				fromlen = sizeof(sockaddr_large);
+
+				so = accept(cfg->tcp[i], (struct sockaddr*)from, &fromlen);
+		
+				if (so < 0) {
+					dolog(LOG_INFO, "tcp accept: %s\n", strerror(errno));
+					continue;
+				}
+
+				if (from->sa_family == AF_INET6) {
+					is_ipv6 = 1;
+
+					fromlen = sizeof(struct sockaddr_in6);
+					sin6 = (struct sockaddr_in6 *)from;
+					inet_ntop(AF_INET6, (void *)&sin6->sin6_addr, (char *)&address, sizeof(address));
+					aregion = find_region((struct sockaddr_storage *)sin6, AF_INET6);
+					filter = find_filter((struct sockaddr_storage *)sin6, AF_INET6);
+					if (whitelist) {
+						blacklist = find_whitelist((struct sockaddr_storage *)sin6, AF_INET6);
+					}
+					axfr_acl = find_axfr((struct sockaddr_storage *)sin6, AF_INET6);
+				} else if (from->sa_family == AF_INET) {
+					is_ipv6 = 0;
+					
+					fromlen = sizeof(struct sockaddr_in);
+					sin = (struct sockaddr_in *)from;
+					inet_ntop(AF_INET, (void *)&sin->sin_addr, (char *)&address, sizeof(address));
+					aregion = find_region((struct sockaddr_storage *)sin, AF_INET);
+					filter = find_filter((struct sockaddr_storage *)sin, AF_INET);
+					if (whitelist) {
+						blacklist = find_whitelist((struct sockaddr_storage *)sin, AF_INET);
+					}
+					axfr_acl = find_axfr((struct sockaddr_storage *)sin, AF_INET);
+				} else {
+					dolog(LOG_INFO, "TCP packet received on descriptor %u interface \"%s\" had weird address family (%u), drop\n", so, cfg->ident[i], from->sa_family);
+					close(so);
+					continue;
+				}
+
+
+				if (filter) {
+					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, filter policy\n", so, cfg->ident[i], address);
+					close(so);
+					continue;
+				}
+
+				if (whitelist && blacklist == 0) {
+					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, whitelist policy\n", so, cfg->ident[i], address);
+					close(so);
+					continue;
+				}
+
+				/* continue on pjp */
+
+				len = recv(so, buf, sizeof(buf), 0);
+				if (len < 0) {
+					close(so);
+					continue;
+				} /* if len */
+
+				if (len == 0) {
+					close(so);
+					continue;
+				}
+
+				if (len >= 2) {	
+					length = ntohs(*((u_int16_t *)&buf[0]));
+				}
+
+				len = length;
+				pbuf = &buf[2];
+
+				if (len > DNS_MAXUDP || len < sizeof(struct dns_header)){
+					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
+					goto drop;
+				}
+
+				dh = (struct dns_header *)&pbuf[0];	
+
+				/* check if we're a question or reply, drop replies */
+				if ((ntohs(dh->query) & DNS_REPLY)) {
+					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
+					goto drop;
+				}
+
+				/* 
+				 * if questions aren't exactly 1 then drop
+				 */
+
+				if (ntohs(dh->question) != 1) {
+					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
+
+					/* format error */
+					build_reply(	&sreply, so, pbuf, len, NULL, 
+									from, fromlen, NULL, NULL, aregion, 
+									istcp, 0, NULL, replybuf);
+
+					slen = reply_fmterror(&sreply);
+					dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
+					goto drop;
+				}
+					
+				if ((question = build_question(pbuf, len, ntohs(dh->additional))) == NULL) {
+					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
+					goto drop;
+				}
+				/* goto drop beyond this point should goto out instead */
+				fakequestion = NULL;
+
+				/*
+				 * we check now for AXFR's in the query and deny if not found
+				 * in our list of AXFR'ers
+				 */
+
+				switch (ntohs(question->hdr->qtype)) {
+				case DNS_TYPE_AXFR:
+				case DNS_TYPE_IXFR:
+					if (! axfr_acl) {
+						dolog(LOG_INFO, "AXFR connection from %s on interface \"%s\" was not in our axfr acl, drop\n", address, cfg->ident[i]);
+							
+						snprintf(replystring, DNS_MAXNAME, "DROP");
+						goto tcpout;
+					}
+					break;
+				default:
+					break;
+				}
+
+				sd0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring);
+				if (type0 < 0) {
+	
+					switch (lzerrno) {
+					default:
+						dolog(LOG_INFO, "invalid lzerrno! dropping\n");
+						/* FALLTHROUGH */
+					case ERR_DROP:
+						snprintf(replystring, DNS_MAXNAME, "DROP");
+						goto tcpout;
+
+					case ERR_REFUSED:
+						if (ntohs(question->hdr->qclass) == DNS_CLASS_CH &&
+							ntohs(question->hdr->qtype) == DNS_TYPE_TXT &&
+								strcasecmp(question->converted_name, "version.bind.") == 0) {
+								snprintf(replystring, DNS_MAXNAME, "VERSION");
+								build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+								slen = reply_version(&sreply);
+								goto tcpout;
+						}
+						snprintf(replystring, DNS_MAXNAME, "REFUSED");
+						build_reply(&sreply, so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+						slen = reply_refused(&sreply);
+						goto tcpout;
+						break;
+					case ERR_NXDOMAIN:
+						/* check if our question is for an ENT */
+						if (check_ent(question->hdr->name, question->hdr->namelen) == 1) {
+							if (dnssec) {
+								goto tcpnoerror;
+							} else {
+								snprintf(replystring, DNS_MAXNAME, "NODATA");
+								build_reply(&sreply, so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+								slen = reply_nodata(&sreply);
+								goto tcpout;
+								break;
+							}	
+						} else {
+							goto tcpnxdomain;
+						}
+					case ERR_NOERROR:
+						/*
+ 						 * this is hackish not sure if this should be here
+						 */
+
+tcpnoerror:
+						snprintf(replystring, DNS_MAXNAME, "NOERROR");
+
+						/*
+						 * lookup an authoritative soa
+						 */
+
+						if (sd0) {
+							free(sd0);
+							sd0 = NULL;
+						}
+
+						sd0 = get_soa(cfg->db, question);
+						if (sd0 != NULL) {
+
+								build_reply(	&sreply, so, pbuf, len, 
+												question, from, fromlen, 
+												sd0, NULL, aregion, istcp, 
+												0, NULL, replybuf);
+
+								slen = reply_noerror(&sreply, cfg->db);
+						}
+						goto tcpout;
+
+					}
+				}
+
+				switch (type0) {
+				case 0:
+					/* check for ents */
+					if (check_ent(question->hdr->name, question->hdr->namelen) == 1) {
+						if (dnssec) {
+							goto tcpnoerror;
+						} else {
+							snprintf(replystring, DNS_MAXNAME, "NODATA");
+							build_reply(&sreply, so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+							slen = reply_nodata(&sreply);
+							goto tcpout;
+						}	
+					}
+
+
+					/*
+					 * lookup_zone could not find an RR for the
+					 * question at all -> nxdomain
+					 */
+tcpnxdomain:
+					snprintf(replystring, DNS_MAXNAME, "NXDOMAIN");
+
+					/* 
+					 * lookup an authoritative soa 
+					 */
+					if (sd0 != NULL) {
+			
+							build_reply(	&sreply, so, pbuf, len, question, 
+											from, fromlen, sd0, NULL, 
+											aregion, istcp, 0, NULL,
+											replybuf);
+
+							slen = reply_nxdomain(&sreply, cfg->db);
+					}
+					goto tcpout;
+				case DNS_TYPE_CNAME:
+					csd = (struct domain_cname *)find_substruct(sd0, INTERNAL_TYPE_CNAME);
+					fakequestion = build_fake_question(csd->cname, csd->cnamelen, question->hdr->qtype);
+					if (fakequestion == NULL) {	
+						dolog(LOG_INFO, "fakequestion failed\n");
+						break;
+					}
+
+					sd1 = lookup_zone(cfg->db, fakequestion, &type1, &lzerrno, (char *)&fakereplystring);
+					/* break CNAMES pointing to CNAMES */
+					if (type1 == DNS_TYPE_CNAME)
+						type1 = 0;
+					
+					break;	
+				default:
+
+					break;
+				}
+
+				/*
+				 * Allow CLASS IN, CHAOS and others are
+				 * not implemented and so we build a reply for
+				 * that and go out.
+				 */
+
+				switch (ntohs(question->hdr->qclass)) {
+				case DNS_CLASS_IN:
+					break;
+				default:
+					 build_reply(	&sreply, so, pbuf, len, question, 
+									from, fromlen, NULL, NULL, aregion, 
+									istcp, 0, NULL, replybuf);
+
+					slen = reply_notimpl(&sreply);
+					snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
+					goto tcpout;
+				}
+		
+				switch (ntohs(question->hdr->qtype)) {
+				case DNS_TYPE_IXFR:
+					/* FALLTHROUGH */
+				case DNS_TYPE_AXFR:
+					dolog(LOG_INFO, "composed AXFR message to axfr process\n");
+					imsg_compose(ibuf[MY_IMSG_AXFR], IMSG_XFR_MESSAGE, 0, 0, so, buf, len + 2);
+					msgbuf_write(&ibuf[MY_IMSG_AXFR]->w);
+					close(so);
+					continue;
+					break;
+				case DNS_TYPE_A:
+					if (type0 == DNS_TYPE_CNAME) {
+						build_reply(&sreply, so, pbuf, len, question, from, 	\
+							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
+							aregion, istcp, 0, NULL, replybuf);
+						slen = reply_cname(&sreply);
+					} else if (type0 == DNS_TYPE_NS) {
+
+						build_reply(&sreply, so, pbuf, len, question, 
+									from, fromlen, sd0, NULL, 
+									aregion, istcp, 0, NULL,
+									replybuf);
+
+						slen = reply_ns(&sreply, cfg->db);
+						break;
+					} else if (type0 == DNS_TYPE_A) {
+						build_reply(&sreply, so, pbuf, len, question, from, \
+							fromlen, sd0, NULL, aregion, istcp, 0, 
+							NULL, replybuf);
+						slen = reply_a(&sreply, cfg->db);
+						break;		/* must break here */
+					}
+
+					break;
+
+				case DNS_TYPE_ANY:
+					build_reply(&sreply, so, pbuf, len, question, from, \
+						fromlen, sd0, NULL, aregion, istcp, 0, 
+						NULL, replybuf);
+
+					slen = reply_any(&sreply);
+					break;		/* must break here */
+				case DNS_TYPE_NSEC3PARAM:
+					build_reply(&sreply, so, pbuf, len, question, from, \
+						fromlen, sd0, NULL, aregion, istcp, 0, 
+						NULL, replybuf);
+
+					slen = reply_nsec3param(&sreply);
+					break;		/* must break here */
+					
+				case DNS_TYPE_NSEC3:
+					build_reply(&sreply, so, pbuf, len, question, from, \
+						fromlen, sd0, NULL, aregion, istcp, 0, 
+						NULL, replybuf);
+
+					slen = reply_nxdomain(&sreply, cfg->db);
+					break;		/* must break here */
+					
+				case DNS_TYPE_DS:
+					build_reply(&sreply, so, pbuf, len, question, from, \
+						fromlen, sd0, NULL, aregion, istcp, 0, 
+						NULL, replybuf);
+
+					slen = reply_ds(&sreply);
+					break;		/* must break here */
+					
+				case DNS_TYPE_DNSKEY:
+					build_reply(&sreply, so, pbuf, len, question, from, \
+						fromlen, sd0, NULL, aregion, istcp, 0, 
+						NULL, replybuf);
+
+					slen = reply_dnskey(&sreply);
+					break;		/* must break here */
+					
+				case DNS_TYPE_RRSIG:
+					build_reply(&sreply, so, pbuf, len, question, from, \
+						fromlen, sd0, NULL, aregion, istcp, 0, 
+						NULL, replybuf);
+
+					slen = reply_rrsig(&sreply, cfg->db);
+					break;		/* must break here */
+					
+				case DNS_TYPE_AAAA:
+					
+					if (type0 == DNS_TYPE_CNAME) {
+						build_reply(&sreply, so, pbuf, len, question, from, \
+							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
+							aregion, istcp, 0, NULL, replybuf);
+						slen = reply_cname(&sreply);
+					} else if (type0 == DNS_TYPE_NS) {
+						build_reply(&sreply, so, pbuf, len, question, from, \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_ns(&sreply, cfg->db);
+						break;
+					 } else if (type0 == DNS_TYPE_AAAA) {
+						build_reply(&sreply, so, pbuf, len, question, from, 
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_aaaa(&sreply, cfg->db);
+						break;		/* must break here */
+					}
+
+					break;
+				case DNS_TYPE_MX:
+					
+					if (type0 == DNS_TYPE_CNAME) {
+						build_reply(&sreply, so, pbuf, len, question, from, \
+							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
+							aregion, istcp, 0, NULL, replybuf);
+
+						slen = reply_cname(&sreply);
+
+					} else if (type0 == DNS_TYPE_NS) {
+						build_reply(&sreply, so, pbuf, len, question, from, \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_ns(&sreply, cfg->db);
+
+						break;
+					} else if (type0 == DNS_TYPE_MX) {
+						build_reply(&sreply, so, pbuf, len, question, from,  \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_mx(&sreply, cfg->db);
+						break;		/* must break here */
+					}
+
+					break;
+				case DNS_TYPE_SOA:
+					if (type0 == DNS_TYPE_SOA) {
+						build_reply(&sreply, so, pbuf, len, question, from, \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_soa(&sreply);
+					} else if (type0 == DNS_TYPE_NS) {
+						build_reply(&sreply, so, pbuf, len, question, from, \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_ns(&sreply, cfg->db);
+						break;
+					}
+					break;
+				case DNS_TYPE_NS:
+					if (type0 == DNS_TYPE_NS) {
+						build_reply(&sreply, so, pbuf, len, question, from,  \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_ns(&sreply, cfg->db);
+					}
+					break;
+
+				case DNS_TYPE_TLSA:
+					if (type0 == DNS_TYPE_TLSA) {
+						build_reply(&sreply, so, pbuf, len, question, from,  \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_tlsa(&sreply);
+					}
+					break;
+
+				case DNS_TYPE_SSHFP:
+					if (type0 == DNS_TYPE_SSHFP) {
+						build_reply(&sreply, so, pbuf, len, question, from,  \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_sshfp(&sreply);
+					}
+					break;
+
+
+				case DNS_TYPE_SRV:
+					if (type0 == DNS_TYPE_SRV) {
+						build_reply(&sreply, so, pbuf, len, question, from,  \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_srv(&sreply, cfg->db);
+					}
+					break;
+
+				case DNS_TYPE_NAPTR:
+					if (type0 == DNS_TYPE_NAPTR) {
+						build_reply(&sreply, so, pbuf, len, question, from,  \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_naptr(&sreply, cfg->db);
+					}
+					break;
+
+				case DNS_TYPE_CNAME:
+					if (type0 == DNS_TYPE_CNAME) {
+						build_reply(&sreply, so, pbuf, len, question, from, \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_cname(&sreply);
+					} else if (type0 == DNS_TYPE_NS) {
+						build_reply(&sreply, so, pbuf, len, question, from, \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_ns(&sreply, cfg->db);
+						break;
+					}
+					break;
+
+				case DNS_TYPE_PTR:
+					if (type0 == DNS_TYPE_CNAME) {
+						build_reply(&sreply, so, pbuf, len, question, from, \
+							fromlen, sd0, ((type1 > 0) ? sd1 : NULL) \
+							, aregion, istcp, 0, NULL,
+							replybuf);
+
+						slen = reply_cname(&sreply);
+
+					} else if (type0 == DNS_TYPE_NS) {
+
+						build_reply(&sreply, so, pbuf, len, question, from, \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_ns(&sreply, cfg->db);
+
+						break;
+					} else if (type0 == DNS_TYPE_PTR) {
+
+						build_reply(&sreply, so, pbuf, len, question, from, 	
+								fromlen, sd0, NULL, aregion, istcp, 
+								0, NULL, replybuf);
+
+						slen = reply_ptr(&sreply);
+						break;		/* must break here */
+					}
+					break;
+
+				case DNS_TYPE_TXT:
+					if (type0 == DNS_TYPE_TXT) {
+
+						build_reply(&sreply, so, pbuf, len, question, from,  \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_txt(&sreply);
+					}
+					break;
+
+				default:
+
+					/*
+					 * ANY unknown RR TYPE gets a NOTIMPL
+					 */
+
+					/*
+					 * except for delegations 
+					 */
+					
+					if (type0 == DNS_TYPE_NS) {
+						build_reply(&sreply, so, pbuf, len, question, from, \
+							fromlen, sd0, NULL, aregion, istcp, 
+							0, NULL, replybuf);
+
+						slen = reply_ns(&sreply, cfg->db);
+
+					} else {
+
+						build_reply(&sreply, so, pbuf, len, question, from, \
+						fromlen, NULL, NULL, aregion, istcp, 
+						0, NULL, replybuf);
+		
+						slen = reply_notimpl(&sreply);
+						snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
+					}
+					break;
+				}
+			
+		tcpout:
+				if (lflag)
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s answering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", replystring, len, slen);
+
+
+				if (fakequestion != NULL) {
+					free_question(fakequestion);
+				}
+	
+				free_question(question);
+				
+				if (sd0) {
+					free(sd0);
+					sd0 = NULL;
+				}
+				if (sd1) {
+					free (sd1);
+					sd1 = NULL;
+				}
+
+				close(so);
+			}	/* END ISSET */
+		} /* for (i = 0;;)... */
+	drop:
+		
+		if (sd0) {	
+			free(sd0);
+			sd0 = NULL;
+		}
+
+		if (sd1) {
+			free(sd1);
+			sd1 = NULL;
+		}
+
+		close(so);
+
+		continue;
+	}  /* for (;;) */
+
+	/* NOTREACHED */
 }

@@ -54,7 +54,7 @@ static struct ententry {
 } *ent2, *entp;
 
 
-static const char rcsid[] = "$Id: ent.c,v 1.2 2017/06/26 20:28:50 pjp Exp $";
+static const char rcsid[] = "$Id: ent.c,v 1.3 2017/08/09 15:34:17 pjp Exp $";
 
 
 #if 0
@@ -75,8 +75,8 @@ extern int domaincmp(struct node *e1, struct node *e2);
 
 
 RB_HEAD(domaintree, node) rbhead;
-RB_PROTOTYPE_STATIC(domaintree, node, entry, domaincmp)
-RB_GENERATE_STATIC(domaintree, node, entry, domaincmp)
+RB_PROTOTYPE_STATIC(domaintree, node, rbentry, domaincmp)
+RB_GENERATE_STATIC(domaintree, node, rbentry, domaincmp)
 
 /*
  * INIT_ENTLIST - initialize the ent singly linked list

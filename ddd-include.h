@@ -60,6 +60,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
@@ -71,6 +72,7 @@
 #include <dirent.h>
 #include <signal.h>
 #include <time.h>
+#include <imsg.h>
 
 #ifdef __linux__
 #include <grp.h>

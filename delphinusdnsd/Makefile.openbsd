@@ -8,7 +8,7 @@ SRCS=delphinusdnsd.c parse.y reply.c additional.c region.c log.c axfr.c filter.c
 CFLAGS= -Wall -g
 CFLAGS+= -I${.CURDIR}/.. 
 LDFLAGS= -Wall -g
-LDADD= -lcrypto -lssl
+LDADD= -lcrypto -lssl -lutil
 LDLIBS= 
 
 OBJDIR=.

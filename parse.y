@@ -68,7 +68,7 @@ extern uint8_t vslen;
 
 TAILQ_HEAD(files, file)          files = TAILQ_HEAD_INITIALIZER(files);
 static struct file {
-        TAILQ_ENTRY(file)        entry;
+        TAILQ_ENTRY(file)        file_entry;
         FILE                    *stream;
         char                    *name;
         int                      lineno;
@@ -103,7 +103,7 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.45 2017/06/26 20:28:50 pjp Exp $";
+static const char rcsid[] = "$Id: parse.y,v 1.46 2017/08/09 15:34:17 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
@@ -3626,7 +3626,7 @@ pushfile(const char *name, int secret)
 		time_changed = (time_t)sb.st_ctime; /* ufs1 is only 32 bits */
 
         nfile->lineno = 1;
-        TAILQ_INSERT_TAIL(&files, nfile, entry);
+        TAILQ_INSERT_TAIL(&files, nfile, file_entry);
         return (nfile);
 }
 
@@ -3680,10 +3680,10 @@ popfile(void)
 {
         struct file     *prev;
 
-        if ((prev = TAILQ_PREV(file, files, entry)) != NULL)
+        if ((prev = TAILQ_PREV(file, files, file_entry)) != NULL)
                 prev->errors += file->errors;
 
-        TAILQ_REMOVE(&files, file, entry);
+        TAILQ_REMOVE(&files, file, file_entry);
         fclose(file->stream);
         free(file->name);
         free(file);

@@ -34,6 +34,11 @@
 #define CONFFILE "/etc/delphinusdns.conf"
 #define DEFAULT_SOCKET 64
 
+#define IMSG_HELLO_MESSAGE  0		/* hello the master process a few */
+#define IMSG_SPREAD_MESSAGE 1		/* spread a record to all childs */
+#define IMSG_XFR_MESSAGE    2		/* forward message to axfr proc */
+#define IMSG_XFRFD_MESSAGE  3		/* forward message fd to axfr proc */
+
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2
 #define ERR_NOERROR	0x4
@@ -463,7 +468,7 @@ typedef struct __dddb {
 		sizeof(struct domain_nsec3param) + sizeof(struct domain_ds) )
 
 struct node {
-        RB_ENTRY(node) entry;		/* the node entry */
+        RB_ENTRY(node) rbentry;		/* the node entry */
 	char domainname[256];		/* domain name key name */
         int len;			/* length of domain name */
 	char *data;			/* data it points to */
@@ -476,6 +481,12 @@ struct cfg {
 	int tcp[DEFAULT_SOCKET];	/* tcp socket */
 	int axfr[DEFAULT_SOCKET];	/* axfr udp socket */
 	char *ident[DEFAULT_SOCKET];	/* identification of interface */
+	struct my_imsg {
+		int imsg_fds[2];
+	} my_imsg[100];
+#define MY_IMSG_MASTER	0
+#define MY_IMSG_AXFR 	1
+#define MY_IMSG_TCP	2
 	int recurse;			/* recurse socket */
 	int log;			/* logging socket */
 	int sockcount;			/* set sockets */

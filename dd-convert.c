@@ -148,7 +148,7 @@ extern char * base32hex_encode(u_char *input, int len);
 
 extern int domaincmp(struct node *e1, struct node *e2);
 RB_HEAD(domaintree, node) rbhead;
-RB_GENERATE_STATIC(domaintree, node, entry, domaincmp)
+RB_GENERATE_STATIC(domaintree, node, rbentry, domaincmp)
 
 
 
