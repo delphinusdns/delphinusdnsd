@@ -151,7 +151,7 @@ uint8_t vslen = DD_VERSION_LEN;
 #endif
 int *ptr = NULL;
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.15 2017/08/09 15:34:17 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.16 2017/08/10 09:49:49 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -2706,13 +2706,13 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	lfd = cfg->log;
 
 	/* 
-	 * set descriptors nonblocking, and listen on them
+	 * listen on descriptors
 	 */
 
 	for (i = 0; i < cfg->sockcount; i++) {
 		listen(cfg->tcp[i], 5);
 	}
-	
+
 	for (;;) {
 		is_ipv6 = 0;
 		maxso = 0;
@@ -2793,10 +2793,23 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					continue;
 				}
 
-				/* continue on pjp */
+				/*
+				 * We wrap a 3 second alarm, 3000 ms is a long
+				 * time on the Internet so this is ok...
+				 */
+				tv.tv_sec = 3;
+				tv.tv_usec = 0;
+				if (setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+					close(so);
+					continue;
+				}
 
 				len = recv(so, buf, sizeof(buf), 0);
 				if (len < 0) {
+					if (errno == EWOULDBLOCK) {
+						dolog(LOG_INFO, "TCP socket timed out on descriptor %d interface \"%s\" from %s\n", so, cfg->ident[i], address);
+					}
 					close(so);
 					continue;
 				} /* if len */
