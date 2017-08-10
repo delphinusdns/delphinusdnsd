@@ -151,7 +151,7 @@ uint8_t vslen = DD_VERSION_LEN;
 #endif
 int *ptr = NULL;
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.16 2017/08/10 09:49:49 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.17 2017/08/10 10:32:21 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -481,7 +481,7 @@ main(int argc, char *argv[])
 				exit(1);
 			}
 
-			if (axfrport && axfrport != 53) {
+			if (axfrport && axfrport != port) {
 				/* axfr port below */
 				hints.ai_socktype = SOCK_STREAM;
 				hints.ai_protocol = IPPROTO_TCP;
@@ -639,7 +639,7 @@ main(int argc, char *argv[])
 
 
 			/* axfr socket */
-			if (axfrport && axfrport != 53) {
+			if (axfrport && axfrport != port) {
 				if ((afd[i] = socket(pifap->ifa_addr->sa_family, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 					dolog(LOG_INFO, "tcp socket: %s\n", strerror(errno));
 					slave_shutdown();
@@ -833,7 +833,7 @@ main(int argc, char *argv[])
 			for (j = 0; j < i; j++) {
 				close(tcp[j]);
 				close(udp[j]);
-				if (axfrport != 53)
+				if (axfrport != port)
 					close(uafd[j]);
 			}
 			close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]);
@@ -888,7 +888,7 @@ main(int argc, char *argv[])
 				cfg->udp[i] = udp[i];
 				cfg->tcp[i] = tcp[i];
 
-				if (axfrport && axfrport != 53)
+				if (axfrport && axfrport != port)
 					cfg->axfr[i] = uafd[i];
 
 				cfg->ident[i] = strdup(ident[i]);
@@ -911,7 +911,7 @@ main(int argc, char *argv[])
 		cfg->udp[i] = udp[i];
 		cfg->tcp[i] = tcp[i];
 
-		if (axfrport && axfrport != 53)
+		if (axfrport && axfrport != port)
 			cfg->axfr[i] = uafd[i];
 
 		cfg->ident[i] = strdup(ident[i]);
@@ -1626,12 +1626,12 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 			if (maxso < cfg->udp[i])
 				maxso = cfg->udp[i];
 
-			if (axfrport && axfrport != 53 && maxso < cfg->axfr[i])
+			if (axfrport && axfrport != port && maxso < cfg->axfr[i])
 				maxso = cfg->axfr[i];
 
 			FD_SET(cfg->udp[i], &rset);
 
-			if (axfrport && axfrport != 53)
+			if (axfrport && axfrport != port)
 				FD_SET(cfg->axfr[i], &rset);
 		}
 	
@@ -1663,7 +1663,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 		}
 			
 		for (i = 0; i < cfg->sockcount; i++) {
-			if (axfrport && axfrport != 53 && FD_ISSET(cfg->axfr[i], &rset)) {
+			if (axfrport && axfrport != port && FD_ISSET(cfg->axfr[i], &rset)) {
 				istcp = 0;
 				so = cfg->axfr[i];
 
