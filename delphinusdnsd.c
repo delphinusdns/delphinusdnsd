@@ -151,7 +151,7 @@ uint8_t vslen = DD_VERSION_LEN;
 #endif
 int *ptr = NULL;
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.17 2017/08/10 10:32:21 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.18 2017/08/10 11:00:43 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -836,7 +836,6 @@ main(int argc, char *argv[])
 				if (axfrport != port)
 					close(uafd[j]);
 			}
-			close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]);
 
 #if !defined __APPLE__
 			setproctitle("AXFR engine on port %d", axfrport);
@@ -853,7 +852,8 @@ main(int argc, char *argv[])
 		default:
 			/* close afd descriptors, they aren't needed here */
 			for (j = 0; j < i; j++) {
-				close(afd[j]);
+				if (axfrport != port)
+					close(afd[j]);
 			}
 			/* XXX these are reversed because we need to use child_ibuf later */
 			close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[0]);
@@ -1594,7 +1594,8 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	case 0:
 		for (i = 0; i < cfg->sockcount; i++)  {
 				close(cfg->udp[i]);
-				close(cfg->axfr[i]);
+				if (axfrport != port)
+					close(cfg->axfr[i]);
 		}
 		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
 		close(cfg->my_imsg[MY_IMSG_TCP].imsg_fds[1]);
@@ -1607,7 +1608,6 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 		for (i = 0; i < cfg->sockcount; i++)  {
 				close(cfg->tcp[i]);
 		}
-		close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[0]);
 		close(cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]);
 		imsg_init(&tcp_ibuf, cfg->my_imsg[MY_IMSG_TCP].imsg_fds[1]);
 		break;
