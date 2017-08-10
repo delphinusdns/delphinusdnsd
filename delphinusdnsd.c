@@ -151,7 +151,7 @@ uint8_t vslen = DD_VERSION_LEN;
 #endif
 int *ptr = NULL;
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.18 2017/08/10 11:00:43 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.19 2017/08/10 17:59:23 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -833,7 +833,7 @@ main(int argc, char *argv[])
 			for (j = 0; j < i; j++) {
 				close(tcp[j]);
 				close(udp[j]);
-				if (axfrport != port)
+				if (axfrport && axfrport != port)
 					close(uafd[j]);
 			}
 
@@ -852,7 +852,7 @@ main(int argc, char *argv[])
 		default:
 			/* close afd descriptors, they aren't needed here */
 			for (j = 0; j < i; j++) {
-				if (axfrport != port)
+				if (axfrport && axfrport != port)
 					close(afd[j]);
 			}
 			/* XXX these are reversed because we need to use child_ibuf later */
@@ -1594,7 +1594,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	case 0:
 		for (i = 0; i < cfg->sockcount; i++)  {
 				close(cfg->udp[i]);
-				if (axfrport != port)
+				if (axfrport && axfrport != port)
 					close(cfg->axfr[i]);
 		}
 		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
