@@ -220,6 +220,7 @@ struct question {
 	char *converted_name;
 	u_int16_t edns0len;
 	u_int8_t ednsversion;
+	int rd;
 	int dnssecok;
 	int badvers;
 };

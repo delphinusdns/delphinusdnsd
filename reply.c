@@ -109,7 +109,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.54 2017/06/26 20:28:50 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.55 2017/09/05 18:27:43 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -177,6 +177,10 @@ reply_a(struct sreply *sreply, ddDB *db)
 		SET_DNS_AUTHORITATIVE(odh);
 	else	
 		SET_DNS_RECURSION_AVAIL(odh);
+
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
 
 	HTONS(odh->query);
 
@@ -359,6 +363,10 @@ reply_nsec3param(struct sreply *sreply)
 		SET_DNS_AUTHORITATIVE(odh);
 	else	
 		SET_DNS_RECURSION_AVAIL(odh);
+
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
 
 	HTONS(odh->query);
 
@@ -550,6 +558,10 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 	else	
 		SET_DNS_RECURSION_AVAIL(odh);
 
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -740,6 +752,10 @@ reply_nsec(struct sreply *sreply)
 	else	
 		SET_DNS_RECURSION_AVAIL(odh);
 
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -919,6 +935,10 @@ reply_ds(struct sreply *sreply)
 		SET_DNS_AUTHORITATIVE(odh);
 	else	
 		SET_DNS_RECURSION_AVAIL(odh);
+
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
 
 	HTONS(odh->query);
 
@@ -1101,6 +1121,10 @@ reply_dnskey(struct sreply *sreply)
 	else	
 		SET_DNS_RECURSION_AVAIL(odh);
 
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -1279,6 +1303,10 @@ reply_rrsig(struct sreply *sreply, ddDB *db)
 	else	
 		SET_DNS_RECURSION_AVAIL(odh);
 
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -1445,6 +1473,10 @@ reply_aaaa(struct sreply *sreply, ddDB *db)
 	else
 		SET_DNS_RECURSION_AVAIL(odh);
 	
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -1622,6 +1654,10 @@ reply_mx(struct sreply *sreply, ddDB *db)
 	} else
 		SET_DNS_RECURSION_AVAIL(odh);
 	
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -1800,6 +1836,9 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	} else
 		SET_DNS_RECURSION_AVAIL(odh);
 
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
 	
 	HTONS(odh->query);
 
@@ -2002,6 +2041,10 @@ reply_cname(struct sreply *sreply)
 	else
 		SET_DNS_RECURSION_AVAIL(odh);
 	
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -2194,6 +2237,10 @@ reply_ptr(struct sreply *sreply)
 	else
 		SET_DNS_RECURSION_AVAIL(odh);
 	
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -2362,6 +2409,10 @@ reply_soa(struct sreply *sreply)
 	else
 		SET_DNS_RECURSION_AVAIL(odh);
 	
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	NTOHS(odh->query);
 
 	odh->question = htons(1);
@@ -2603,6 +2654,10 @@ reply_txt(struct sreply *sreply)
 	else
 		SET_DNS_RECURSION_AVAIL(odh);
 	
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -2755,6 +2810,10 @@ reply_version(struct sreply *sreply)
 	else
 		SET_DNS_RECURSION_AVAIL(odh);
 	
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -2889,6 +2948,10 @@ reply_tlsa(struct sreply *sreply)
 	} else
 		SET_DNS_RECURSION_AVAIL(odh);
 	
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -3071,6 +3134,10 @@ reply_sshfp(struct sreply *sreply)
 	} else
 		SET_DNS_RECURSION_AVAIL(odh);
 	
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -3254,6 +3321,10 @@ reply_naptr(struct sreply *sreply, ddDB *db)
 	} else
 		SET_DNS_RECURSION_AVAIL(odh);
 	
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -3457,6 +3528,10 @@ reply_srv(struct sreply *sreply, ddDB *db)
 	} else
 		SET_DNS_RECURSION_AVAIL(odh);
 	
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	HTONS(odh->query);
 
 	odh->question = htons(1);
@@ -3717,7 +3792,9 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 		}
 		SET_DNS_RCODE_NAMEERR(odh);
 
-		
+		if (q->rd) {
+			SET_DNS_RECURSION(odh);
+		}
 
 		HTONS(odh->query);		
 		if (istcp) {
@@ -3763,6 +3840,10 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 		SET_DNS_AUTHORITATIVE(odh);
 
 	SET_DNS_RCODE_NAMEERR(odh);
+
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
 	
 	NTOHS(odh->query);
 
@@ -4242,9 +4323,10 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 		memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 		SET_DNS_REPLY(odh);
-#if 0
-		SET_DNS_RCODE_NAMEERR(odh);
-#endif
+
+		if (q->rd) {
+			SET_DNS_RECURSION(odh);
+		}
 
 		HTONS(odh->query);		
 
@@ -4289,6 +4371,10 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 		SET_DNS_RECURSION_AVAIL(odh);
 	else
 		SET_DNS_AUTHORITATIVE(odh);
+
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
 
 	NTOHS(odh->query);
 
@@ -4602,6 +4688,10 @@ reply_any(struct sreply *sreply)
 	else
 		SET_DNS_RECURSION_AVAIL(odh);
 	
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+	}
+
 	NTOHS(odh->query);
 
 	odh->question = htons(1);

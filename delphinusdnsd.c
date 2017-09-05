@@ -151,7 +151,7 @@ uint8_t vslen = DD_VERSION_LEN;
 #endif
 int *ptr = NULL;
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.21 2017/09/05 17:56:55 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.22 2017/09/05 18:27:43 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -943,6 +943,7 @@ build_question(char *buf, int len, int additional)
 
 	struct dns_optrr *opt = NULL;
 	struct question *q = NULL;
+	struct dns_header *hdr = (struct dns_header *)buf;
 
 	/* find the end of name */
 	for (i = sizeof(struct dns_header); i < len; i++) {
@@ -1135,6 +1136,8 @@ build_question(char *buf, int len, int additional)
 	memcpy((char *)&q->hdr->qtype, (char *)qtype, sizeof(u_int16_t));
 	memcpy((char *)&q->hdr->qclass, (char *)qclass, sizeof(u_int16_t));
 
+	/* make note of whether recursion is desired */
+	q->rd = ((ntohs(hdr->query) & DNS_RECURSE) == DNS_RECURSE);
 
 	return (q);
 }
