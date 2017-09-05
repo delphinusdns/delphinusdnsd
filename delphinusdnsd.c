@@ -151,7 +151,7 @@ uint8_t vslen = DD_VERSION_LEN;
 #endif
 int *ptr = NULL;
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.20 2017/09/05 17:45:40 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.21 2017/09/05 17:56:55 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -2813,11 +2813,6 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					close(so);
 					continue;
 				} /* if len */
-
-				if (len == 0) {
-					close(so);
-					continue;
-				}
 
 				if (len != 2) {
 					close(so);
