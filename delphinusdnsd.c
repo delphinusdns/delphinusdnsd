@@ -151,7 +151,7 @@ uint8_t vslen = DD_VERSION_LEN;
 #endif
 int *ptr = NULL;
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.19 2017/08/10 17:59:23 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.20 2017/09/05 17:45:40 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -2805,7 +2805,32 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					continue;
 				}
 
-				len = recv(so, buf, sizeof(buf), 0);
+				len = recv(so, buf, 2, MSG_WAITALL | MSG_PEEK);
+				if (len < 0) {
+					if (errno == EWOULDBLOCK) {
+						dolog(LOG_INFO, "TCP socket timed out on descriptor %d interface \"%s\" from %s\n", so, cfg->ident[i], address);
+					}
+					close(so);
+					continue;
+				} /* if len */
+
+				if (len == 0) {
+					close(so);
+					continue;
+				}
+
+				if (len != 2) {
+					close(so);
+					continue;
+				}
+
+				length = ntohs(*((u_int16_t *)&buf[0]));
+				if ((length + 2) > sizeof(buf)) {
+					close(so);
+					continue;
+				}
+
+				len = recv(so, buf, (length + 2), MSG_WAITALL);
 				if (len < 0) {
 					if (errno == EWOULDBLOCK) {
 						dolog(LOG_INFO, "TCP socket timed out on descriptor %d interface \"%s\" from %s\n", so, cfg->ident[i], address);
