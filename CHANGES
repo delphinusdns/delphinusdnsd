@@ -3,6 +3,7 @@ Changes in RELEASE_1_2 from RELEASE_1_1
 - remove SPF support (deprecated RFC 7208 section 3.1)
 - add TLSA anyreply support (affects AXFR)
 - change BerkeleyDB to tree(3) RB_* macros (faster?)
+- fix EDNS compliancy:  https://ednscomp.isc.org/ednscomp/5a70566c18
 
 Changes in RELEASE_1_1 from RELEASE_1_0
 
