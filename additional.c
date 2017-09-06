@@ -43,7 +43,7 @@ extern void *		find_substruct(struct domain *, u_int16_t);
 
 extern int dnssec;
 
-static const char rcsid[] = "$Id: additional.c,v 1.14 2016/07/06 05:12:50 pjp Exp $";
+static const char rcsid[] = "$Id: additional.c,v 1.15 2017/09/06 08:26:22 pjp Exp $";
 
 
 /*
@@ -486,9 +486,6 @@ additional_opt(struct question *question, char *reply, int replylen, int offset)
 
 	if (question->badvers)
 		rcode |= (0x1 << 24);
-
-	if (question->ednsversion)
-		rcode |= (question->ednsversion << 16);
 
 	answer->ttl = htonl(rcode); 	/* EXTENDED RCODE */
 
