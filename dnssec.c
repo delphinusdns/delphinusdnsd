@@ -193,7 +193,9 @@ find_next_closer_nsec3(char *zonename, int zonelen, char *hashname)
 	}
 	
 	if (n3 == NULL) {
-		return NULL;
+		/* returning NULL is not recommended here */
+		ns3p = TAILQ_LAST(&dnp->nsec3head, a);
+		return (ns3p->domainname);
 	}
 
 #if DEBUG
@@ -1141,8 +1143,10 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, ddDB *d
 	}
 
 	ncn = find_next_closer_name(name, namelen, sd0->zone, sd0->zonelen, &ncnlen);
-	if (ncn == NULL)
+	if (ncn == NULL) {
+		free(sd0);
 		return NULL;
+	}
 
 	hashname = hash_name(ncn, ncnlen, &n3p->nsec3param);
 	if (hashname == NULL) {
