@@ -109,7 +109,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.55 2017/09/05 18:27:43 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.56 2017/09/06 07:21:56 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -3754,6 +3754,7 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	int addrec = 0;
 	
 	struct {
 		char name[DNS_MAXNAME];
@@ -3976,13 +3977,7 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 			odh->nsrr = htons(2);	
 
 		origlen = outlen;
-		if (sd->flags & DOMAIN_HAVE_NSEC) {
-			sd0 = find_nsec(q->hdr->name, q->hdr->namelen, sd, db);
-			if (sd0 == NULL)
-				goto out;
-			tmplen = additional_nsec(sd0->zone, sd0->zonelen, INTERNAL_TYPE_NSEC, sd0, reply, replysize, outlen);
-			free (sd0);
-		} else if (sd->flags & DOMAIN_HAVE_NSEC3PARAM) {
+		if (sd->flags & DOMAIN_HAVE_NSEC3PARAM) {
 			sd0 = find_nsec3_cover_next_closer(q->hdr->name, q->hdr->namelen, sd, db);
 			if (sd0 == NULL)
 				goto out;
@@ -3992,24 +3987,21 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 			
 			tmplen = additional_nsec3(sd0->zone, sd0->zonelen, INTERNAL_TYPE_NSEC3, sd0, reply, replysize, outlen);
 			free (sd0);
-		}
 
-		if (tmplen == 0) {
-			NTOHS(odh->query);
-			SET_DNS_TRUNCATION(odh);
-			HTONS(odh->query);
-			goto out;
-		}
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				goto out;
+			}
 
-		outlen = tmplen;
+			outlen = tmplen;
 
-		if (outlen > origlen)
+			if (outlen > origlen)
 			odh->nsrr = htons(4);
 
-		origlen = outlen;
-		if (sd->flags & DOMAIN_HAVE_NSEC) {
-			tmplen = additional_nsec(sd->zone, sd->zonelen, INTERNAL_TYPE_NSEC, sd, reply, replysize, outlen);
-		} else if (sd->flags & DOMAIN_HAVE_NSEC3PARAM) {
+			origlen = outlen;
+
 			sd0 = find_nsec3_match_closest(q->hdr->name, q->hdr->namelen, sd, db);
 			if (sd0 == NULL)
 				goto out;
@@ -4017,27 +4009,31 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 			memcpy(&uniq[rruniq].name, sd0->zone, sd0->zonelen);
 			uniq[rruniq++].len = sd0->zonelen;
 
-			if (memcmp(uniq[0].name, uniq[1].name, uniq[1].len) != 0)
+			if (memcmp(uniq[0].name, uniq[1].name, uniq[1].len) != 0) {
 				tmplen = additional_nsec3(sd0->zone, sd0->zonelen, INTERNAL_TYPE_NSEC3, sd0, reply, replysize, outlen);
+				addrec = 1;
+			}
 
 			free (sd0);
 			
-		}	
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				goto out;
+			}
 
-		if (tmplen == 0) {
-			NTOHS(odh->query);
-			SET_DNS_TRUNCATION(odh);
-			HTONS(odh->query);
-			goto out;
-		}
+			outlen = tmplen;
 
-		outlen = tmplen;
+			if (outlen > origlen && addrec) {
+				NTOHS(odh->nsrr);
+				odh->nsrr += 2;
+				HTONS(odh->nsrr);
+			}
 
-		if (outlen > origlen)
-			odh->nsrr = htons(6);
+			addrec = 0;
+			origlen = outlen;
 
-		origlen = outlen;
-		if (sd->flags & DOMAIN_HAVE_NSEC3PARAM) {
 			sd0 = find_nsec3_wildcard_closest(q->hdr->name, q->hdr->namelen, sd, db);
 			if (sd0 == NULL)
 				goto out;
@@ -4046,24 +4042,29 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 			uniq[rruniq++].len = sd0->zonelen;
 
 			if (memcmp(uniq[0].name, uniq[2].name, uniq[2].len) != 0&&
-				memcmp(uniq[1].name, uniq[2].name, uniq[2].len) != 0)
+				memcmp(uniq[1].name, uniq[2].name, uniq[2].len) != 0) {
 				tmplen = additional_nsec3(sd0->zone, sd0->zonelen, INTERNAL_TYPE_NSEC3, sd0, reply, replysize, outlen);
+				addrec = 1;
+			}
 			free (sd0);
 			
-		}	
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				goto out;
+			}
 
-		if (tmplen == 0) {
-			NTOHS(odh->query);
-			SET_DNS_TRUNCATION(odh);
-			HTONS(odh->query);
-			goto out;
-		}
+			outlen = tmplen;
 
-		outlen = tmplen;
+			if (outlen > origlen && addrec) {
+				NTOHS(odh->nsrr);
+				odh->nsrr += 2;
+				HTONS(odh->nsrr);
+			}
+			addrec = 0;
 
-		if (outlen > origlen)
-			odh->nsrr = htons(8);
-
+		} /* if (sd->flags & DOMAIN_HAVE_NSEC3PARAM) .. */
 	}
 
 out:
