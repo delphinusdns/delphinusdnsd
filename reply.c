@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2005-2016 Peter J. Philipp
+ * Copyright (c) 2005-2017 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -109,7 +109,7 @@ extern uint8_t vslen;
 				outlen = tmplen;					\
 			} while (0);
 
-static const char rcsid[] = "$Id: reply.c,v 1.56 2017/09/06 07:21:56 pjp Exp $";
+static const char rcsid[] = "$Id: reply.c,v 1.57 2017/09/18 08:01:01 pjp Exp $";
 
 /* 
  * REPLY_A() - replies a DNS question (*q) on socket (so)
@@ -148,6 +148,7 @@ reply_a(struct sreply *sreply, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	u_int16_t rollback;
 
 	if ((sda = find_substruct(sd, INTERNAL_TYPE_A)) == NULL)
 		return -1;
@@ -171,6 +172,7 @@ reply_a(struct sreply *sreply, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -224,6 +226,10 @@ reply_a(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -243,6 +249,10 @@ reply_a(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -334,6 +344,7 @@ reply_nsec3param(struct sreply *sreply)
 	int replysize = 512;
 	int retlen = -1;
 	int i;
+	u_int16_t rollback;
 
 	if ((sdnsec3param = find_substruct(sd, INTERNAL_TYPE_NSEC3PARAM)) == NULL)
 		return -1;
@@ -357,6 +368,7 @@ reply_nsec3param(struct sreply *sreply)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -386,6 +398,10 @@ reply_nsec3param(struct sreply *sreply)
 		NTOHS(odh->query);
 		SET_DNS_TRUNCATION(odh);
 		HTONS(odh->query);
+		odh->answer = 0;
+		odh->nsrr = 0; 
+		odh->additional = 0;
+		outlen = rollback;
 		goto out;
 	}
 
@@ -435,6 +451,10 @@ reply_nsec3param(struct sreply *sreply)
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
+				outlen = rollback;
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
 				goto out;
 			}
 
@@ -520,6 +540,7 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 	int replysize = 512;
 	int retlen = -1;
 	int i;
+	u_int16_t rollback;
 	u_int8_t *somelen;
 
 	if ((sdnsec3 = find_substruct(sd, INTERNAL_TYPE_NSEC3)) == NULL)
@@ -551,6 +572,7 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -581,6 +603,10 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 		NTOHS(odh->query);
 		SET_DNS_TRUNCATION(odh);
 		HTONS(odh->query);
+		odh->answer = 0;
+		odh->nsrr = 0; 
+		odh->additional = 0;
+		outlen = rollback;
 		goto out;
 	}
 
@@ -642,6 +668,10 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
 				goto out;
 			}
 
@@ -722,6 +752,7 @@ reply_nsec(struct sreply *sreply)
 	int replysize = 512;
 	int retlen = -1;
 	int i;
+	u_int16_t rollback;
 
 	if ((sdnsec = find_substruct(sd, INTERNAL_TYPE_NSEC)) == NULL)
 		return -1;
@@ -745,6 +776,7 @@ reply_nsec(struct sreply *sreply)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -774,6 +806,10 @@ reply_nsec(struct sreply *sreply)
 		NTOHS(odh->query);
 		SET_DNS_TRUNCATION(odh);
 		HTONS(odh->query);
+		odh->answer = 0;
+		odh->nsrr = 0; 
+		odh->additional = 0;
+		outlen = rollback;
 		goto out;
 	}
 
@@ -822,6 +858,10 @@ reply_nsec(struct sreply *sreply)
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
 				goto out;
 			}
 
@@ -906,6 +946,7 @@ reply_ds(struct sreply *sreply)
 	int replysize = 512;
 	int retlen = -1;
 	int i;
+	u_int16_t rollback;
 
 	if ((sdds = find_substruct(sd, INTERNAL_TYPE_DS)) == NULL)
 		return -1;
@@ -929,6 +970,7 @@ reply_ds(struct sreply *sreply)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -958,6 +1000,10 @@ reply_ds(struct sreply *sreply)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -1008,6 +1054,10 @@ reply_ds(struct sreply *sreply)
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
 				goto out;
 			}
 
@@ -1091,6 +1141,7 @@ reply_dnskey(struct sreply *sreply)
 	int replysize = 512;
 	int retlen = -1;
 	int i;
+	u_int16_t rollback;
 
 	if ((sdkey = find_substruct(sd, INTERNAL_TYPE_DNSKEY)) == NULL)
 		return -1;
@@ -1114,6 +1165,7 @@ reply_dnskey(struct sreply *sreply)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -1144,6 +1196,10 @@ reply_dnskey(struct sreply *sreply)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -1192,6 +1248,10 @@ reply_dnskey(struct sreply *sreply)
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
 				goto out;
 			}
 
@@ -1273,6 +1333,7 @@ reply_rrsig(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	int tmplen = 0;
 	int i;
+	u_int16_t rollback;
 
 	if ((sdrr = find_substruct(sd, INTERNAL_TYPE_RRSIG)) == NULL)
 		return -1;
@@ -1296,6 +1357,7 @@ reply_rrsig(struct sreply *sreply, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -1356,6 +1418,10 @@ reply_rrsig(struct sreply *sreply, ddDB *db)
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
 				goto out;
 			}
 
@@ -1442,6 +1508,7 @@ reply_aaaa(struct sreply *sreply, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	u_int16_t rollback;
 
 	if ((sdaaaa = find_substruct(sd, INTERNAL_TYPE_AAAA)) == NULL)
 		return -1;
@@ -1466,6 +1533,7 @@ reply_aaaa(struct sreply *sreply, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -1513,6 +1581,10 @@ reply_aaaa(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -1533,6 +1605,10 @@ reply_aaaa(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -1620,6 +1696,7 @@ reply_mx(struct sreply *sreply, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	u_int16_t rollback;
 	
 	if ((sdmx = find_substruct(sd, INTERNAL_TYPE_MX)) == NULL) {
 		dolog(LOG_INFO, "no such record MX!\n");
@@ -1646,6 +1723,7 @@ reply_mx(struct sreply *sreply, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 
@@ -1695,6 +1773,10 @@ reply_mx(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -1713,6 +1795,10 @@ reply_mx(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -1797,6 +1883,7 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	u_int16_t rollback;
 
 	if ((sdns = find_substruct(sd, INTERNAL_TYPE_NS)) == NULL)
 		return -1;
@@ -1821,7 +1908,8 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
-
+	rollback = outlen;
+	
 	SET_DNS_REPLY(odh);
 
 	if (sreply->sr == NULL) {
@@ -1896,6 +1984,10 @@ reply_ns(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -1915,6 +2007,10 @@ reply_ns(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -2009,6 +2105,7 @@ reply_cname(struct sreply *sreply)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	u_int16_t rollback;
 
 	if ((sdcname = find_substruct(sd, INTERNAL_TYPE_CNAME)) == NULL)
 		return -1;
@@ -2034,6 +2131,7 @@ reply_cname(struct sreply *sreply)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -2205,6 +2303,7 @@ reply_ptr(struct sreply *sreply)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	u_int16_t rollback;
 
 	if ((sdptr = find_substruct(sd, INTERNAL_TYPE_PTR)) == NULL)
 		return -1;
@@ -2230,6 +2329,7 @@ reply_ptr(struct sreply *sreply)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -2376,6 +2476,7 @@ reply_soa(struct sreply *sreply)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	u_int16_t rollback;
 
 	if ((sdsoa = find_substruct(sd, INTERNAL_TYPE_SOA)) == NULL)
 		return -1;
@@ -2402,6 +2503,7 @@ reply_soa(struct sreply *sreply)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -2536,6 +2638,10 @@ reply_soa(struct sreply *sreply)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -2621,6 +2727,7 @@ reply_txt(struct sreply *sreply)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	u_int16_t rollback;
 
 	if ((sdtxt = find_substruct(sd, INTERNAL_TYPE_TXT)) == NULL)
 		return -1;
@@ -2647,6 +2754,7 @@ reply_txt(struct sreply *sreply)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -2698,6 +2806,10 @@ reply_txt(struct sreply *sreply)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -2780,6 +2892,7 @@ reply_version(struct sreply *sreply)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	u_int16_t rollback;
 
 	if (istcp) {
 		replysize = 65535;
@@ -2803,6 +2916,7 @@ reply_version(struct sreply *sreply)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -2916,6 +3030,7 @@ reply_tlsa(struct sreply *sreply)
 	int typelen = 0;
 	int replysize = 512;
 	int retlen = -1;
+	u_int16_t rollback;
 
 	if ((sdtlsa = find_substruct(sd, INTERNAL_TYPE_TLSA)) == NULL)
 		return -1;
@@ -2940,6 +3055,7 @@ reply_tlsa(struct sreply *sreply)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 
@@ -2998,6 +3114,10 @@ reply_tlsa(struct sreply *sreply)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -3017,6 +3137,10 @@ reply_tlsa(struct sreply *sreply)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -3102,6 +3226,7 @@ reply_sshfp(struct sreply *sreply)
 	int typelen = 0;
 	int replysize = 512;
 	int retlen = -1;
+	u_int16_t rollback;
 
 	if ((sdsshfp = find_substruct(sd, INTERNAL_TYPE_SSHFP)) == NULL)
 		return -1;
@@ -3126,6 +3251,7 @@ reply_sshfp(struct sreply *sreply)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 
@@ -3183,6 +3309,10 @@ reply_sshfp(struct sreply *sreply)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -3202,6 +3332,10 @@ reply_sshfp(struct sreply *sreply)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -3290,6 +3424,7 @@ reply_naptr(struct sreply *sreply, ddDB *db)
 	int tmplen, savelen;
 	char *p;
 	int retlen = -1;
+	u_int16_t rollback;
 
 	if ((sdnaptr = find_substruct(sd, INTERNAL_TYPE_NAPTR)) == NULL)
 		return -1;
@@ -3313,6 +3448,7 @@ reply_naptr(struct sreply *sreply, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 
@@ -3391,6 +3527,10 @@ reply_naptr(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -3409,6 +3549,10 @@ reply_naptr(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -3497,6 +3641,7 @@ reply_srv(struct sreply *sreply, ddDB *db)
 	int replysize = 512;
 	int retlen = -1;
 	int tmplen;
+	u_int16_t rollback;
 
 	if ((sdsrv = find_substruct(sd, INTERNAL_TYPE_SRV)) == NULL)
 		return -1;
@@ -3520,6 +3665,7 @@ reply_srv(struct sreply *sreply, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 
@@ -3572,6 +3718,10 @@ reply_srv(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -3588,6 +3738,10 @@ reply_srv(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -3720,6 +3874,7 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
+	u_int16_t rollback;
 
 	struct answer {
 		u_int16_t type;
@@ -3833,6 +3988,7 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4); 
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr != NULL)
@@ -3968,6 +4124,10 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -3992,6 +4152,10 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
 				goto out;
 			}
 
@@ -4020,6 +4184,10 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
 				goto out;
 			}
 
@@ -4052,6 +4220,10 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
 				goto out;
 			}
 
@@ -4256,6 +4428,7 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
+	u_int16_t rollback;
 
 	struct answer {
 		u_int16_t type;
@@ -4366,6 +4539,7 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4); 
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr != NULL)
@@ -4499,6 +4673,10 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -4528,6 +4706,10 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
 			goto out;
 		}
 
@@ -4659,6 +4841,7 @@ reply_any(struct sreply *sreply)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	u_int16_t rollback;
 
 	if (istcp) {
 		replysize = 65535;
@@ -4682,6 +4865,7 @@ reply_any(struct sreply *sreply)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
 
 	SET_DNS_REPLY(odh);
 	if (sreply->sr == NULL)
@@ -4703,7 +4887,13 @@ reply_any(struct sreply *sreply)
 	outlen = create_anyreply(sreply, (char *)reply, replysize, outlen, 1);
 	if (outlen == 0) {
 		return (retlen);
+	} else if (istcp == 0 && outlen == 65535) {
+		odh->answer = 0;
+		odh->nsrr = 0;
+		odh->additional = 0;
+		outlen = rollback;
 	}
+
 
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -5936,8 +6126,8 @@ truncate:
 	NTOHS(odh->query);
 	SET_DNS_TRUNCATION(odh);
 	HTONS(odh->query);
-	
-	return (offset);
+
+	return (65535);
 }
 
 /* 
