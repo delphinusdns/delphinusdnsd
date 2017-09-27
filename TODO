@@ -7,7 +7,9 @@ For 1.2.0 release
   dates	new NSEC3 and RRSIG's for new records.
 - TSIG support would still be nice
 - allow AXFR to bind to port 53 and pass it from main engine to axfr engine
-  via descriptor passing
+  via descriptor passing  [DONE]
+- CNAME's with DNSSEC are broken, due to a missing RRSIG, recursive servers
+  return SERVFAIL
 
 For 1.1.0 release
 
