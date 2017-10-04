@@ -16,13 +16,13 @@ dd-convert:  dd-convert.o util.o dnssec.o parse.o base64.o ent.o
 	
 
 imsg-buffer.o: imsg-buffer.c
-        $(CC) $(CFLAGS) -c imsg-buffer.c
+	$(CC) $(CFLAGS) -c imsg-buffer.c
 
 imsg.o: imsg.c
-        $(CC) $(CFLAGS) -c imsg.c
+	$(CC) $(CFLAGS) -c imsg.c
 
 db.o: db.c
-        $(CC) $(CFLAGS) -c db.c
+	$(CC) $(CFLAGS) -c db.c
 
 dd-convert.o: dd-convert.c
 	$(CC) $(CFLAGS) -c dd-convert.c
