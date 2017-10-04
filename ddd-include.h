@@ -79,7 +79,11 @@
 #else
 #include <sys/queue.h>
 #include <sys/tree.h>
+#ifdef __FreeBSD__
+#include "imsg.h"
+#else
 #include <imsg.h>
+#endif
 #endif
 
 #ifndef NTOHS
