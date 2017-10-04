@@ -37,12 +37,6 @@
 #include <sys/queue.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
-#if __linux__
-#define __unused 
-#include <bsd/sys/tree.h>
-#else
-#include <sys/tree.h>
-#endif
 
 #include <net/if.h>
 
@@ -72,13 +66,20 @@
 #include <dirent.h>
 #include <signal.h>
 #include <time.h>
-#include <imsg.h>
 
 #ifdef __linux__
 #include <grp.h>
 #include <bsd/stdlib.h>
 #include <bsd/string.h>
 #include <bsd/unistd.h>
+#include <bsd/sys/queue.h>
+#define __unused 
+#include <bsd/sys/tree.h>
+#include "imsg.h"
+#else
+#include <sys/queue.h>
+#include <sys/tree.h>
+#include <imsg.h>
 #endif
 
 #ifndef NTOHS

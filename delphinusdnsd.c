@@ -151,7 +151,7 @@ uint8_t vslen = DD_VERSION_LEN;
 #endif
 int *ptr = NULL;
 
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.22 2017/09/05 18:27:43 pjp Exp $";
+static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.23 2017/10/04 18:51:36 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -159,7 +159,7 @@ static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.22 2017/09/05 18:27:43 pjp
  */
 
 int
-main(int argc, char *argv[])
+main(int argc, char *argv[], char *environ[])
 {
 	static int udp[DEFAULT_SOCKET];
 	static int tcp[DEFAULT_SOCKET];
@@ -198,6 +198,10 @@ main(int argc, char *argv[])
 	}
 
 	av = argv;
+#if __linux__
+	setproctitle_init(argc, av, environ);
+#endif
+
 
 	while ((ch = getopt(argc, argv, "b:df:i:ln:p:v")) != -1) {
 		switch (ch) {
