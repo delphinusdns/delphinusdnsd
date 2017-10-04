@@ -5,6 +5,7 @@ Changes in RELEASE_1_2 from RELEASE_1_1
 - change BerkeleyDB to tree(3) RB_* macros (faster?)
 - fix EDNS compliancy:  https://ednscomp.isc.org/ednscomp/5a70566c18
 - fix truncation code and give empty answers with TC bit set when appropriate
+- fix CNAME's with DNSSEC
 
 Changes in RELEASE_1_1 from RELEASE_1_0
 
