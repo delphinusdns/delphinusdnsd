@@ -8,8 +8,8 @@ For 1.2.0 release
 - TSIG support would still be nice
 - allow AXFR to bind to port 53 and pass it from main engine to axfr engine
   via descriptor passing  [DONE]
-- CNAME's with DNSSEC are broken, due to a missing RRSIG, recursive servers
-  return SERVFAIL
+- CNAME's with DNSSEC are broken, due to a missing RRSIG, recursive servers 
+  return SERVFAIL [DONE]
 
 For 1.1.0 release
 
