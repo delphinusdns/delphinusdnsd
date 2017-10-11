@@ -77,7 +77,6 @@ u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
 char * 	bin2hex(char *, int);
 int 	print_sd(FILE *, struct domain *);
-void	cleanup(ddDB *, char *);
 void 	usage(void);
 
 
@@ -175,7 +174,6 @@ main(int argc, char *argv[])
 	
 	char *ksk_key = NULL;
 	char *zsk_key = NULL;
-	char *tmpdir;
 	
 	ddDB *db;
 
@@ -366,9 +364,6 @@ main(int argc, char *argv[])
 	if ((mask & MASK_DUMP_DB) && dump_db(db, of, zonename) < 0)
 		exit (1);
 
-
-	/* clean up */
-	cleanup(db, tmpdir);
 
 	exit(0);
 }
@@ -1055,7 +1050,7 @@ calculate_rrsigs(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int exp
 int
 sign_soa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_soa *sdsoa;
+	struct domain_soa *sdsoa = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -1286,7 +1281,7 @@ sign_soa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 int
 sign_txt(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_txt *sdtxt;
+	struct domain_txt *sdtxt = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -1504,7 +1499,7 @@ sign_txt(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 int
 sign_aaaa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_aaaa *sdaaaa;
+	struct domain_aaaa *sdaaaa = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -1779,7 +1774,7 @@ sign_aaaa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
 int
 sign_nsec3(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_nsec3 *sdnsec3;
+	struct domain_nsec3 *sdnsec3 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2019,7 +2014,7 @@ sign_nsec3(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 int
 sign_nsec3param(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_nsec3param *sdnsec3;
+	struct domain_nsec3param *sdnsec3 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2250,7 +2245,7 @@ sign_nsec3param(ddDB *db, char *zonename, char *zsk_key, int expiry, struct doma
 int
 sign_cname(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_cname *sdc;
+	struct domain_cname *sdc = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2466,7 +2461,7 @@ sign_cname(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 int
 sign_ptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_ptr *sdptr;
+	struct domain_ptr *sdptr = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2682,7 +2677,7 @@ sign_ptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 int
 sign_naptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_naptr *sdnaptr;
+	struct domain_naptr *sdnaptr = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2978,7 +2973,7 @@ sign_naptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 int
 sign_srv(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_srv *sdsrv;
+	struct domain_srv *sdsrv = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -3262,7 +3257,7 @@ sign_srv(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 int
 sign_sshfp(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_sshfp *sdsshfp;
+	struct domain_sshfp *sdsshfp = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -3542,7 +3537,7 @@ sign_sshfp(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 int
 sign_tlsa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_tlsa *sdtlsa;
+	struct domain_tlsa *sdtlsa = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -3824,7 +3819,7 @@ sign_tlsa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
 int
 sign_ds(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_ds *sdds;
+	struct domain_ds *sdds = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -4106,7 +4101,7 @@ sign_ds(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 int
 sign_ns(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_ns *sdns;
+	struct domain_ns *sdns = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -4381,7 +4376,7 @@ sign_ns(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 int
 sign_mx(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_mx *sdmx;
+	struct domain_mx *sdmx = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -4659,7 +4654,7 @@ sign_mx(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 int
 sign_a(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 {
-	struct domain_a *sda;
+	struct domain_a *sda = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -4933,7 +4928,7 @@ create_ds(ddDB *db, char *zonename, char *ksk_key)
 	FILE *f;
 
 	struct domain *sd;
-	struct domain_dnskey *sddk;
+	struct domain_dnskey *sddk = NULL;
 	struct stat sb;
 
 	char *mytmp;
@@ -5130,7 +5125,7 @@ create_ds(ddDB *db, char *zonename, char *ksk_key)
 int
 sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, struct domain *sd)
 {
-	struct domain_dnskey *sddk;
+	struct domain_dnskey *sddk = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -5235,7 +5230,7 @@ sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, 
 			dolog(LOG_INFO, "no dnskeys in apex!\n");
                         return -1;
 		}
-	}
+	} 
 	
 	p = key;
 
@@ -6691,39 +6686,5 @@ usage(void)
 	fprintf(stderr, "\t-s salt\t\tsalt for NSEC3 (in hexadecimal)\n");
 	fprintf(stderr, "\t-t ttl\t\ttime-to-live for dnskey's\n");
 	fprintf(stderr, "\t-z ZSK\t\tuse provided ZSK zone-signing keyname\n");	
-	return;
-}
-	
-void
-cleanup(ddDB *db, char *tmpdir)
-{
-	DIR *dirp;
-	struct dirent *dp;
-	struct stat sb;
-	
-	if (chdir(tmpdir) < 0) {
-		return;
-	}
-
-	if ((dirp = opendir(".")) == NULL) {
-		return;
-	}
-
-	while ((dp = readdir(dirp)) != NULL) {
-		if (lstat(dp->d_name, &sb) < 0) {
-			closedir(dirp);
-			return;
-		}
-		if (S_ISREG(sb.st_mode)) {
-			if (unlink(dp->d_name) < 0) {
-				closedir(dirp);
-				return;
-			}
-		}
-	}
-	(void)closedir(dirp);
-	chdir("..");
-	rmdir(tmpdir);
-
 	return;
 }
