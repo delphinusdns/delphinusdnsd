@@ -26,6 +26,10 @@
  * 
  */
 
+/*
+ * $Id: db.c,v 1.5 2017/10/26 15:49:29 pjp Exp $
+ */
+
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"

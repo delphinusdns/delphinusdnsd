@@ -25,6 +25,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
+
+/*
+ * $Id: ddd-dns.h,v 1.5 2017/10/26 15:49:29 pjp Exp $
+ */
+
 #ifndef _DNS_H
 #define _DNS_H
 

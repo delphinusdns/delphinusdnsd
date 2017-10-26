@@ -25,6 +25,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
+
+/* 
+ * $Id: region.c,v 1.5 2017/10/26 15:49:30 pjp Exp $
+ */
+
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
@@ -47,8 +52,6 @@ static struct regionentry {
 	SLIST_ENTRY(regionentry) region_entry;
 } *n2, *np;
 
-
-static const char rcsid[] = "$Id: region.c,v 1.4 2017/06/26 20:28:50 pjp Exp $";
 
 /*
  * INIT_REGION - initialize the region singly linked list

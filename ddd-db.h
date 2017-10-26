@@ -25,6 +25,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
+
+/*
+ * $Id: ddd-db.h,v 1.6 2017/10/26 15:49:29 pjp Exp $
+ */
+
 #ifndef _DB_H
 #define _DB_H
 

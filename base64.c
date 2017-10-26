@@ -42,6 +42,10 @@
  * IF IBM IS APPRISED OF THE POSSIBILITY OF SUCH DAMAGES.
  */
 
+/*
+ * $Id: base64.c,v 1.2 2017/10/26 15:49:29 pjp Exp $
+ */
+
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -55,8 +59,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-
-static const char rcsid[] = "$Id: base64.c,v 1.1 2014/11/21 09:04:41 pjp Exp $";
 
 static const char Base64[] =
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

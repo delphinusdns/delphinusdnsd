@@ -25,6 +25,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
+
+/* 
+ * $Id: util.c,v 1.14 2017/10/26 15:49:30 pjp Exp $
+ */
+
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h" 

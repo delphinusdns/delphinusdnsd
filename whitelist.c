@@ -26,6 +26,11 @@
  * 
  */
 
+/* 
+ * $Id: whitelist.c,v 1.4 2017/10/26 15:49:30 pjp Exp $
+ */
+
+
 /*
  * this file is based on filter.c 
  */
@@ -57,8 +62,6 @@ static struct whitelistentry {
 	SLIST_ENTRY(whitelistentry) whitelist_entry;
 } *wln2, *wlnp;
 
-
-static const char rcsid[] = "$Id: whitelist.c,v 1.3 2016/07/06 05:12:51 pjp Exp $";
 
 /*
  * INIT_FILTER - initialize the whitelist singly linked list

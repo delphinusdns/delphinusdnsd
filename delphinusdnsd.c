@@ -25,6 +25,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
+
+/*
+ * $Id: delphinusdnsd.c,v 1.24 2017/10/26 15:49:29 pjp Exp $
+ */
+
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h" 
@@ -150,8 +155,6 @@ char *versionstring = DD_VERSION;
 uint8_t vslen = DD_VERSION_LEN;
 #endif
 int *ptr = NULL;
-
-static const char rcsid[] = "$Id: delphinusdnsd.c,v 1.23 2017/10/04 18:51:36 pjp Exp $";
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop

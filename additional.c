@@ -25,6 +25,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
+
+/*
+ * $Id: additional.c,v 1.16 2017/10/26 15:49:29 pjp Exp $
+ */
+
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
@@ -42,8 +47,6 @@ extern int 		compress_label(u_char *, int, int);
 extern void *		find_substruct(struct domain *, u_int16_t);
 
 extern int dnssec;
-
-static const char rcsid[] = "$Id: additional.c,v 1.15 2017/09/06 08:26:22 pjp Exp $";
 
 
 /*

@@ -26,6 +26,10 @@
  * 
  */
 
+/* 
+ * $Id: ent.c,v 1.4 2017/10/26 15:49:29 pjp Exp $
+ */
+
 /*
  * this file is based on whitelist.c
  */
@@ -52,24 +56,6 @@ static struct ententry {
 	u_int64_t flags;
 	SLIST_ENTRY(ententry) ent_entry;
 } *ent2, *entp;
-
-
-static const char rcsid[] = "$Id: ent.c,v 1.3 2017/08/09 15:34:17 pjp Exp $";
-
-
-#if 0
-int
-domaincmp(struct node *e1, struct node *e2)
-{
-	if (e1->len < e2->len)
-		return -1;
-	else if (e1->len > e2->len)
-		return 1;
-	else {
-        	return (memcmp(e1->domainname, e2->domainname, e1->len));
-	}
-}
-#endif
 
 extern int domaincmp(struct node *e1, struct node *e2);
 

@@ -25,6 +25,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
+
+/*
+ * $Id: axfr.c,v 1.12 2017/10/26 15:49:29 pjp Exp $
+ */
+
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
@@ -105,8 +110,6 @@ RB_HEAD(domaintree, node) rbhead;
 RB_PROTOTYPE_STATIC(domaintree, node, rbentry, domaincmp)
 RB_GENERATE_STATIC(domaintree, node, rbentry, domaincmp)
 
-
-static const char rcsid[] = "$Id: axfr.c,v 1.11 2017/08/09 15:34:17 pjp Exp $";
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list

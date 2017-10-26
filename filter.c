@@ -25,6 +25,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
+
+/* 
+ * $Id: filter.c,v 1.4 2017/10/26 15:49:29 pjp Exp $
+ */
+
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
@@ -50,8 +55,6 @@ static struct filterentry {
 	SLIST_ENTRY(filterentry) filter_entry;
 } *fn2, *fnp;
 
-
-static const char rcsid[] = "$Id: filter.c,v 1.3 2016/07/06 05:12:50 pjp Exp $";
 
 /*
  * INIT_FILTER - initialize the filter singly linked list

@@ -16,6 +16,11 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* 
+ * $Id: imsg.c,v 1.2 2017/10/26 15:49:29 pjp Exp $
+ */
+
+
 
 #include <sys/param.h>
 #include <sys/queue.h>
@@ -28,8 +33,6 @@
 #include <unistd.h>
 
 #include "imsg.h"
-
-static const char rcsid[] = "$Id: imsg.c,v 1.1 2017/10/04 18:51:36 pjp Exp $";
 
 int	 imsg_fd_overhead = 0;
 
