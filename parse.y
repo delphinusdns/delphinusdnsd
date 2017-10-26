@@ -20,6 +20,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+/*
+ * $Id: parse.y,v 1.47 2017/10/26 15:56:38 pjp Exp $
+ */
+
 %{
 #include "ddd-include.h"
 #include "ddd-dns.h"
@@ -103,7 +107,6 @@ typedef struct {
 #define YYSTYPE_IS_DECLARED 1
 #endif
 
-static const char rcsid[] = "$Id: parse.y,v 1.46 2017/08/09 15:34:17 pjp Exp $";
 static int version = 0;
 static int state = 0;
 static uint8_t region = 0;
