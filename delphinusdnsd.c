@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.25 2017/11/27 04:55:12 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.26 2017/11/27 05:06:46 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -752,7 +752,7 @@ main(int argc, char *argv[], char *environ[])
 	}
 
 #if __OpenBSD__
-	if (pledge("stdio inet rpath wpath cpath getpw proc id sendfd recvfd", NULL) < 0) {
+	if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
 		perror("pledge");
 		exit(1);
 	}
@@ -1604,6 +1604,13 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 		imsg_init(&tcp_ibuf, cfg->my_imsg[MY_IMSG_TCP].imsg_fds[1]);
 		break;
 	}
+
+#if __OpenBSD__
+	if (pledge("stdio inet sendfd recvfd", NULL) < 0) {
+		perror("pledge");
+		exit(1);
+	}
+#endif
 
 
 	sp = cfg->recurse;
@@ -2678,6 +2685,13 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	
 	struct sreply sreply;
 	struct timeval tv = { 10, 0};
+
+#if __OpenBSD__
+	if (pledge("stdio inet sendfd recvfd", NULL) < 0) {
+		perror("pledge");
+		exit(1);
+	}
+#endif
 
 	replybuf = calloc(1, 65536);
 	if (replybuf == NULL) {
