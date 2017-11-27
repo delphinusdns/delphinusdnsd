@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.24 2017/10/26 15:49:29 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.25 2017/11/27 04:55:12 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -435,16 +435,10 @@ main(int argc, char *argv[], char *environ[])
 				if (setsockopt(udp[i], IPPROTO_IP, IP_TTL,
 					&on, sizeof(on)) < 0) {
 #else
-#ifndef NEEDPLEDGE
 				if (setsockopt(udp[i], IPPROTO_IP, IP_RECVTTL,
 					&on, sizeof(on)) < 0) {
-#else
-				{
 #endif
-#endif
-#ifndef NEEDPLEDGE
 				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-#endif
 				}
 			} else if (res->ai_family == AF_INET6) {
 				/* RFC 3542 page 30 */
@@ -604,16 +598,10 @@ main(int argc, char *argv[], char *environ[])
 				if (setsockopt(udp[i], IPPROTO_IP, IP_TTL,
 					&on, sizeof(on)) < 0) {
 #else
-#ifndef NEEDPLEDGE
 				if (setsockopt(udp[i], IPPROTO_IP, IP_RECVTTL,
 					&on, sizeof(on)) < 0) {
-#else
-				{
 #endif
-#endif
-#ifndef NEEDPLEDGE
 				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-#endif
 				}
 			} else if (pifap->ifa_addr->sa_family == AF_INET6) {
 				/* RFC 3542 page 30 */
@@ -764,12 +752,10 @@ main(int argc, char *argv[], char *environ[])
 	}
 
 #if __OpenBSD__
-#ifdef NEEDPLEDGE
 	if (pledge("stdio inet rpath wpath cpath getpw proc id sendfd recvfd", NULL) < 0) {
 		perror("pledge");
 		exit(1);
 	}
-#endif
 #endif
 
 	/*
@@ -1538,9 +1524,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 
        u_int32_t received_ttl;
 #if defined __FreeBSD__ || defined __OpenBSD__
-#ifndef NEEDPLEDGE
 	u_char *ttlptr;
-#endif
 #else
 	int *ttlptr;
 #endif
@@ -1577,9 +1561,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	struct timeval tv = { 10, 0};
 
 	struct msghdr msgh;
-#ifndef NEEDPLEDGE
-	struct cmsghdr *cmsg;
-#endif
+	struct cmsghdr *cmsg = NULL;
 	struct iovec iov;
 	struct imsgbuf tcp_ibuf;
 	
@@ -1704,7 +1686,6 @@ axfrentry:
 
 				received_ttl = 0;
 
-#ifndef NEEDPLEDGE
 				for (cmsg = CMSG_FIRSTHDR(&msgh);
                    			cmsg != NULL;
                    			cmsg = CMSG_NXTHDR(&msgh,cmsg)) {
@@ -1749,7 +1730,6 @@ axfrentry:
 										received_ttl = (u_int)*ttlptr;
                      				}
 				}
-#endif /* NEEDPLEDGE */
 	
 				if (from->sa_family == AF_INET6) {
 					is_ipv6 = 1;
@@ -2461,12 +2441,10 @@ setup_master(ddDB *db, char **av, struct imsgbuf *ibuf)
 	struct imsg imsg;
 
 #if __OpenBSD__
-#ifdef NEEDPLEDGE
 	if (pledge("stdio wpath cpath exec proc", NULL) < 0) {
 		perror("pledge");
 		exit(1);
 	}
-#endif
 #endif
 	
 	idata = (struct domain *)calloc(1, SIZENODE); 
@@ -2701,9 +2679,6 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	struct sreply sreply;
 	struct timeval tv = { 10, 0};
 
-#ifndef NEEDPLEDGE
-	struct cmsghdr *cmsg;
-#endif
 	replybuf = calloc(1, 65536);
 	if (replybuf == NULL) {
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
