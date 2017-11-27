@@ -8,6 +8,7 @@ Changes in RELEASE_1_2 from RELEASE_1_1
 - fix CNAME's with DNSSEC
 - fix PTR's with DNSSEC
 - move to imsg functions with privsep for IPC messaging
+- OpenBSD delphinusdnsd is pledged
 
 Changes in RELEASE_1_1 from RELEASE_1_0
 

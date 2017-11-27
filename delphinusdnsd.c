@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.26 2017/11/27 05:06:46 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.27 2017/11/27 05:50:01 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -1783,6 +1783,8 @@ axfrentry:
 					dolog(LOG_INFO, "on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
 					goto drop;
 				}
+
+				/* pjp - branch to pledge parser here */
 
 				dh = (struct dns_header *)&buf[0];	
 
