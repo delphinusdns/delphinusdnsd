@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.13 2017/11/28 15:25:50 pjp Exp $
+ * $Id: axfr.c,v 1.14 2017/11/28 16:26:12 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -663,6 +663,8 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 
 					notifyfd[0] = -1;	
 					notifyfd[1] = -1;	
+			
+					notify = 0;
 				}
 			}
 
