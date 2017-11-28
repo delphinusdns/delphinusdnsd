@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.5 2017/10/26 15:49:29 pjp Exp $
+ * $Id: ddd-dns.h,v 1.6 2017/11/28 15:02:41 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -229,5 +229,27 @@ struct question {
 	int dnssecok;
 	int badvers;
 };
+
+struct parsequestion {
+	char name[DNS_MAXNAME];
+	u_int namelen;
+	u_int16_t qtype;
+	u_int16_t qclass;
+	char converted_name[DNS_MAXNAME + 1];
+	u_int16_t edns0len;
+	u_int8_t ednsversion;
+	int rd;
+	int dnssecok;
+	int badvers;
+	int rc;		/* return code */
+#define PARSE_RETURN_ACK	0
+#define PARSE_RETURN_NAK	1
+#define PARSE_RETURN_MALFORMED	2
+#define PARSE_RETURN_NOQUESTION 3
+#define PARSE_RETURN_NOTAQUESTION 4
+};
+	
+	
+	
 
 #endif /* DNS_H */

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.27 2017/11/27 05:50:01 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.28 2017/11/28 15:02:41 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -97,6 +97,7 @@ extern int 	get_record_size(ddDB *, char *, int);
 extern void *	find_substruct(struct domain *, u_int16_t);
 
 struct question		*build_question(char *, int, int);
+struct question		*convert_question(struct parsequestion *);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct domain *, struct domain *, u_int8_t, int, int, struct recurses *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
 int			free_question(struct question *);
@@ -109,6 +110,7 @@ void 			recurseheader(struct srecurseheader *, int, struct sockaddr_storage *, s
 void 			setup_master(ddDB *, char **, struct imsgbuf *ibuf);
 void 			slave_signal(int);
 void 			tcploop(struct cfg *, struct imsgbuf **);
+void 			parseloop(struct cfg *, struct imsgbuf **);
 
 /* aliases */
 
@@ -272,19 +274,19 @@ main(int argc, char *argv[], char *environ[])
 	}
 	/* imsg structs */
 	
-	parent_ibuf = calloc(3 + nflag, sizeof(struct imsgbuf *));
+	parent_ibuf = calloc(MY_IMSG_MAX + nflag, sizeof(struct imsgbuf *));
 	if (parent_ibuf == NULL) {
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		exit(1);
 	}
 
-	child_ibuf = calloc(3 + nflag, sizeof(struct imsgbuf *));
+	child_ibuf = calloc(MY_IMSG_MAX + nflag, sizeof(struct imsgbuf *));
 	if (child_ibuf == NULL) {
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		exit(1);
 	}
 
-	for (i = 0; i < 3 + nflag; i++) {
+	for (i = 0; i < MY_IMSG_MAX + nflag; i++) {
 		child_ibuf[i] = calloc(1, sizeof(struct imsgbuf));
 		if (child_ibuf[i] == NULL) {
 			dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
@@ -1552,8 +1554,8 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	struct sockaddr_in6 *sin6;
 	struct sockaddr_storage logfrom;
 
-	struct dns_header *dh;
 	struct question *question = NULL, *fakequestion = NULL;
+	struct parsequestion pq;
 	struct domain *sd0 = NULL, *sd1 = NULL;
 	struct domain_cname *csd;
 	
@@ -1563,7 +1565,11 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	struct msghdr msgh;
 	struct cmsghdr *cmsg = NULL;
 	struct iovec iov;
-	struct imsgbuf tcp_ibuf;
+	struct imsgbuf tcp_ibuf, parse_ibuf;
+	struct imsgbuf *pibuf;
+	struct imsg imsg;
+
+	ssize_t n, datalen;
 	
 	replybuf = calloc(1, 65536);
 	if (replybuf == NULL) {
@@ -1571,6 +1577,39 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 		slave_shutdown();
 		exit(1);
 	 }
+
+	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]) < 0) {
+		dolog(LOG_INFO, "socketpair() failed\n");
+		slave_shutdown();
+		exit(1);
+	}
+
+	pid = fork();
+	switch (pid) {
+	case -1:
+		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
+		exit(1);
+	case 0:
+		for (i = 0; i < cfg->sockcount; i++)  {
+				close(cfg->udp[i]);
+				close(cfg->tcp[i]);
+				if (axfrport && axfrport != port)
+					close(cfg->axfr[i]);
+		}
+		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
+		close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[1]);
+		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
+		imsg_init(ibuf[MY_IMSG_PARSER], cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
+		setproctitle("udp parse engine");
+		parseloop(cfg, ibuf);
+		/* NOTREACHED */
+		exit(1);
+	default:
+		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
+		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
+		pibuf = &parse_ibuf;
+		break;
+	}
 
 	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]) < 0) {
 		dolog(LOG_INFO, "socketpair() failed\n");
@@ -1589,6 +1628,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 				if (axfrport && axfrport != port)
 					close(cfg->axfr[i]);
 		}
+		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]); /* we open our own */
 		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
 		close(cfg->my_imsg[MY_IMSG_TCP].imsg_fds[1]);
 		imsg_init(ibuf[MY_IMSG_TCP], cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]);
@@ -1784,31 +1824,6 @@ axfrentry:
 					goto drop;
 				}
 
-				/* pjp - branch to pledge parser here */
-
-				dh = (struct dns_header *)&buf[0];	
-
-				/* check if we're a question or reply, drop replies */
-				if ((ntohs(dh->query) & DNS_REPLY)) {
-					dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
-					goto drop;
-				}
-
-				/* 
-				 * if questions aren't exactly 1 then drop
-				 */
-
-				if (ntohs(dh->question) != 1) {
-					dolog(LOG_INFO, "on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
-
-					/* format error */
-					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-
-					slen = reply_fmterror(&sreply);
-					dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
-					goto drop;
-				}
-
 				if (filter) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
@@ -1832,10 +1847,97 @@ axfrentry:
 					goto drop;
 				}
 					
+#if 0
 				if ((question = build_question(buf, len, ntohs(dh->additional))) == NULL) {
 					dolog(LOG_INFO, "on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
 					goto drop;
 				}
+#endif
+				/* pjp - branch to pledge parser here */
+
+				if (imsg_compose(pibuf, IMSG_PARSE_MESSAGE, 
+					0, 0, -1, buf, len) < 0) {
+					dolog(LOG_INFO, "imsg_compose %s\n", strerror(errno));
+				}
+				msgbuf_write(&pibuf->w);
+
+				FD_ZERO(&rset);
+				FD_SET(pibuf->fd, &rset);
+
+				tv.tv_sec = 10;
+				tv.tv_usec = 0;
+
+				sel = select(pibuf->fd + 1, &rset, NULL, NULL, &tv);
+
+				if (sel < 0) {
+					dolog(LOG_ERR, "internal error around select, dropping packet\n");
+					goto drop;
+				}
+
+				if (sel == 0) {
+					dolog(LOG_ERR, "internal error, timeout on parse imsg, drop\n");
+					goto drop;
+				}
+	
+				if (((n = imsg_read(pibuf)) == -1 && errno != EAGAIN) || n == 0) {
+					dolog(LOG_ERR, "internal error, timeout on parse imsg, drop\n");
+					goto drop;
+				}
+
+				for (;;) {
+				
+					if ((n = imsg_get(pibuf, &imsg)) == -1) {
+						break;
+					}
+
+					if (n == 0) {
+						break;
+					}
+
+					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+
+					switch (imsg.hdr.type) {
+					case IMSG_PARSEREPLY_MESSAGE:
+						if (datalen != sizeof(struct parsequestion)) {
+							dolog(LOG_ERR, "datalen != sizeof(struct parsequestion), can't work with this, drop\n");
+							goto drop;
+						}
+			
+						memcpy((char *)&pq, imsg.data, datalen);
+
+						if (pq.rc != PARSE_RETURN_ACK) {
+							switch (pq.rc) {
+							case PARSE_RETURN_MALFORMED:
+								dolog(LOG_INFO, "on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
+								goto drop;
+							case PARSE_RETURN_NOQUESTION:
+								dolog(LOG_INFO, "on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
+								/* format error */
+								build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+								slen = reply_fmterror(&sreply);
+								dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
+								goto drop;
+							case PARSE_RETURN_NOTAQUESTION:
+								dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
+								goto drop;
+							case PARSE_RETURN_NAK:
+								dolog(LOG_INFO, "on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
+								goto drop;
+							}
+						}	
+
+						question = convert_question(&pq);
+						if (question == NULL) {
+							dolog(LOG_INFO, "on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[i], address);
+							goto drop;
+						}
+							
+					
+						break;
+					} /* switch */
+
+					imsg_free(&imsg);
+				} /* for (;;) */
 
 				/* goto drop beyond this point should goto out instead */
 
@@ -2658,6 +2760,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	int axfr_acl = 0;
 	int sp; 
 	int lfd;
+	pid_t pid;
 
 	u_int8_t aregion;			/* region where the address comes from */
 
@@ -2680,20 +2783,59 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
 
-	struct dns_header *dh;
 	struct question *question = NULL, *fakequestion = NULL;
 	struct domain *sd0 = NULL, *sd1 = NULL;
 	struct domain_cname *csd;
 	
 	struct sreply sreply;
 	struct timeval tv = { 10, 0};
+	struct imsgbuf parse_ibuf;
+	struct imsgbuf *pibuf;
+	struct imsg imsg;
+	struct parsequestion pq;
 
+	ssize_t n, datalen;
+
+	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]) < 0) {
+		dolog(LOG_INFO, "socketpair() failed\n");
+		slave_shutdown();
+		exit(1);
+	}
+
+	pid = fork();
+	switch (pid) {
+	case -1:
+		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
+		exit(1);
+	case 0:
+		for (i = 0; i < cfg->sockcount; i++)  {
+				close(cfg->tcp[i]);
+				if (axfrport && axfrport != port)
+					close(cfg->axfr[i]);
+		}
+		close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[1]);
+		close(cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]);
+		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
+		imsg_init(ibuf[MY_IMSG_PARSER], cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
+		setproctitle("tcp parse engine");
+		parseloop(cfg, ibuf);
+		/* NOTREACHED */
+		exit(1);
+	default:
+		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
+		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
+		pibuf = &parse_ibuf;
+		break;
+	}
+	
+	/* pjp */
 #if __OpenBSD__
 	if (pledge("stdio inet sendfd recvfd", NULL) < 0) {
 		perror("pledge");
 		exit(1);
 	}
 #endif
+
 
 	replybuf = calloc(1, 65536);
 	if (replybuf == NULL) {
@@ -2852,35 +2994,93 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					goto drop;
 				}
 
-				dh = (struct dns_header *)&pbuf[0];	
+				/* pjp send to parseloop */
 
-				/* check if we're a question or reply, drop replies */
-				if ((ntohs(dh->query) & DNS_REPLY)) {
-					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
+				if (imsg_compose(pibuf, IMSG_PARSE_MESSAGE, 
+					0, 0, -1, pbuf, len) < 0) {
+					dolog(LOG_INFO, "imsg_compose %s\n", strerror(errno));
+				}
+				msgbuf_write(&pibuf->w);
+
+				FD_ZERO(&rset);
+				FD_SET(pibuf->fd, &rset);
+
+				tv.tv_sec = 10;
+				tv.tv_usec = 0;
+
+				sel = select(pibuf->fd + 1, &rset, NULL, NULL, &tv);
+
+				if (sel < 0) {
+					dolog(LOG_ERR, "tcploop internal error around select, dropping packet\n");
 					goto drop;
 				}
 
-				/* 
-				 * if questions aren't exactly 1 then drop
-				 */
-
-				if (ntohs(dh->question) != 1) {
-					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
-
-					/* format error */
-					build_reply(	&sreply, so, pbuf, len, NULL, 
-									from, fromlen, NULL, NULL, aregion, 
-									istcp, 0, NULL, replybuf);
-
-					slen = reply_fmterror(&sreply);
-					dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
+				if (sel == 0) {
+					dolog(LOG_ERR, "tcploop internal error, timeout on parse imsg, drop\n");
 					goto drop;
 				}
+	
+				if (((n = imsg_read(pibuf)) == -1 && errno != EAGAIN) || n == 0) {
+					dolog(LOG_ERR, "tcploop internal error, timeout on parse imsg, drop\n");
+					goto drop;
+				}
+
+				for (;;) {
+				
+					if ((n = imsg_get(pibuf, &imsg)) == -1) {
+						break;
+					}
+
+					if (n == 0) {
+						break;
+					}
+
+					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+
+					switch (imsg.hdr.type) {
+					case IMSG_PARSEREPLY_MESSAGE:
+						if (datalen != sizeof(struct parsequestion)) {
+							dolog(LOG_ERR, "tcploop datalen != sizeof(struct parsequestion), can't work with this, drop\n");
+							goto drop;
+						}
+			
+						memcpy((char *)&pq, imsg.data, datalen);
+
+						if (pq.rc != PARSE_RETURN_ACK) {
+							switch (pq.rc) {
+							case PARSE_RETURN_MALFORMED:
+								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
+								goto drop;
+							case PARSE_RETURN_NOQUESTION:
+								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
+								/* format error */
+								build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+								slen = reply_fmterror(&sreply);
+								dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
+								goto drop;
+							case PARSE_RETURN_NOTAQUESTION:
+								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
+								goto drop;
+							case PARSE_RETURN_NAK:
+								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
+								goto drop;
+							}
+						}	
+
+						question = convert_question(&pq);
+						if (question == NULL) {
+							dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[i], address);
+							goto drop;
+						}
+							
 					
-				if ((question = build_question(pbuf, len, ntohs(dh->additional))) == NULL) {
-					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
-					goto drop;
-				}
+						break;
+					} /* switch */
+
+					imsg_free(&imsg);
+				} /* for (;;) */
+
+				/* pjp end of parseloop branch */
 				/* goto drop beyond this point should goto out instead */
 				fakequestion = NULL;
 
@@ -3375,4 +3575,191 @@ tcpnxdomain:
 	}  /* for (;;) */
 
 	/* NOTREACHED */
+}
+
+void
+parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
+{
+	struct imsg imsg;
+	struct imsgbuf *mybuf = ibuf[MY_IMSG_PARSER];
+	struct dns_header *dh = NULL;
+	struct question *question = NULL;
+	struct parsequestion pq;
+	char *packet;
+	fd_set rset;
+	int sel;
+	int fd = mybuf->fd;
+	ssize_t n, datalen;
+
+#if __OpenBSD__
+	if (pledge("stdio sendfd recvfd", NULL) < 0) {
+		perror("pledge");
+		slave_shutdown();
+		exit(1);
+	}
+#endif
+
+	packet = calloc(1, 16384);
+	if (packet == NULL) {
+		dolog(LOG_ERR, "calloc: %m");
+		slave_shutdown();
+		exit(1);
+	}
+
+	for (;;) {
+		FD_ZERO(&rset);
+		FD_SET(fd, &rset);
+
+		sel = select(fd + 1, &rset, NULL, NULL, NULL);
+
+		if (sel < 0) {
+			continue;
+		}
+
+		if (((n = imsg_read(mybuf)) == -1 && errno != EAGAIN) || n == 0) {
+			continue;
+		}
+
+		for (;;) {
+		
+			if ((n = imsg_get(mybuf, &imsg)) == -1) {
+				break;
+			}
+
+			if (n == 0) {
+				break;
+			}
+
+			datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+
+			switch (imsg.hdr.type) {
+			case IMSG_PARSE_MESSAGE:
+				memset(&pq, 0, sizeof(struct parsequestion));
+
+				/* XXX magic numbers */
+				if (datalen > 16384) {
+					pq.rc = PARSE_RETURN_NAK;
+					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
+					msgbuf_write(&mybuf->w);
+					break;
+				}
+				memcpy(packet, imsg.data, datalen);
+
+				if (datalen < sizeof(struct dns_header)) {
+					/* SEND NAK */
+					pq.rc = PARSE_RETURN_NAK;
+					imsg_compose(ibuf[MY_IMSG_PARSER], IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
+					msgbuf_write(&ibuf[MY_IMSG_PARSER]->w);
+					msgbuf_write(&mybuf->w);
+					break;
+				}
+				/* pjp */
+				dh = (struct dns_header *)packet;
+
+				if ((ntohs(dh->query) & DNS_REPLY)) {
+					/* we want to reply with a NAK here */
+					pq.rc = PARSE_RETURN_NOTAQUESTION;
+					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
+					msgbuf_write(&mybuf->w);
+					break;
+				}
+
+				/* 
+				 * if questions aren't exactly 1 then reply NAK
+				 */
+
+				if (ntohs(dh->question) != 1) {
+					/* XXX reply nak here */
+					pq.rc = PARSE_RETURN_NOQUESTION;
+					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
+					msgbuf_write(&mybuf->w);
+					break;
+				}
+
+				if ((question = build_question(packet, datalen, ntohs(dh->additional))) == NULL) {
+					/* XXX reply nak here */
+					pq.rc = PARSE_RETURN_MALFORMED;
+					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
+					msgbuf_write(&mybuf->w);
+					break;
+				}
+				
+				memcpy(pq.name, question->hdr->name, question->hdr->namelen);
+				pq.namelen = question->hdr->namelen;
+				pq.qtype = question->hdr->qtype;
+				pq.qclass = question->hdr->qclass;
+				strlcpy(pq.converted_name, question->converted_name, sizeof(pq.converted_name));
+				pq.edns0len = question->edns0len;
+				pq.ednsversion = question->ednsversion;
+				pq.rd = question->rd;
+				pq.dnssecok = question->dnssecok;
+				pq.badvers = question->badvers;
+				pq.rc = PARSE_RETURN_ACK;
+
+				imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&pq, sizeof(struct parsequestion));
+				msgbuf_write(&mybuf->w);
+				/* send it */
+				free_question(question);
+				break;
+			}
+
+			imsg_free(&imsg);
+
+
+		} /* inner for(;;) */
+
+	} /* outter for(;;) */
+
+	/* NOTREACHED */
+}
+
+/*
+ * CONVERT_QUESTION - convert a struct parsequestion from parse process to 
+ *			struct question
+ */
+ 
+struct question	*
+convert_question(struct parsequestion *pq)
+{
+	struct question *q;
+
+	q = (void *)calloc(1, sizeof(struct question));
+	if (q == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		return NULL;
+	}
+	q->hdr = (void *)calloc(1, sizeof(struct dns_question_hdr));
+	if (q->hdr == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		free(q);
+		return NULL;
+	}
+	
+	q->hdr->name = strdup(pq->name);
+	if (q->hdr->name == NULL) {
+		dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+		free(q->hdr);
+		free(q);
+		return NULL;
+	}
+		
+	q->hdr->namelen = pq->namelen;
+	q->hdr->qtype = pq->qtype;
+	q->hdr->qclass = pq->qclass;
+	
+	q->converted_name = strdup(pq->converted_name);
+	if (q->converted_name == NULL) {
+		dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+		free(q->hdr);
+		free(q);
+		return NULL;
+	}
+
+	q->edns0len = pq->edns0len;
+	q->ednsversion = pq->ednsversion;
+	q->rd = pq->rd;
+	q->dnssecok = pq->dnssecok;
+	q->badvers = pq->badvers;
+
+	return (q);
 }

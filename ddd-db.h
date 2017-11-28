@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.6 2017/10/26 15:49:29 pjp Exp $
+ * $Id: ddd-db.h,v 1.7 2017/11/28 15:02:41 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -43,6 +43,8 @@
 #define IMSG_SPREAD_MESSAGE 1		/* spread a record to all childs */
 #define IMSG_XFR_MESSAGE    2		/* forward message to axfr proc */
 #define IMSG_XFRFD_MESSAGE  3		/* forward message fd to axfr proc */
+#define IMSG_PARSE_MESSAGE  4		/* pass message to pledge parser */
+#define IMSG_PARSEREPLY_MESSAGE 5	/* return message from pledge parser */
 
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2
@@ -492,6 +494,8 @@ struct cfg {
 #define MY_IMSG_MASTER	0
 #define MY_IMSG_AXFR 	1
 #define MY_IMSG_TCP	2
+#define MY_IMSG_PARSER	3
+#define MY_IMSG_MAX	4
 	int recurse;			/* recurse socket */
 	int log;			/* logging socket */
 	int sockcount;			/* set sockets */
