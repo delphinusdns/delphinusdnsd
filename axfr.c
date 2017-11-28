@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.12 2017/10/26 15:49:29 pjp Exp $
+ * $Id: axfr.c,v 1.13 2017/11/28 15:25:50 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -334,13 +334,11 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 	char address[INET6_ADDRSTRLEN];
 
 #if __OpenBSD__
-#ifdef NEEDPLEDGE
         if (pledge("stdio inet recvfd", NULL) < 0)
  {
                 perror("pledge");
                 exit(1);
         }
-#endif
 #endif
 
 	signal(SIGCHLD, reap);
