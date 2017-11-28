@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.28 2017/11/28 15:02:41 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.29 2017/11/28 18:17:00 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -328,7 +328,7 @@ main(int argc, char *argv[], char *environ[])
 
 	/* make a master program that holds the pidfile, boss of ... eek */
 
-	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]) < 0) {
+	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]) < 0) {
 		dolog(LOG_INFO, "socketpair() failed\n");
 		slave_shutdown();
 		exit(1);
