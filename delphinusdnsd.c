@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.29 2017/11/28 18:17:00 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.30 2017/11/28 18:57:16 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -1909,6 +1909,7 @@ axfrentry:
 							switch (pq.rc) {
 							case PARSE_RETURN_MALFORMED:
 								dolog(LOG_INFO, "on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
+								imsg_free(&imsg);
 								goto drop;
 							case PARSE_RETURN_NOQUESTION:
 								dolog(LOG_INFO, "on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
@@ -1916,12 +1917,15 @@ axfrentry:
 								build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 								slen = reply_fmterror(&sreply);
 								dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
+								imsg_free(&imsg);
 								goto drop;
 							case PARSE_RETURN_NOTAQUESTION:
 								dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
+								imsg_free(&imsg);
 								goto drop;
 							case PARSE_RETURN_NAK:
 								dolog(LOG_INFO, "on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
+								imsg_free(&imsg);
 								goto drop;
 							}
 						}	
@@ -1929,6 +1933,7 @@ axfrentry:
 						question = convert_question(&pq);
 						if (question == NULL) {
 							dolog(LOG_INFO, "on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[i], address);
+							imsg_free(&imsg);
 							goto drop;
 						}
 							
@@ -3041,6 +3046,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					case IMSG_PARSEREPLY_MESSAGE:
 						if (datalen != sizeof(struct parsequestion)) {
 							dolog(LOG_ERR, "tcploop datalen != sizeof(struct parsequestion), can't work with this, drop\n");
+							imsg_free(&imsg);
 							goto drop;
 						}
 			
@@ -3050,6 +3056,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 							switch (pq.rc) {
 							case PARSE_RETURN_MALFORMED:
 								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
+								imsg_free(&imsg);
 								goto drop;
 							case PARSE_RETURN_NOQUESTION:
 								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
@@ -3057,12 +3064,15 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 								build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 								slen = reply_fmterror(&sreply);
 								dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
+								imsg_free(&imsg);
 								goto drop;
 							case PARSE_RETURN_NOTAQUESTION:
 								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
+								imsg_free(&imsg);
 								goto drop;
 							case PARSE_RETURN_NAK:
 								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
+								imsg_free(&imsg);
 								goto drop;
 							}
 						}	
@@ -3070,6 +3080,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						question = convert_question(&pq);
 						if (question == NULL) {
 							dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[i], address);
+							imsg_free(&imsg);
 							goto drop;
 						}
 							
