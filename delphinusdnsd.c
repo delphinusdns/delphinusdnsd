@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.30 2017/11/28 18:57:16 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.31 2017/11/29 09:57:16 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -3603,7 +3603,7 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	ssize_t n, datalen;
 
 #if __OpenBSD__
-	if (pledge("stdio sendfd recvfd", NULL) < 0) {
+	if (pledge("stdio", NULL) < 0) {
 		perror("pledge");
 		slave_shutdown();
 		exit(1);
