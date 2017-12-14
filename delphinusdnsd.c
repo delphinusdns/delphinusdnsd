@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.32 2017/12/14 10:15:50 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.33 2017/12/14 10:37:23 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -433,13 +433,8 @@ main(int argc, char *argv[], char *environ[])
 			}
 
 			if (res->ai_family == AF_INET) {
-#ifdef __NetBSD__
-				if (setsockopt(udp[i], IPPROTO_IP, IP_TTL,
-					&on, sizeof(on)) < 0) {
-#else
 				if (setsockopt(udp[i], IPPROTO_IP, IP_RECVTTL,
 					&on, sizeof(on)) < 0) {
-#endif
 				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 				}
 			} else if (res->ai_family == AF_INET6) {
@@ -598,13 +593,8 @@ main(int argc, char *argv[], char *environ[])
 			}
 
 			if (pifap->ifa_addr->sa_family == AF_INET) {
-#ifdef __NetBSD__
-				if (setsockopt(udp[i], IPPROTO_IP, IP_TTL,
-					&on, sizeof(on)) < 0) {
-#else
 				if (setsockopt(udp[i], IPPROTO_IP, IP_RECVTTL,
 					&on, sizeof(on)) < 0) {
-#endif
 				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 				}
 			} else if (pifap->ifa_addr->sa_family == AF_INET6) {
@@ -1743,9 +1733,6 @@ axfrentry:
                       				if (cmsg->cmsg_level == IPPROTO_IP
 #ifdef __linux__ 
                         				&& cmsg->cmsg_type == IP_TTL) {
-#elif defined __NetBSD__
-                        				&& cmsg->cmsg_type == IP_TTL) {
-
 #else
 
                         				&& cmsg->cmsg_type == IP_RECVTTL) {
@@ -1772,12 +1759,10 @@ axfrentry:
 										}
 
 #ifdef __NetBSD__
-										ttlptr = (int *) CMSG_DATA(cmsg);
+   										ttlptr = (int *) CMSG_DATA(cmsg);
 #else
 										ttlptr = (u_char *) CMSG_DATA(cmsg);
 #endif
-
-
 										received_ttl = (u_int)*ttlptr;
                      				}
 				}
