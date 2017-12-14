@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.31 2017/11/29 09:57:16 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.32 2017/12/14 10:15:50 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -526,7 +526,9 @@ main(int argc, char *argv[], char *environ[])
 					slave_shutdown();
 					exit(1);
 				}
-			} /* axfrport */
+			} else if (axfrport && axfrport == port) {
+				afd[i] = -1;
+			}
 
 		} /* for .. bcount */
 
@@ -665,7 +667,9 @@ main(int argc, char *argv[], char *environ[])
 					slave_shutdown();
 					exit(1);
 				}
-			} /* axfrport */
+			} else if (axfrport && axfrport == port) {
+				afd[i] = -1;
+			}
 
 		} /* AF_INET */
 
@@ -841,7 +845,7 @@ main(int argc, char *argv[], char *environ[])
 			close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[1]);
 			imsg_init(parent_ibuf[MY_IMSG_AXFR], cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[0]);
 
-			axfrloop(afd, i, ident, db, parent_ibuf[MY_IMSG_AXFR]);
+			axfrloop(afd, (axfrport == port) ? 0 : i, ident, db, parent_ibuf[MY_IMSG_AXFR]);
 			/* NOTREACHED */
 			exit(1);
 		default:
@@ -1878,71 +1882,76 @@ axfrentry:
 					dolog(LOG_ERR, "internal error, timeout on parse imsg, drop\n");
 					goto drop;
 				}
+
+				if (FD_ISSET(pibuf->fd, &rset)) {
 	
-				if (((n = imsg_read(pibuf)) == -1 && errno != EAGAIN) || n == 0) {
-					dolog(LOG_ERR, "internal error, timeout on parse imsg, drop\n");
+						if (((n = imsg_read(pibuf)) == -1 && errno != EAGAIN) || n == 0) {
+							dolog(LOG_ERR, "internal error, timeout on parse imsg, drop\n");
+							goto drop;
+						}
+
+						for (;;) {
+						
+							if ((n = imsg_get(pibuf, &imsg)) == -1) {
+								break;
+							}
+
+							if (n == 0) {
+								break;
+							}
+
+							datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+
+							switch (imsg.hdr.type) {
+							case IMSG_PARSEREPLY_MESSAGE:
+								if (datalen != sizeof(struct parsequestion)) {
+									dolog(LOG_ERR, "datalen != sizeof(struct parsequestion), can't work with this, drop\n");
+									goto drop;
+								}
+					
+								memcpy((char *)&pq, imsg.data, datalen);
+
+								if (pq.rc != PARSE_RETURN_ACK) {
+									switch (pq.rc) {
+									case PARSE_RETURN_MALFORMED:
+										dolog(LOG_INFO, "on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
+										imsg_free(&imsg);
+										goto drop;
+									case PARSE_RETURN_NOQUESTION:
+										dolog(LOG_INFO, "on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
+										/* format error */
+										build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+										slen = reply_fmterror(&sreply);
+										dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
+										imsg_free(&imsg);
+										goto drop;
+									case PARSE_RETURN_NOTAQUESTION:
+										dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
+										imsg_free(&imsg);
+										goto drop;
+									case PARSE_RETURN_NAK:
+										dolog(LOG_INFO, "on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
+										imsg_free(&imsg);
+										goto drop;
+									}
+								}	
+
+								question = convert_question(&pq);
+								if (question == NULL) {
+									dolog(LOG_INFO, "on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[i], address);
+									imsg_free(&imsg);
+									goto drop;
+								}
+											
+									
+								break;
+							} /* switch */
+
+							imsg_free(&imsg);
+						} /* for (;;) */
+				} else { 	 /* FD_ISSET */
 					goto drop;
 				}
-
-				for (;;) {
-				
-					if ((n = imsg_get(pibuf, &imsg)) == -1) {
-						break;
-					}
-
-					if (n == 0) {
-						break;
-					}
-
-					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
-
-					switch (imsg.hdr.type) {
-					case IMSG_PARSEREPLY_MESSAGE:
-						if (datalen != sizeof(struct parsequestion)) {
-							dolog(LOG_ERR, "datalen != sizeof(struct parsequestion), can't work with this, drop\n");
-							goto drop;
-						}
-			
-						memcpy((char *)&pq, imsg.data, datalen);
-
-						if (pq.rc != PARSE_RETURN_ACK) {
-							switch (pq.rc) {
-							case PARSE_RETURN_MALFORMED:
-								dolog(LOG_INFO, "on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
-								imsg_free(&imsg);
-								goto drop;
-							case PARSE_RETURN_NOQUESTION:
-								dolog(LOG_INFO, "on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
-								/* format error */
-								build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_fmterror(&sreply);
-								dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
-								imsg_free(&imsg);
-								goto drop;
-							case PARSE_RETURN_NOTAQUESTION:
-								dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
-								imsg_free(&imsg);
-								goto drop;
-							case PARSE_RETURN_NAK:
-								dolog(LOG_INFO, "on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
-								imsg_free(&imsg);
-								goto drop;
-							}
-						}	
-
-						question = convert_question(&pq);
-						if (question == NULL) {
-							dolog(LOG_INFO, "on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[i], address);
-							imsg_free(&imsg);
-							goto drop;
-						}
-							
-					
-						break;
-					} /* switch */
-
-					imsg_free(&imsg);
-				} /* for (;;) */
 
 				/* goto drop beyond this point should goto out instead */
 
@@ -3627,97 +3636,101 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 			continue;
 		}
 
-		if (((n = imsg_read(mybuf)) == -1 && errno != EAGAIN) || n == 0) {
-			continue;
-		}
+		if (FD_ISSET(fd, &rset)) {
 
-		for (;;) {
-		
-			if ((n = imsg_get(mybuf, &imsg)) == -1) {
-				break;
+			if (((n = imsg_read(mybuf)) == -1 && errno != EAGAIN) || n == 0) {
+				continue;
 			}
 
-			if (n == 0) {
-				break;
-			}
-
-			datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
-
-			switch (imsg.hdr.type) {
-			case IMSG_PARSE_MESSAGE:
-				memset(&pq, 0, sizeof(struct parsequestion));
-
-				/* XXX magic numbers */
-				if (datalen > 16384) {
-					pq.rc = PARSE_RETURN_NAK;
-					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
-					msgbuf_write(&mybuf->w);
-					break;
-				}
-				memcpy(packet, imsg.data, datalen);
-
-				if (datalen < sizeof(struct dns_header)) {
-					/* SEND NAK */
-					pq.rc = PARSE_RETURN_NAK;
-					imsg_compose(ibuf[MY_IMSG_PARSER], IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
-					msgbuf_write(&ibuf[MY_IMSG_PARSER]->w);
-					msgbuf_write(&mybuf->w);
-					break;
-				}
-				/* pjp */
-				dh = (struct dns_header *)packet;
-
-				if ((ntohs(dh->query) & DNS_REPLY)) {
-					/* we want to reply with a NAK here */
-					pq.rc = PARSE_RETURN_NOTAQUESTION;
-					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
-					msgbuf_write(&mybuf->w);
+			for (;;) {
+			
+				if ((n = imsg_get(mybuf, &imsg)) == -1) {
 					break;
 				}
 
-				/* 
-				 * if questions aren't exactly 1 then reply NAK
-				 */
-
-				if (ntohs(dh->question) != 1) {
-					/* XXX reply nak here */
-					pq.rc = PARSE_RETURN_NOQUESTION;
-					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
-					msgbuf_write(&mybuf->w);
+				if (n == 0) {
 					break;
 				}
 
-				if ((question = build_question(packet, datalen, ntohs(dh->additional))) == NULL) {
-					/* XXX reply nak here */
-					pq.rc = PARSE_RETURN_MALFORMED;
-					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
+				datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+
+				switch (imsg.hdr.type) {
+				case IMSG_PARSE_MESSAGE:
+					memset(&pq, 0, sizeof(struct parsequestion));
+
+					/* XXX magic numbers */
+					if (datalen > 16384) {
+						pq.rc = PARSE_RETURN_NAK;
+						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
+						msgbuf_write(&mybuf->w);
+						break;
+					}
+					memcpy(packet, imsg.data, datalen);
+
+					if (datalen < sizeof(struct dns_header)) {
+						/* SEND NAK */
+						pq.rc = PARSE_RETURN_NAK;
+						imsg_compose(ibuf[MY_IMSG_PARSER], IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
+						msgbuf_write(&ibuf[MY_IMSG_PARSER]->w);
+						msgbuf_write(&mybuf->w);
+						break;
+					}
+					/* pjp */
+					dh = (struct dns_header *)packet;
+
+					if ((ntohs(dh->query) & DNS_REPLY)) {
+						/* we want to reply with a NAK here */
+						pq.rc = PARSE_RETURN_NOTAQUESTION;
+						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
+						msgbuf_write(&mybuf->w);
+						break;
+					}
+
+					/* 
+					 * if questions aren't exactly 1 then reply NAK
+					 */
+
+					if (ntohs(dh->question) != 1) {
+						/* XXX reply nak here */
+						pq.rc = PARSE_RETURN_NOQUESTION;
+						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
+						msgbuf_write(&mybuf->w);
+						break;
+					}
+
+					if ((question = build_question(packet, datalen, ntohs(dh->additional))) == NULL) {
+						/* XXX reply nak here */
+						pq.rc = PARSE_RETURN_MALFORMED;
+						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
+						msgbuf_write(&mybuf->w);
+						break;
+					}
+					
+					memcpy(pq.name, question->hdr->name, question->hdr->namelen);
+					pq.namelen = question->hdr->namelen;
+					pq.qtype = question->hdr->qtype;
+					pq.qclass = question->hdr->qclass;
+					strlcpy(pq.converted_name, question->converted_name, sizeof(pq.converted_name));
+					pq.edns0len = question->edns0len;
+					pq.ednsversion = question->ednsversion;
+					pq.rd = question->rd;
+					pq.dnssecok = question->dnssecok;
+					pq.badvers = question->badvers;
+					pq.rc = PARSE_RETURN_ACK;
+
+					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&pq, sizeof(struct parsequestion));
 					msgbuf_write(&mybuf->w);
+					/* send it */
+					free_question(question);
 					break;
 				}
-				
-				memcpy(pq.name, question->hdr->name, question->hdr->namelen);
-				pq.namelen = question->hdr->namelen;
-				pq.qtype = question->hdr->qtype;
-				pq.qclass = question->hdr->qclass;
-				strlcpy(pq.converted_name, question->converted_name, sizeof(pq.converted_name));
-				pq.edns0len = question->edns0len;
-				pq.ednsversion = question->ednsversion;
-				pq.rd = question->rd;
-				pq.dnssecok = question->dnssecok;
-				pq.badvers = question->badvers;
-				pq.rc = PARSE_RETURN_ACK;
 
-				imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&pq, sizeof(struct parsequestion));
-				msgbuf_write(&mybuf->w);
-				/* send it */
-				free_question(question);
-				break;
-			}
-
-			imsg_free(&imsg);
+				imsg_free(&imsg);
 
 
-		} /* inner for(;;) */
+			} /* inner for(;;) */
+
+		} /* FD_ISSET */
 
 	} /* outter for(;;) */
 
