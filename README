@@ -1,4 +1,4 @@
-$Id: README,v 1.23 2017/11/27 05:50:38 pjp Exp $
+$Id: README,v 1.24 2017/12/14 10:39:39 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -139,7 +139,7 @@ Operating System**| makes and compiles | responds to queries |
 ------------------+--------------------+---------------------+
 FreeBSD 10.3      |        yes         |       yes           |
 ------------------+--------------------+---------------------+
-NetBSD 7.0.2      |        yes*        |       yes           |
+NetBSD 7.1        |        yes         |       yes           |
 ------------------+--------------------+---------------------+
 OpenBSD 6.2       |        yes         |       yes           |
 ------------------+--------------------+---------------------+
@@ -151,7 +151,6 @@ with MacPorts     |                    |                     |
 Rasbian OS        |        yes         |       yes           |
 ------------------+--------------------+---------------------+
 
-* there was a period in time that NetBSD didn't compile
 **** Mac OS X support has been dropped in version 1.1.0
 
 5. EXAMPLES
