@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.33 2017/12/14 10:37:23 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.34 2017/12/26 14:01:33 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -868,9 +868,20 @@ main(int argc, char *argv[], char *environ[])
 	 *
 	 */
 
+	cfg->pid = 0;
+	cfg->nth = 0;
+
 	for (n = 0; n < nflag; n++) {
+		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_MAX + n].imsg_fds[0]) < 0) {
+			dolog(LOG_INFO, "socketpair() failed\n");
+			slave_shutdown();
+			exit(1);
+		}
+
 		switch (pid = fork()) {
 		case 0:
+			cfg->pid = getpid();
+			cfg->nth = n;
 			cfg->sockcount = i;
 			cfg->db = db;
 			for (i = 0; i < cfg->sockcount; i++) {
@@ -885,11 +896,16 @@ main(int argc, char *argv[], char *environ[])
 
 			cfg->log = lfd;
 
+			close(cfg->my_imsg[MY_IMSG_MAX + n].imsg_fds[0]);
+			imsg_init(child_ibuf[MY_IMSG_MAX + n], cfg->my_imsg[MY_IMSG_MAX + n].imsg_fds[1]);
 			
+			setproctitle("child %d pid %d", n, cfg->pid);
 			(void)mainloop(cfg, child_ibuf);
 
 			/* NOTREACHED */
 		default:	
+			close(cfg->my_imsg[MY_IMSG_MAX + n].imsg_fds[1]);
+			imsg_init(child_ibuf[MY_IMSG_MAX + n], cfg->my_imsg[MY_IMSG_MAX + n].imsg_fds[0]);
 			break;
 		} /* switch pid= fork */
 	} /* for (.. nflag */
@@ -1594,7 +1610,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 		close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[1]);
 		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
 		imsg_init(ibuf[MY_IMSG_PARSER], cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
-		setproctitle("udp parse engine");
+		setproctitle("udp parse engine %d", cfg->pid);
 		parseloop(cfg, ibuf);
 		/* NOTREACHED */
 		exit(1);
@@ -1626,7 +1642,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
 		close(cfg->my_imsg[MY_IMSG_TCP].imsg_fds[1]);
 		imsg_init(ibuf[MY_IMSG_TCP], cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]);
-		setproctitle("TCP engine");
+		setproctitle("TCP engine %d", cfg->pid);
 		tcploop(cfg, ibuf);
 		/* NOTREACHED */
 		exit(1);
@@ -1836,12 +1852,6 @@ axfrentry:
 					goto drop;
 				}
 					
-#if 0
-				if ((question = build_question(buf, len, ntohs(dh->additional))) == NULL) {
-					dolog(LOG_INFO, "on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
-					goto drop;
-				}
-#endif
 				/* pjp - branch to pledge parser here */
 
 				if (imsg_compose(pibuf, IMSG_PARSE_MESSAGE, 
@@ -1972,13 +1982,6 @@ axfrentry:
 								goto udpout;
 						}
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
-#if 0
-						fakequestion = build_fake_question(sd0->zone, sd0->zonelen, DNS_TYPE_SOA);
-						if (fakequestion == NULL) {
-							dolog(LOG_INFO, "fakequestion failed\n");
-							break;
-						}
-#endif
 
 						build_reply(&sreply, so, buf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_refused(&sreply);
@@ -2816,7 +2819,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 		close(cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]);
 		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
 		imsg_init(ibuf[MY_IMSG_PARSER], cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
-		setproctitle("tcp parse engine");
+		setproctitle("tcp parse engine %d", cfg->pid);
 		parseloop(cfg, ibuf);
 		/* NOTREACHED */
 		exit(1);

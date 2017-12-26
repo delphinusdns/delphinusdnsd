@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.7 2017/11/28 15:02:41 pjp Exp $
+ * $Id: ddd-db.h,v 1.8 2017/12/26 14:01:33 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -499,6 +499,8 @@ struct cfg {
 	int recurse;			/* recurse socket */
 	int log;			/* logging socket */
 	int sockcount;			/* set sockets */
+	int nth;
+	pid_t pid;
 	ddDB *db;			/* database */
 };
 
