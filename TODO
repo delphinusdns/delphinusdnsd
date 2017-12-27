@@ -1,5 +1,12 @@
 The TODO's here are for delphinusdnsd which is the successor of wildcarddnsd.
-Please see http://delphinusdns.centroid.eu for updates/news.
+Please see http://delphinusdns.org for updates/news.
+
+For 1.3.0 release
+- fix the DNSSEC code so that a key rollover is allowed
+- sign zones immediately at startup which doesn't require a zonesigner
+  this would be coupled with a dynamic dns system which automatically adds/up-
+  dates	new NSEC3 and RRSIG's for new records.
+- TSIG support would still be nice
 
 For 1.2.0 release
 - sign zones immediately at startup which doesn't require a zonesigner

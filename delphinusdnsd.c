@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.34 2017/12/26 14:01:33 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.35 2017/12/27 19:40:27 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -150,8 +150,8 @@ u_int32_t cachesize = 0;
 char *bind_list[255];
 char *interface_list[255];
 #ifndef DD_VERSION
-char *versionstring = "delphinusdnsd-current";
-uint8_t vslen = 21;
+char *versionstring = "delphinusdnsd-1.2";
+uint8_t vslen = 17;
 #else
 char *versionstring = DD_VERSION;
 uint8_t vslen = DD_VERSION_LEN;
