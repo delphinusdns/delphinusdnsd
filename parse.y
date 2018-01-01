@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.47 2017/10/26 15:56:38 pjp Exp $
+ * $Id: parse.y,v 1.48 2018/01/01 19:47:40 pjp Exp $
  */
 
 %{
@@ -1259,7 +1259,7 @@ int
 yylex() 
 {
 	struct tab *p;
-	static char buf[512];
+	static char buf[4096];
 	static char dst[INET6_ADDRSTRLEN];
 	char *cp = NULL;
 	int c, cpos;
