@@ -1,8 +1,8 @@
 .PATH: ${.CURDIR}/..
 
-PROG=dd-convert
+PROG=dddctl
 
-SRCS=dd-convert.c parse.y base64.c dnssec.c util.c ent.c db.c
+SRCS=dddctl.c parse.y base64.c dnssec.c util.c ent.c db.c
 
 CFLAGS= -Wall -g  -I${.CURDIR}/..
 LDFLAGS= -Wall -g 
@@ -12,6 +12,7 @@ OBJDIR=.
 BINDIR=/usr/local/sbin
 MANDIR=/usr/local/man/man
 
-MAN= dd-convert.8
+#MAN= dd-convert.8
+NOMAN=1
 
 .include <bsd.prog.mk>
