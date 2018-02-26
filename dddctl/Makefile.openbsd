@@ -9,10 +9,9 @@ LDFLAGS= -Wall -g
 LDADD= -lcrypto -lssl
 
 OBJDIR=.
-BINDIR=/usr/local/sbin
+BINDIR=/usr/local/bin
 MANDIR=/usr/local/man/man
 
-#MAN= dd-convert.8
 NOMAN=1
 
 .include <bsd.prog.mk>
