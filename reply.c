@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.60 2017/10/26 15:49:30 pjp Exp $
+ * $Id: reply.c,v 1.61 2018/02/27 18:32:48 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -346,7 +346,6 @@ reply_nsec3param(struct sreply *sreply)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	int i;
 	u_int16_t rollback;
 
 	if ((sdnsec3param = find_substruct(sd, INTERNAL_TYPE_NSEC3PARAM)) == NULL)
@@ -445,28 +444,23 @@ reply_nsec3param(struct sreply *sreply)
 		int tmplen = 0;
 		int origlen = outlen;
 
-		for (i = 0; i < a_count; i++) {
-			origlen = outlen; 
-
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_NSEC3PARAM, sd, reply, replysize, outlen, i);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_NSEC3PARAM, sd, reply, replysize, outlen, 0);
 		
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				outlen = rollback;
-				odh->answer = 0;
-				odh->nsrr = 0; 
-				odh->additional = 0;
-				goto out;
-			}
-
-			outlen = tmplen;
-
-			if (outlen > origlen)
-				odh->answer = htons(a_count + 1 + i);	
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			outlen = rollback;
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			goto out;
 		}
 
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(a_count + 1 + 1);	
 	}
 
 out:
@@ -542,7 +536,6 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	int i;
 	u_int16_t rollback;
 	u_int8_t *somelen;
 
@@ -662,28 +655,23 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 		int tmplen = 0;
 		int origlen = outlen;
 
-		for (i = 0; i < a_count; i++) {
-			origlen = outlen; 
-
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_NSEC3, sd, reply, replysize, outlen, i);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_NSEC3, sd, reply, replysize, outlen, 0);
 		
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				odh->answer = 0;
-				odh->nsrr = 0; 
-				odh->additional = 0;
-				outlen = rollback;
-				goto out;
-			}
-
-			outlen = tmplen;
-
-			if (outlen > origlen)
-				odh->answer = htons(a_count + 1 + i);	
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
+			goto out;
 		}
 
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(a_count + 1 + 1);	
 	}
 
 out:
@@ -754,7 +742,6 @@ reply_nsec(struct sreply *sreply)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	int i;
 	u_int16_t rollback;
 
 	if ((sdnsec = find_substruct(sd, INTERNAL_TYPE_NSEC)) == NULL)
@@ -852,27 +839,23 @@ reply_nsec(struct sreply *sreply)
 		int tmplen = 0;
 		int origlen = outlen;
 
-		for (i = 0; i < a_count; i++) {
-			origlen = outlen; 
-
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_NSEC, sd, reply, replysize, outlen, i);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_NSEC, sd, reply, replysize, outlen, 0);
 		
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				odh->answer = 0;
-				odh->nsrr = 0; 
-				odh->additional = 0;
-				outlen = rollback;
-				goto out;
-			}
-
-			outlen = tmplen;
-
-			if (outlen > origlen)
-				odh->answer = htons(a_count + 1 + i);	
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
+			goto out;
 		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(a_count + 1 + 1);	
 
 	}
 
@@ -944,6 +927,7 @@ reply_ds(struct sreply *sreply)
 	int salen = sreply->salen;
 	struct domain *sd = sreply->sd1;
 	struct domain_ds *sdds = NULL;
+	struct domain_rrsig *sdrrsig = NULL;
 	
 	int istcp = sreply->istcp;
 	int replysize = 512;
@@ -1048,7 +1032,10 @@ reply_ds(struct sreply *sreply)
 		int tmplen = 0;
 		int origlen = outlen;
 
-		for (i = 0; i < a_count; i++) {
+		if ((sdrrsig = find_substruct(sd, INTERNAL_TYPE_RRSIG)) == NULL)
+			goto out;
+
+		for (i = 0; i < sdrrsig->rrsig_ds_count; i++) {
 			origlen = outlen; 
 
 			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_DS, sd, reply, replysize, outlen, i);
@@ -1139,6 +1126,7 @@ reply_dnskey(struct sreply *sreply)
 	int salen = sreply->salen;
 	struct domain *sd = sreply->sd1;
 	struct domain_dnskey *sdkey = NULL;
+	struct domain_rrsig *sdrrsig = NULL;
 	
 	int istcp = sreply->istcp;
 	int replysize = 512;
@@ -1241,8 +1229,11 @@ reply_dnskey(struct sreply *sreply)
 	if (dnssec && q->dnssecok) {
 		int tmplen = 0;
 		int origlen = outlen;
+	
+		if ((sdrrsig = find_substruct(sd, INTERNAL_TYPE_RRSIG)) == NULL)
+			goto out;
 
-		for (i = 0; i < a_count; i++) {
+		for (i = 0; i < sdrrsig->rrsig_dnskey_count; i++) {
 			origlen = outlen; 
 
 			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_DNSKEY, sd, reply, replysize, outlen, i);
