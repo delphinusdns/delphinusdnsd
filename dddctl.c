@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.1 2018/02/25 17:43:43 pjp Exp $
+ * $Id: dddctl.c,v 1.2 2018/02/27 16:52:58 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -417,6 +417,8 @@ signmain(int argc, char *argv[])
 			perror("malloc");
 			exit(1);
 		}
+
+		dolog(LOG_INFO, "creating new KSK (257) algorithm: %s with %d bits\n", alg_to_name(algorithm), bits);
 		kn->key = create_key(zonename, ttl, 257, algorithm, bits, &newpid);
 		kn->type = KEYTYPE_KSK;
 		kn->pid = newpid;
@@ -433,6 +435,7 @@ signmain(int argc, char *argv[])
 			perror("malloc");
 			exit(1);
 		}
+		dolog(LOG_INFO, "creating new ZSK (256) algorithm: %s with %d bits\n", alg_to_name(algorithm), bits);
 		kn->key = create_key(zonename, ttl, 256, algorithm, bits, &newpid);
 		kn->type = KEYTYPE_ZSK;
 		kn->pid = newpid;
@@ -878,7 +881,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 	case ALGORITHM_RSASHA512:
 		break;
 	default:
-		dolog(LOG_INFO, "invalid key\n");
+		dolog(LOG_INFO, "invalid algorithm in key\n");
 		return NULL;
 	}
 
@@ -916,6 +919,17 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 	p += binlen;
 	rlen = (p - &bin[0]);
 	*pid = keytag(bin, rlen);
+
+	/* check for collisions, XXX should be rare */
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if (knp->pid == *pid)
+			break;
+	}
+	
+	if (knp != NULL) {
+		dolog(LOG_INFO, "create_key: collision with existing pid %d\n", *pid);
+		return (create_key(zonename, ttl, flags, algorithm, bits, pid));
+	}
 	
 	snprintf(buf, sizeof(buf), "K%s%s+%03d+%d", zonename,
 		(zonename[strlen(zonename) - 1] == '.') ? "" : ".",
@@ -5387,7 +5401,7 @@ sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, 
 	/* get the KSK */
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
 		if (knp->type == KEYTYPE_KSK) {
-			snprintf(buf, sizeof(buf), "%s.key", ksk_key);
+			snprintf(buf, sizeof(buf), "%s.key", knp->key);
 			if ((fd = open(buf, O_RDONLY, 0)) < 0) {
 				dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
 				return -1;
@@ -5605,222 +5619,218 @@ sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, 
 	} /* SLIST_FOREACH */
 
 	/* now work out the ZSK */
-	SLIST_FOREACH(knp, &keyshead, keys_entry) {
-		if (knp->type == KEYTYPE_ZSK) {
-			snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-			if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-				dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
-				return -1;
-			}
+	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
+	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
+		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+		return -1;
+	}
 
-			if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-				dolog(LOG_INFO, "parse %s\n", buf);
-				close (fd);
-				return -1;
-			}
+	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "parse %s\n", buf);
+		close (fd);
+		return -1;
+	}
 
-			close(fd);
+	close(fd);
 
-			/* check the keytag supplied */
-			p = key;
-			pack16(p, htons(flags));
-			p += 2;
-			pack8(p, protocol);
-			p++;
-			pack8(p, algorithm);
-			p++;
-			keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-			pack(p, signature, keylen);
-			p += keylen;
-			keylen = (p - key);
-			if (keyid != keytag(key, keylen)) {
-				dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-				return -1;
-			}
-			
-			labels = label_count(sd->zone);
-			if (labels < 0) {
-				dolog(LOG_INFO, "label_count");
-				return -1;
-			}
+	/* check the keytag supplied */
+	p = key;
+	pack16(p, htons(flags));
+	p += 2;
+	pack8(p, protocol);
+	p++;
+	pack8(p, algorithm);
+	p++;
+	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+	pack(p, signature, keylen);
+	p += keylen;
+	keylen = (p - key);
+	if (keyid != keytag(key, keylen)) {
+		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+		return -1;
+	}
+	
+	labels = label_count(sd->zone);
+	if (labels < 0) {
+		dolog(LOG_INFO, "label_count");
+		return -1;
+	}
 
-			dnsname = dns_label(zonename, &labellen);
-			if (dnsname == NULL)
-				return -1;
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL)
+		return -1;
 
-			if (sd->flags & DOMAIN_HAVE_DNSKEY) {
-				if ((sddk = (struct domain_dnskey *)find_substruct(sd, INTERNAL_TYPE_DNSKEY)) == NULL) {
-					dolog(LOG_INFO, "no dnskeys in apex!\n");
-					return -1;
-				}
-			}
-			
-			p = key;
+	if (sd->flags & DOMAIN_HAVE_DNSKEY) {
+		if ((sddk = (struct domain_dnskey *)find_substruct(sd, INTERNAL_TYPE_DNSKEY)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in apex!\n");
+			return -1;
+		}
+	}
+	
+	p = key;
 
-			pack16(p, htons(DNS_TYPE_DNSKEY));
-			p += 2;
-			pack8(p, algorithm);
-			p++;
-			pack8(p, labels);
-			p++;
-			pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
-			p += 4;
-				
-			snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-			expiredon2 = timegm(&tm);
-			snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-			signedon2 = timegm(&tm);
+	pack16(p, htons(DNS_TYPE_DNSKEY));
+	p += 2;
+	pack8(p, algorithm);
+	p++;
+	pack8(p, labels);
+	p++;
+	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
+	p += 4;
+		
+	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	expiredon2 = timegm(&tm);
+	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+	signedon2 = timegm(&tm);
 
-			pack32(p, htonl(expiredon2));
-			p += 4;
-			pack32(p, htonl(signedon2));	
-			p += 4;
-			pack16(p, htons(keyid));
-			p += 2;
-			pack(p, dnsname, labellen);
-			p += labellen;
+	pack32(p, htonl(expiredon2));
+	p += 4;
+	pack32(p, htonl(signedon2));	
+	p += 4;
+	pack16(p, htons(keyid));
+	p += 2;
+	pack(p, dnsname, labellen);
+	p += labellen;
 
-			/* no signature here */	
-			
-			for (i = 0; i < sddk->dnskey_count; i++) {
-				q = tmpkey;
-				pack(q, dnsname, labellen);
-				q += labellen;
-				pack16(q, htons(DNS_TYPE_DNSKEY));
-				q += 2;
-				pack16(q, htons(DNS_CLASS_IN));
-				q += 2;
-				pack32(q, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
-				q += 4;
-				pack16(q, htons(2 + 1 + 1 + sddk->dnskey[i].publickey_len));
-				q += 2;
-				pack16(q, htons(sddk->dnskey[i].flags));
-				q += 2;
-				pack8(q, sddk->dnskey[i].protocol);
-				q++;
-				pack8(q, sddk->dnskey[i].algorithm);
-				q++;
-				pack(q, sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len);
-				q += sddk->dnskey[i].publickey_len;
+	/* no signature here */	
+	
+	for (i = 0; i < sddk->dnskey_count; i++) {
+		q = tmpkey;
+		pack(q, dnsname, labellen);
+		q += labellen;
+		pack16(q, htons(DNS_TYPE_DNSKEY));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
+		q += 4;
+		pack16(q, htons(2 + 1 + 1 + sddk->dnskey[i].publickey_len));
+		q += 2;
+		pack16(q, htons(sddk->dnskey[i].flags));
+		q += 2;
+		pack8(q, sddk->dnskey[i].protocol);
+		q++;
+		pack8(q, sddk->dnskey[i].algorithm);
+		q++;
+		pack(q, sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len);
+		q += sddk->dnskey[i].publickey_len;
 
-				c1 = malloc(sizeof(struct canonical));
-				if (c1 == NULL) {
-					dolog(LOG_INFO, "c1 out of memory\n");
-					return -1;
-				}
+		c1 = malloc(sizeof(struct canonical));
+		if (c1 == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return -1;
+		}
 
-				c1->len = (q - tmpkey);
-				c1->data = malloc(c1->len);
-				if (c1->data == NULL) {
-					dolog(LOG_INFO, "c1->data out of memory\n");
-					return -1;
-				}
+		c1->len = (q - tmpkey);
+		c1->data = malloc(c1->len);
+		if (c1->data == NULL) {
+			dolog(LOG_INFO, "c1->data out of memory\n");
+			return -1;
+		}
 
-				memcpy(c1->data, tmpkey, c1->len);
+		memcpy(c1->data, tmpkey, c1->len);
 
-				if (TAILQ_EMPTY(&head))
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-				else {
-					TAILQ_FOREACH(c2, &head, entries) {
-						if (c1->len < c2->len)
-							break;
-						else if (c2->len == c1->len &&
-							memcmp(c1->data, c2->data, c1->len) < 0)
-							break;
-					}
-
-					if (c2 != NULL)
-						TAILQ_INSERT_BEFORE(c2, c1, entries);
-					else
-						TAILQ_INSERT_TAIL(&head, c1, entries);
-				}
-			}
-
-		#ifdef __linux__
+		if (TAILQ_EMPTY(&head))
+			TAILQ_INSERT_TAIL(&head, c1, entries);
+		else {
 			TAILQ_FOREACH(c2, &head, entries) {
-		#else
-			TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-		#endif
-				pack(p, c2->data, c2->len);
-				p += c2->len;
-
-				TAILQ_REMOVE(&head, c2, entries);
+				if (c1->len < c2->len)
+					break;
+				else if (c2->len == c1->len &&
+					memcmp(c1->data, c2->data, c1->len) < 0)
+					break;
 			}
 
-			keylen = (p - key);	
+			if (c2 != NULL)
+				TAILQ_INSERT_BEFORE(c2, c1, entries);
+			else
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+		}
+	}
 
-		#if 0
-			fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-			for (i = 0; i < keylen; i++) {
-				write(fd, (char *)&key[i], 1);
-			}
-			close(fd);
-			
-		#endif
+#ifdef __linux__
+	TAILQ_FOREACH(c2, &head, entries) {
+#else
+	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
+		pack(p, c2->data, c2->len);
+		p += c2->len;
 
-			switch (algorithm) {
-			case ALGORITHM_RSASHA1_NSEC3_SHA1:
-				SHA1_Init(&sha1);
-				SHA1_Update(&sha1, key, keylen);
-				SHA1_Final((u_char *)shabuf, &sha1);
-				bufsize = 20;
-				break;
-			case ALGORITHM_RSASHA256:	
-				SHA256_Init(&sha256);
-				SHA256_Update(&sha256, key, keylen);
-				SHA256_Final((u_char *)shabuf, &sha256);
-				bufsize = 32;
+		TAILQ_REMOVE(&head, c2, entries);
+	}
 
-		#if 0
-				printf("keylen = %d\n", keylen);
-				fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-				for (i = 0; i < bufsize; i++) {
-					write(fd, (char *)&shabuf[i], 1);
-				}
-				close(fd);
-		#endif
+	keylen = (p - key);	
 
-				break;
-			case ALGORITHM_RSASHA512:
-				SHA512_Init(&sha512);
-				SHA512_Update(&sha512, key, keylen);
-				SHA512_Final((u_char *)shabuf, &sha512);
-				bufsize = 64;
-				break;
-			default:
-				return -1;
-			}
-				
-			rsa = read_private_key(zonename, keyid, algorithm);
-			if (rsa == NULL) {
-				dolog(LOG_INFO, "reading private key failed\n");
-				return -1;
-			}
-				
-			rsatype = alg_to_rsa(algorithm);
-			if (rsatype == -1) {
-				dolog(LOG_INFO, "algorithm mismatch\n");
-				return -1;
-			}
+#if 0
+	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+	for (i = 0; i < keylen; i++) {
+		write(fd, (char *)&key[i], 1);
+	}
+	close(fd);
+	
+#endif
 
-			if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-				dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-				return -1;
-			}
+	switch (algorithm) {
+	case ALGORITHM_RSASHA1_NSEC3_SHA1:
+		SHA1_Init(&sha1);
+		SHA1_Update(&sha1, key, keylen);
+		SHA1_Final((u_char *)shabuf, &sha1);
+		bufsize = 20;
+		break;
+	case ALGORITHM_RSASHA256:	
+		SHA256_Init(&sha256);
+		SHA256_Update(&sha256, key, keylen);
+		SHA256_Final((u_char *)shabuf, &sha256);
+		bufsize = 32;
 
-			RSA_free(rsa);
+#if 0
+		printf("keylen = %d\n", keylen);
+		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+		for (i = 0; i < bufsize; i++) {
+			write(fd, (char *)&shabuf[i], 1);
+		}
+		close(fd);
+#endif
 
-			len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-			tmp[len] = '\0';
+		break;
+	case ALGORITHM_RSASHA512:
+		SHA512_Init(&sha512);
+		SHA512_Update(&sha512, key, keylen);
+		SHA512_Final((u_char *)shabuf, &sha512);
+		bufsize = 64;
+		break;
+	default:
+		return -1;
+	}
+		
+	rsa = read_private_key(zonename, keyid, algorithm);
+	if (rsa == NULL) {
+		dolog(LOG_INFO, "reading private key failed\n");
+		return -1;
+	}
+		
+	rsatype = alg_to_rsa(algorithm);
+	if (rsatype == -1) {
+		dolog(LOG_INFO, "algorithm mismatch\n");
+		return -1;
+	}
 
-			if (fill_rrsig(sd->zonename, "RRSIG", ttl, "DNSKEY", algorithm, labels, 			ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-				dolog(LOG_INFO, "fill_rrsig\n");
-				return -1;
-			}
-		} /* if ZSK */
-	} /* SLIST_FOREACH */
+	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
+		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
+		return -1;
+	}
+
+	RSA_free(rsa);
+
+	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+	tmp[len] = '\0';
+
+	if (fill_rrsig(sd->zonename, "RRSIG", ttl, "DNSKEY", algorithm, labels, 			ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		dolog(LOG_INFO, "fill_rrsig\n");
+		return -1;
+	}
 	
 	return 0;
 }
@@ -6981,6 +6991,10 @@ stop(int argc, char *argv[])
 {
 	pid_t pid;
 
+	if (geteuid() != 0) {
+		fprintf(stderr, "must be root\n");
+		exit(1);
+	}
 	fprintf(stderr, "stopping delphinusdnsd\n");
 	pid = getdaemonpid();
 	
