@@ -1,0 +1,18 @@
+.PATH: ${.CURDIR}/..
+
+PROG=dddctl
+
+SRCS=dddctl.c parse.y base64.c dnssec.c util.c ent.c db.c
+
+CFLAGS= -g 
+CFLAGS+= -I${.CURDIR}/..
+LDFLAGS= -g -L/usr/pkg/lib -R/usr/pkg/lib
+LDADD= -lcrypto -lssl 
+
+OBJDIR=.
+BINDIR=/usr/local/bin
+MANDIR=/usr/local/man/man
+
+MAN= dddctl.1
+
+.include <bsd.prog.mk>

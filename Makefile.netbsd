@@ -1,6 +1,6 @@
 .include <bsd.own.mk>
 
-SUBDIR= delphinusdnsd dd-convert
+SUBDIR= delphinusdnsd dddctl
 
 .include <bsd.subdir.mk>
 
