@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.16 2017/10/26 15:49:29 pjp Exp $
+ * $Id: additional.c,v 1.17 2018/03/03 10:41:02 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -553,10 +553,6 @@ additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *
 
 	if (inttype == INTERNAL_TYPE_DNSKEY) {
 		rrsig = &sdrr->rrsig_dnskey[count];
-		if (rrsig->algorithm == 0)
-			return 0;
-	} else if (inttype == INTERNAL_TYPE_DS) {
-		rrsig = &sdrr->rrsig_ds[count];
 		if (rrsig->algorithm == 0)
 			return 0;
 	} else {

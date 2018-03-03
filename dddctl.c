@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.2 2018/02/27 16:52:58 pjp Exp $
+ * $Id: dddctl.c,v 1.3 2018/03/03 10:41:02 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -6623,23 +6623,21 @@ print_sd(FILE *of, struct domain *sdomain)
 		}
 
 		if (sdomain->flags & DOMAIN_HAVE_DS) {
-			for (i = 0; i < sdrr->rrsig_ds_count; i++) {
-				rss = (struct rrsig *)&sdrr->rrsig_ds[i];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
+			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_DS];
+			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+			buf[len] = '\0';
 
-				fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-					convert_name(sdomain->zone, sdomain->zonelen),
-					sdomain->ttl[INTERNAL_TYPE_RRSIG],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
-			}
+			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
+				convert_name(sdomain->zone, sdomain->zonelen),
+				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				get_dns_type(rss->type_covered, 0), 
+				rss->algorithm, rss->labels,
+				rss->original_ttl, 
+				timethuman(rss->signature_expiration),
+				timethuman(rss->signature_inception), 
+				rss->key_tag,
+				convert_name(rss->signers_name, rss->signame_len),
+				buf);	
 		}
 
 

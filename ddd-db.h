@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.8 2017/12/26 14:01:33 pjp Exp $
+ * $Id: ddd-db.h,v 1.9 2018/03/03 10:41:02 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -240,11 +240,10 @@ struct domain_soa {
 struct domain_rrsig {
 	u_int16_t type;
 	u_int32_t len;
-	struct rrsig rrsig[INTERNAL_TYPE_MAX];	/* rrsig RR */
+	struct rrsig rrsig[INTERNAL_TYPE_MAX * 2];	/* rrsig RR */
+	int rrsig_count;			/* how many ZSK's */
 	struct rrsig rrsig_dnskey[RECORD_COUNT];/* hack around dnskeys */
 	int rrsig_dnskey_count;			/* RRSIG count */
-	struct rrsig rrsig_ds[RECORD_COUNT];	/* hack around ds */
-	int rrsig_ds_count;
 } __attribute__((packed));
 
 

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.61 2018/02/27 18:32:48 pjp Exp $
+ * $Id: reply.c,v 1.62 2018/03/03 10:41:03 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -932,7 +932,6 @@ reply_ds(struct sreply *sreply)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	int i;
 	u_int16_t rollback;
 
 	if ((sdds = find_substruct(sd, INTERNAL_TYPE_DS)) == NULL)
@@ -1035,28 +1034,23 @@ reply_ds(struct sreply *sreply)
 		if ((sdrrsig = find_substruct(sd, INTERNAL_TYPE_RRSIG)) == NULL)
 			goto out;
 
-		for (i = 0; i < sdrrsig->rrsig_ds_count; i++) {
-			origlen = outlen; 
-
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_DS, sd, reply, replysize, outlen, i);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, INTERNAL_TYPE_DS, sd, reply, replysize, outlen, 0);
 		
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				odh->answer = 0;
-				odh->nsrr = 0; 
-				odh->additional = 0;
-				outlen = rollback;
-				goto out;
-			}
-
-			outlen = tmplen;
-
-			if (outlen > origlen)
-				odh->answer = htons(a_count + 1 + i);	
+		if (tmplen == 0) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
+			goto out;
 		}
 
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(a_count + 1 + 1);	
 	}
 
 out:
@@ -5252,16 +5246,14 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 						offset = tmplen;
 					}
 				} else if (internal_type == INTERNAL_TYPE_DS) {
-					for (i = 0; i < sdrrsig->rrsig_ds_count; i++) {
-						rrsig_count++;
-						tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen,
-						internal_type, sd, reply, rlen, offset, i);
+					rrsig_count++;
+					tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen,
+					internal_type, sd, reply, rlen, offset, 0);
 			
-						if (tmplen == 0)
-							goto truncate;
+					if (tmplen == 0)
+						goto truncate;
 
-						offset = tmplen;
-					}
+					offset = tmplen;
 				} else {
 
 					rrsig_count++;
