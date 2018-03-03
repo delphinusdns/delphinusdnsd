@@ -1,4 +1,6 @@
 Changes in RELEASE_1_3 from RELEASE_1_2
+- replaced dd-convert with dddctl which is a utility that can do a bit more,
+  including dnssec key roll-over
 - ...
 
 Changes in RELEASE_1_2 from RELEASE_1_1
