@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.16 2018/03/28 20:19:56 pjp Exp $
+ * $Id: axfr.c,v 1.17 2018/03/28 21:16:25 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -1569,18 +1569,16 @@ check_notifyreply(struct dns_header *dh, struct question *question, struct socka
 					if (memcmp(&sin6->sin6_addr, &sin62->sin6_addr, 16) == 0) {
 						dolog(LOG_INFO, "notify success! removing address \"%s\" from notify contact list\n", address);
 						SLIST_REMOVE(&notifyslavehead, nfslnp, notifyslaveentry, notifyslave_entry);
-						return 0;
 					}
 				} else {
 					sin2 = (struct sockaddr_in *)&nfslnp->hostmask;
 					if (sin->sin_addr.s_addr == sin2->sin_addr.s_addr) {
 						dolog(LOG_INFO, "notify success! removing address \"%s\" from notify contact list\n", address);
 						SLIST_REMOVE(&notifyslavehead, nfslnp, notifyslaveentry, notifyslave_entry);
-						return 0;
 					}
-				} /* if af==AF_INET6 */
-			} /* SLIST_FOREACH */
-		} /* ntohs(dh->id) == notnp->ids[count] */
+			} /* if af==AF_INET6 */
+		} /* SLIST_FOREACH */
+	} 
 
-	return -1;
+	return 0;
 }
