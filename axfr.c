@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.15 2017/11/28 17:01:18 pjp Exp $
+ * $Id: axfr.c,v 1.16 2018/03/28 20:19:56 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -106,6 +106,7 @@ static struct notifyentry {
 } *notn2, *notnp;
 
 extern int domaincmp(struct node *e1, struct node *e2);
+static int 	check_notifyreply(struct dns_header *, struct question *, struct sockaddr_storage *, int, struct notifyentry *, int);
 RB_HEAD(domaintree, node) rbhead;
 RB_PROTOTYPE_STATIC(domaintree, node, rbentry, domaincmp)
 RB_GENERATE_STATIC(domaintree, node, rbentry, domaincmp)
@@ -311,8 +312,8 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 
 	struct timeval tv;
 	struct sockaddr_storage from;
-	struct sockaddr_in6 *sin6, *sin62;
-	struct sockaddr_in *sin, *sin2;
+	struct sockaddr_in6 *sin6;
+	struct sockaddr_in *sin;
 	struct dns_header *dh;
 	struct question *question;
 	struct imsg	imsg;
@@ -622,32 +623,11 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 #else
 				SLIST_FOREACH_SAFE(notnp, &notifyhead, notify_entry, notn2) {
 #endif
-
 					for (i = 0; i < notify; i++) {
-					 if (ntohs(dh->id) == notnp->ids[i] &&
-						(ntohs(dh->query) & DNS_NOTIFY) &&
-						(ntohs(dh->query) & DNS_AUTH) && 
-						ntohs(question->hdr->qtype) == DNS_TYPE_SOA &&
-						ntohs(question->hdr->qclass) == DNS_CLASS_IN &&
-						question->hdr->namelen == notnp->domainlen && 
-						memcmp(question->hdr->name, notnp->domain, notnp->domainlen) == 0) {
-#ifdef __linux__
-						SLIST_FOREACH(nfslnp, &notifyslavehead, notifyslave_entry) {
-#else
-						SLIST_FOREACH_SAFE(nfslnp, &notifyslavehead, notifyslave_entry, nfslnp2) {
-#endif
-							if (nfslnp->family != AF_INET)
-								continue;
-
-							sin2 = (struct sockaddr_in *)&nfslnp->hostmask;
-							if (sin->sin_addr.s_addr == sin2->sin_addr.s_addr) {
-								dolog(LOG_INFO, "notify success! removing address \"%s\" from notify contact list\n", address);
-								SLIST_REMOVE(&notifyslavehead, nfslnp, notifyslaveentry, notifyslave_entry);
-							}
-						}
-					 } else {
+						if (check_notifyreply(dh, question, 
+							(struct sockaddr_storage *) sin, AF_INET, notnp, i) < 0) {
 						dolog(LOG_INFO, "got a reply from a notify host (%s) DNS->ID %u that says: %04x\n", address, ntohs(dh->id), ntohs(dh->query));
-					 }
+					 	}
 					}
 				}
 			
@@ -706,30 +686,10 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 				SLIST_FOREACH_SAFE(notnp, &notifyhead, notify_entry, notn2) {
 #endif
 					for (i = 0; i < notify; i++) {
-					 if (ntohs(dh->id) == notnp->ids[i] &&
-						(ntohs(dh->query) & DNS_NOTIFY) &&
-						(ntohs(dh->query) & DNS_AUTH) && 
-						ntohs(question->hdr->qtype) == DNS_TYPE_SOA &&
-						ntohs(question->hdr->qclass) == DNS_CLASS_IN &&
-						question->hdr->namelen == notnp->domainlen && 
-						memcmp(question->hdr->name, notnp->domain, notnp->domainlen) == 0) {
-#ifdef __linux__
-						SLIST_FOREACH(nfslnp, &notifyslavehead, notifyslave_entry) {
-#else
-						SLIST_FOREACH_SAFE(nfslnp, &notifyslavehead, notifyslave_entry, nfslnp2) {
-#endif
-							if (nfslnp->family != AF_INET6)
-								continue;
-
-							sin62 = (struct sockaddr_in6 *)&nfslnp->hostmask;
-							if (memcmp(&sin6->sin6_addr, &sin62->sin6_addr, 16) == 0) {
-								dolog(LOG_INFO, "notify success! removing address \"%s\" from notify contact list\n", address);
-								SLIST_REMOVE(&notifyslavehead, nfslnp, notifyslaveentry, notifyslave_entry);
-							}
-						}
-					 } else {
-						dolog(LOG_INFO, "got a reply from a notify host (%s) DNS->ID %u that says: %04x\n", address, ntohs(dh->id), ntohs(dh->query));
-					 }
+						if (check_notifyreply(dh, question, 
+							(struct sockaddr_storage *) sin6, AF_INET6, notnp, i) < 0) {
+							dolog(LOG_INFO, "got a reply from a notify host (%s) DNS->ID %u that says: %04x\n", address, ntohs(dh->id), ntohs(dh->query));
+					    }
 					}
 				}
 			
@@ -745,6 +705,8 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 
 					notifyfd[0] = -1;	
 					notifyfd[1] = -1;	
+
+					notify = 0;
 				}
 			}
 	
@@ -1560,4 +1522,65 @@ notifypacket(int so, void *vnse, void *vnotnp, int packetcount)
 	}
 	
 	return;
+}
+
+int 
+check_notifyreply(struct dns_header *dh, struct question *question, struct sockaddr_storage *ss, int af, struct notifyentry *notnp, int count)
+{
+	struct sockaddr_in6 *sin6, *sin62 = NULL;
+	struct sockaddr_in *sin, *sin2 = NULL;
+	char address[INET6_ADDRSTRLEN];
+	u_int16_t ntohsquery;
+
+	switch (af) {
+	case AF_INET6:
+		sin6 = (struct sockaddr_in6 *)ss;
+		inet_ntop(AF_INET6, (void*)&sin6->sin6_addr, (char*)&address, sizeof(address));
+		break;	
+	case AF_INET:
+		sin = (struct sockaddr_in *)ss;
+		inet_ntop(AF_INET, (void*)&sin->sin_addr, (char*)&address, sizeof(address));
+		break;
+	default:
+		return -1;
+		break;
+	}
+
+	ntohsquery = ntohs(dh->query);
+
+	if (ntohs(dh->id) == notnp->ids[count] &&
+		(((ntohsquery & DNS_NOTIFY) && (ntohsquery & DNS_AUTH)) || 
+		(ntohsquery & (DNS_AUTH | DNS_REPLY)) ||
+		(ntohsquery & (DNS_AUTH | DNS_REPLY | DNS_NOTIFY))) && 
+		ntohs(question->hdr->qtype) == DNS_TYPE_SOA &&
+		ntohs(question->hdr->qclass) == DNS_CLASS_IN &&
+		question->hdr->namelen == notnp->domainlen && 
+		memcmp(question->hdr->name, notnp->domain, notnp->domainlen) == 0) {
+#ifdef __linux__
+			SLIST_FOREACH(nfslnp, &notifyslavehead, notifyslave_entry) {
+#else
+			SLIST_FOREACH_SAFE(nfslnp, &notifyslavehead, notifyslave_entry, nfslnp2) {
+#endif
+				if (nfslnp->family != af)
+					continue;
+
+				if (af == AF_INET6)  {
+					sin62 = (struct sockaddr_in6 *)&nfslnp->hostmask;
+					if (memcmp(&sin6->sin6_addr, &sin62->sin6_addr, 16) == 0) {
+						dolog(LOG_INFO, "notify success! removing address \"%s\" from notify contact list\n", address);
+						SLIST_REMOVE(&notifyslavehead, nfslnp, notifyslaveentry, notifyslave_entry);
+						return 0;
+					}
+				} else {
+					sin2 = (struct sockaddr_in *)&nfslnp->hostmask;
+					if (sin->sin_addr.s_addr == sin2->sin_addr.s_addr) {
+						dolog(LOG_INFO, "notify success! removing address \"%s\" from notify contact list\n", address);
+						SLIST_REMOVE(&notifyslavehead, nfslnp, notifyslaveentry, notifyslave_entry);
+						return 0;
+					}
+				} /* if af==AF_INET6 */
+			} /* SLIST_FOREACH */
+		} /* ntohs(dh->id) == notnp->ids[count] */
+
+	return -1;
 }
