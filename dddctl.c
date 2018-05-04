@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.6 2018/05/04 21:17:15 pjp Exp $
+ * $Id: dddctl.c,v 1.7 2018/05/04 21:21:55 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -1879,9 +1879,8 @@ sign_aaaa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
                         TAILQ_INSERT_TAIL(&head, c1, entries);
                 else {
                         TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len && 
-                                       memcmp(c1->data, c2->data, c1->len) > 0)
-					break;
+                                if (c1->len < c2->len)
+                                        break;
                                 else if (c2->len == c1->len &&
                                         memcmp(c1->data, c2->data, c1->len) < 0)
                                         break;
@@ -3079,8 +3078,7 @@ sign_naptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
                         TAILQ_INSERT_TAIL(&head, c1, entries);
                 else {
                         TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len && 
-                                       memcmp(c1->data, c2->data, c1->len) > 0)
+                                if (c1->len < c2->len)
                                         break;
                                 else if (c2->len == c1->len &&
                                         memcmp(c1->data, c2->data, c1->len) < 0)
@@ -3362,8 +3360,7 @@ sign_srv(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                         TAILQ_INSERT_TAIL(&head, c1, entries);
                 else {
                         TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len && 
-                                       memcmp(c1->data, c2->data, c1->len) > 0)
+                                if (c1->len < c2->len)
                                         break;
                                 else if (c2->len == c1->len &&
                                         memcmp(c1->data, c2->data, c1->len) < 0)
@@ -3645,8 +3642,7 @@ sign_sshfp(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
                         TAILQ_INSERT_TAIL(&head, c1, entries);
                 else {
                         TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len && 
-					memcmp(c1->data, c2->data, c1->len) > 0)
+                                if (c1->len < c2->len)
                                         break;
                                 else if (c2->len == c1->len &&
                                         memcmp(c1->data, c2->data, c1->len) < 0)
@@ -3928,8 +3924,7 @@ sign_tlsa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
                         TAILQ_INSERT_TAIL(&head, c1, entries);
                 else {
                         TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len && 
-                                       memcmp(c1->data, c2->data, c1->len) > 0)
+                                if (c1->len < c2->len)
                                         break;
                                 else if (c2->len == c1->len &&
                                         memcmp(c1->data, c2->data, c1->len) < 0)
@@ -4211,8 +4206,7 @@ sign_ds(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                         TAILQ_INSERT_TAIL(&head, c1, entries);
                 else {
                         TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len && 
-                                       memcmp(c1->data, c2->data, c1->len) > 0)
+                                if (c1->len < c2->len)
                                         break;
                                 else if (c2->len == c1->len &&
                                         memcmp(c1->data, c2->data, c1->len) < 0)
@@ -4488,8 +4482,7 @@ sign_ns(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                         TAILQ_INSERT_TAIL(&head, c1, entries);
                 else {
                         TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len && 
-                                       memcmp(c1->data, c2->data, c1->len) > 0)
+                                if (c1->len < c2->len)
                                         break;
                                 else if (c2->len == c1->len &&
                                         memcmp(c1->data, c2->data, c1->len) < 0)
@@ -4766,8 +4759,7 @@ sign_mx(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                         TAILQ_INSERT_TAIL(&head, c1, entries);
                 else {
                         TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len && 
-                                       memcmp(c1->data, c2->data, c1->len) > 0)
+                                if (c1->len < c2->len)
                                         break;
                                 else if (c2->len == c1->len &&
                                         memcmp(c1->data, c2->data, c1->len) < 0)
@@ -5043,8 +5035,7 @@ sign_a(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
                         TAILQ_INSERT_TAIL(&head, c1, entries);
                 else {
                         TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len && 
-                                       memcmp(c1->data, c2->data, c1->len) > 0)
+                                if (c1->len < c2->len)
                                         break;
                                 else if (c2->len == c1->len &&
                                         memcmp(c1->data, c2->data, c1->len) < 0)
@@ -5532,8 +5523,7 @@ sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, 
 					TAILQ_INSERT_TAIL(&head, c1, entries);
 				else {
 					TAILQ_FOREACH(c2, &head, entries) {
-                                		if (c1->len < c2->len && 
-                                       			memcmp(c1->data, c2->data, c1->len) > 0)
+						if (c1->len < c2->len)
 							break;
 						else if (c2->len == c1->len && 
 							memcmp(c1->data, c2->data, c1->len) < 0)
@@ -5750,8 +5740,7 @@ sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, 
 			TAILQ_INSERT_TAIL(&head, c1, entries);
 		else {
 			TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len && 
-                                       memcmp(c1->data, c2->data, c1->len) > 0)
+				if (c1->len < c2->len)
 					break;
 				else if (c2->len == c1->len &&
 					memcmp(c1->data, c2->data, c1->len) < 0)
