@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.4 2018/05/04 16:15:37 pjp Exp $
+ * $Id: dddctl.c,v 1.5 2018/05/04 16:22:28 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -7194,9 +7194,9 @@ sshfp(int argc, char *argv[])
 			continue;
 		}
 
-		q += 4;
+		q += 10;
 
-		printf("  %s,%d,%s\"%s\"\n", he->h_name, ttl, q, tmp);
+		printf("  %s,sshfp,%d,%s\"%s\"\n", he->h_name, ttl, q, tmp);
 		free(tmp);
 	}
 
