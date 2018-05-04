@@ -27,13 +27,15 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.3 2018/03/03 10:41:02 pjp Exp $
+ * $Id: dddctl.c,v 1.4 2018/05/04 16:15:37 pjp Exp $
  */
 
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
 #include "ddd-config.h"
+
+#include <netdb.h>
 
 #include <openssl/bn.h>
 #include <openssl/obj_mac.h>
@@ -101,6 +103,7 @@ int	restart(int argc, char *argv[]);
 int	stop(int argc, char *argv[]);
 int	signmain(int argc, char *argv[]);
 int	configtest(int argc, char *argv[]);
+int	sshfp(int argc, char *argv[]);
 void init_keys(void);
 uint32_t getkeypid(char *);
 pid_t 	getdaemonpid(void);
@@ -113,6 +116,7 @@ struct _mycmdtab {
 	{ "configtest", configtest },
 	{ "help", usage },
 	{ "sign", signmain },
+	{ "sshfp", sshfp },
 	{ "start", start },
 	{ "stop", stop},
 	{ "restart", restart },
@@ -6915,6 +6919,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\tconfigtest [configfile]\n");
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-z ZSK]\n");
+		fprintf(stderr, "\tsshfp hostname [ttl]\n");
 		fprintf(stderr, "\tstart [configfile]\n");
 		fprintf(stderr, "\tstop\n");
 		fprintf(stderr, "\trestart\n");
@@ -7115,4 +7120,87 @@ getdaemonpid(void)
 	pid = atoi(buf);
 	
 	return (pid);
+}
+
+int	
+sshfp(int argc, char *argv[])
+{
+	char buf[512];
+	char *hostname = NULL;
+	struct hostent *he;
+	FILE *po;
+	char *p, *q;
+	char *tmp;
+	int len, ttl = 3600;
+
+	if (argc < 2) {
+		usage(argc, argv);
+		exit(1);
+	}
+
+	hostname = argv[1];
+
+	if (argc == 3) {
+		ttl = atoi(argv[2]);
+	}
+
+	if ((he = gethostbyname(hostname)) == NULL) {
+		fprintf(stderr, "no such hostname\n");
+		exit(1);
+	}
+
+	snprintf(buf, sizeof(buf), "/usr/bin/ssh-keygen -r %s", he->h_name);
+
+	po = popen(buf, "r");
+	if (po == NULL) {
+		perror("popen");
+		exit(1);
+	}
+
+	while (fgets(buf, sizeof(buf), po) != NULL) {
+		len = strlen(buf);
+		if (buf[len - 1] == '\n')
+			len--;
+		buf[len] = '\0';
+
+		while ((p = strchr(buf, ' ')) != NULL) {
+			*p = ',';
+		}
+	
+		q = strrchr(buf, ',');
+		if (q == NULL) {
+			continue;
+		}
+
+		q++;
+		if (*q == '\0') {
+			continue;
+		}
+
+		tmp = strdup(q);
+		if (tmp == NULL) {
+			perror("strdup");
+			exit(1);
+		}
+		*q = '\0';
+
+		p = strchr(buf, ',');
+		if (p == NULL) {
+			continue;
+		}
+	
+		q = strchr(p, ',');
+		if (q == NULL) {
+			continue;
+		}
+
+		q += 4;
+
+		printf("  %s,%d,%s\"%s\"\n", he->h_name, ttl, q, tmp);
+		free(tmp);
+	}
+
+	pclose(po);
+
+	exit(0);	
 }
