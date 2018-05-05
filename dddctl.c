@@ -27,15 +27,13 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.8 2018/05/04 21:24:58 pjp Exp $
+ * $Id: dddctl.c,v 1.9 2018/05/05 06:27:44 pjp Exp $
  */
 
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
 #include "ddd-config.h"
-
-#include <netdb.h>
 
 #include <openssl/bn.h>
 #include <openssl/obj_mac.h>
@@ -6920,7 +6918,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\tconfigtest [configfile]\n");
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-z ZSK]\n");
-		fprintf(stderr, "\tsshfp hostname [ttl]\n");
+		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
 		fprintf(stderr, "\tstart [configfile]\n");
 		fprintf(stderr, "\tstop\n");
 		fprintf(stderr, "\trestart\n");
@@ -7128,11 +7126,12 @@ sshfp(int argc, char *argv[])
 {
 	char buf[512];
 	char *hostname = NULL;
-	struct hostent *he;
+	char *keyfile = NULL;
 	FILE *po;
 	char *p, *q;
 	char *tmp;
 	int len, ttl = 3600;
+	int ch;
 
 	if (argc < 2) {
 		usage(argc, argv);
@@ -7141,16 +7140,24 @@ sshfp(int argc, char *argv[])
 
 	hostname = argv[1];
 
-	if (argc == 3) {
-		ttl = atoi(argv[2]);
+	while ((ch = getopt(argc, argv, "f:k:t:")) != -1) {
+		switch (ch) {
+		case 'f':
+			/* fallthrough */
+		case 'k':
+			keyfile = optarg;
+			break;
+		case 't':	
+			ttl = atoi(optarg);
+			break;
+
+		}
 	}
 
-	if ((he = gethostbyname(hostname)) == NULL) {
-		fprintf(stderr, "no such hostname\n");
-		exit(1);
-	}
-
-	snprintf(buf, sizeof(buf), "/usr/bin/ssh-keygen -r %s", he->h_name);
+	if (keyfile)
+		snprintf(buf, sizeof(buf), "/usr/bin/ssh-keygen -r %s -f %s", hostname, keyfile);
+	else
+		snprintf(buf, sizeof(buf), "/usr/bin/ssh-keygen -r %s", hostname);
 
 	po = popen(buf, "r");
 	if (po == NULL) {
@@ -7197,7 +7204,7 @@ sshfp(int argc, char *argv[])
 
 		q += 10;
 
-		printf("  %s,sshfp,%d,%s\"%s\"\n", he->h_name, ttl, q, tmp);
+		printf("  %s.,sshfp,%d,%s\"%s\"\n", hostname, ttl, q, tmp);
 		free(tmp);
 	}
 
