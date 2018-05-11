@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.10 2018/05/10 09:18:16 pjp Exp $
+ * $Id: dddctl.c,v 1.11 2018/05/11 20:54:29 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -7267,7 +7267,7 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 
 		memcpy((char *)sdomain, (char *)n->data, n->datalen);
 
-		if (strcmp(sdomain->zonename, zonename) == 0)
+		if (strcmp(convert_name(sdomain->zone, sdomain->zonelen), zonename) == 0)
 			continue;
 
 		if (print_sd_bind(of, sdomain) < 0) {
@@ -7870,6 +7870,7 @@ bindfile(int argc, char *argv[])
 	char *zonefile;
 	char *zonename;
 	FILE *of = stdout;
+	int len;
 
 	if (argc != 3) {
 		usage(argc, argv);
@@ -7878,6 +7879,20 @@ bindfile(int argc, char *argv[])
 
 	zonename = argv[1];
 	zonefile = argv[2];
+
+	len = strlen(zonename);
+	if (zonename[len - 1] != '.') {
+		len += 2;
+		zonename = malloc(len);
+		if (zonename == NULL) {
+			perror("malloc");
+			return 1;
+		}
+
+		strlcpy(zonename, argv[1], len);
+		strlcat(zonename, ".", len);
+	}
+			
 
 #if __OpenBSD__
 	if (pledge("stdio rpath cpath", NULL) < 0) {
