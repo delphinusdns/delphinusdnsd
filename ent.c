@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: ent.c,v 1.5 2018/05/11 23:21:20 pjp Exp $
+ * $Id: ent.c,v 1.6 2018/05/11 23:36:45 pjp Exp $
  */
 
 /*
@@ -151,11 +151,11 @@ exists:
 	 * base of an ENT...this was overlooked originally
 	 */
 
-	SLIST_FOREACH(entp, &enthead, ent_entry) {
-		if (entp->len != l)
+	SLIST_FOREACH(ent2, &enthead, ent_entry) {
+		if (ent2->len != l)
 			continue;
 
-		if (memcasecmp(entp->name, p, l) == 0)
+		if (memcasecmp(ent2->name, p, l) == 0)
 			return 0;
 	}
 
