@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: ent.c,v 1.4 2017/10/26 15:49:29 pjp Exp $
+ * $Id: ent.c,v 1.5 2018/05/11 23:21:20 pjp Exp $
  */
 
 /*
@@ -140,8 +140,24 @@ ent_contains(char *name, int len, char *entname, int entlen)
 			continue;
 
 		if (memcasecmp(name, p, l) == 0)
-			return 1;
+			goto exists; /* ? */
 	}
 
 	return 0;
+
+exists:
+	/*
+	 * we take a second look, to make sure that we don't hit the
+	 * base of an ENT...this was overlooked originally
+	 */
+
+	SLIST_FOREACH(entp, &enthead, ent_entry) {
+		if (entp->len != l)
+			continue;
+
+		if (memcasecmp(entp->name, p, l) == 0)
+			return 0;
+	}
+
+	return 1;
 }

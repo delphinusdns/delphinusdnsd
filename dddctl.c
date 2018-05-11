@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.11 2018/05/11 20:54:29 pjp Exp $
+ * $Id: dddctl.c,v 1.12 2018/05/11 23:21:20 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -197,6 +197,9 @@ extern int label_count(char *);
 extern char *get_dns_type(int, int);
 extern char * hash_name(char *, int, struct nsec3param *);
 extern char * base32hex_encode(u_char *input, int len);
+extern int  	init_entlist(ddDB *);
+extern int	check_ent(char *, int);
+
 extern int dnssec;
 
 extern int domaincmp(struct node *e1, struct node *e2);
@@ -513,6 +516,12 @@ signmain(int argc, char *argv[])
 		exit(1);
 	}
 
+	/* create ENT list */
+	if (init_entlist(db) < 0) {
+		dolog(LOG_INFO, "creating entlist failed\n");
+		exit(1);
+	}
+
 	/* three passes to "sign" our zones */
 	/* first pass, add dnskey records, on apex */
 
@@ -521,7 +530,7 @@ signmain(int argc, char *argv[])
 		exit(1);
 	}
 
-	/* second pass construct NSEC3 records */	
+	/* second pass construct NSEC3 records, including ENT's */	
 
 	if ((mask & MASK_CONSTRUCT_NSEC3) && construct_nsec3(db, zonename, iterations, salt) < 0) {
 		dolog(LOG_INFO, "construct nsec3 failed\n");
@@ -6056,12 +6065,13 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 	char bitmap[4096];
 	char *dnsname;
 	char *hashname = NULL;
+	char *p;
 
 	int labellen;
 	int retval, lzerrno;
 	u_int32_t ttl = 0;
 
-	int j, rs;
+	int j, rs, len, rootlen;
 
 	TAILQ_HEAD(listhead, mynsec3) head;
 
@@ -6094,6 +6104,9 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		return -1;
 	}
 
+	/* get the rootzone's len */
+	rootlen = sd->zonelen;
+
 	/* RFC 5155 page 3 */
 	ttl = sd->ttl[INTERNAL_TYPE_SOA];
 
@@ -6118,7 +6131,6 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 
 		memcpy((char *)sd, (char *)n->data, n->datalen);
 
-		
 		hashname = hash_name(sd->zone, sd->zonelen, &n3p);
 		if (hashname == NULL) {
 			dolog(LOG_INFO, "hash_name return NULL");
@@ -6198,6 +6210,68 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		}
 
 	}  /* RB_FOREACH_SAFE */
+
+	/* check ENT's which we'll create */
+
+	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+		rs = n->datalen;
+		if ((sd = calloc(1, rs)) == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			exit(1);
+		}
+
+		memcpy((char *)sd, (char *)n->data, n->datalen);
+
+		len = sd->zonelen;
+		for (p = sd->zone; *p && len > rootlen; p++, len--) {
+			if (check_ent(p, len))
+				break;
+			
+			len -= *p;
+			p += *p;
+		}
+
+		if (len > rootlen) {
+			/* we have an ENT */
+			hashname = hash_name(p, len, &n3p);
+			if (hashname == NULL) {
+				dolog(LOG_INFO, "hash_name return NULL");
+				return -1;
+			}
+			
+			bitmap[0] = '\0';
+
+			n1 = malloc(sizeof(struct mynsec3));
+			if (n1 == NULL) {
+				dolog(LOG_INFO, "out of memory");
+				return -1;
+			}
+			
+			n1->hashname = strdup(hashname);
+			n1->bitmap = strdup(bitmap);	
+			if (n1->hashname == NULL || n1->bitmap == NULL) {
+				dolog(LOG_INFO, "out of memory");
+				return -1;
+			}
+		
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, n1, entries);
+			else {
+				TAILQ_FOREACH(n2, &head, entries) {
+					if (strcmp(n1->hashname, n2->hashname) < 0)
+						break;
+				}
+
+				if (n2 != NULL) 
+					TAILQ_INSERT_BEFORE(n2, n1, entries);
+				else
+					TAILQ_INSERT_TAIL(&head, n1, entries);
+			}
+
+		} /* if len > rootlen */
+
+	} /* RB_FOREACH_SAFE */
+
 
 	TAILQ_FOREACH(n2, &head, entries) {
 		np = TAILQ_NEXT(n2, entries);
