@@ -2,6 +2,9 @@ Changes in RELEASE_1_3 from RELEASE_1_2
 - fixed a timeout issue with notify hosts, refactored code (axfr.c)
 - replaced dd-convert with dddctl which is a utility that can do a bit more,
   including dnssec key roll-over
+- added a DNS conversion tool to convert delphinusdnsd zonefiles to BIND style.
+- fixed ENT's with DNSSEC (missing NSEC3 in ENT's, RFC 7129).
+- added regressions for the developing platform (OpenBSD)
 - ...
 
 Changes in RELEASE_1_2 from RELEASE_1_1
