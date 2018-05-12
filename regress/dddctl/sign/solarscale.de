@@ -1,0 +1,32 @@
+zone "solarscale.de" {
+	solarscale.de,soa,86400,omega.virgostar.net.,hostmaster.centroid.eu.,2018051001,3600,1800,1209600,86400
+	solarscale.de,ns,86400,omega.virgostar.net.
+	solarscale.de,ns,86400,psi.virgostar.net.
+	solarscale.de,mx,86400,10,mail.solarscale.de.
+	solarscale.de,a,86400,108.61.211.139
+	solarscale.de,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+	solarscale.de,txt,86400,"v=spf1 ip4:108.61.211.139 ip6:2001:19f0:6c00:9041:5400:ff:fe11:3332 -all"
+
+	io.solarscale.de,a,86400,195.201.114.180
+	io.solarscale.de,aaaa,86400,2a01:4f8:1c0c:7b0c::180
+
+	mail.solarscale.de,a,86400,108.61.211.139
+	mail.solarscale.de,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+
+	_25._tcp.mail.solarscale.de,tlsa,300,3,1,1,"1c8235a70b05f35bb7e00438afd7acdd2a6e0deed83fa5624c64353249b334a7"
+	_465._tcp.mail.solarscale.de,tlsa,300,3,1,1,"1c8235a70b05f35bb7e00438afd7acdd2a6e0deed83fa5624c64353249b334a7"
+	_587._tcp.mail.solarscale.de,tlsa,300,3,1,1,"1c8235a70b05f35bb7e00438afd7acdd2a6e0deed83fa5624c64353249b334a7"
+
+	mail6.solarscale.de,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+
+	localhost.solarscale.de,a,86400,127.0.0.1
+	localhost.solarscale.de,aaaa,86400,::1
+
+	www.solarscale.de,a,86400,108.61.211.139
+	www.solarscale.de,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+
+        ipv6.solarscale.de,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+        localhost.ipv6.solarscale.de,aaaa,86400,::1
+        www.ipv6.solarscale.de,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+
+}

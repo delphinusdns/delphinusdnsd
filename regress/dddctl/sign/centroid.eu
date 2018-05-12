@@ -1,0 +1,39 @@
+zone "centroid.eu" {
+	centroid.eu,soa,86400,omega.virgostar.net.,hostmaster.centroid.eu.,2018050201,3600,1800,1209600,86400
+	centroid.eu,ns,86400,omega.virgostar.net.
+	centroid.eu,ns,86400,psi.virgostar.net.
+	centroid.eu,mx,86400,10,mail.solarscale.de.
+	centroid.eu,a,86400,108.61.211.139
+	centroid.eu,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+	centroid.eu,txt,86400,"v=spf1 ip4:108.61.211.139 ip6:2001:19f0:6c00:9041:5400:ff:fe11:3332 ~all"
+
+	twh.centroid.eu,a,86400,108.61.211.139
+	twh.centroid.eu,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+	wildcarddns.centroid.eu,a,86400,108.61.211.139
+	wildcarddnsd.centroid.eu,a,86400,108.61.211.139
+	wildcarddns.centroid.eu,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+	wildcarddnsd.centroid.eu,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+	delphinusdns.centroid.eu,a,86400,108.61.211.139
+	delphinusdns.centroid.eu,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+	delphinusdnsd.centroid.eu,a,86400,108.61.211.139
+	delphinusdnsd.centroid.eu,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+
+	ipv4.centroid.eu,a,86400,108.61.211.139
+	www.ipv4.centroid.eu,a,86400,108.61.211.139
+	localhost.centroid.eu,a,86400,127.0.0.1		
+	localhost.centroid.eu,aaaa,86400,::1
+
+	www.centroid.eu,a,86400,108.61.211.139
+	www.centroid.eu,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+
+        ipv6.centroid.eu,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+        localhost.ipv6.centroid.eu,aaaa,86400,::1
+        www.ipv6.centroid.eu,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+	mytest.centroid.eu,naptr,86400,10,10,"u","E2U+sip","!^.*$!sip:1234@sip.example.com!",centroid.eu.
+	mytest.centroid.eu,SSHFP,86400,1,1,"9b3624f96a6766e73dc88505f945a564dee82e59"
+	mytest.centroid.eu,srv,86400,0,0,0,www.centroid.eu.
+
+	auth.beta.centroid.eu,a,86400,192.168.34.4
+	www.beta.centroid.eu,a,86400,192.168.34.4
+	webmail.beta.centroid.eu,a,86400,192.168.34.4
+}
