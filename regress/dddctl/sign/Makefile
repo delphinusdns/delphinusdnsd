@@ -4,7 +4,7 @@ DELPHINUSDNSDSRC =      ${.CURDIR}/../../../delphinusdnsd
 
 ZONES= solarscale.de centroid.eu delphinusdns.org
 
-REGRESS_TARGETS=        test-sign
+REGRESS_TARGETS=        test-sign kfiles
 
 CLEANFILES +=           kfiles
 
@@ -38,13 +38,11 @@ test-sign: depend
 	@echo "--> If you reach here everything verified"
 	@echo "--> OK."
 	
-	
-
 kfiles:
 
 .for i in ${ZONES}
-	rm K${i}*key K${i}*private
-	rm ${i}.bind ${i}.signed dsset-${i}.
+	@rm K${i}*key K${i}*private
+	@rm ${i}.bind ${i}.signed dsset-${i}.
 .endfor
 
 clean: kfiles
