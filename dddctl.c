@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.12 2018/05/11 23:21:20 pjp Exp $
+ * $Id: dddctl.c,v 1.13 2018/05/12 05:59:40 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -7458,7 +7458,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 			return -1;
 		}
 		for (i = 0; i < sdnaptr->naptr_count; i++) {
-			fprintf(of, "%s %d IN NAPTR (\t\t%d\t; order\n\t\t%d\t; preference\n\t\t\"", 
+			fprintf(of, "%s %d IN NAPTR %d\t%d\t\"", 
 				convert_name(sdomain->zone, sdomain->zonelen),
 				sdomain->ttl[INTERNAL_TYPE_NAPTR],
 				sdnaptr->naptr[i].order,
@@ -7467,15 +7467,15 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 			for (x = 0; x < sdnaptr->naptr[i].flagslen; x++) {
 				fprintf(of, "%c", sdnaptr->naptr[i].flags[x]);
 			}
-			fprintf(of, "\"\t; flag\n\t\t\"");
+			fprintf(of, "\"\t\"");
 			for (x = 0; x < sdnaptr->naptr[i].serviceslen; x++) {
 				fprintf(of, "%c", sdnaptr->naptr[i].services[x]);
 			}
-			fprintf(of, "\"\t; service\n\t\t\"");
+			fprintf(of, "\"\t\"");
 			for (x = 0; x < sdnaptr->naptr[i].regexplen; x++) {
 				fprintf(of, "%c", sdnaptr->naptr[i].regexp[x]);
 			}
-			fprintf(of, "\"\t; regexp\n\t\t%s ) ; replacement\n", (sdnaptr->naptr[i].replacement[0] == '\0') ? "." : convert_name(sdnaptr->naptr[i].replacement, sdnaptr->naptr[i].replacementlen));
+			fprintf(of, "\"\t%s\n", (sdnaptr->naptr[i].replacement[0] == '\0') ? "." : convert_name(sdnaptr->naptr[i].replacement, sdnaptr->naptr[i].replacementlen));
 		}
 	}
 	if (sdomain->flags & DOMAIN_HAVE_TXT) {
