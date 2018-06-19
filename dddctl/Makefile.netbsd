@@ -13,6 +13,6 @@ OBJDIR=.
 BINDIR=/usr/local/bin
 MANDIR=/usr/local/man/man
 
-MAN= dddctl.1
+MAN= dddctl.8
 
 .include <bsd.prog.mk>

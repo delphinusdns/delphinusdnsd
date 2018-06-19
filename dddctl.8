@@ -1,0 +1,142 @@
+.\" Copyright (c) 2018 Peter J. Philipp
+.\" All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\" 3. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+.\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+.\" OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+.\" IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+.\" INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+.\" NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+.\" DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+.\" THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+.\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+.\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+.\"
+.\" In parts copyright (template) by:
+.\"
+.\"	$OpenBSD: vmctl.8,v 1.39 2018/02/24 13:14:09 jmc Exp $
+.\"
+.\" Copyright (c) 2015 Mike Larkin <mlarkin@openbsd.org>
+.\"
+.\" Permission to use, copy, modify, and distribute this software for any
+.\" purpose with or without fee is hereby granted, provided that the above
+.\" copyright notice and this permission notice appear in all copies.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\"
+.Dd $Mdocdate: June 19 2018 $
+.Dt DDDCTL 8
+.Os
+.Sh NAME
+.Nm dddctl
+.Nd control and manage delphinusdnsd
+.Sh SYNOPSIS
+.Nm
+.Ar command
+.Op Ar arg ...
+.Sh DESCRIPTION
+The
+.Nm
+utility is used to control, manage and sign delphinusdnsd (zone files)
+.Pp
+The commands are as follows:
+.Bl -tag -width Ds
+.It Cm bindfile Ar zonename zonefile
+Convert a 
+.Xr delphinusdns.conf 5
+zonefile to BIND format with the specified zonename domain name.
+.It Cm configtest Ar [configfile]
+Test the entire config, alternatively you can test a
+.Xr delphinusdns.conf 5
+config file by specifying such a file.
+.It Cm help Ar [command]
+provides an in-binary help.  Alternatively you can specify a subcommand 
+to provide help for.  Ie. 
+.Nm
+help sign.
+.It Xo Cm sign 
+.Op Fl KZ
+.Op Fl a Ar algorithm
+.Op Fl B Ar bits
+.Op Fl e Ar seconds
+.Op Fl I Ar iterations
+.Op Fl i Ar inputfile
+.Op Fl k Ar KSK
+.Op Fl m Ar mask
+.Op Fl n Ar zonename
+.Op Fl o Ar output
+.Op Fl S Ar pid
+.Op Fl s Ar salt
+.Op Fl t Ar ttl
+.Op Fl z Ar ZSK
+.Xc
+performs signing operations on a zonefile for DNSSEC operations.
+.Bl -tag -width "-I iterations"
+.It Fl K
+create a new KSK key.
+.It Fl Z
+create a new ZSK key.
+.It Fl a Ar algorithm
+use algorithm (integer).
+.It Fl B Ar bits
+use number of bits (integer).
+.It Fl e Ar seconds
+expiry in seconds.
+.It Fl I Ar iterations
+use (integer) NSEC3 iterations.
+.It Fl i Ar inputfile
+use the inputfile of unsigned zone.
+.It Fl k Ar KSK
+use provided KSK key-signing keyname.
+.It Fl m Ar mask
+run the following masked functions (used for debug).
+.It Fl n Ar zonename
+run for zonename zone.
+.It Fl o Ar output
+output to file, may be '-' for stdout.
+.It Fl S Ar pid
+sign with this pid ('KSK' or 'ZSK' if used in conjunction with [-ZK]).
+.It Fl s Ar salt
+salt for NSEC3 (in hexadecimal).
+.It Fl t Ar ttl
+time-to-live for DNSKEY's.
+.It Fl z Ar ZSK
+use provided ZSK zone-signing keyname.
+.El
+.It Cm sshfp Ar hostname [-k keyfile] [-t ttl]
+produces an SSHFP output on stdout in 
+.Xr delphinusdnsd 8
+format.
+.It Cm start Ar [configfile]
+starts
+.Xr delphinusdnsd 8
+with an optional configfile.
+.It Cm stop
+stops delphinusdnsd by means of signal on a pidfile.
+.It Cm restart
+restarts delphinusdnsd by means of signal on a pidfile.
+.Sh SEE ALSO
+.Xr delphinusdnsd 8
+.Xr delphinusdns.conf 5
+.Xr named 8
+.Xr nsd 8
+.Sh AUTHORS
+.An -nosplit
+.An Peter J. Philipp Aq Mt petphi@delphinusdns.org
