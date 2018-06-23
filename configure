@@ -38,14 +38,14 @@ netbsd() {
 	echo configuring for NetBSD
 	cp Makefile.netbsd Makefile
 	cp delphinusdnsd/Makefile.netbsd delphinusdnsd/Makefile
-	cp dd-convert/Makefile.netbsd dd-convert/Makefile
+	cp dddctl/Makefile.netbsd dddctl/Makefile
 }
 
 freebsd() {
 	echo configuring for FreeBSD
 	cp Makefile.freebsd Makefile
 	cp delphinusdnsd/Makefile.freebsd delphinusdnsd/Makefile
-	cp dd-convert/Makefile.freebsd dd-convert/Makefile
+	cp dddctl/Makefile.freebsd dddctl/Makefile
 }
 
 linux() {
