@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.14 2018/06/23 05:03:04 pjp Exp $
+ * $Id: dddctl.c,v 1.15 2018/06/23 05:04:54 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -7025,13 +7025,11 @@ start(int argc, char *argv[])
 	}
 #else
         if (setgid(0) < 0) {
-                dolog(LOG_INFO, "setgid: %s\n", strerror(errno));
-                slave_shutdown();
+		perror("setgid");
                 exit(1);
         }
         if (setuid(0) < 0) {
-                dolog(LOG_INFO, "setuid: %s\n", strerror(errno));
-                slave_shutdown();
+		perror("setuid");
                 exit(1);
         }
 #endif
