@@ -75,7 +75,7 @@ install: install-delphinusdnsd install-dddctl
 
 install-dddctl:
 	test -f dddctl/dddctl && install -m 555 dddctl/dddctl /usr/local/bin/
-	mkdir -p /usr/local/man/man1 && install -m 444 dddctl.1 /usr/local/man/man1
+	mkdir -p /usr/local/man/man8 && install -m 444 dddctl.8 /usr/local/man/man8
 
 install-delphinusdnsd:
 	test -f delphinusdnsd/delphinusdnsd && install -m 555 delphinusdnsd/delphinusdnsd /usr/local/sbin/
