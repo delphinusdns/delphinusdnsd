@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.15 2018/06/23 05:04:54 pjp Exp $
+ * $Id: dddctl.c,v 1.16 2018/06/26 07:33:17 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -855,7 +855,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 	FILE *f;
         RSA *rsa;
         BIGNUM *e;
-        BN_GENCB cb;
+        BN_GENCB *cb;
 	char buf[512];
 	char bin[4096];
 	char b64[4096];
@@ -879,6 +879,12 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 		RSA_free(rsa);
 		return NULL;
 	}
+	
+	if ((cb = BN_GENCB_new()) == NULL) {
+		dolog(LOG_INFO, "BN_GENCB_new: %s\n", strerror(errno));
+		RSA_free(rsa);
+		return NULL;
+	}
 
 	for (i = 0; i < 32; i++) {
 		if (RSA_F4 & (1 << i)) {
@@ -886,7 +892,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 		}
 	}
 
-	BN_GENCB_set_old(&cb, NULL, NULL);
+	BN_GENCB_set_old(cb, NULL, NULL);
 	
 	switch (algorithm) {
 	case ALGORITHM_RSASHA1_NSEC3_SHA1:
@@ -900,12 +906,16 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 		return NULL;
 	}
 
-	if (RSA_generate_key_ex(rsa, bits, e, &cb) == 0) {
+	if (RSA_generate_key_ex(rsa, bits, e, cb) == 0) {
 		dolog(LOG_INFO, "RSA_generate_key_ex: %s\n", strerror(errno));
 		BN_free(e);
 		RSA_free(rsa);
+		BN_GENCB_free(cb);
 		return NULL;
 	}
+
+	/* cb is not used again */
+	BN_GENCB_free(cb);
 
 	/* get the keytag, this is a bit of a hard process */
 	p = (char *)&bin[0];
