@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.16 2018/06/26 07:33:17 pjp Exp $
+ * $Id: dddctl.c,v 1.17 2018/06/26 08:08:38 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -855,6 +855,8 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 	FILE *f;
         RSA *rsa;
         BIGNUM *e;
+	BIGNUM *rsan, *rsae, *rsad, *rsap, *rsaq;
+	BIGNUM *rsadmp1, *rsadmq1, *rsaiqmp;
         BN_GENCB *cb;
 	char buf[512];
 	char bin[4096];
@@ -875,6 +877,18 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 	}
 
 	if ((e = BN_new()) == NULL) {
+		dolog(LOG_INFO, "BN_new: %s\n", strerror(errno));
+		RSA_free(rsa);
+		return NULL;
+	}
+	if ((rsan = BN_new()) == NULL ||
+		(rsae = BN_new()) == NULL ||
+		(rsad = BN_new()) == NULL ||
+		(rsap = BN_new()) == NULL ||
+		(rsaq = BN_new()) == NULL ||
+		(rsadmp1 = BN_new()) == NULL ||
+		(rsadmq1 = BN_new()) == NULL ||
+		(rsaiqmp = BN_new()) == NULL) {
 		dolog(LOG_INFO, "BN_new: %s\n", strerror(errno));
 		RSA_free(rsa);
 		return NULL;
@@ -917,6 +931,9 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 	/* cb is not used again */
 	BN_GENCB_free(cb);
 
+	/* get the bignums for now hidden struct */
+	RSA_get0_key(rsa, (const BIGNUM **)&rsan, (const BIGNUM **)&rsae, (const BIGNUM **)&rsad);
+
 	/* get the keytag, this is a bit of a hard process */
 	p = (char *)&bin[0];
 	pack16(p, htons(flags));
@@ -925,7 +942,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 	p++;
  	pack8(p, algorithm);
 	p++;
-	binlen = BN_bn2bin(rsa->e, (char *)tmp); 
+	binlen = BN_bn2bin(rsae, (char *)tmp); 
 	/* RFC 3110 */
 	if (binlen < 256) {
 		*p = binlen;
@@ -939,7 +956,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 	
 	pack(p, tmp, binlen);
 	p += binlen;
-	binlen = BN_bn2bin(rsa->n, (char *)tmp);
+	binlen = BN_bn2bin(rsan, (char *)tmp);
 	pack(p, tmp, binlen);
 	p += binlen;
 	rlen = (p - &bin[0]);
@@ -996,35 +1013,39 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 	fprintf(f, "Private-key-format: v1.3\n");
 	fprintf(f, "Algorithm: %d (%s)\n", algorithm, alg_to_name(algorithm));
 	/* modulus */
-	binlen = BN_bn2bin(rsa->n, (char *)&bin);
+	binlen = BN_bn2bin(rsan, (char *)&bin);
 	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Modulus: %s\n", b64);
 	/* public exponent */
-	binlen = BN_bn2bin(rsa->e, (char *)&bin);
+	binlen = BN_bn2bin(rsae, (char *)&bin);
 	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "PublicExponent: %s\n", b64);
 	/* private exponent */
-	binlen = BN_bn2bin(rsa->d, (char *)&bin);
+	binlen = BN_bn2bin(rsad, (char *)&bin);
 	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "PrivateExponent: %s\n", b64);
+	/* get the RSA factors */
+	RSA_get0_factors(rsa, (const BIGNUM **)&rsap, (const BIGNUM **)&rsaq);
 	/* prime1 */
-	binlen = BN_bn2bin(rsa->p, (char *)&bin);
+	binlen = BN_bn2bin(rsap, (char *)&bin);
 	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Prime1: %s\n", b64);
 	/* prime2 */
-	binlen = BN_bn2bin(rsa->q, (char *)&bin);
+	binlen = BN_bn2bin(rsaq, (char *)&bin);
 	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Prime2: %s\n", b64);
+	/* get the RSA crt params */
+	RSA_get0_crt_params(rsa, (const BIGNUM **)&rsadmp1, (const BIGNUM **)&rsadmq1, (const BIGNUM **)&rsaiqmp);
 	/* exponent1 */
-	binlen = BN_bn2bin(rsa->dmp1, (char *)&bin);
+	binlen = BN_bn2bin(rsadmp1, (char *)&bin);
 	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Exponent1: %s\n", b64);
 	/* exponent2 */
-	binlen = BN_bn2bin(rsa->dmq1, (char *)&bin);
+	binlen = BN_bn2bin(rsadmq1, (char *)&bin);
 	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Exponent2: %s\n", b64);
 	/* coefficient */
-	binlen = BN_bn2bin(rsa->iqmp, (char *)&bin);
+	binlen = BN_bn2bin(rsaiqmp, (char *)&bin);
 	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Coefficient: %s\n", b64);
 
@@ -1076,7 +1097,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 
 	/* RFC 3110, section 2 */
 	p = &bin[0];
-	binlen = BN_bn2bin(rsa->e, (char *)tmp);
+	binlen = BN_bn2bin(rsae, (char *)tmp);
 	if (binlen < 256) {
 		*p = binlen;
 		p++;
@@ -1088,7 +1109,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 	}
 	pack(p, tmp, binlen);
 	p += binlen;
-	binlen = BN_bn2bin(rsa->n, (char *)tmp);
+	binlen = BN_bn2bin(rsan, (char *)tmp);
 	pack(p, tmp, binlen);
 	p += binlen; 
 	binlen = (p - &bin[0]);
@@ -5920,6 +5941,9 @@ read_private_key(char *zonename, int keyid, int algorithm)
 {
 	FILE *f;
 	RSA *rsa;
+	BIGNUM *rsan, *rsae, *rsad;
+	BIGNUM *rsap, *rsaq;
+	BIGNUM *rsadmp1, *rsadmq1, *rsaiqmp;
 
 	char buf[4096];
 	char key[4096];
@@ -5968,7 +5992,7 @@ read_private_key(char *zonename, int keyid, int algorithm)
 			p += 9;
 	
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsa->n = BN_bin2bn(key, keylen, NULL)) == NULL)  {
+			if ((rsan = BN_bin2bn(key, keylen, NULL)) == NULL)  {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
 			}
@@ -5976,7 +6000,7 @@ read_private_key(char *zonename, int keyid, int algorithm)
 			p += 16;	
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsa->e = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((rsae = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
 			}
@@ -5984,7 +6008,7 @@ read_private_key(char *zonename, int keyid, int algorithm)
 			p += 17;
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsa->d = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((rsad = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
 			}
@@ -5992,7 +6016,7 @@ read_private_key(char *zonename, int keyid, int algorithm)
 			p += 8;
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsa->p = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((rsap = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
 			}
@@ -6000,7 +6024,7 @@ read_private_key(char *zonename, int keyid, int algorithm)
 			p += 8;
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsa->q = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((rsaq = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
 			}
@@ -6008,7 +6032,7 @@ read_private_key(char *zonename, int keyid, int algorithm)
 			p += 11;
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsa->dmp1 = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((rsadmp1 = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
 			}
@@ -6016,7 +6040,7 @@ read_private_key(char *zonename, int keyid, int algorithm)
 			p += 11;
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsa->dmq1 = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((rsadmq1 = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
 			}
@@ -6024,7 +6048,7 @@ read_private_key(char *zonename, int keyid, int algorithm)
 			p += 13;
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsa->iqmp = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((rsaiqmp = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return NULL;
 			}
@@ -6032,6 +6056,13 @@ read_private_key(char *zonename, int keyid, int algorithm)
 	} /* fgets */
 
 	fclose(f);
+
+	if (RSA_set0_key(rsa, rsan, rsae, rsad) == 0 ||
+		RSA_set0_factors(rsa, rsap, rsaq) == 0 ||
+		RSA_set0_crt_params(rsa, rsadmp1, rsadmq1, rsaiqmp) == 0) {
+		dolog(LOG_INFO, "RSA_set0_* failed\n");
+		return NULL;
+	}
 
 #if __OpenBSD__
 	explicit_bzero(buf, sizeof(buf));
