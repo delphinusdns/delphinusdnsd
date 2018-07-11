@@ -1,4 +1,4 @@
-.\" Copyright (c) 2014-2017 Peter J. Philipp
+.\" Copyright (c) 2014-2018 Peter J. Philipp
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -207,19 +207,19 @@ notify "these hosts" {
         ::1;
 }
 
-include "/etc/delphinusdns/centroid.eu.signed";
-include "/etc/delphinusdns/virgostar.net.signed";
-include "/etc/delphinusdns/solarscale.de.signed";
+zinclude "/etc/delphinusdns/centroid.eu.signed";
+zinclude "/etc/delphinusdns/virgostar.net.signed";
+zinclude "/etc/delphinusdns/solarscale.de.signed";
 
 .Ed
 Then the included files are output of
-.Xr dd-convert 8
+.Xr dddctl 8
 .Sh GRAMMAR
 Syntax for 
 .Nm
 in BNF:
 .Bd -literal
-line = ( version | axfrport | include | zone | region | 
+line = ( version | axfrport | include | zinclude | zone | region | 
 	axfr | notify | whitelist | filter | recurse | logging 
         | comment | options )
 
@@ -228,6 +228,8 @@ version = "version" ("number") ;
 axfrport = "axfrport" ("port number") ; 
 
 include = "include" ("filename") ; 
+
+zinclude = "zinclude" ("filename") ;
 
 zone = "zone" ("string") [ "{" zonedata "}" ]
 zonedata = { [hostname] [ "," dnstype] [ "," ttl ] ["," variablednsdata] }
@@ -275,7 +277,7 @@ optdnssec = "dnssec" ;
 .Sh FILES
 .Pa /etc/delphinusdns.conf
 .Sh SEE ALSO
-.Xr dd-convert 8 , 
+.Xr dddctl 8 , 
 .Xr delphinusdnsd 8
 .Sh AUTHORS
 This software and manual was written by

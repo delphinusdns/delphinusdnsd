@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.48 2018/01/01 19:47:40 pjp Exp $
+ * $Id: parse.y,v 1.49 2018/07/11 15:46:33 pjp Exp $
  */
 
 %{
@@ -77,6 +77,9 @@ static struct file {
         char                    *name;
         int                      lineno;
         int                      errors;
+	int			descend;
+#define DESCEND_NO		0
+#define DESCEND_YES		1
 } *file, *topfile;
 
 #define STATE_IP 1
@@ -94,6 +97,7 @@ static struct file {
 #define CONFIG_LOGGING          0x80
 #define CONFIG_AXFRFOR          0x100
 #define CONFIG_AXFRPORT         0x200
+#define CONFIG_ZINCLUDE		0x400
 
 typedef struct {
 	union {
@@ -157,7 +161,7 @@ int             lgetc(int);
 struct tab * 	lookup(struct tab *, char *);
 int             lungetc(int);
 int 		parse_file(ddDB *, char *);
-struct file     *pushfile(const char *, int);
+struct file     *pushfile(const char *, int, int);
 int             popfile(void);
 struct rrtab 	*rrlookup(char *);
 void 		set_record(struct domain *, int, char *, int);
@@ -201,7 +205,7 @@ struct rrtab {
 %token VERSION OBRACE EBRACE REGION AXFRFOR 
 %token DOT COLON TEXT WOF INCLUDE ZONE COMMA CRLF 
 %token ERROR AXFRPORT LOGGING OPTIONS FILTER NOTIFY
-%token WHITELIST
+%token WHITELIST ZINCLUDE
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -226,6 +230,7 @@ cmd	:
 	version 
 	| axfrport
 	| include
+	| zinclude
 	| zone
 	| region CRLF
 	| axfr CRLF
@@ -270,8 +275,9 @@ axfrport:
 			dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
 			return (-1);
 		}
-
-		axfrport = atoi($2);
+		if (file->descend == DESCEND_YES) {
+			axfrport = atoi($2);
+		}
 		free ($2);
 	}
 	;
@@ -297,15 +303,46 @@ includes:
 			return (-1);
 		}
 
-		if ((nfile = pushfile($2, 0)) == NULL) {
-			fprintf(stderr, "failed to include file %s\n", $2);
-			free($2);
-			return (-1);
+		if (file->descend == DESCEND_YES) {
+			if ((nfile = pushfile($2, 0, DESCEND_YES)) == NULL) {
+				fprintf(stderr, "failed to include file %s\n", $2);
+				free($2);
+				return (-1);
+			}
+
+			file = nfile;
+			lungetc('\n');
 		}
 
 		free($2);
+	}
+	;
 
-		file = nfile;
+zinclude:
+		zincludes CRLF
+		;
+
+zincludes:
+	ZINCLUDE quotedfilename SEMICOLON {
+		struct file     *nfile;
+	
+		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
+			dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
+			return (-1);
+		}
+
+		if (file->descend == DESCEND_YES) {
+			if ((nfile = pushfile($2, 0, DESCEND_NO)) == NULL) {
+				fprintf(stderr, "failed to include file %s\n", $2);
+				free($2);
+				return (-1);
+			}
+
+			file = nfile;
+			lungetc('\n');
+		}
+
+		free($2);
 	}
 	;
 
@@ -702,69 +739,76 @@ optionsstatement:
 
 	STRING SEMICOLON CRLF
 	{
-		if (strcasecmp($1, "dnssec") == 0) {
-			dolog(LOG_DEBUG, "DNSSEC enabled\n");
-			dnssec = 1;
-		} else if (strcasecmp($1, "log") == 0) {
-			dolog(LOG_DEBUG, "logging on\n");
-			lflag = 1;
+		if (file->descend == DESCEND_YES) {
+			if (strcasecmp($1, "dnssec") == 0) {
+				dolog(LOG_DEBUG, "DNSSEC enabled\n");
+				dnssec = 1;
+			} else if (strcasecmp($1, "log") == 0) {
+				dolog(LOG_DEBUG, "logging on\n");
+				lflag = 1;
+			}
 		}
 	}
 	|
 	STRING QUOTEDSTRING SEMICOLON CRLF
 	{
-		if (strcasecmp($1, "interface") == 0) {
-			iflag = 1;
-			if (icount > 253) {
-				dolog(LOG_ERR, "too many interface keywords in options\n");
-				return (-1);
-			}
-	
-			dolog(LOG_DEBUG, "interface \"%s\" added\n", $2);
-			interface_list[icount++] = $2;
-		} else if (strcasecmp($1, "versionstring") == 0) {
-			if (strlen($2) > 255) {
-				dolog(LOG_ERR, "versionstring too long\n");
-				return (-1);
-			}
+		if (file->descend == DESCEND_YES) {
+			if (strcasecmp($1, "interface") == 0) {
+				iflag = 1;
+				if (icount > 253) {
+					dolog(LOG_ERR, "too many interface keywords in options\n");
+					return (-1);
+				}
+		
+				dolog(LOG_DEBUG, "interface \"%s\" added\n", $2);
+				interface_list[icount++] = $2;
+			} else if (strcasecmp($1, "versionstring") == 0) {
+				if (strlen($2) > 255) {
+					dolog(LOG_ERR, "versionstring too long\n");
+					return (-1);
+				}
 
-			versionstring = strdup($2);
-			vslen = strlen(versionstring);
+				versionstring = strdup($2);
+				vslen = strlen(versionstring);
+			}
 		}
 	}
 	|
 	STRING NUMBER SEMICOLON CRLF
 	{
-		if (strcasecmp($1, "fork") == 0) {
-			dolog(LOG_DEBUG, "forking %d times\n", $2);
-			nflag = $2;
-		} else if (strcasecmp($1, "port") == 0) {
-			port = $2 & 0xffff;
-			dolog(LOG_DEBUG, "listening on port %d\n", port);
-		} else if (strcasecmp($1, "ratelimit-pps") == 0) {
-			if ($2 > 127 || $2 < 1) {
-				dolog(LOG_ERR, "ratelimit packets per second must be between 1 and 127, or leave it off!\n");
-				return -1;
-			}	
-			ratelimit = 1;
-			ratelimit_packets_per_second = $2;
-			dolog(LOG_DEBUG, "ratelimiting to %d packets per second", ratelimit_packets_per_second);
+		if (file->descend == DESCEND_YES) {
+			if (strcasecmp($1, "fork") == 0) {
+				dolog(LOG_DEBUG, "forking %d times\n", $2);
+				nflag = $2;
+			} else if (strcasecmp($1, "port") == 0) {
+				port = $2 & 0xffff;
+				dolog(LOG_DEBUG, "listening on port %d\n", port);
+			} else if (strcasecmp($1, "ratelimit-pps") == 0) {
+				if ($2 > 127 || $2 < 1) {
+					dolog(LOG_ERR, "ratelimit packets per second must be between 1 and 127, or leave it off!\n");
+					return -1;
+				}	
+				ratelimit = 1;
+				ratelimit_packets_per_second = $2;
+				dolog(LOG_DEBUG, "ratelimiting to %d packets per second", ratelimit_packets_per_second);
+			}
+			
 		}
-		
 	}
 	|
 	STRING ipcidr SEMICOLON CRLF
 	{
-		if (strcasecmp($1, "bind") == 0) {
-			bflag = 1;
-			if (bcount > 253) {
-				dolog(LOG_ERR, "too many bind keywords in options\n");
-				return (-1);
+		if (file->descend == DESCEND_YES) {
+			if (strcasecmp($1, "bind") == 0) {
+				bflag = 1;
+				if (bcount > 253) {
+					dolog(LOG_ERR, "too many bind keywords in options\n");
+					return (-1);
+				}
+				dolog(LOG_DEBUG, "binding to %s\n", $2);
+				bind_list[bcount++] = $2;
 			}
-			dolog(LOG_DEBUG, "binding to %s\n", $2);
-			bind_list[bcount++] = $2;
 		}
-
 	}
 	| comment CRLF
 	;
@@ -800,51 +844,54 @@ loggingstatement:
 	{
 		char buf[512];
 		
-		if (strcasecmp($1, "logbind") == 0) {
-			logging.active = 1;
-			logging.bind = 0;
+		if (file->descend == DESCEND_YES) {
+			if (strcasecmp($1, "logbind") == 0) {
+				logging.active = 1;
+				logging.bind = 0;
 
-			gethostname(buf, sizeof(buf));
-			logging.hostname = strdup(buf);
-			if (logging.hostname == NULL) {
-				dolog(LOG_ERR, "strdup failed\n");
+				gethostname(buf, sizeof(buf));
+				logging.hostname = strdup(buf);
+				if (logging.hostname == NULL) {
+					dolog(LOG_ERR, "strdup failed\n");
+					return (-1);
+				}
+		
+				if (strcmp($2, "yes") == 0) {
+					logging.bind = 1;
+				}
+			} else if (strcasecmp($1, "logpasswd") == 0) {
+			
+				logging.logpasswd = strdup($2);
+			
+				if (logging.logpasswd == NULL) {
+					dolog(LOG_ERR, "strdup failed\n");
+					return (-1);
+				}
+
+			} else {
+				if (debug)
+					printf("another logging statement I don't know?\n");
 				return (-1);
 			}
-	
-			if (strcmp($2, "yes") == 0) {
-				logging.bind = 1;
-			}
-		} else if (strcasecmp($1, "logpasswd") == 0) {
-		
-			logging.logpasswd = strdup($2);
-		
-			if (logging.logpasswd == NULL) {
-				dolog(LOG_ERR, "strdup failed\n");
-				return (-1);
-			}
-
-		} else {
-			if (debug)
-				printf("another logging statement I don't know?\n");
-			return (-1);
 		}
-
 	}
 	|
 	STRING NUMBER SEMICOLON 
 	{
 		char buf[16];
 
-		if (strcasecmp($1, "logport") == 0) {
-			snprintf(buf, sizeof(buf), "%lld", $2);
-			logging.logport = strdup(buf);
-			if (logging.logport == NULL) {
-				dolog(LOG_ERR, "strdup failed\n");
-				return (-1);
+		if (file->descend == DESCEND_YES) {
+			if (strcasecmp($1, "logport") == 0) {
+				snprintf(buf, sizeof(buf), "%lld", $2);
+				logging.logport = strdup(buf);
+				if (logging.logport == NULL) {
+					dolog(LOG_ERR, "strdup failed\n");
+					return (-1);
+				}
+				logging.logport2 = $2;
 			}
-			logging.logport2 = $2;
-		}
-	}	
+		}	
+	}
 	|
 	STRING ipcidr SEMICOLON
 	{
@@ -853,73 +900,75 @@ loggingstatement:
 		struct sockaddr_in *psin;
 		int error;
 
-		if (strcasecmp($1, "loghost") == 0) {
-			logging.loghost = strdup($2);
-			if (logging.loghost == NULL) {
-				dolog(LOG_ERR, "strdup failed\n");
+		if (file->descend == DESCEND_YES) {
+			if (strcasecmp($1, "loghost") == 0) {
+				logging.loghost = strdup($2);
+				if (logging.loghost == NULL) {
+					dolog(LOG_ERR, "strdup failed\n");
 
+					return (-1);
+				}
+
+				if (strchr($2, ':') != NULL) {
+					memset(&hints, 0, sizeof(hints));
+					hints.ai_family = AF_INET6;
+					hints.ai_socktype = SOCK_STREAM;
+					hints.ai_flags = AI_NUMERICHOST;
+
+					error = getaddrinfo($2, "www", &hints, &res0);
+					if (error) {
+						dolog(LOG_ERR, "%s line %d: %s\n", 
+							file->name, file->lineno,
+							gai_strerror(error));
+		
+						return (-1);
+					}
+
+					if (res0 == NULL) {
+						dolog(LOG_ERR, "%s line %d: could not"
+							" determine IPv6 address\n"
+							, file->name, file->lineno);
+						return (-1);
+					}
+		
+					psin6 = (struct sockaddr_in6 *)&logging.loghost2;
+					psin6->sin6_family = res0->ai_family;
+					memcpy(psin6, res0->ai_addr, res0->ai_addrlen);
+					freeaddrinfo(res0);
+				} else {
+					memset(&hints, 0, sizeof(hints));
+
+					hints.ai_family = AF_INET;
+					hints.ai_socktype = SOCK_STREAM;
+					hints.ai_flags = AI_NUMERICHOST;
+
+					error = getaddrinfo($2, "www", &hints, &res0);
+					if (error) {
+						dolog(LOG_ERR, "%s line %d: %s\n", 
+							file->name, file->lineno,
+							gai_strerror(error));
+		
+						return (-1);
+					}
+
+					if (res0 == NULL) {
+						dolog(LOG_ERR, "%s line %d: could not"
+							" determine IPv6 address\n"
+							, file->name, file->lineno);
+						return (-1);
+					}
+						
+					psin = (struct sockaddr_in *)&logging.loghost2;
+					psin->sin_family = res0->ai_family;
+					memcpy(psin, res0->ai_addr, res0->ai_addrlen);
+
+					freeaddrinfo(res0);
+				}
+			} else {
+				if (debug)
+					printf("2 another logging statement I don't know?\n");
 				return (-1);
 			}
-
-			if (strchr($2, ':') != NULL) {
-				memset(&hints, 0, sizeof(hints));
-				hints.ai_family = AF_INET6;
-				hints.ai_socktype = SOCK_STREAM;
-				hints.ai_flags = AI_NUMERICHOST;
-
-				error = getaddrinfo($2, "www", &hints, &res0);
-				if (error) {
-					dolog(LOG_ERR, "%s line %d: %s\n", 
-						file->name, file->lineno,
-						gai_strerror(error));
-	
-					return (-1);
-				}
-
-				if (res0 == NULL) {
-					dolog(LOG_ERR, "%s line %d: could not"
-						" determine IPv6 address\n"
-						, file->name, file->lineno);
-					return (-1);
-				}
-	
-				psin6 = (struct sockaddr_in6 *)&logging.loghost2;
-				psin6->sin6_family = res0->ai_family;
-				memcpy(psin6, res0->ai_addr, res0->ai_addrlen);
-				freeaddrinfo(res0);
-			} else {
-				memset(&hints, 0, sizeof(hints));
-
-				hints.ai_family = AF_INET;
-				hints.ai_socktype = SOCK_STREAM;
-				hints.ai_flags = AI_NUMERICHOST;
-
-				error = getaddrinfo($2, "www", &hints, &res0);
-				if (error) {
-					dolog(LOG_ERR, "%s line %d: %s\n", 
-						file->name, file->lineno,
-						gai_strerror(error));
-	
-					return (-1);
-				}
-
-				if (res0 == NULL) {
-					dolog(LOG_ERR, "%s line %d: could not"
-						" determine IPv6 address\n"
-						, file->name, file->lineno);
-					return (-1);
-				}
-					
-				psin = (struct sockaddr_in *)&logging.loghost2;
-				psin->sin_family = res0->ai_family;
-				memcpy(psin, res0->ai_addr, res0->ai_addrlen);
-
-				freeaddrinfo(res0);
-			}
-		} else {
-			if (debug)
-				printf("2 another logging statement I don't know?\n");
-			return (-1);
 		}
 	}
 	| comment CRLF
@@ -957,21 +1006,24 @@ whiteliststatement	:	ipcidr SEMICOLON CRLF
 					char *dst;
 					
 
-					if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
-						return (-1);
+					if (file->descend == DESCEND_YES) {
+							if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
+								return (-1);
+							}
+
+							if (insert_whitelist(dst, prefixlength) < 0) {
+								dolog(LOG_ERR, "insert_whitelist, line %d\n", file->lineno);
+								return (-1);
+							}
+			
+							if (debug)
+								printf("whitelist inserted %s address\n", $1);
+			
+							whitelist = 1;
+
+							free (dst);
 					}
 
-					if (insert_whitelist(dst, prefixlength) < 0) {
-						dolog(LOG_ERR, "insert_whitelist, line %d\n", file->lineno);
-						return (-1);
-					}
-	
-					if (debug)
-						printf("whitelist inserted %s address\n", $1);
-	
-					whitelist = 1;
-
-					free (dst);
 					free ($1);
 			}
 			| comment CRLF
@@ -1009,19 +1061,22 @@ filterstatement	:	ipcidr SEMICOLON CRLF
 					char *dst;
 					
 
-					if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
-						return (-1);
+					if (file->descend == DESCEND_YES) {
+							if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
+								return (-1);
+							}
+
+							if (insert_filter(dst, prefixlength) < 0) {
+								dolog(LOG_ERR, "insert_filter, line %d\n", file->lineno);
+								return (-1);
+							}
+			
+							if (debug)
+								printf("filter inserted %s address\n", $1);
+
+							free (dst);
 					}
 
-					if (insert_filter(dst, prefixlength) < 0) {
-						dolog(LOG_ERR, "insert_filter, line %d\n", file->lineno);
-						return (-1);
-					}
-	
-					if (debug)
-						printf("filter inserted %s address\n", $1);
-
-					free (dst);
 					free ($1);
 			}
 			| comment CRLF
@@ -1060,18 +1115,21 @@ notifystatement	:	ipcidr SEMICOLON CRLF
 					char *dst;
 					
 
-					if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
-						return (-1);
+					if (file->descend == DESCEND_YES) {
+							if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
+								return (-1);
+							}
+
+							if (insert_notifyslave(dst, prefixlength) < 0) {
+								dolog(LOG_ERR, "insert_notifyslave, line %d\n", file->lineno);
+								return (-1);
+							}
+				
+							notify++;
+			
+							free (dst);
 					}
 
-					if (insert_notifyslave(dst, prefixlength) < 0) {
-						dolog(LOG_ERR, "insert_notifyslave, line %d\n", file->lineno);
-						return (-1);
-					}
-		
-					notify++;
-	
-					free (dst);
 					free ($1);
 			}
 			| comment CRLF
@@ -1109,19 +1167,23 @@ axfrstatement	:	ipcidr SEMICOLON CRLF
 					char *dst;
 					
 
-					if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
-						return (-1);
+					if (file->descend == DESCEND_YES) {
+							if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
+								return (-1);
+							}
+
+							if (insert_axfr(dst, prefixlength) < 0) {
+								dolog(LOG_ERR, "insert_axfr, line %d\n", file->lineno);
+								return (-1);
+							}
+			
+							if (debug)
+								printf("axfr inserted %s address\n", $1);
+
+							free (dst);
+
 					}
 
-					if (insert_axfr(dst, prefixlength) < 0) {
-						dolog(LOG_ERR, "insert_axfr, line %d\n", file->lineno);
-						return (-1);
-					}
-	
-					if (debug)
-						printf("axfr inserted %s address\n", $1);
-
-					free (dst);
 					free ($1);
 			}
 			| comment CRLF
@@ -1160,19 +1222,23 @@ regionstatement		:	ipcidr SEMICOLON CRLF
 					char prefixlength[INET_ADDRSTRLEN];
 					char *dst;
 				
-					if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
-						return (-1);
+					if (file->descend == DESCEND_YES) {
+							if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
+								return (-1);
+							}
+
+							if (insert_region(dst, prefixlength, region) < 0) {
+								dolog(LOG_ERR, "insert_region, line %d\n", file->lineno);
+								return (-1);
+							}
+							
+							if (debug)
+								printf("%s ipv4 address\n", dst);
+
+							free (dst);
+
 					}
 
-					if (insert_region(dst, prefixlength, region) < 0) {
-						dolog(LOG_ERR, "insert_region, line %d\n", file->lineno);
-						return (-1);
-					}
-					
-					if (debug)
-						printf("%s ipv4 address\n", dst);
-
-					free (dst);
 					free ($1);
 				}
 				| comment CRLF
@@ -1204,6 +1270,7 @@ struct tab cmdtab[] = {
 	{ "region", REGION, STATE_IP },
 	{ "wildcard-only-for", WOF, STATE_IP },
 	{ "version", VERSION, 0 },
+	{ "zinclude", ZINCLUDE, 0 },
 	{ "zone", ZONE, 0 },
 	{ "notify", NOTIFY, STATE_IP },
 	{ NULL, 0, 0}};
@@ -1235,7 +1302,7 @@ parse_file(ddDB *db, char *filename)
 	logging.active = 0;
 
 
-        if ((file = pushfile(filename, 0)) == NULL) {
+        if ((file = pushfile(filename, 0, DESCEND_YES)) == NULL) {
                 return (-1);
         }
 
@@ -3597,7 +3664,7 @@ set_record(struct domain *sdomain, int rs, char *converted_name, int converted_n
 	
 
 struct file *
-pushfile(const char *name, int secret)
+pushfile(const char *name, int secret, int descend)
 {
 	struct stat sb;
         struct file     *nfile;
@@ -3629,6 +3696,7 @@ pushfile(const char *name, int secret)
 		time_changed = (time_t)sb.st_ctime; /* ufs1 is only 32 bits */
 
         nfile->lineno = 1;
+	nfile->descend = descend;
         TAILQ_INSERT_TAIL(&files, nfile, file_entry);
         return (nfile);
 }

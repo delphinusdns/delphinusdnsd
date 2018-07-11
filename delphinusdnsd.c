@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.35 2017/12/27 19:40:27 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.36 2018/07/11 15:46:33 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -261,6 +261,18 @@ main(int argc, char *argv[], char *environ[])
 	
 	if (! debug)
 		daemon(0,0);
+	else {
+		/*
+		 * even if in debug mode we want to have our own parent group
+		 * for reasons in that regress needs it when killing debug
+		 * mode delphinusdnsd
+		 */
+
+		if (setpgrp(0, 0) < 0) {
+			perror("setpgrp");
+			exit(1);
+		}
+	}
 
 
 	openlog(__progname, LOG_PID | LOG_NDELAY, LOG_DAEMON);
