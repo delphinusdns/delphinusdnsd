@@ -1,0 +1,13 @@
+zone "centroid.eu" {
+	centroid.eu,soa,3600,uranus.centroid.eu.,pjp.solarscale.de.,2014051701,3600,1800,7200,3600
+	centroid.eu,ns,3600,proteus.solarscale.de.
+	centroid.eu,ns,3600,uranus.centroid.eu.
+	centroid.eu,ns,3600,dione.solarscale.de.
+	;
+	centroid.eu,a,3600,200.46.208.61
+	centroid.eu,a,3600,62.75.160.180
+}
+
+options "trying to cheat" {
+	dnssec;
+}
