@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.49 2018/07/11 15:46:33 pjp Exp $
+ * $Id: parse.y,v 1.50 2018/07/11 16:00:18 pjp Exp $
  */
 
 %{
@@ -85,7 +85,7 @@ static struct file {
 #define STATE_IP 1
 #define STATE_ZONE 2
 
-#define DELPHINUSVERSION 7
+#define DELPHINUSVERSION	8 
 
 #define CONFIG_START            0x1
 #define CONFIG_VERSION          0x2
