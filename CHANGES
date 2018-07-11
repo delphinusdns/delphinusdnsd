@@ -1,4 +1,5 @@
 Changes in RELEASE_1_3 from RELEASE_1_2
+- created a manpage for dddctl
 - fixed a timeout issue with notify hosts, refactored code (axfr.c)
 - replaced dd-convert with dddctl which is a utility that can do a bit more,
   including dnssec key roll-over
