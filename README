@@ -1,4 +1,4 @@
-$Id: README,v 1.25 2017/12/26 12:21:24 pjp Exp $
+$Id: README,v 1.26 2018/07/12 08:25:04 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -110,7 +110,7 @@ $ make install
 3.4 NetBSD
 ----------
 
-The tests for this were done on NetBSD 7.0.2
+The tests for this were done on NetBSD 7.1.2
 
 ## create paths needed
 $ mkdir -p /usr/local/sbin /usr/local/man/man/man5 /usr/local/man/man/man8 /usr/local/man/man/html5/ /usr/local/man/man/html8
@@ -137,7 +137,7 @@ it they can send patches for the Makefile.
 ------------------+--------------------+---------------------+
 Operating System**| makes and compiles | responds to queries |
 ------------------+--------------------+---------------------+
-FreeBSD 10.3      |        yes         |       yes           |
+FreeBSD 11.2      |        yes         |       yes           |
 ------------------+--------------------+---------------------+
 NetBSD 7.1        |        yes         |       yes           |
 ------------------+--------------------+---------------------+
