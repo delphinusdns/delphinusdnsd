@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.50 2018/07/11 16:00:18 pjp Exp $
+ * $Id: parse.y,v 1.51 2018/07/12 18:22:30 pjp Exp $
  */
 
 %{
@@ -1554,7 +1554,7 @@ yylex()
 
 			free (yylval.v.string);
 #if ! defined __APPLE__ && ! defined __NetBSD__
-			yylval.v.intval = strtonum(buf, 0, 0x7fffffffffffffff, &errstr);
+			yylval.v.intval = strtonum(buf, 0, LLONG_MAX, &errstr);
 #else
 			yylval.v.intval = atoll(buf);
 #endif
