@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.36 2018/07/11 15:46:33 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.37 2018/07/12 07:53:02 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -268,7 +268,11 @@ main(int argc, char *argv[], char *environ[])
 		 * mode delphinusdnsd
 		 */
 
+#if __linux__
+		if (setpgrp() < 0) {
+#else
 		if (setpgrp(0, 0) < 0) {
+#endif
 			perror("setpgrp");
 			exit(1);
 		}
