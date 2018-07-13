@@ -2,6 +2,7 @@ The TODO's here are for delphinusdnsd which is the successor of wildcarddnsd.
 Please see http://delphinusdns.org for updates/news.
 
 For 1.4.0 release
+- a github mirrored copy
 - fix the DNSSEC code so that a KSK key rollover is allowed
 - TSIG support would still be nice
 - CAA RR support
