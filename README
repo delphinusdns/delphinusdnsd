@@ -1,4 +1,4 @@
-$Id: README,v 1.28 2018/07/13 04:59:54 pjp Exp $
+$Id: README,v 1.29 2018/07/13 05:41:07 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -35,8 +35,8 @@ DelphinusDNS is written for research into the DNS system so that perhaps one
 day the author has a better understanding of it.  Delphinusdnsd is developed
 on OpenBSD, due to pledge(2) and other security mitigations, it is recommended
 that serious delphinusdnsd users also use OpenBSD.  Ports to other OS's exist
-for those that cannot do without those platforms, but at the risk of security
-vulnerabilities.  Delphinusdnsd chroots and privseps on all platforms, meaning 
+for those that cannot do without those platforms, but at the risk of more
+attack surface*.  Delphinusdnsd chroots and privseps on all platforms, meaning 
 that a direct root exploit is not possible.
 
 Usually CVS HEAD is for OpenBSD and the other ports are not guaranteed to 
@@ -48,6 +48,7 @@ program, then you can fork Delphinusdns and make your own creation, or you
 can send patches to the author who may implement them into the code.  The
 current contact mail address is petphi@delphinusdns.org.
 
+* https://en.wikipedia.org/wiki/Attack_surface
 
 3. INSTALL HINTS
 ----------------
