@@ -1,6 +1,6 @@
 CC=gcc
 #CFLAGS=-DDEBUG
-CFLAGS=
+CFLAGS=-D_XOPEN_SOURCE -D_DEFAULT_SOURCE
 LDADD= -lresolv -lcrypto -lrt -lbsd 
 YACC=bison
 AR=ar
@@ -28,7 +28,7 @@ dddctl.o: dddctl.c
 	$(CC) $(CFLAGS) -c dddctl.c
 
 parse.o: parse.y
-	$(YACC) $(CFLAGS) -y -d parse.y
+	$(YACC) $(BISONCFLAGS) -y -d parse.y
 	mv -f y.tab.c parse.c
 	$(CC) $(CFLAGS) -c parse.c
 	

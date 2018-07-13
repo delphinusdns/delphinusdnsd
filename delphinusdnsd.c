@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.37 2018/07/12 07:53:02 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.38 2018/07/13 02:40:59 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -1550,12 +1550,8 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	int lfd;
 	int idata;
 
-       u_int32_t received_ttl;
-#if defined __FreeBSD__ || defined __OpenBSD__
+	u_int32_t received_ttl;
 	u_char *ttlptr;
-#else
-	int *ttlptr;
-#endif
 
 	u_int8_t aregion;			/* region where the address comes from */
 
@@ -1770,15 +1766,8 @@ axfrentry:
                         				&& cmsg->cmsg_type == IP_RECVTTL) {
 #endif
 										
-#if defined __FreeBSD__ || defined __OpenBSD__ 
-
                               			ttlptr = (u_char *) CMSG_DATA(cmsg);
                               			received_ttl = (u_int)*ttlptr;
-#else
-
-                              			ttlptr = (int *) CMSG_DATA(cmsg);
-                              			received_ttl = (u_int)*ttlptr;
-#endif
                       				}
 
 									if (cmsg->cmsg_level == IPPROTO_IPV6 &&
@@ -1790,11 +1779,7 @@ axfrentry:
 											continue;
 										}
 
-#ifdef __NetBSD__
-   										ttlptr = (int *) CMSG_DATA(cmsg);
-#else
 										ttlptr = (u_char *) CMSG_DATA(cmsg);
-#endif
 										received_ttl = (u_int)*ttlptr;
                      				}
 				}
