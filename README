@@ -1,4 +1,4 @@
-$Id: README,v 1.27 2018/07/13 04:35:52 pjp Exp $
+$Id: README,v 1.28 2018/07/13 04:59:54 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -24,22 +24,29 @@ $Id: README,v 1.27 2018/07/13 04:35:52 pjp Exp $
 
 Delphinusdns is a small authoritative nameserver.  It does not recurse nor 
 search.  This program is written to a BSD Style License.  BSD's tree(3)
-Red Black btree macros are used for the main in-memory database.
+Red Black btree macros are used for the main in-memory database.  A project
+website exists at http://delphinusdns.org.
 
 2. WHY DELPHINUSDNS?
 -------------------
 
-DNS is simple.  Yet implementation of DNS servers is not so simple.
-Delphinusdns is written for research into the DNS system so that perhaps one
-day the author has a better understanding of it.  Comparing delphinusdns to
-other DNS implementations is not fair since many of those implementation
-fix Delphinusdns's faults on the Internet.  It is recommended that if this
-daemon is used on the Internet that logging be turned on to learn from it
-and the DNS system.  
+DNS is simple.  Yet, implementation of DNS servers is not so simple.
+DelphinusDNS is written for research into the DNS system so that perhaps one
+day the author has a better understanding of it.  Delphinusdnsd is developed
+on OpenBSD, due to pledge(2) and other security mitigations, it is recommended
+that serious delphinusdnsd users also use OpenBSD.  Ports to other OS's exist
+for those that cannot do without those platforms, but at the risk of security
+vulnerabilities.  Delphinusdnsd chroots and privseps on all platforms, meaning 
+that a direct root exploit is not possible.
+
+Usually CVS HEAD is for OpenBSD and the other ports are not guaranteed to 
+compile until shortly before release time, when testing occurs for these 
+platforms.
 
 Use the tool "dig" that comes with bind9 to debug Delphinusdns.  If you like to 
 program, then you can fork Delphinusdns and make your own creation, or you
-can send patches to the author who may implement them into the code.
+can send patches to the author who may implement them into the code.  The
+current contact mail address is petphi@delphinusdns.org.
 
 
 3. INSTALL HINTS
