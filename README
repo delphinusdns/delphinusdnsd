@@ -1,4 +1,4 @@
-$Id: README,v 1.26 2018/07/12 08:25:04 pjp Exp $
+$Id: README,v 1.27 2018/07/13 04:35:52 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -11,12 +11,12 @@ $Id: README,v 1.26 2018/07/12 08:25:04 pjp Exp $
 4. COMPATIBILITY
 5. EXAMPLES
 6. DNSSEC
- 6.1 Signing your zone with dd-convert
+ 6.1 Signing your zone with dddctl sign
  6.2 re-signing with existing keys
  6.3 What to do with the .signed file
  6.4 How can I sub-delegate a zone with DNSSEC
- 6.5 What algorithms are supported with dd-convert
- 6.6 What happened to dd-convert.rb
+ 6.5 What algorithms are supported with dddctl sign
+ 6.6 What happened to dd-convert
 7. WHAT IT CAN'T DO
 
 1. README 
@@ -46,7 +46,7 @@ can send patches to the author who may implement them into the code.
 ----------------
 
 To install, type ./configure on your platform.  This will copy the proper 
-Makefile to ./Makefile and dd-convert and delphinusdnsd.  Then you would type 
+Makefile to ./Makefile and dddctl and delphinusdnsd.  Then you would type 
 make, followed by su'ing and make install.  Delphinusdnsd installs to 
 /usr/local/sbin.
 
@@ -98,7 +98,7 @@ $ make install
 ## configure the platform
 $ ./configure
 ## add a privsep user (_ddd) with a chroot directory (as root)
-$ vipw
+$ useradd -m _ddd
 ## or
 $ adduser
 ## make the program
@@ -135,7 +135,7 @@ it they can send patches for the Makefile.
 ----------------
 
 ------------------+--------------------+---------------------+
-Operating System**| makes and compiles | responds to queries |
+Operating System  | makes and compiles | responds to queries |
 ------------------+--------------------+---------------------+
 FreeBSD 11.2      |        yes         |       yes           |
 ------------------+--------------------+---------------------+
@@ -143,17 +143,18 @@ NetBSD 7.1        |        yes         |       yes           |
 ------------------+--------------------+---------------------+
 OpenBSD 6.2       |        yes         |       yes           |
 ------------------+--------------------+---------------------+
-Linux 		  |        yes         |       yes           |
-------------------+--------------------+---------------------+
-Rasbian OS        |        yes         |       yes           |
+Linux*		  |        yes         |       yes           |
 ------------------+--------------------+---------------------+
 
-**** Mac OS X support has been dropped in version 1.1.0
+* Devuan and OpenSuse were tested for version 1.3.0
+** Mac OS X support has been dropped in version 1.1.0
 
 5. EXAMPLES
 -----------
 
-in the directory "examples" are a few examples from working configs.
+in the directory "examples" are a few examples from working configs.  The
+author uses example8.conf often to test functionality and compatibility
+on any platform.
 
 6. DNSSEC
 ---------
@@ -161,15 +162,15 @@ in the directory "examples" are a few examples from working configs.
 DNSSEC is added hostmaster commitment.  You will have to re-sign your zone at
 periodic intervals.  This can be automated though.
 
-6.1 Signing your zone with dd-convert
--------------------------------------
+6.1 Signing your zone with dddctl sign
+--------------------------------------
 
 The very first time you'll want to create ZSK and KSK keys.  They are the
 zone signing and key signing keys respectively.  Every DNSSEC zone has at
-least one of these.  To create these with dd-convert I use -Z and -K
+least one of these.  To create these with dddctl sign I use -Z and -K
 options.  Here is an example:
 
-	dd-convert -Z -K -i centroid.eu -n centroid.eu -o centroid.eu.signed
+	dddctl sign -Z -K -i centroid.eu -n centroid.eu -o centroid.eu.signed
 
 What this does is it creates the keys and signs the zone 'centroid.eu' with
 the zonename centroid.eu.  No trailing dots are needed.  The output will be
@@ -196,7 +197,7 @@ In order to do the monthly re-signing you must know which key is the ZSK and
 which is the KSK.  The K*.key files will tell you which is the ZSK and which
 is the KSK.
 
-	dd-convert -z Kcentroid.eu.+008+04815 -k Kcentroid.eu.+008+40405 \
+	dddctl sign -z Kcentroid.eu.+008+04815 -k Kcentroid.eu.+008+40405 \
 		-i centroid.eu -n centroid.eu -o centroid.eu.signed
 
 Note, this will overwrite any centroid.eu.signed file.
@@ -210,7 +211,7 @@ configfile so that this is managed easy.  Then restart delphinusdnsd after
 setting the 'dnssec' option.  Your zone should talk DNSSEC, after you upload
 the KSK to your registrar.  They'll likely want the DNSKEY and in some cases
 grab it themselves over the insecure channel.  My registrar joker.com did 
-this.  Other than that dd-convert creates a dsset-centroid.eu. file which 
+this.  Other than that dddctl sign creates a dsset-centroid.eu. file which 
 has the uploadable DS keys in it.
 
 It's up to you to upload DS or DNSKEY (which can derive DS keys) to your 
@@ -225,20 +226,23 @@ sign a zone containing a DS resource record.  Since I haven't tested this I
 cannot say if this will work.
 
 
-6.5 What algorithms are supported with dd-convert
--------------------------------------------------
+6.5 What algorithms are supported with dddctl sign
+--------------------------------------------------
 
 Currently only 3 algorithms are supported.   There is RSASHA1-NSEC3-SHA1 
 which has algorithm 7, there is RSASHA256 which has algorithm 8 (the default), 
 and there is RSASHA512 which has algorithm 10.
 
-6.6 What happened to dd-convert.rb
-----------------------------------
+6.6 What happened to dd-convert
+-------------------------------
 
 The BIND-reliant dd-convert.rb has been replaced with a native C program called
-dd-convert.c starting from version 1.1.0.  If you must have the .rb utility you
+dd-convert.c starting from version 1.1.0.  Then in version 1.3.0 a broader
+control tool called dddctl came, the dddctl sign subcommand has all the 
+functionality of dd-convert.c and more.  If you must have the .rb utility you
 can always get it from the 1.0.2 download which should never go away as long
-as I live.
+as I live.  There is obvious benefits in using dddctl sign to replace all
+versions of dd-convert, for one it's up to date.
 
 
 7. WHAT IT CAN'T DO
@@ -247,6 +251,5 @@ as I live.
 * Solaris.  Unless you port some functions to solaris it won't compile on
 there.
 
-* DNSSEC key rollover - we'll have to wait another year at least.  This is ok
-though partially because the DNSSEC root zone was not rolled over for a long 
-time, either, so going by their example.
+* DNSSEC key rollover - a ZSK key can be rolled over, this was tested on a 
+live zone.  However a KSK key still can't be rolled over.  Maybe next year.
