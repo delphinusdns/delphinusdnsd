@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.51 2018/07/12 18:22:30 pjp Exp $
+ * $Id: parse.y,v 1.52 2018/07/14 06:12:53 pjp Exp $
  */
 
 %{
@@ -47,6 +47,7 @@ extern int 	mybase64_decode(char const *, u_char *, size_t);
 extern int 	get_record_size(ddDB *, char *, int);
 extern void *	find_substruct(struct domain *, u_int16_t);
 void 		yyerror(const char *);
+int		yylex(void);
 
 extern int whitelist;
 extern int notify;
@@ -1323,7 +1324,7 @@ parse_file(ddDB *db, char *filename)
 }
 
 int
-yylex() 
+yylex(void) 
 {
 	struct tab *p;
 	static char buf[4096];
