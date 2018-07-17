@@ -1,3 +1,7 @@
+Changes in RELEASE_1_4 from RELEASE_1_3
+
+- ...
+
 Changes in RELEASE_1_3 from RELEASE_1_2
 - created a "zinclude" config, which will only allow zone files to be 
 	included and nothing else inside that. 
@@ -8,7 +12,6 @@ Changes in RELEASE_1_3 from RELEASE_1_2
 - added a DNS conversion tool to convert delphinusdnsd zonefiles to BIND style.
 - fixed ENT's with DNSSEC (missing NSEC3 in ENT's, RFC 7129).
 - added regressions for the developing platform (OpenBSD)
-- ...
 
 Changes in RELEASE_1_2 from RELEASE_1_1
 
