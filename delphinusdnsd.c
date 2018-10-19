@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.39 2018/07/17 13:14:42 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.40 2018/10/19 08:16:29 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -764,7 +764,7 @@ main(int argc, char *argv[], char *environ[])
 	}
 
 #if __OpenBSD__
-	if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
+	if (pledge("stdio inet proc id sendfd recvfd unveil", NULL) < 0) {
 		perror("pledge");
 		exit(1);
 	}
@@ -1668,6 +1668,10 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	}
 
 #if __OpenBSD__
+	if (unveil(NULL, NULL) < 0) {
+		perror("unveil");
+		exit(1);
+	}
 	if (pledge("stdio inet sendfd recvfd", NULL) < 0) {
 		perror("pledge");
 		exit(1);
@@ -2555,6 +2559,14 @@ setup_master(ddDB *db, char **av, struct imsgbuf *ibuf)
 	struct imsg imsg;
 
 #if __OpenBSD__
+	if (unveil(PIDFILE, "rwc")  < 0) {
+		perror("unveil");
+		exit(1);
+	}
+	if (unveil("/usr/local/sbin/delphinusdnsd", "rx")  < 0) {
+		perror("unveil");
+		exit(1);
+	}
 	if (pledge("stdio wpath cpath exec proc", NULL) < 0) {
 		perror("pledge");
 		exit(1);
@@ -2833,6 +2845,10 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	
 	/* pjp */
 #if __OpenBSD__
+	if (unveil(NULL, NULL) < 0) {
+		perror("unveil");
+		exit(1);
+	}
 	if (pledge("stdio inet sendfd recvfd", NULL) < 0) {
 		perror("pledge");
 		exit(1);
