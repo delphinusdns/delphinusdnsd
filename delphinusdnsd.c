@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2002-2017 Peter J. Philipp
+ * Copyright (c) 2002-2018 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.40 2018/10/19 08:16:29 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.41 2018/10/19 08:24:48 pjp Exp $
  */
 
 #include "ddd-include.h"

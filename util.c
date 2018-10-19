@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2002-2016 Peter J. Philipp
+ * Copyright (c) 2002-2018 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.14 2017/10/26 15:49:30 pjp Exp $
+ * $Id: util.c,v 1.15 2018/10/19 08:24:48 pjp Exp $
  */
 
 #include "ddd-include.h"

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Peter J. Philipp
+ * Copyright (c) 2017-2018 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: ent.c,v 1.6 2018/05/11 23:36:45 pjp Exp $
+ * $Id: ent.c,v 1.7 2018/10/19 08:24:48 pjp Exp $
  */
 
 /*

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Peter J. Philipp
+ * Copyright (c) 2015-2018 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dnssec.c,v 1.18 2017/10/26 15:49:29 pjp Exp $
+ * $Id: dnssec.c,v 1.19 2018/10/19 08:24:48 pjp Exp $
  */
 
 #include "ddd-include.h"

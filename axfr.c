@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2015 Peter J. Philipp
+ * Copyright (c) 2011-2018 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.17 2018/03/28 21:16:25 pjp Exp $
+ * $Id: axfr.c,v 1.18 2018/10/19 08:24:48 pjp Exp $
  */
 
 #include "ddd-include.h"
