@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.19 2019/01/07 10:16:13 pjp Exp $
+ * $Id: dddctl.c,v 1.20 2019/01/07 12:25:10 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -48,10 +48,20 @@ int verbose = 0;
 SLIST_HEAD(, keysentry) keyshead;
 
 static struct keysentry {
-        char *key;
+        char *keyname;
 	uint32_t pid;
 	int sign;
 	int type;
+
+	/* key material in this struct */
+        char *key;
+        char *zone;
+        uint32_t ttl;
+        uint16_t flags;
+        uint8_t protocol;
+        uint8_t algorithm;
+        int keyid;
+
         SLIST_ENTRY(keysentry) keys_entry;
 } *kn, *knp;
 
@@ -62,6 +72,7 @@ void	dolog(int pri, char *fmt, ...);
 int	add_dnskey(ddDB *);
 char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
 char *  key2zone(char *, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
+char *  get_key(struct keysentry *,uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int, int *);
 char *	create_key(char *, int, int, int, int, uint32_t *);
 int 	dump_db(ddDB *, FILE *, char *);
 int	dump_db_bind(ddDB*, FILE *, char *);
@@ -69,22 +80,22 @@ char * 	alg_to_name(int);
 int 	alg_to_rsa(int);
 int 	construct_nsec3(ddDB *, char *, int, char *);
 int 	calculate_rrsigs(ddDB *, char *, int);
-int	sign_dnskey(ddDB *, char *, char *, char *, int, struct domain *);
-int 	sign_a(ddDB *, char *, char *, int, struct domain *);
-int 	sign_mx(ddDB *, char *, char *, int, struct domain *);
-int 	sign_ns(ddDB *, char *, char *, int, struct domain *);
-int 	sign_srv(ddDB *, char *, char *, int, struct domain *);
-int 	sign_cname(ddDB *, char *, char *, int, struct domain *);
-int 	sign_soa(ddDB *, char *, char *, int, struct domain *);
-int	sign_txt(ddDB *, char *, char *, int, struct domain *);
-int	sign_aaaa(ddDB *, char *, char *, int, struct domain *);
-int	sign_ptr(ddDB *, char *, char *, int, struct domain *);
-int	sign_nsec3(ddDB *, char *, char *, int, struct domain *);
-int	sign_nsec3param(ddDB *, char *, char *, int, struct domain *);
-int	sign_naptr(ddDB *, char *, char *, int, struct domain *);
-int	sign_sshfp(ddDB *, char *, char *, int, struct domain *);
-int	sign_tlsa(ddDB *, char *, char *, int, struct domain *);
-int	sign_ds(ddDB *, char *, char *, int, struct domain *);
+int	sign_dnskey(ddDB *, char *, struct keysentry *, struct keysentry *, int, struct domain *);
+int 	sign_a(ddDB *, char *, struct keysentry *, int, struct domain *);
+int 	sign_mx(ddDB *, char *, struct keysentry *, int, struct domain *);
+int 	sign_ns(ddDB *, char *, struct keysentry *, int, struct domain *);
+int 	sign_srv(ddDB *, char *, struct keysentry *, int, struct domain *);
+int 	sign_cname(ddDB *, char *, struct keysentry *, int, struct domain *);
+int 	sign_soa(ddDB *, char *, struct keysentry  *, int, struct domain *);
+int	sign_txt(ddDB *, char *, struct keysentry *, int, struct domain *);
+int	sign_aaaa(ddDB *, char *, struct keysentry  *, int, struct domain *);
+int	sign_ptr(ddDB *, char *, struct keysentry *, int, struct domain *);
+int	sign_nsec3(ddDB *, char *, struct keysentry *, int, struct domain *);
+int	sign_nsec3param(ddDB *, char *, struct keysentry *, int, struct domain *);
+int	sign_naptr(ddDB *, char *, struct keysentry *, int, struct domain *);
+int	sign_sshfp(ddDB *, char *, struct keysentry *, int, struct domain *);
+int	sign_tlsa(ddDB *, char *, struct keysentry *, int, struct domain *);
+int	sign_ds(ddDB *, char *, struct keysentry *, int, struct domain *);
 int 	create_ds(ddDB *, char *, char *);
 u_int 	keytag(u_char *key, u_int keysize);
 void 	pack(char *, char *, int);
@@ -269,6 +280,14 @@ signmain(int argc, char *argv[])
 	int numkeys = 0, search = 0;
 
 	uint32_t pid = -1, newpid;
+
+	char key_key[4096];
+       	char *key_zone;
+        uint32_t key_ttl;
+        uint16_t key_flags;
+        uint8_t key_protocol;
+        uint8_t key_algorithm;
+        int key_keyid;
 	
 	ddDB *db;
 
@@ -322,18 +341,39 @@ signmain(int argc, char *argv[])
 				perror("malloc");
 				exit(1);
 			}
-			kn->key = strdup(optarg);
-			if (kn->key == NULL) {
+			kn->keyname = strdup(optarg);
+			if (kn->keyname == NULL) {
 				perror("strdup");
 				exit(1);
 			}
 			kn->type = KEYTYPE_KSK;
-			kn->pid = getkeypid(kn->key);
+			kn->pid = getkeypid(kn->keyname);
 #if DEBUG
-			printf("opened %s with pid %u\n", kn->key, kn->pid);
+			printf("opened %s with pid %u\n", kn->keyname, kn->pid);
 #endif
 			kn->sign = 0;
 			ksk_key = 1;
+
+			if ((key_zone = key2zone(kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
+				perror("key2zone");
+				exit(1);
+			}
+
+			kn->zone = strdup(key_zone);
+			if (kn->zone == NULL) {
+				perror("strdup");
+				exit(1);
+			}
+			kn->ttl = key_ttl;
+			kn->flags = key_flags;
+			kn->protocol = key_protocol;
+			kn->algorithm = key_algorithm;
+			kn->key = strdup(key_key);
+			if (kn->key == NULL) {
+				perror("strdup kn->key");
+				exit(1);
+			}
+			kn->keyid = key_keyid;
 
 			SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 			numkeys++;
@@ -407,18 +447,39 @@ signmain(int argc, char *argv[])
 				perror("malloc");
 				exit(1);
 			}
-			kn->key = strdup(optarg);
-			if (kn->key == NULL) {
+			kn->keyname = strdup(optarg);
+			if (kn->keyname == NULL) {
 				perror("strdup");
 				exit(1);
 			}
 			kn->type = KEYTYPE_ZSK;
-			kn->pid = getkeypid(kn->key);
+			kn->pid = getkeypid(kn->keyname);
 #if DEBUG
-			printf("opened %s with pid %u\n", kn->key, kn->pid);
+			printf("opened %s with pid %u\n", kn->keyname, kn->pid);
 #endif
 			kn->sign = 0;
 			zsk_key = 1;
+
+			if ((key_zone = key2zone(kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
+				perror("key2zone");
+				exit(1);
+			}
+
+			kn->zone = strdup(key_zone);
+			if (kn->zone == NULL) {
+				perror("strdup");
+				exit(1);
+			}
+			kn->ttl = key_ttl;
+			kn->flags = key_flags;
+			kn->protocol = key_protocol;
+			kn->algorithm = key_algorithm;
+			kn->key = strdup(key_key);
+			if (kn->key == NULL) {
+				perror("strdup kn->key");
+				exit(1);
+			}
+			kn->keyid = key_keyid;
 
 			SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 			numkeys++;
@@ -442,12 +503,32 @@ signmain(int argc, char *argv[])
 		}
 
 		dolog(LOG_INFO, "creating new KSK (257) algorithm: %s with %d bits\n", alg_to_name(algorithm), bits);
-		kn->key = create_key(zonename, ttl, 257, algorithm, bits, &newpid);
+		kn->keyname = create_key(zonename, ttl, 257, algorithm, bits, &newpid);
 		kn->type = KEYTYPE_KSK;
 		kn->pid = newpid;
 		kn->sign = 0;
 		ksk_key = 1;
 		
+		if ((key_zone = key2zone(kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
+			perror("key2zone");
+			exit(1);
+		}
+
+		kn->zone = strdup(key_zone);
+		if (kn->zone == NULL) {
+			perror("strdup");
+			exit(1);
+		}
+		kn->ttl = key_ttl;
+		kn->flags = key_flags;
+		kn->protocol = key_protocol;
+		kn->algorithm = key_algorithm;
+		kn->key = strdup(key_key);
+		if (kn->key == NULL) {
+			perror("strdup kn->key");
+			exit(1);
+		}
+		kn->keyid = key_keyid;
 
 		SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 		numkeys++;
@@ -459,11 +540,33 @@ signmain(int argc, char *argv[])
 			exit(1);
 		}
 		dolog(LOG_INFO, "creating new ZSK (256) algorithm: %s with %d bits\n", alg_to_name(algorithm), bits);
-		kn->key = create_key(zonename, ttl, 256, algorithm, bits, &newpid);
+		kn->keyname = create_key(zonename, ttl, 256, algorithm, bits, &newpid);
 		kn->type = KEYTYPE_ZSK;
 		kn->pid = newpid;
 		kn->sign = 0;
 		zsk_key = 1;
+	
+		if ((key_zone = key2zone(kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
+			perror("key2zone");
+			exit(1);
+		}
+
+		kn->zone = strdup(key_zone);
+		if (kn->zone == NULL) {
+			perror("strdup");
+			exit(1);
+		}
+		kn->ttl = key_ttl;
+		kn->flags = key_flags;
+		kn->protocol = key_protocol;
+		kn->algorithm = key_algorithm;
+		kn->key = strdup(key_key);
+		if (kn->key == NULL) {
+			perror("strdup kn->key");
+			exit(1);
+		}
+		kn->keyid = key_keyid;
+		
 
 		SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 		numkeys++;
@@ -509,7 +612,7 @@ signmain(int argc, char *argv[])
 
 #if DEBUG
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
-		printf("%s pid: %u %s\n", knp->key, knp->pid, knp->sign ? "<--" : "" );
+		printf("%s pid: %u %s\n", knp->keyname, knp->pid, knp->sign ? "<--" : "" );
 	}
 #endif
 #if DEBUG
@@ -560,7 +663,7 @@ signmain(int argc, char *argv[])
 
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
 		if (knp->sign == 1 && knp->type == KEYTYPE_KSK)
-			pksk_key = knp->key;
+			pksk_key = knp->keyname;
 	}
 
 	/* calculate ds */
@@ -650,8 +753,8 @@ add_dnskey(ddDB *db)
 	/* first the zsk */
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
 		if (knp->type == KEYTYPE_ZSK) {
-			if ((zone = key2zone(knp->key, &ttl, &flags, &protocol, &algorithm, (char *)&key, &keyid)) == NULL) {
-				dolog(LOG_INFO, "key2zone: %s\n", knp->key);
+			if ((zone = get_key(knp, &ttl, &flags, &protocol, &algorithm, (char *)&key, sizeof(key), &keyid)) == NULL) {
+				dolog(LOG_INFO, "get_key: %s\n", knp->keyname);
 				return -1;
 			}
 			if (fill_dnskey(zone, "dnskey", ttl, flags, protocol, algorithm, key) < 0) {
@@ -663,8 +766,8 @@ add_dnskey(ddDB *db)
 	/* now the ksk */
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
 		if (knp->type == KEYTYPE_KSK) {
-			if ((zone = key2zone(knp->key, &ttl, &flags, &protocol, &algorithm, (char *)&key, &keyid)) == NULL) {
-				dolog(LOG_INFO, "key2zone %s\n", knp->key);
+			if ((zone = get_key(knp, &ttl, &flags, &protocol, &algorithm, (char *)&key, sizeof(key), &keyid)) == NULL) {
+				dolog(LOG_INFO, "get_key %s\n", knp->keyname);
 				return -1;
 			}
 			if (fill_dnskey(zone, "dnskey", ttl, flags, protocol, algorithm, key) < 0) {
@@ -1154,8 +1257,8 @@ alg_to_rsa(int algorithm)
 int
 calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 {
-	char *zsk_key = NULL;
-	char *ksk_key = NULL;
+	struct keysentry *zsk_key = NULL;
+	struct keysentry *ksk_key = NULL;
 	struct node *n, *nx;
 	struct domain *sd;
 	int j, rs;
@@ -1168,9 +1271,9 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 	
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
 		if (knp->sign == 1 && knp->type == KEYTYPE_KSK)
-			ksk_key = knp->key;
+			ksk_key = knp;
 		if (knp->sign == 1 && knp->type == KEYTYPE_ZSK)
-			zsk_key = knp->key;
+			zsk_key = knp;
 	}
 
 	/* set expiredon and signedon */
@@ -1293,7 +1396,7 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
  */
 
 int
-sign_soa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_soa *sdsoa = NULL;
 
@@ -1338,8 +1441,8 @@ sign_soa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -1514,7 +1617,7 @@ sign_soa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_txt(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_txt *sdtxt = NULL;
 
@@ -1559,8 +1662,8 @@ sign_txt(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -1722,7 +1825,7 @@ sign_txt(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_aaaa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_aaaa *sdaaaa = NULL;
 
@@ -1781,8 +1884,8 @@ sign_aaaa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -1987,7 +2090,7 @@ sign_aaaa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
  */
 
 int
-sign_nsec3(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_nsec3 *sdnsec3 = NULL;
 
@@ -2032,8 +2135,8 @@ sign_nsec3(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -2217,7 +2320,7 @@ sign_nsec3(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
  */
 
 int
-sign_nsec3param(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_nsec3param *sdnsec3 = NULL;
 
@@ -2262,8 +2365,8 @@ sign_nsec3param(ddDB *db, char *zonename, char *zsk_key, int expiry, struct doma
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -2438,7 +2541,7 @@ sign_nsec3param(ddDB *db, char *zonename, char *zsk_key, int expiry, struct doma
  */
 
 int
-sign_cname(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_cname *sdc = NULL;
 
@@ -2483,8 +2586,8 @@ sign_cname(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -2644,7 +2747,7 @@ sign_cname(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
  */
 
 int
-sign_ptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_ptr *sdptr = NULL;
 
@@ -2689,8 +2792,8 @@ sign_ptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -2850,7 +2953,7 @@ sign_ptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_naptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_naptr *sdnaptr = NULL;
 
@@ -2909,8 +3012,8 @@ sign_naptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -3136,7 +3239,7 @@ sign_naptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
  */
 
 int
-sign_srv(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_srv *sdsrv = NULL;
 
@@ -3195,8 +3298,8 @@ sign_srv(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -3410,7 +3513,7 @@ sign_srv(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_sshfp(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_sshfp *sdsshfp = NULL;
 
@@ -3469,8 +3572,8 @@ sign_sshfp(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -3681,7 +3784,7 @@ sign_sshfp(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
  */
 
 int
-sign_tlsa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_tlsa *sdtlsa = NULL;
 
@@ -3740,8 +3843,8 @@ sign_tlsa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -3953,7 +4056,7 @@ sign_tlsa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
  */
 
 int
-sign_ds(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_ds *sdds = NULL;
 
@@ -4012,8 +4115,8 @@ sign_ds(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -4225,7 +4328,7 @@ sign_ds(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_ns(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_ns *sdns = NULL;
 
@@ -4284,8 +4387,8 @@ sign_ns(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -4490,7 +4593,7 @@ sign_ns(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_mx(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_mx *sdmx = NULL;
 
@@ -4549,8 +4652,8 @@ sign_mx(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -4758,7 +4861,7 @@ sign_mx(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
  */
 
 int
-sign_a(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
+sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_a *sda = NULL;
 
@@ -4817,8 +4920,8 @@ sign_a(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 
@@ -5088,8 +5191,8 @@ create_ds(ddDB *db, char *zonename, char *ksk_key)
 			keylen = 0;
 
 			/* get the KSK */
-			if ((zone = key2zone(knp->key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-				dolog(LOG_INFO, "key2zone %s\n", knp->key);
+			if ((zone = get_key(knp, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+				dolog(LOG_INFO, "get_key %s\n", knp->keyname);
 				return -1;
 			}
 
@@ -5217,7 +5320,7 @@ create_ds(ddDB *db, char *zonename, char *ksk_key)
  */
 
 int
-sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, struct domain *sd)
+sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, struct keysentry *ksk_key, int expiry, struct domain *sd)
 {
 	struct domain_dnskey *sddk = NULL;
 
@@ -5279,8 +5382,8 @@ sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, 
 	/* get the KSK */
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
 		if (knp->type == KEYTYPE_KSK) {
-			if ((zone = key2zone(knp->key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-				dolog(LOG_INFO, "key2zone %s\n", knp->key);
+			if ((zone = get_key(knp, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+				dolog(LOG_INFO, "get_key %s\n", knp->keyname);
 				return -1;
 			}
 
@@ -5488,8 +5591,8 @@ sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, 
 	} /* SLIST_FOREACH */
 
 	/* now work out the ZSK */
-	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
+	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
 		return -1;
 	}
 	/* check the keytag supplied */
@@ -7855,6 +7958,20 @@ bindfile(int argc, char *argv[])
 	
 	
 	return 0;
+}
+
+char *
+get_key(struct keysentry *kn, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t *algorithm, char *key, int keylen, int *keyid)
+{
+	*ttl = kn->ttl;
+	*flags = kn->flags;
+	*protocol = kn->protocol;
+	*algorithm = kn->algorithm;
+	*keyid = kn->keyid;
+	
+	strlcpy(key, kn->key, keylen);
+	
+	return (kn->zone);
 }
 
 char *
