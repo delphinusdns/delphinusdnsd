@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.18 2018/06/27 05:55:18 pjp Exp $
+ * $Id: dddctl.c,v 1.19 2019/01/07 10:16:13 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -61,6 +61,7 @@ static struct keysentry {
 void	dolog(int pri, char *fmt, ...);
 int	add_dnskey(ddDB *);
 char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
+char *  key2zone(char *, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
 char *	create_key(char *, int, int, int, int, uint32_t *);
 int 	dump_db(ddDB *, FILE *, char *);
 int	dump_db_bind(ddDB*, FILE *, char *);
@@ -639,9 +640,7 @@ int
 add_dnskey(ddDB *db)
 {
 	char key[4096];
-	char buf[512];
 	char *zone;
-	int fd;
 	uint32_t ttl;
 	uint16_t flags;
 	uint8_t protocol;
@@ -651,20 +650,10 @@ add_dnskey(ddDB *db)
 	/* first the zsk */
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
 		if (knp->type == KEYTYPE_ZSK) {
-			snprintf(buf, sizeof(buf), "%s.key", knp->key);
-			if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-				dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+			if ((zone = key2zone(knp->key, &ttl, &flags, &protocol, &algorithm, (char *)&key, &keyid)) == NULL) {
+				dolog(LOG_INFO, "key2zone: %s\n", knp->key);
 				return -1;
 			}
-
-			if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&key, &keyid)) == NULL) {
-				dolog(LOG_INFO, "parse %s\n", buf);
-				close (fd);
-				return -1;
-			}
-
-			close(fd);
-	
 			if (fill_dnskey(zone, "dnskey", ttl, flags, protocol, algorithm, key) < 0) {
 				return -1;
 			}
@@ -674,20 +663,10 @@ add_dnskey(ddDB *db)
 	/* now the ksk */
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
 		if (knp->type == KEYTYPE_KSK) {
-			snprintf(buf, sizeof(buf), "%s.key", knp->key);
-			if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-				dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+			if ((zone = key2zone(knp->key, &ttl, &flags, &protocol, &algorithm, (char *)&key, &keyid)) == NULL) {
+				dolog(LOG_INFO, "key2zone %s\n", knp->key);
 				return -1;
 			}
-
-			if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&key, &keyid)) == NULL) {
-				dolog(LOG_INFO, "parse %s\n", buf);
-				close (fd);
-				return -1;
-			}
-
-			close(fd);
-			
 			if (fill_dnskey(zone, "dnskey", ttl, flags, protocol, algorithm, key) < 0) {
 				return -1;
 			}
@@ -1320,7 +1299,6 @@ sign_soa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -1339,7 +1317,7 @@ sign_soa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	int labellen;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -1360,19 +1338,10 @@ sign_soa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -1551,7 +1520,6 @@ sign_txt(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -1570,7 +1538,7 @@ sign_txt(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	int labellen;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -1591,19 +1559,10 @@ sign_txt(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -1769,7 +1728,6 @@ sign_aaaa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -1788,7 +1746,7 @@ sign_aaaa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
 
 	int labellen, i;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -1823,19 +1781,10 @@ sign_aaaa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -2044,7 +1993,6 @@ sign_nsec3(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -2063,7 +2011,7 @@ sign_nsec3(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 
 	int labellen;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -2084,19 +2032,10 @@ sign_nsec3(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -2284,7 +2223,6 @@ sign_nsec3param(ddDB *db, char *zonename, char *zsk_key, int expiry, struct doma
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -2303,7 +2241,7 @@ sign_nsec3param(ddDB *db, char *zonename, char *zsk_key, int expiry, struct doma
 
 	int labellen;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -2324,19 +2262,10 @@ sign_nsec3param(ddDB *db, char *zonename, char *zsk_key, int expiry, struct doma
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -2515,7 +2444,6 @@ sign_cname(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -2534,7 +2462,7 @@ sign_cname(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 
 	int labellen;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -2555,19 +2483,10 @@ sign_cname(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -2731,7 +2650,6 @@ sign_ptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -2750,7 +2668,7 @@ sign_ptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	int labellen;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -2771,19 +2689,10 @@ sign_ptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -2947,7 +2856,6 @@ sign_naptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -2966,7 +2874,7 @@ sign_naptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 
 	int labellen, i;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -3001,19 +2909,10 @@ sign_naptr(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -3243,7 +3142,6 @@ sign_srv(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -3262,7 +3160,7 @@ sign_srv(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	int labellen, i;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -3297,19 +3195,10 @@ sign_srv(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -3527,7 +3416,6 @@ sign_sshfp(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -3546,7 +3434,7 @@ sign_sshfp(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 
 	int labellen, i;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -3581,19 +3469,10 @@ sign_sshfp(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *s
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -3808,7 +3687,6 @@ sign_tlsa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -3827,7 +3705,7 @@ sign_tlsa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
 
 	int labellen, i;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -3862,19 +3740,10 @@ sign_tlsa(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -4090,7 +3959,6 @@ sign_ds(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -4109,7 +3977,7 @@ sign_ds(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	int labellen, i;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -4144,19 +4012,10 @@ sign_ds(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -4372,7 +4231,6 @@ sign_ns(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -4391,7 +4249,7 @@ sign_ns(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	int labellen, i;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -4426,19 +4284,10 @@ sign_ns(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -4647,7 +4496,6 @@ sign_mx(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -4666,7 +4514,7 @@ sign_mx(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	int labellen, i;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -4701,19 +4549,10 @@ sign_mx(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -4925,7 +4764,6 @@ sign_a(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -4944,7 +4782,7 @@ sign_a(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 
 	int labellen, i;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -4979,19 +4817,10 @@ sign_a(ddDB *db, char *zonename, char *zsk_key, int expiry, struct domain *sd)
 	}
 
 	/* get the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	/* check the keytag supplied */
 	p = key;
@@ -5219,7 +5048,6 @@ create_ds(ddDB *db, char *zonename, char *ksk_key)
 
 	int labellen;
 	int keyid;
-	int fd;
 	int keylen;
 	int bufsize;
 	int labels;
@@ -5260,19 +5088,10 @@ create_ds(ddDB *db, char *zonename, char *ksk_key)
 			keylen = 0;
 
 			/* get the KSK */
-			snprintf(buf, sizeof(buf), "%s.key", knp->key);
-			if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-				dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+			if ((zone = key2zone(knp->key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+				dolog(LOG_INFO, "key2zone %s\n", knp->key);
 				return -1;
 			}
-
-			if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-				dolog(LOG_INFO, "parse %s\n", buf);
-				close (fd);
-				return -1;
-			}
-
-			close(fd);
 
 			/* check the keytag supplied */
 			p = key;
@@ -5404,7 +5223,6 @@ sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, 
 
 	char tmp[4096];
 	char signature[4096];
-	char buf[512];
 	char shabuf[64];
 	
 	SHA_CTX sha1;
@@ -5423,7 +5241,7 @@ sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, 
 
 	int labellen, i;
 	int keyid;
-	int fd, len;
+	int len;
 	int keylen, siglen;
 	int rsatype;
 	int bufsize;
@@ -5461,19 +5279,10 @@ sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, 
 	/* get the KSK */
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
 		if (knp->type == KEYTYPE_KSK) {
-			snprintf(buf, sizeof(buf), "%s.key", knp->key);
-			if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-				dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+			if ((zone = key2zone(knp->key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+				dolog(LOG_INFO, "key2zone %s\n", knp->key);
 				return -1;
 			}
-
-			if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-				dolog(LOG_INFO, "parse %s\n", buf);
-				close (fd);
-				return -1;
-			}
-
-			close(fd);
 
 			/* check the keytag supplied */
 			p = key;
@@ -5679,20 +5488,10 @@ sign_dnskey(ddDB *db, char *zonename, char *zsk_key, char *ksk_key, int expiry, 
 	} /* SLIST_FOREACH */
 
 	/* now work out the ZSK */
-	snprintf(buf, sizeof(buf), "%s.key", zsk_key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone %s\n", zsk_key);
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
-
 	/* check the keytag supplied */
 	p = key;
 	pack16(p, htons(flags));
@@ -7207,9 +7006,7 @@ init_keys(void)
 uint32_t
 getkeypid(char *key)
 {
-	char buf[MAXPATHLEN];
 	char tmp[4096];
-	int fd;
 
 	char *zone;
 
@@ -7219,19 +7016,10 @@ getkeypid(char *key)
 	uint8_t algorithm;
 	int keyid;
 
-	snprintf(buf, sizeof(buf), "%s.key", key);
-	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
-		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+	if ((zone = key2zone(key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+		dolog(LOG_INFO, "key2zone\n");
 		return -1;
 	}
-
-	if ((zone = parse_keyfile(fd, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
-		dolog(LOG_INFO, "parse %s\n", buf);
-		close (fd);
-		return -1;
-	}
-
-	close(fd);
 
 	return (keyid);
 }
@@ -8069,6 +7857,29 @@ bindfile(int argc, char *argv[])
 	return 0;
 }
 
+char *
+key2zone(char *keyname, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t *algorithm, char *key, int *keyid)
+{
+	int fd;
+	char *zone;
+	char buf[MAXPATHLEN];
+
+	snprintf(buf, sizeof(buf), "%s.key", keyname);
+	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
+		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
+		return NULL;
+	}
+
+	if ((zone = parse_keyfile(fd, ttl, flags, protocol, algorithm, key, keyid)) == NULL) {
+		dolog(LOG_INFO, "parse %s\n", buf);
+		close (fd);
+		return NULL;
+	}
+
+	close(fd);
+
+	return (zone);
+}
 
 /* carelessly copied from https://wiki.openssl.org/index.php/OpenSSL_1.1.0_Changes */
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
