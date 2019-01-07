@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.20 2019/01/07 12:25:10 pjp Exp $
+ * $Id: dddctl.c,v 1.21 2019/01/07 14:40:41 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -167,6 +167,7 @@ struct _mycmdtab {
 #define PROVIDED_SIGNTIME			0
 #define	SIGNEDON				20161230073133
 #define EXPIREDON 				20170228073133
+#define SIGNEDON_DRIFT				(14 * 86400)
 
 /* define masks */
 
@@ -1263,7 +1264,7 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 	struct domain *sd;
 	int j, rs;
 
-	time_t now;
+	time_t now, twoweeksago; 
 	char timebuf[32];
 	struct tm *tm;
 
@@ -1279,7 +1280,8 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 	/* set expiredon and signedon */
 
 	now = time(NULL);
-	tm = gmtime(&now);
+	twoweeksago = now - SIGNEDON_DRIFT;
+	tm = gmtime(&twoweeksago);
 	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
 	signedon = atoll(timebuf);
 	now += expiry;
