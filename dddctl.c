@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.23 2019/01/09 15:54:12 pjp Exp $
+ * $Id: dddctl.c,v 1.24 2019/01/09 18:34:49 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -179,7 +179,9 @@ struct _mycmdtab {
 #define PROVIDED_SIGNTIME			0
 #define	SIGNEDON				20161230073133
 #define EXPIREDON 				20170228073133
+
 #define SIGNEDON_DRIFT				(14 * 86400)
+#define DEFAULT_EXPIRYTIME			(60 * 86400)
 
 /* define masks */
 
@@ -279,7 +281,7 @@ signmain(int argc, char *argv[])
 	int create_zsk = 0;
 	int create_ksk = 0;
 	int algorithm = ALGORITHM_RSASHA256;
-	int expiry = 5184000;
+	int expiry = DEFAULT_EXPIRYTIME;
 	int iterations = 10;
 	u_int32_t mask = (MASK_PARSE_FILE | MASK_ADD_DNSKEY | MASK_CONSTRUCT_NSEC3 | MASK_CALCULATE_RRSIGS | MASK_CREATE_DS | MASK_DUMP_DB);
 
