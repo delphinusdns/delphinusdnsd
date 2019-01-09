@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.25 2019/01/09 18:51:09 pjp Exp $
+ * $Id: dddctl.c,v 1.26 2019/01/09 19:36:53 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -90,7 +90,7 @@ char * 	alg_to_name(int);
 int 	alg_to_rsa(int);
 int 	construct_nsec3(ddDB *, char *, int, char *);
 int 	calculate_rrsigs(ddDB *, char *, int);
-int	sign_dnskey(ddDB *, char *, struct keysentry *, struct keysentry *, int, struct domain *);
+int	sign_dnskey(ddDB *, char *, struct keysentry *, int, struct domain *);
 int 	sign_a(ddDB *, char *, struct keysentry *, int, struct domain *);
 int 	sign_mx(ddDB *, char *, struct keysentry *, int, struct domain *);
 int 	sign_ns(ddDB *, char *, struct keysentry *, int, struct domain *);
@@ -106,7 +106,7 @@ int	sign_naptr(ddDB *, char *, struct keysentry *, int, struct domain *);
 int	sign_sshfp(ddDB *, char *, struct keysentry *, int, struct domain *);
 int	sign_tlsa(ddDB *, char *, struct keysentry *, int, struct domain *);
 int	sign_ds(ddDB *, char *, struct keysentry *, int, struct domain *);
-int 	create_ds(ddDB *, char *, char *);
+int 	create_ds(ddDB *, char *, struct keysentry *);
 u_int 	keytag(u_char *key, u_int keysize);
 void 	pack(char *, char *, int);
 void 	pack32(char *, u_int32_t);
@@ -128,9 +128,10 @@ int	signmain(int argc, char *argv[]);
 int	configtest(int argc, char *argv[]);
 int	bindfile(int argc, char *argv[]);
 int	sshfp(int argc, char *argv[]);
-void init_keys(void);
+void 	init_keys(void);
 uint32_t getkeypid(char *);
 pid_t 	getdaemonpid(void);
+void	debug_bindump(const char *, int);
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 
@@ -293,7 +294,6 @@ signmain(int argc, char *argv[])
 	char *zonename = NULL;
 	char *ep;
 	
-	char *pksk_key = NULL;
 	int ksk_key = 0, zsk_key = 0;
 	int numkeys = 0, search = 0;
 
@@ -707,15 +707,12 @@ signmain(int argc, char *argv[])
 		exit(1);
 	}
 
-	SLIST_FOREACH(knp, &keyshead, keys_entry) {
-		if (knp->sign == 1 && knp->type == KEYTYPE_KSK)
-			pksk_key = knp->keyname;
-	}
-
 	/* calculate ds */
-	if ((mask & MASK_CREATE_DS) && create_ds(db, zonename, pksk_key) < 0) {
-		dolog(LOG_INFO, "create_ds failed\n");
-		exit(1);
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((mask & MASK_CREATE_DS) && create_ds(db, zonename, knp) < 0) {
+			dolog(LOG_INFO, "create_ds failed\n");
+			exit(1);
+		}
 	}
 
 	/* free private keys */
@@ -1356,7 +1353,7 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 		memcpy((char *)sd, (char *)n->data, n->datalen);
 		
 		if (sd->flags & DOMAIN_HAVE_DNSKEY)
-			if (sign_dnskey(db, zonename, zsk_key, ksk_key, expiry, sd) < 0) {
+			if (sign_dnskey(db, zonename, zsk_key, expiry, sd) < 0) {
 				fprintf(stderr, "sign_dnskey error\n");
 				return -1;
 			}
@@ -1590,14 +1587,7 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	keylen = (p - key);	
 
 #if 0
-	{
-		int i;
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	}
+	debug_bindump(key, keylen);
 	
 #endif
 
@@ -1613,16 +1603,6 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -1801,12 +1781,7 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -1821,16 +1796,6 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -2066,12 +2031,7 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -2086,16 +2046,6 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -2292,15 +2242,7 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	keylen = (p - key);	
 
 #if 0
-	{
-		int i;
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	}
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -2315,16 +2257,6 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -2514,15 +2446,7 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 	keylen = (p - key);	
 
 #if 0
-	{
-		int i;
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	}
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -2537,16 +2461,6 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -2723,12 +2637,7 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -2743,16 +2652,6 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -2929,12 +2828,7 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -2949,16 +2843,6 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -3215,12 +3099,7 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -3235,16 +3114,6 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -3488,12 +3357,7 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -3508,16 +3372,6 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -3760,12 +3614,7 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -3780,16 +3629,6 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -4032,12 +3871,7 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -4052,16 +3886,6 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -4303,12 +4127,7 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -4323,16 +4142,6 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -4569,12 +4378,7 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -4589,16 +4393,6 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -4836,12 +4630,7 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -4856,16 +4645,6 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -5102,12 +4881,7 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct d
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);	
 #endif
 
 	switch (algorithm) {
@@ -5122,16 +4896,6 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct d
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -5174,7 +4938,7 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct d
 }
 
 int
-create_ds(ddDB *db, char *zonename, char *ksk_key)
+create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 {
 	FILE *f;
 
@@ -5212,6 +4976,10 @@ create_ds(ddDB *db, char *zonename, char *ksk_key)
 	int retval, lzerrno;
 	char replystring[512];
 
+	/* silently ignore zsk's, no error here */
+	if (knp->type != KEYTYPE_KSK)
+		return 0;
+
 	dnsname = dns_label(zonename, &labellen);
 	if (dnsname == NULL) {
 		dolog(LOG_INFO, "dnsname == NULL\n");
@@ -5230,139 +4998,134 @@ create_ds(ddDB *db, char *zonename, char *ksk_key)
 	}
 
 
-	SLIST_FOREACH(knp, &keyshead, keys_entry) {
-		if (knp->type == KEYTYPE_KSK) {
-			memset(&shabuf, 0, sizeof(shabuf));
+	memset(&shabuf, 0, sizeof(shabuf));
 
-			key = malloc(10 * 4096);
-			if (key == NULL) {
-				dolog(LOG_INFO, "key out of memory\n");
-				return -1;
-			}
-		
-			keylen = 0;
+	key = malloc(10 * 4096);
+	if (key == NULL) {
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
 
-			/* get the KSK */
-			if ((zone = get_key(knp, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-				dolog(LOG_INFO, "get_key %s\n", knp->keyname);
-				return -1;
-			}
+	keylen = 0;
 
-			/* check the keytag supplied */
-			p = key;
-			pack16(p, htons(flags));
-			p += 2;
-			pack8(p, protocol);
-			p++;
-			pack8(p, algorithm);
-			p++;
-			keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-			pack(p, signature, keylen);
-			p += keylen;
-			keylen = (p - key);
-			if (keyid != keytag(key, keylen)) {
-				dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-				return -1;
-			}
-			
-			labels = label_count(sd->zone);
-			if (labels < 0) {
-				dolog(LOG_INFO, "label_count");
-				return -1;
-			}
+	/* get the KSK */
+	if ((zone = get_key(ksk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+		dolog(LOG_INFO, "get_key %s\n", knp->keyname);
+		return -1;
+	}
 
-			dnsname = dns_label(zonename, &labellen);
-			if (dnsname == NULL)
-				return -1;
-
-			if (sd->flags & DOMAIN_HAVE_DNSKEY) {
-				if ((sddk = (struct domain_dnskey *)find_substruct(sd, INTERNAL_TYPE_DNSKEY)) == NULL) {
-					dolog(LOG_INFO, "no dnskeys in apex!\n");
-					return -1;
-				}
-			}
-			
-			keylen = (p - key);	
-
-			/* work out the digest */
-
-			p = key;
-			pack(p, sd->zone, sd->zonelen);
-			p += sd->zonelen;
-			pack16(p, htons(flags));
-			p += 2;
-			pack8(p, protocol);
-			p++;
-			pack8(p, algorithm);
-			p++;
-			keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-			pack(p, signature, keylen);
-			p += keylen;
-			
-			keylen = (p - key);
-
-			SHA1_Init(&sha1);
-			SHA1_Update(&sha1, key, keylen);
-			SHA1_Final((u_char *)shabuf, &sha1);
-			bufsize = 20;
-
-			mytmp = bin2hex(shabuf, bufsize);
-			if (mytmp == NULL) {
-				dolog(LOG_INFO, "bin2hex shabuf\n");
-				return -1;
-			}
-				
-			for (p = mytmp; *p; p++) {
-				*p = toupper(*p);
-			}
-			
-			snprintf(buf, sizeof(buf), "dsset-%s", convert_name(sd->zone, sd->zonelen));
-
-			errno = 0;
-			if (lstat(buf, &sb) < 0 && errno != ENOENT) {
-				perror("lstat");
-				exit(1);
-			}
-			
-			if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
-				dolog(LOG_INFO, "%s is not a file!\n", buf);
-				return -1;
-			}
-
-			/* remove the file at first pass */
-			if (pass++ == 0)
-				unlink(buf);
+	/* check the keytag supplied */
+	p = key;
+	pack16(p, htons(flags));
+	p += 2;
+	pack8(p, protocol);
+	p++;
+	pack8(p, algorithm);
+	p++;
+	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+	pack(p, signature, keylen);
+	p += keylen;
+	keylen = (p - key);
+	if (keyid != keytag(key, keylen)) {
+		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+		return -1;
+	}
 	
-			f = fopen(buf, "a+");
-			if (f == NULL) {
-				dolog(LOG_INFO, "fopen dsset\n");
-				return -1;
-			}
+	labels = label_count(sd->zone);
+	if (labels < 0) {
+		dolog(LOG_INFO, "label_count");
+		return -1;
+	}
 
-			fprintf(f, "%s\t\tIN DS %u %d 1 %s\n", convert_name(sd->zone, sd->zonelen), keyid, algorithm, mytmp);
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL)
+		return -1;
+
+	if (sd->flags & DOMAIN_HAVE_DNSKEY) {
+		if ((sddk = (struct domain_dnskey *)find_substruct(sd, INTERNAL_TYPE_DNSKEY)) == NULL) {
+			dolog(LOG_INFO, "no dnskeys in apex!\n");
+			return -1;
+		}
+	}
+	
+	keylen = (p - key);	
+
+	/* work out the digest */
+
+	p = key;
+	pack(p, sd->zone, sd->zonelen);
+	p += sd->zonelen;
+	pack16(p, htons(flags));
+	p += 2;
+	pack8(p, protocol);
+	p++;
+	pack8(p, algorithm);
+	p++;
+	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+	pack(p, signature, keylen);
+	p += keylen;
+	
+	keylen = (p - key);
+
+	SHA1_Init(&sha1);
+	SHA1_Update(&sha1, key, keylen);
+	SHA1_Final((u_char *)shabuf, &sha1);
+	bufsize = 20;
+
+	mytmp = bin2hex(shabuf, bufsize);
+	if (mytmp == NULL) {
+		dolog(LOG_INFO, "bin2hex shabuf\n");
+		return -1;
+	}
+		
+	for (p = mytmp; *p; p++) {
+		*p = toupper(*p);
+	}
+	
+	snprintf(buf, sizeof(buf), "dsset-%s", convert_name(sd->zone, sd->zonelen));
+
+	errno = 0;
+	if (lstat(buf, &sb) < 0 && errno != ENOENT) {
+		perror("lstat");
+		exit(1);
+	}
+	
+	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
+		dolog(LOG_INFO, "%s is not a file!\n", buf);
+		return -1;
+	}
+
+	/* remove the file at first pass */
+	if (pass++ == 0)
+		unlink(buf);
+
+	f = fopen(buf, "a+");
+	if (f == NULL) {
+		dolog(LOG_INFO, "fopen dsset\n");
+		return -1;
+	}
+
+	fprintf(f, "%s\t\tIN DS %u %d 1 %s\n", convert_name(sd->zone, sd->zonelen), keyid, algorithm, mytmp);
 
 
-			SHA256_Init(&sha256);
-			SHA256_Update(&sha256, key, keylen);
-			SHA256_Final((u_char *)shabuf, &sha256);
-			bufsize = 32;
+	SHA256_Init(&sha256);
+	SHA256_Update(&sha256, key, keylen);
+	SHA256_Final((u_char *)shabuf, &sha256);
+	bufsize = 32;
 
-			mytmp = bin2hex(shabuf, bufsize);
-			if (mytmp == NULL) {
-				dolog(LOG_INFO, "bin2hex shabuf\n");
-				return -1;
-			}
-			
-			for (p = mytmp; *p; p++) {
-				*p = toupper(*p);
-			}
+	mytmp = bin2hex(shabuf, bufsize);
+	if (mytmp == NULL) {
+		dolog(LOG_INFO, "bin2hex shabuf\n");
+		return -1;
+	}
+	
+	for (p = mytmp; *p; p++) {
+		*p = toupper(*p);
+	}
 
-			fprintf(f, "%s\t\tIN DS %u %d 2 %s\n", convert_name(sd->zone, sd->zonelen), keyid, algorithm, mytmp);
+	fprintf(f, "%s\t\tIN DS %u %d 2 %s\n", convert_name(sd->zone, sd->zonelen), keyid, algorithm, mytmp);
 
-			fclose(f);
-		} /* KSK */
-	} /* SLIST_FOREACH */
-
+	fclose(f);
 
 	return 0;
 }
@@ -5372,7 +5135,7 @@ create_ds(ddDB *db, char *zonename, char *ksk_key)
  */
 
 int
-sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, struct keysentry *ksk_key, int expiry, struct domain *sd)
+sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
 {
 	struct domain_dnskey *sddk = NULL;
 
@@ -5571,12 +5334,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, struct keysentr
 			keylen = (p - key);	
 
 		#if 0
-			fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-			for (i = 0; i < keylen; i++) {
-				write(fd, (char *)&key[i], 1);
-			}
-			close(fd);
-			
+			debug_bindump(key, keylen);
 		#endif
 
 			switch (algorithm) {
@@ -5591,16 +5349,6 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, struct keysentr
 				SHA256_Update(&sha256, key, keylen);
 				SHA256_Final((u_char *)shabuf, &sha256);
 				bufsize = 32;
-
-		#if 0
-				printf("keylen = %d\n", keylen);
-				fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-				for (i = 0; i < bufsize; i++) {
-					write(fd, (char *)&shabuf[i], 1);
-				}
-				close(fd);
-		#endif
-
 				break;
 			case ALGORITHM_RSASHA512:
 				SHA512_Init(&sha512);
@@ -5778,12 +5526,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, struct keysentr
 	keylen = (p - key);	
 
 #if 0
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-	for (i = 0; i < keylen; i++) {
-		write(fd, (char *)&key[i], 1);
-	}
-	close(fd);
-	
+	debug_bindump(key, keylen);
 #endif
 
 	switch (algorithm) {
@@ -5798,16 +5541,6 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, struct keysentr
 		SHA256_Update(&sha256, key, keylen);
 		SHA256_Final((u_char *)shabuf, &sha256);
 		bufsize = 32;
-
-#if 0
-		printf("keylen = %d\n", keylen);
-		fd = open("bindump-sha256.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-		for (i = 0; i < bufsize; i++) {
-			write(fd, (char *)&shabuf[i], 1);
-		}
-		close(fd);
-#endif
-
 		break;
 	case ALGORITHM_RSASHA512:
 		SHA512_Init(&sha512);
@@ -8088,6 +7821,20 @@ key2zone(char *keyname, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8
 	close(fd);
 
 	return (zone);
+}
+
+void
+debug_bindump(const char *key, int keylen)
+{
+	int fd, i;
+
+	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+	for (i = 0; i < keylen; i++) {
+		write(fd, (const void *)&key[i], 1);
+	}
+	close(fd);
+	
+	return;
 }
 
 /* carelessly copied from https://wiki.openssl.org/index.php/OpenSSL_1.1.0_Changes */
