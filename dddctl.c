@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.24 2019/01/09 18:34:49 pjp Exp $
+ * $Id: dddctl.c,v 1.25 2019/01/09 18:51:09 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -183,6 +183,9 @@ struct _mycmdtab {
 #define SIGNEDON_DRIFT				(14 * 86400)
 #define DEFAULT_EXPIRYTIME			(60 * 86400)
 
+#define DEFAULT_TTL				3600
+#define DEFAULT_BITS				2048
+
 /* define masks */
 
 #define MASK_PARSE_BINDFILE		0x1
@@ -276,8 +279,8 @@ signmain(int argc, char *argv[])
 	struct stat sb;
 
 	int ch;
-	int bits = 2048;
-	int ttl = 3600;
+	int bits = DEFAULT_BITS;
+	int ttl = DEFAULT_TTL;
 	int create_zsk = 0;
 	int create_ksk = 0;
 	int algorithm = ALGORITHM_RSASHA256;
@@ -293,6 +296,8 @@ signmain(int argc, char *argv[])
 	char *pksk_key = NULL;
 	int ksk_key = 0, zsk_key = 0;
 	int numkeys = 0, search = 0;
+
+	int numksk = 0, numzsk = 0;
 
 	uint32_t pid = -1, newpid;
 
@@ -397,6 +402,7 @@ signmain(int argc, char *argv[])
 
 			SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 			numkeys++;
+			numksk++;
 
 			break;
 
@@ -509,6 +515,7 @@ signmain(int argc, char *argv[])
 
 			SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 			numkeys++;
+			numzsk++;
 
 			break;
 		}
@@ -564,6 +571,7 @@ signmain(int argc, char *argv[])
 
 		SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 		numkeys++;
+		numksk++;
 	}
 	if (create_zsk) {
 		kn = malloc(sizeof(struct keysentry));
@@ -607,6 +615,7 @@ signmain(int argc, char *argv[])
 
 		SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 		numkeys++;
+		numzsk++;
 	}
 
 
@@ -624,7 +633,7 @@ signmain(int argc, char *argv[])
 			knp->sign = 1;
 		}
 	} else {
-		if (pid == -1) {
+		if (pid == -1 && numzsk == 2) {
 			fprintf(stderr, "you specified three keys, please select one for signing (with -S pid)!\n");
 			exit(1);
 		}
