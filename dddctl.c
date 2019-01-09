@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.22 2019/01/07 14:47:19 pjp Exp $
+ * $Id: dddctl.c,v 1.23 2019/01/09 15:54:12 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -61,6 +61,16 @@ static struct keysentry {
         uint8_t protocol;
         uint8_t algorithm;
         int keyid;
+
+	/* private key */
+	BIGNUM *rsan;
+	BIGNUM *rsae;
+	BIGNUM *rsad;
+	BIGNUM *rsap;
+	BIGNUM *rsaq;
+	BIGNUM *rsadmp1;
+	BIGNUM *rsadmq1;
+	BIGNUM *rsaiqmp;
 
         SLIST_ENTRY(keysentry) keys_entry;
 } *kn, *knp;
@@ -102,7 +112,9 @@ void 	pack(char *, char *, int);
 void 	pack32(char *, u_int32_t);
 void 	pack16(char *, u_int16_t);
 void 	pack8(char *, u_int8_t);
-RSA * 	read_private_key(char *, int, int);
+void	free_private_key(struct keysentry *);
+RSA * 	get_private_key(struct keysentry *);
+int	store_private_key(struct keysentry *, char *, int, int);
 u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
 char * 	bin2hex(char *, int);
@@ -376,6 +388,11 @@ signmain(int argc, char *argv[])
 			}
 			kn->keyid = key_keyid;
 
+			if (store_private_key(kn, kn->zone, kn->keyid, kn->algorithm) < 0) {
+				perror("store_private_key");
+				exit(1);
+			}
+
 			SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 			numkeys++;
 
@@ -482,6 +499,12 @@ signmain(int argc, char *argv[])
 			}
 			kn->keyid = key_keyid;
 
+			if (store_private_key(kn, kn->zone, kn->keyid, kn->algorithm) < 0) {
+				perror("store_private_key");
+				exit(1);
+			}
+
+
 			SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 			numkeys++;
 
@@ -531,6 +554,12 @@ signmain(int argc, char *argv[])
 		}
 		kn->keyid = key_keyid;
 
+		if (store_private_key(kn, kn->zone, kn->keyid, kn->algorithm) < 0) {
+			perror("store_private_key");
+			exit(1);
+		}
+
+
 		SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 		numkeys++;
 	}
@@ -567,7 +596,12 @@ signmain(int argc, char *argv[])
 			exit(1);
 		}
 		kn->keyid = key_keyid;
-		
+				
+		if (store_private_key(kn, kn->zone, kn->keyid, kn->algorithm) < 0) {
+			perror("store_private_key");
+			exit(1);
+		}
+
 
 		SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 		numkeys++;
@@ -671,6 +705,11 @@ signmain(int argc, char *argv[])
 	if ((mask & MASK_CREATE_DS) && create_ds(db, zonename, pksk_key) < 0) {
 		dolog(LOG_INFO, "create_ds failed\n");
 		exit(1);
+	}
+
+	/* free private keys */
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		free_private_key(knp);	
 	}
 
 	/* write new zone file */
@@ -1584,7 +1623,7 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -1792,7 +1831,7 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -2057,7 +2096,7 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -2286,7 +2325,7 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -2508,7 +2547,7 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -2714,7 +2753,7 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -2920,7 +2959,7 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -3206,7 +3245,7 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -3479,7 +3518,7 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -3751,7 +3790,7 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -4023,7 +4062,7 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -4294,7 +4333,7 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -4560,7 +4599,7 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -4827,7 +4866,7 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -5093,7 +5132,7 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct d
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -5562,7 +5601,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, struct keysentr
 				return -1;
 			}
 				
-			rsa = read_private_key(zonename, keyid, algorithm);
+			rsa = get_private_key(knp);
 			if (rsa == NULL) {
 				dolog(LOG_INFO, "reading private key failed\n");
 				return -1;
@@ -5769,7 +5808,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, struct keysentr
 		return -1;
 	}
 		
-	rsa = read_private_key(zonename, keyid, algorithm);
+	rsa = get_private_key(zsk_key);
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "reading private key failed\n");
 		return -1;
@@ -5852,27 +5891,73 @@ pack(char *buf, char *input, int len)
 	memcpy(buf, input, len);
 }	
 
+void
+free_private_key(struct keysentry *kn)
+{
+	BN_clear_free(kn->rsan);
+	BN_clear_free(kn->rsae);
+	BN_clear_free(kn->rsad);
+	BN_clear_free(kn->rsap);
+	BN_clear_free(kn->rsaq);
+	BN_clear_free(kn->rsadmp1);
+	BN_clear_free(kn->rsadmq1);
+	BN_clear_free(kn->rsaiqmp);
+
+	return;
+}
 
 RSA *
-read_private_key(char *zonename, int keyid, int algorithm)
+get_private_key(struct keysentry *kn)
 {
-	FILE *f;
 	RSA *rsa;
-	BIGNUM *rsan, *rsae, *rsad;
-	BIGNUM *rsap, *rsaq;
-	BIGNUM *rsadmp1, *rsadmq1, *rsaiqmp;
 
-	char buf[4096];
-	char key[4096];
-	char *p, *q;
-
-	int keylen;
+	BIGNUM *rsan;
+	BIGNUM *rsae;
+	BIGNUM *rsad;
+	BIGNUM *rsap;
+	BIGNUM *rsaq;
+	BIGNUM *rsadmp1;
+	BIGNUM *rsadmq1;
+	BIGNUM *rsaiqmp;
 
 	rsa = RSA_new();
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "RSA creation\n");
 		return NULL;
 	}
+
+	if ( 	(rsan = BN_dup(kn->rsan)) == NULL ||
+		(rsae = BN_dup(kn->rsae)) == NULL ||
+		(rsad = BN_dup(kn->rsad)) == NULL ||
+		(rsap = BN_dup(kn->rsap)) == NULL ||
+		(rsaq = BN_dup(kn->rsaq)) == NULL ||
+		(rsadmp1 = BN_dup(kn->rsadmp1)) == NULL ||
+		(rsadmq1 = BN_dup(kn->rsadmq1)) == NULL ||
+		(rsaiqmp = BN_dup(kn->rsaiqmp)) == NULL) {
+		dolog(LOG_INFO, "BN_dup\n");
+		return NULL;
+	}
+
+	if (RSA_set0_key(rsa, rsan, rsae, rsad) == 0 ||
+		RSA_set0_factors(rsa, rsap, rsaq) == 0 ||
+		RSA_set0_crt_params(rsa, rsadmp1, rsadmq1, rsaiqmp) == 0) {
+		dolog(LOG_INFO, "RSA_set0_* failed\n");
+		return NULL;
+	}
+
+	return (rsa);
+}
+
+int
+store_private_key(struct keysentry *kn, char *zonename, int keyid, int algorithm)
+{
+	FILE *f;
+
+	char buf[4096];
+	char key[4096];
+	char *p, *q;
+
+	int keylen;
 
 	snprintf(buf, sizeof(buf), "K%s%s+%03d+%d.private", zonename,
 		(zonename[strlen(zonename) - 1] == '.') ? "" : ".",
@@ -5881,7 +5966,7 @@ read_private_key(char *zonename, int keyid, int algorithm)
 	f = fopen(buf, "r");
 	if (f == NULL) {
 		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
-		return NULL;
+		return -1;
 	}
 		
 	while (fgets(buf, sizeof(buf), f) != NULL) {
@@ -5889,7 +5974,7 @@ read_private_key(char *zonename, int keyid, int algorithm)
 			p += 20;
 			if (strncmp(p, "v1.3", 4) != 0) {
 				dolog(LOG_INFO, "wrong private key version %s", p);
-				return NULL;
+				return -1;
 			}	
 		} else if ((p = strstr(buf, "Algorithm: ")) != NULL) {
 			p += 11;
@@ -5897,89 +5982,83 @@ read_private_key(char *zonename, int keyid, int algorithm)
 			q = strchr(p, ' ');
 			if (q == NULL) {
 				dolog(LOG_INFO, "bad parse of private key 1\n");
-				return NULL;
+				return -1;
 			}
 			*q = '\0';
 	
 			if (algorithm != atoi(p)) {
 				dolog(LOG_INFO, "ZSK .key and .private file do not agree on algorithm %d\n", atoi(p));
-				return NULL;
+				return -1;
 			}
 		} else if ((p = strstr(buf, "Modulus: ")) != NULL) {
 			p += 9;
 	
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsan = BN_bin2bn(key, keylen, NULL)) == NULL)  {
+			if ((kn->rsan = BN_bin2bn(key, keylen, NULL)) == NULL)  {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
-				return NULL;
+				return -1;
 			}
 		} else if ((p = strstr(buf, "PublicExponent: ")) != NULL) {
 			p += 16;	
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsae = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((kn->rsae = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
-				return NULL;
+				return -1;
 			}
 		} else if ((p = strstr(buf, "PrivateExponent: ")) != NULL) {
 			p += 17;
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsad = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((kn->rsad = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
-				return NULL;
+				return -1;
 			}
 		} else if ((p = strstr(buf, "Prime1: ")) != NULL) {
 			p += 8;
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsap = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((kn->rsap = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
-				return NULL;
+				return -1;
 			}
 		} else if ((p = strstr(buf, "Prime2: ")) != NULL) {
 			p += 8;
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsaq = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((kn->rsaq = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
-				return NULL;
+				return -1;
 			}
 		} else if ((p = strstr(buf, "Exponent1: ")) != NULL) {
 			p += 11;
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsadmp1 = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((kn->rsadmp1 = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
-				return NULL;
+				return -1;
 			}
 		} else if ((p = strstr(buf, "Exponent2: ")) != NULL) {
 			p += 11;
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsadmq1 = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((kn->rsadmq1 = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
-				return NULL;
+				return -1;
 			}
 		} else if ((p = strstr(buf, "Coefficient: ")) != NULL) {
 			p += 13;
 
 			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
-			if ((rsaiqmp = BN_bin2bn(key, keylen, NULL)) == NULL) {
+			if ((kn->rsaiqmp = BN_bin2bn(key, keylen, NULL)) == NULL) {
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
-				return NULL;
+				return -1;
 			}
 		}
 	} /* fgets */
 
 	fclose(f);
 
-	if (RSA_set0_key(rsa, rsan, rsae, rsad) == 0 ||
-		RSA_set0_factors(rsa, rsap, rsaq) == 0 ||
-		RSA_set0_crt_params(rsa, rsadmp1, rsadmq1, rsaiqmp) == 0) {
-		dolog(LOG_INFO, "RSA_set0_* failed\n");
-		return NULL;
-	}
 
 #if __OpenBSD__
 	explicit_bzero(buf, sizeof(buf));
@@ -5989,7 +6068,7 @@ read_private_key(char *zonename, int keyid, int algorithm)
 	memset(key, 0, sizeof(key));
 #endif
 
-	return (rsa);
+	return 0;
 	
 }
 
