@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.26 2019/01/09 19:36:53 pjp Exp $
+ * $Id: dddctl.c,v 1.27 2019/01/10 07:29:33 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -638,22 +638,28 @@ signmain(int argc, char *argv[])
 			exit(1);
 		}
 
-		/* we're over 2 keys */
-		search = KEYTYPE_NONE;
-		SLIST_FOREACH(knp, &keyshead, keys_entry) {
-			if (knp->pid == pid) {
+		if (numzsk == 2) {
+			search = KEYTYPE_NONE;
+			SLIST_FOREACH(knp, &keyshead, keys_entry) {
+				if (knp->pid == pid) {
+					knp->sign = 1;
+					search = (knp->type == KEYTYPE_KSK) ? KEYTYPE_ZSK : KEYTYPE_KSK;
+					break;
+				}
+			}
+
+			SLIST_FOREACH(knp, &keyshead, keys_entry) {
+				if (search == knp->type && knp->sign == 0)  {
+					knp->sign = 1;
+					break;
+				}
+			} /* SLIST_FOREACH */
+		} else if (numksk == 2) {
+			SLIST_FOREACH(knp, &keyshead, keys_entry) {
 				knp->sign = 1;
-				search = (knp->type == KEYTYPE_KSK) ? KEYTYPE_ZSK : KEYTYPE_KSK;
-				break;
 			}
 		}
-
-		SLIST_FOREACH(knp, &keyshead, keys_entry) {
-			if (search == knp->type && knp->sign == 0)  {
-				knp->sign = 1;
-				break;
-			}
-		} /* SLIST_FOREACH */
+		
 	} /* numkeys == 3 */
 
 #if DEBUG
@@ -1306,7 +1312,6 @@ int
 calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 {
 	struct keysentry *zsk_key = NULL;
-	struct keysentry *ksk_key = NULL;
 	struct node *n, *nx;
 	struct domain *sd;
 	int j, rs;
@@ -1315,11 +1320,9 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 	char timebuf[32];
 	struct tm *tm;
 
-	/* set ZSK and KSK keys, there can be only two set */
+	/* set ZSK key, there can be only two set max */
 	
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
-		if (knp->sign == 1 && knp->type == KEYTYPE_KSK)
-			ksk_key = knp;
 		if (knp->sign == 1 && knp->type == KEYTYPE_ZSK)
 			zsk_key = knp;
 	}
@@ -4970,7 +4973,7 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 	int keylen;
 	int bufsize;
 	int labels;
-	int pass = 0;
+	static int pass = 0;
 
 	struct question *qp;
 	int retval, lzerrno;
@@ -5099,7 +5102,7 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 	if (pass++ == 0)
 		unlink(buf);
 
-	f = fopen(buf, "a+");
+	f = fopen(buf, "a");
 	if (f == NULL) {
 		dolog(LOG_INFO, "fopen dsset\n");
 		return -1;
