@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.27 2019/01/10 07:29:33 pjp Exp $
+ * $Id: dddctl.c,v 1.28 2019/01/10 12:57:35 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -633,33 +633,24 @@ signmain(int argc, char *argv[])
 			knp->sign = 1;
 		}
 	} else {
-		if (pid == -1 && numzsk == 2) {
+		if (pid == -1) {
 			fprintf(stderr, "you specified three keys, please select one for signing (with -S pid)!\n");
 			exit(1);
 		}
 
-		if (numzsk == 2) {
-			search = KEYTYPE_NONE;
-			SLIST_FOREACH(knp, &keyshead, keys_entry) {
-				if (knp->pid == pid) {
-					knp->sign = 1;
-					search = (knp->type == KEYTYPE_KSK) ? KEYTYPE_ZSK : KEYTYPE_KSK;
-					break;
-				}
-			}
-
-			SLIST_FOREACH(knp, &keyshead, keys_entry) {
-				if (search == knp->type && knp->sign == 0)  {
-					knp->sign = 1;
-					break;
-				}
-			} /* SLIST_FOREACH */
-		} else if (numksk == 2) {
-			SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		search = KEYTYPE_NONE;
+		SLIST_FOREACH(knp, &keyshead, keys_entry) {
+			if (knp->pid == pid) {
 				knp->sign = 1;
+				search = (knp->type == KEYTYPE_KSK) ? KEYTYPE_ZSK : KEYTYPE_KSK;
+				break;
 			}
 		}
-		
+
+		SLIST_FOREACH(knp, &keyshead, keys_entry) {
+			if (search == knp->type && knp->sign == 0)
+				knp->sign = 1;
+		} /* SLIST_FOREACH */
 	} /* numkeys == 3 */
 
 #if DEBUG
