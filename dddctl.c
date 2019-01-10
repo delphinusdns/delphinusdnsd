@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.28 2019/01/10 12:57:35 pjp Exp $
+ * $Id: dddctl.c,v 1.29 2019/01/10 13:43:56 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -535,12 +535,19 @@ signmain(int argc, char *argv[])
 			exit(1);
 		}
 
-		dolog(LOG_INFO, "creating new KSK (257) algorithm: %s with %d bits\n", alg_to_name(algorithm), bits);
+		dolog(LOG_INFO, "creating new KSK (257) algorithm: %s with %d bits, pid ", alg_to_name(algorithm), bits);
 		kn->keyname = create_key(zonename, ttl, 257, algorithm, bits, &newpid);
+		if (kn->keyname == NULL) {
+			dolog(LOG_ERR, "failed.\n");
+			exit(1);
+		}
+
 		kn->type = KEYTYPE_KSK;
 		kn->pid = newpid;
 		kn->sign = 0;
 		ksk_key = 1;
+
+		dolog(LOG_INFO, "%d.\n", newpid);
 		
 		if ((key_zone = key2zone(kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
 			perror("key2zone");
@@ -579,12 +586,19 @@ signmain(int argc, char *argv[])
 			perror("malloc");
 			exit(1);
 		}
-		dolog(LOG_INFO, "creating new ZSK (256) algorithm: %s with %d bits\n", alg_to_name(algorithm), bits);
+		dolog(LOG_INFO, "creating new ZSK (256) algorithm: %s with %d bits, pid ", alg_to_name(algorithm), bits);
 		kn->keyname = create_key(zonename, ttl, 256, algorithm, bits, &newpid);
+		if (kn->keyname == NULL) {
+			dolog(LOG_ERR, "failed.\n");
+			exit(1);
+		}
+			
 		kn->type = KEYTYPE_ZSK;
 		kn->pid = newpid;
 		kn->sign = 0;
 		zsk_key = 1;
+
+		dolog(LOG_INFO, "%d.\n", newpid);
 	
 		if ((key_zone = key2zone(kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
 			perror("key2zone");
