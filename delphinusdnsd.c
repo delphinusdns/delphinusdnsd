@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.42 2019/01/25 20:00:15 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.43 2019/01/25 20:06:43 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -149,7 +149,6 @@ static struct reply_logic {
 	{ DNS_TYPE_MX, DNS_TYPE_MX, BUILD_OTHER, reply_mx },
 	{ DNS_TYPE_SOA, DNS_TYPE_SOA, BUILD_OTHER, reply_soa },
 	{ DNS_TYPE_SOA, DNS_TYPE_NS, BUILD_OTHER, reply_soa },
-	{ DNS_TYPE_NS, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
 	{ DNS_TYPE_NS, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
 	{ DNS_TYPE_TLSA, DNS_TYPE_TLSA, BUILD_OTHER, reply_tlsa },
 	{ DNS_TYPE_SSHFP, DNS_TYPE_SSHFP, BUILD_OTHER, reply_sshfp },
