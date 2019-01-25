@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.43 2019/01/25 20:06:43 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.44 2019/01/25 20:10:24 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -3136,7 +3136,6 @@ tcpnxdomain:
 						slen = reply_notimpl(&sreply, NULL);
 						snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					}
-					break;
 				}
 			
 		tcpout:
