@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.18 2018/10/19 08:24:48 pjp Exp $
+ * $Id: axfr.c,v 1.19 2019/01/25 20:00:15 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -53,8 +53,8 @@ void	reap(int);
 extern int 		get_record_size(ddDB *, char *, int);
 extern in_addr_t 	getmask(int);
 extern int 		getmask6(int, struct sockaddr_in6 *);
-extern void		reply_fmterror(struct sreply *);
-extern void		reply_nxdomain(struct sreply *);
+extern void		reply_fmterror(struct sreply *, ddDB *);
+extern void		reply_nxdomain(struct sreply *, ddDB *);
 extern struct domain *	get_soa(ddDB *, struct question *);
 extern void *		find_substruct(struct domain *, u_int16_t);
 extern int		compress_label(u_char *, int, int);
@@ -800,7 +800,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			
 			build_reply(&sreply, so, (p + 2), dnslen, NULL, NULL, 0, NULL, NULL, 0xff, 1, 0, NULL);
 
-			reply_fmterror(&sreply);
+			reply_fmterror(&sreply, NULL);
 			goto drop;	
 		}
 
@@ -862,7 +862,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				goto drop;
 			}
 			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, sdomain, NULL, 0xff, 1, 0, NULL);
-			reply_nxdomain(&sreply);
+			reply_nxdomain(&sreply, NULL);
 			dolog(LOG_INFO, "AXFR request for zone %s, no db entry, nxdomain -> drop\n", question->converted_name);
 			goto drop;
 		}
@@ -890,7 +890,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				goto drop;
 			}
 			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, sdomain, NULL, 0xff, 1, 0, NULL);
-			reply_nxdomain(&sreply);
+			reply_nxdomain(&sreply, NULL);
 			
 			dolog(LOG_INFO, "AXFR request for zone %s, which has no SOA for the zone, nxdomain -> drop\n", question->converted_name);
 			goto drop;

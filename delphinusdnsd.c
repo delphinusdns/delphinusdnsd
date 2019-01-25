@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2002-2018 Peter J. Philipp
+ * Copyright (c) 2002-2019 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.41 2018/10/19 08:24:48 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.42 2019/01/25 20:00:15 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -64,31 +64,31 @@ extern void 	recurseloop(int sp, int *, ddDB *);
 extern void 	receivelog(char *, int);
 extern int 	reply_a(struct sreply *, ddDB *);
 extern int 	reply_aaaa(struct sreply *, ddDB *);
-extern int 	reply_any(struct sreply *);
-extern int 	reply_badvers(struct sreply *);
-extern int	reply_nodata(struct sreply *);
-extern int 	reply_cname(struct sreply *);
-extern int 	reply_fmterror(struct sreply *);
-extern int 	reply_notimpl(struct sreply *);
+extern int 	reply_any(struct sreply *, ddDB *);
+extern int 	reply_badvers(struct sreply *, ddDB *);
+extern int	reply_nodata(struct sreply *, ddDB *);
+extern int 	reply_cname(struct sreply *, ddDB *);
+extern int 	reply_fmterror(struct sreply *, ddDB *);
+extern int 	reply_notimpl(struct sreply *, ddDB *);
 extern int 	reply_nxdomain(struct sreply *, ddDB *);
 extern int 	reply_noerror(struct sreply *, ddDB *);
-extern int 	reply_soa(struct sreply *);
+extern int 	reply_soa(struct sreply *, ddDB *);
 extern int 	reply_mx(struct sreply *, ddDB *);
 extern int 	reply_naptr(struct sreply *, ddDB *);
 extern int 	reply_ns(struct sreply *, ddDB *);
-extern int 	reply_ptr(struct sreply *);
-extern int 	reply_refused(struct sreply *);
+extern int 	reply_ptr(struct sreply *, ddDB *);
+extern int 	reply_refused(struct sreply *, ddDB *);
 extern int 	reply_srv(struct sreply *, ddDB *);
-extern int 	reply_sshfp(struct sreply *);
-extern int 	reply_tlsa(struct sreply *);
-extern int 	reply_txt(struct sreply *);
-extern int 	reply_version(struct sreply *);
+extern int 	reply_sshfp(struct sreply *, ddDB *);
+extern int 	reply_tlsa(struct sreply *, ddDB *);
+extern int 	reply_txt(struct sreply *, ddDB *);
+extern int 	reply_version(struct sreply *, ddDB *);
 extern int      reply_rrsig(struct sreply *, ddDB *);
-extern int	reply_dnskey(struct sreply *);
-extern int	reply_ds(struct sreply *);
-extern int	reply_nsec(struct sreply *);
+extern int	reply_dnskey(struct sreply *, ddDB *);
+extern int	reply_ds(struct sreply *, ddDB *);
+extern int	reply_nsec(struct sreply *, ddDB *);
 extern int	reply_nsec3(struct sreply *, ddDB *);
-extern int	reply_nsec3param(struct sreply *);
+extern int	reply_nsec3param(struct sreply *, ddDB *);
 extern int 	remotelog(int, char *, ...);
 extern char 	*rrlimit_setup(int);
 extern char 	*dns_label(char *, int *);
@@ -120,6 +120,50 @@ void 			parseloop(struct cfg *, struct imsgbuf **);
 
 #define PIDFILE "/var/run/delphinusdnsd.pid"
 #define MYDB_PATH "/var/db/delphinusdns"
+
+/* structs */
+
+static struct reply_logic {
+	int rrtype;
+	int type0;
+	int buildtype;
+#define BUILD_CNAME	1
+#define BUILD_OTHER	2
+	int (*reply)(struct sreply *, ddDB *);
+} rlogic[] = {
+	{ DNS_TYPE_A, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_A, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
+	{ DNS_TYPE_A, DNS_TYPE_A, BUILD_OTHER, reply_a },
+	{ DNS_TYPE_ANY, DNS_TYPE_ANY, BUILD_OTHER, reply_any },
+	{ DNS_TYPE_NSEC3PARAM, DNS_TYPE_NSEC3PARAM, BUILD_OTHER, reply_nsec3param },
+	{ DNS_TYPE_NSEC3, DNS_TYPE_NSEC3, BUILD_OTHER, reply_nsec3 },
+	{ DNS_TYPE_NSEC, DNS_TYPE_NSEC, BUILD_OTHER, reply_nsec },
+	{ DNS_TYPE_DS, DNS_TYPE_DS, BUILD_OTHER, reply_ds },
+	{ DNS_TYPE_DNSKEY, DNS_TYPE_DNSKEY, BUILD_OTHER, reply_dnskey },
+	{ DNS_TYPE_RRSIG, DNS_TYPE_RRSIG, BUILD_OTHER, reply_rrsig },
+	{ DNS_TYPE_AAAA, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_AAAA, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
+	{ DNS_TYPE_AAAA, DNS_TYPE_AAAA, BUILD_OTHER, reply_aaaa },
+	{ DNS_TYPE_MX, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_MX, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
+	{ DNS_TYPE_MX, DNS_TYPE_MX, BUILD_OTHER, reply_mx },
+	{ DNS_TYPE_SOA, DNS_TYPE_SOA, BUILD_OTHER, reply_soa },
+	{ DNS_TYPE_SOA, DNS_TYPE_NS, BUILD_OTHER, reply_soa },
+	{ DNS_TYPE_NS, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
+	{ DNS_TYPE_NS, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
+	{ DNS_TYPE_TLSA, DNS_TYPE_TLSA, BUILD_OTHER, reply_tlsa },
+	{ DNS_TYPE_SSHFP, DNS_TYPE_SSHFP, BUILD_OTHER, reply_sshfp },
+	{ DNS_TYPE_SRV, DNS_TYPE_SRV, BUILD_OTHER, reply_srv },
+	{ DNS_TYPE_NAPTR, DNS_TYPE_NAPTR, BUILD_OTHER, reply_naptr },
+	{ DNS_TYPE_CNAME, DNS_TYPE_CNAME, BUILD_OTHER, reply_cname },
+	{ DNS_TYPE_CNAME, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
+	{ DNS_TYPE_PTR, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_PTR, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
+	{ DNS_TYPE_PTR, DNS_TYPE_PTR, BUILD_OTHER, reply_ptr },
+	{ DNS_TYPE_TXT, DNS_TYPE_TXT, BUILD_OTHER, reply_txt },
+	{ 0, 0, 0, NULL }
+};
+	
 
 /* global variables */
 
@@ -1582,6 +1626,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	struct domain_cname *csd;
 	
 	struct sreply sreply;
+	struct reply_logic *rl = NULL;
 	struct timeval tv = { 10, 0};
 
 	struct msghdr msgh;
@@ -1837,7 +1882,7 @@ axfrentry:
 				if (filter) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-					slen = reply_refused(&sreply);
+					slen = reply_refused(&sreply, NULL);
 
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, filter policy\n", so, cfg->ident[i], address, received_ttl, aregion);
 					goto drop;
@@ -1846,7 +1891,7 @@ axfrentry:
 				if (whitelist && blacklist == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-					slen = reply_refused(&sreply);
+					slen = reply_refused(&sreply, NULL);
 
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, whitelist policy\n", so, cfg->ident[i], address, received_ttl, aregion);
 					goto drop;
@@ -1921,7 +1966,7 @@ axfrentry:
 										dolog(LOG_INFO, "on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
 										/* format error */
 										build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-										slen = reply_fmterror(&sreply);
+										slen = reply_fmterror(&sreply, NULL);
 										dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
 										imsg_free(&imsg);
 										goto drop;
@@ -1958,7 +2003,7 @@ axfrentry:
 				/* hack around whether we're edns version 0 */
 				if (question->ednsversion != 0) {
 					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-					slen = reply_badvers(&sreply);
+					slen = reply_badvers(&sreply, NULL);
 
 					dolog(LOG_INFO, "on descriptor %u interface \"%s\" edns version is %u from %s, replying badvers\n", so, cfg->ident[i], question->ednsversion, address);
 
@@ -1983,13 +2028,13 @@ axfrentry:
 								strcasecmp(question->converted_name, "version.bind.") == 0) {
 								snprintf(replystring, DNS_MAXNAME, "VERSION");
 								build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_version(&sreply);
+								slen = reply_version(&sreply, NULL);
 								goto udpout;
 						}
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 
 						build_reply(&sreply, so, buf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
-						slen = reply_refused(&sreply);
+						slen = reply_refused(&sreply, NULL);
 						goto udpout;
 						break;
 					case ERR_NXDOMAIN:
@@ -2000,7 +2045,7 @@ axfrentry:
 							} else {
 								snprintf(replystring, DNS_MAXNAME, "NODATA");
 								build_reply(&sreply, so, buf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_nodata(&sreply);
+								slen = reply_nodata(&sreply, NULL);
 								goto udpout;
 								break;
 							}	
@@ -2047,7 +2092,7 @@ udpnxdomain:
 							} else {
 								snprintf(replystring, DNS_MAXNAME, "NODATA");
 								build_reply(&sreply, so, buf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_nodata(&sreply);
+								slen = reply_nodata(&sreply, NULL);
 								goto udpout;
 							}	
 						}
@@ -2103,280 +2148,36 @@ udpnxdomain:
 							fromlen, NULL, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
-					slen = reply_notimpl(&sreply);
+					slen = reply_notimpl(&sreply, NULL);
 					snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					goto udpout;
 				}
-		
-				switch (ntohs(question->hdr->qtype)) {
-				case DNS_TYPE_A:
-					if (type0 == DNS_TYPE_CNAME) {
 
-						build_reply(&sreply, so, buf, len, question, from, 	\
-							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							aregion, istcp, 0, NULL, replybuf);
-
-						slen = reply_cname(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
-
-						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
+				for (rl = &rlogic[0]; rl->rrtype != 0; rl++) {
+					if (rl->rrtype == ntohs(question->hdr->qtype)) {
+						if (rl->type0 == type0) {
+							switch (rl->buildtype) {
+							case BUILD_CNAME:
+								build_reply(&sreply, so, buf, len, question,
+									from, fromlen, sd0, ((type1 > 0) ? sd1 : 
+									NULL), aregion, istcp, 0, NULL, replybuf);
+								break;
+							case BUILD_OTHER:
+								build_reply(&sreply, so, buf, len, question, 
+									from, fromlen, sd0, NULL, aregion, istcp,
+									0, NULL, replybuf);
+								break;
+							}
+						} else {
+							continue;
+						}
+							
+						slen = (*rl->reply)(&sreply, cfg->db);
 						break;
-					} else if (type0 == DNS_TYPE_A) {
+					} /* if rl->rrtype == */
+				}
 
-						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 0, 
-							NULL, replybuf);
-
-						slen = reply_a(&sreply, cfg->db);
-						break;		/* must break here */
-					}
-
-					break;
-
-				case DNS_TYPE_ANY:
-					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
-						replybuf);
-
-					slen = reply_any(&sreply);
-					break;		/* must break here */
-				case DNS_TYPE_NSEC3PARAM:
-					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
-						replybuf);
-
-					slen = reply_nsec3param(&sreply);
-					break;
-
-				case DNS_TYPE_NSEC3:
-					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
-						replybuf);
-
-					slen = reply_nxdomain(&sreply, cfg->db);
-					break;
-
-				case DNS_TYPE_NSEC:
-					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
-						replybuf);
-
-					slen = reply_nsec(&sreply);
-					break;
-
-				case DNS_TYPE_DS:
-					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
-						replybuf);
-
-					slen = reply_ds(&sreply);
-					break;
-
-				case DNS_TYPE_DNSKEY:
-					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
-						replybuf);
-
-					slen = reply_dnskey(&sreply);
-					break;
-
-				case DNS_TYPE_RRSIG:
-					build_reply(&sreply, so, buf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, NULL,
-						replybuf);
-
-					slen = reply_rrsig(&sreply, cfg->db);
-					break;		/* must break here */
-
-
-				case DNS_TYPE_AAAA:
-					
-					if (type0 == DNS_TYPE_CNAME) {
-
-						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							aregion, istcp, 0, NULL, replybuf);
-
-						slen = reply_cname(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
-
-						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-						break;
-					 } else if (type0 == DNS_TYPE_AAAA) {
-
-						build_reply(&sreply, so, buf, len, question, from, 
-							fromlen, sd0, NULL, aregion, istcp, 0, 
-							NULL, replybuf);
-
-						slen = reply_aaaa(&sreply, cfg->db);
-						break;		/* must break here */
-					}
-
-					break;
-				case DNS_TYPE_MX:
-					
-					if (type0 == DNS_TYPE_CNAME) {
-
-						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							aregion, istcp, 0, NULL, replybuf);
-
-						slen = reply_cname(&sreply);
-	   				} else if (type0 == DNS_TYPE_NS) {
-
-						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-						break;
-					} else if (type0 == DNS_TYPE_MX) {
-						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-						slen = reply_mx(&sreply, cfg->db);
-						break;		/* must break here */
-					}
-
-					break;
-				case DNS_TYPE_SOA:
-					if (type0 == DNS_TYPE_SOA) {
-
-						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_soa(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
-
-						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-						break;
-					}
-					break;
-				case DNS_TYPE_NS:
-					if (type0 == DNS_TYPE_NS) {
-
-						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-					}
-					break;
-
-				case DNS_TYPE_TLSA:
-					if (type0 == DNS_TYPE_TLSA) {
-						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_tlsa(&sreply);
-					}
-					break;
-
-				case DNS_TYPE_SSHFP:
-					if (type0 == DNS_TYPE_SSHFP) {
-						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_sshfp(&sreply);
-					}
-					break;
-
-
-				case DNS_TYPE_SRV:
-					if (type0 == DNS_TYPE_SRV) {
-
-						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_srv(&sreply, cfg->db);
-					}
-					break;
-
-				case DNS_TYPE_NAPTR:
-					if (type0 == DNS_TYPE_NAPTR) {
-
-						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_naptr(&sreply, cfg->db);
-					}
-					break;
-
-				case DNS_TYPE_CNAME:
-					if (type0 == DNS_TYPE_CNAME) {
-
-						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_cname(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
-
-						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-						break;
-					}
-					break;
-
-				case DNS_TYPE_PTR:
-					if (type0 == DNS_TYPE_CNAME) {
-
-						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, ((type1 > 0) ? sd1 : NULL) \
-							, aregion, istcp, 0, NULL, replybuf);
-
-						slen = reply_cname(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
-
-						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-						break;
-					} else if (type0 == DNS_TYPE_PTR) {
-
-						build_reply(&sreply, so, buf, len, question, from, 	
-								fromlen, sd0, NULL, aregion, istcp, 0, \
-								NULL, replybuf);
-
-						slen = reply_ptr(&sreply);
-						break;		/* must break here */
-					}
-					break;
-				case DNS_TYPE_TXT:
-					if (type0 == DNS_TYPE_TXT) {
-
-						build_reply(&sreply, so, buf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
-
-						slen = reply_txt(&sreply);
-					}
-					break;
-
-				default:
-
+				if (rl->rrtype == 0) {
 					/*
 					 * ANY unkown RR TYPE gets a NOTIMPL
 					 */
@@ -2398,10 +2199,9 @@ udpnxdomain:
 							fromlen, NULL, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
-						slen = reply_notimpl(&sreply);
+						slen = reply_notimpl(&sreply, NULL);
 						snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					}
-					break;
 				}
 			
 		udpout:
@@ -2803,6 +2603,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	struct domain_cname *csd;
 	
 	struct sreply sreply;
+	struct reply_logic *rl = NULL;
 	struct timeval tv = { 10, 0};
 	struct imsgbuf parse_ibuf;
 	struct imsgbuf *pibuf;
@@ -3076,7 +2877,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
 								/* format error */
 								build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_fmterror(&sreply);
+								slen = reply_fmterror(&sreply, NULL);
 								dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
 								imsg_free(&imsg);
 								goto drop;
@@ -3145,12 +2946,12 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 								strcasecmp(question->converted_name, "version.bind.") == 0) {
 								snprintf(replystring, DNS_MAXNAME, "VERSION");
 								build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_version(&sreply);
+								slen = reply_version(&sreply, NULL);
 								goto tcpout;
 						}
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
-						slen = reply_refused(&sreply);
+						slen = reply_refused(&sreply, NULL);
 						goto tcpout;
 						break;
 					case ERR_NXDOMAIN:
@@ -3161,7 +2962,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 							} else {
 								snprintf(replystring, DNS_MAXNAME, "NODATA");
 								build_reply(&sreply, so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_nodata(&sreply);
+								slen = reply_nodata(&sreply, NULL);
 								goto tcpout;
 								break;
 							}	
@@ -3209,7 +3010,7 @@ tcpnoerror:
 						} else {
 							snprintf(replystring, DNS_MAXNAME, "NODATA");
 							build_reply(&sreply, so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
-							slen = reply_nodata(&sreply);
+							slen = reply_nodata(&sreply, NULL);
 							goto tcpout;
 						}	
 					}
@@ -3268,11 +3069,12 @@ tcpnxdomain:
 									from, fromlen, NULL, NULL, aregion, 
 									istcp, 0, NULL, replybuf);
 
-					slen = reply_notimpl(&sreply);
+					slen = reply_notimpl(&sreply, NULL);
 					snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					goto tcpout;
 				}
-		
+
+				/* IXFR and AXFR are special types for TCP handle seperately */
 				switch (ntohs(question->hdr->qtype)) {
 				case DNS_TYPE_IXFR:
 					/* FALLTHROUGH */
@@ -3283,255 +3085,34 @@ tcpnxdomain:
 					close(so);
 					continue;
 					break;
-				case DNS_TYPE_A:
-					if (type0 == DNS_TYPE_CNAME) {
-						build_reply(&sreply, so, pbuf, len, question, from, 	\
-							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							aregion, istcp, 0, NULL, replybuf);
-						slen = reply_cname(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
 
-						build_reply(&sreply, so, pbuf, len, question, 
-									from, fromlen, sd0, NULL, 
-									aregion, istcp, 0, NULL,
-									replybuf);
+				}
 
-						slen = reply_ns(&sreply, cfg->db);
+				for (rl = &rlogic[0]; rl->rrtype != 0; rl++) {
+					if (rl->rrtype == ntohs(question->hdr->qtype)) {
+						if (rl->type0 == type0) {
+							switch (rl->buildtype) {
+							case BUILD_CNAME:
+								build_reply(&sreply, so, pbuf, len, question, 
+									from, fromlen, sd0, ((type1 > 0) ? sd1 : 
+									NULL), aregion, istcp, 0, NULL, replybuf);
+								break;
+							case BUILD_OTHER:
+								build_reply(&sreply, so, pbuf, len, question, 
+									from, fromlen, sd0, NULL, aregion, istcp, 
+									0, NULL, replybuf);
+								break;
+							}
+						} else {
+							continue;
+						}
+							
+						slen = (*rl->reply)(&sreply, cfg->db);
 						break;
-					} else if (type0 == DNS_TYPE_A) {
-						build_reply(&sreply, so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 0, 
-							NULL, replybuf);
-						slen = reply_a(&sreply, cfg->db);
-						break;		/* must break here */
-					}
+					} /* if rl->rrtype == */
+				}
 
-					break;
-
-				case DNS_TYPE_ANY:
-					build_reply(&sreply, so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_any(&sreply);
-					break;		/* must break here */
-				case DNS_TYPE_NSEC3PARAM:
-					build_reply(&sreply, so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_nsec3param(&sreply);
-					break;		/* must break here */
-					
-				case DNS_TYPE_NSEC3:
-					build_reply(&sreply, so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_nxdomain(&sreply, cfg->db);
-					break;		/* must break here */
-					
-				case DNS_TYPE_DS:
-					build_reply(&sreply, so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_ds(&sreply);
-					break;		/* must break here */
-					
-				case DNS_TYPE_DNSKEY:
-					build_reply(&sreply, so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_dnskey(&sreply);
-					break;		/* must break here */
-					
-				case DNS_TYPE_RRSIG:
-					build_reply(&sreply, so, pbuf, len, question, from, \
-						fromlen, sd0, NULL, aregion, istcp, 0, 
-						NULL, replybuf);
-
-					slen = reply_rrsig(&sreply, cfg->db);
-					break;		/* must break here */
-					
-				case DNS_TYPE_AAAA:
-					
-					if (type0 == DNS_TYPE_CNAME) {
-						build_reply(&sreply, so, pbuf, len, question, from, \
-							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							aregion, istcp, 0, NULL, replybuf);
-						slen = reply_cname(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
-						build_reply(&sreply, so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-						break;
-					 } else if (type0 == DNS_TYPE_AAAA) {
-						build_reply(&sreply, so, pbuf, len, question, from, 
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_aaaa(&sreply, cfg->db);
-						break;		/* must break here */
-					}
-
-					break;
-				case DNS_TYPE_MX:
-					
-					if (type0 == DNS_TYPE_CNAME) {
-						build_reply(&sreply, so, pbuf, len, question, from, \
-							fromlen, sd0, ((type1 > 0) ? sd1 : NULL), \
-							aregion, istcp, 0, NULL, replybuf);
-
-						slen = reply_cname(&sreply);
-
-					} else if (type0 == DNS_TYPE_NS) {
-						build_reply(&sreply, so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-
-						break;
-					} else if (type0 == DNS_TYPE_MX) {
-						build_reply(&sreply, so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_mx(&sreply, cfg->db);
-						break;		/* must break here */
-					}
-
-					break;
-				case DNS_TYPE_SOA:
-					if (type0 == DNS_TYPE_SOA) {
-						build_reply(&sreply, so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_soa(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
-						build_reply(&sreply, so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-						break;
-					}
-					break;
-				case DNS_TYPE_NS:
-					if (type0 == DNS_TYPE_NS) {
-						build_reply(&sreply, so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-					}
-					break;
-
-				case DNS_TYPE_TLSA:
-					if (type0 == DNS_TYPE_TLSA) {
-						build_reply(&sreply, so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_tlsa(&sreply);
-					}
-					break;
-
-				case DNS_TYPE_SSHFP:
-					if (type0 == DNS_TYPE_SSHFP) {
-						build_reply(&sreply, so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_sshfp(&sreply);
-					}
-					break;
-
-
-				case DNS_TYPE_SRV:
-					if (type0 == DNS_TYPE_SRV) {
-						build_reply(&sreply, so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_srv(&sreply, cfg->db);
-					}
-					break;
-
-				case DNS_TYPE_NAPTR:
-					if (type0 == DNS_TYPE_NAPTR) {
-						build_reply(&sreply, so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_naptr(&sreply, cfg->db);
-					}
-					break;
-
-				case DNS_TYPE_CNAME:
-					if (type0 == DNS_TYPE_CNAME) {
-						build_reply(&sreply, so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_cname(&sreply);
-					} else if (type0 == DNS_TYPE_NS) {
-						build_reply(&sreply, so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-						break;
-					}
-					break;
-
-				case DNS_TYPE_PTR:
-					if (type0 == DNS_TYPE_CNAME) {
-						build_reply(&sreply, so, pbuf, len, question, from, \
-							fromlen, sd0, ((type1 > 0) ? sd1 : NULL) \
-							, aregion, istcp, 0, NULL,
-							replybuf);
-
-						slen = reply_cname(&sreply);
-
-					} else if (type0 == DNS_TYPE_NS) {
-
-						build_reply(&sreply, so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_ns(&sreply, cfg->db);
-
-						break;
-					} else if (type0 == DNS_TYPE_PTR) {
-
-						build_reply(&sreply, so, pbuf, len, question, from, 	
-								fromlen, sd0, NULL, aregion, istcp, 
-								0, NULL, replybuf);
-
-						slen = reply_ptr(&sreply);
-						break;		/* must break here */
-					}
-					break;
-
-				case DNS_TYPE_TXT:
-					if (type0 == DNS_TYPE_TXT) {
-
-						build_reply(&sreply, so, pbuf, len, question, from,  \
-							fromlen, sd0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
-
-						slen = reply_txt(&sreply);
-					}
-					break;
-
-				default:
-
+				if (rl->rrtype == 0) {
 					/*
 					 * ANY unknown RR TYPE gets a NOTIMPL
 					 */
@@ -3553,7 +3134,7 @@ tcpnxdomain:
 						fromlen, NULL, NULL, aregion, istcp, 
 						0, NULL, replybuf);
 		
-						slen = reply_notimpl(&sreply);
+						slen = reply_notimpl(&sreply, NULL);
 						snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					}
 					break;

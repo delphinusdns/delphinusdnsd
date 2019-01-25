@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.63 2018/10/19 08:24:48 pjp Exp $
+ * $Id: reply.c,v 1.64 2019/01/25 20:00:15 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -61,31 +61,31 @@ struct domain 	*Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int);
 int 		reply_a(struct sreply *, ddDB *);
 int		reply_nsec3(struct sreply *, ddDB *);
-int		reply_nsec3param(struct sreply *);
-int		reply_nsec(struct sreply *);
-int		reply_dnskey(struct sreply *);
-int		reply_ds(struct sreply *);
+int		reply_nsec3param(struct sreply *, ddDB *);
+int		reply_nsec(struct sreply *, ddDB *);
+int		reply_dnskey(struct sreply *, ddDB *);
+int		reply_ds(struct sreply *, ddDB *);
 int		reply_rrsig(struct sreply *, ddDB *);
 int 		reply_aaaa(struct sreply *, ddDB *);
 int 		reply_mx(struct sreply *, ddDB *);
 int 		reply_ns(struct sreply *, ddDB *);
-int 		reply_notimpl(struct sreply *);
+int 		reply_notimpl(struct sreply *, ddDB *);
 int 		reply_nxdomain(struct sreply *, ddDB *);
 int 		reply_noerror(struct sreply *, ddDB *);
-int		reply_badvers(struct sreply *);
-int		reply_nodata(struct sreply *);
-int 		reply_soa(struct sreply *);
-int 		reply_ptr(struct sreply *);
-int 		reply_txt(struct sreply *);
-int 		reply_version(struct sreply *);
+int		reply_badvers(struct sreply *, ddDB *);
+int		reply_nodata(struct sreply *, ddDB *);
+int 		reply_soa(struct sreply *, ddDB *);
+int 		reply_ptr(struct sreply *, ddDB *);
+int 		reply_txt(struct sreply *, ddDB *);
+int 		reply_version(struct sreply *, ddDB *);
 int 		reply_srv(struct sreply *, ddDB *);
 int 		reply_naptr(struct sreply *, ddDB *);
-int 		reply_sshfp(struct sreply *);
-int		reply_tlsa(struct sreply *);
-int 		reply_cname(struct sreply *);
-int 		reply_any(struct sreply *);
-int 		reply_refused(struct sreply *);
-int 		reply_fmterror(struct sreply *);
+int 		reply_sshfp(struct sreply *, ddDB *);
+int		reply_tlsa(struct sreply *, ddDB *);
+int 		reply_cname(struct sreply *, ddDB *);
+int 		reply_any(struct sreply *, ddDB *);
+int 		reply_refused(struct sreply *, ddDB *);
+int 		reply_fmterror(struct sreply *, ddDB *);
 void 		update_db(ddDB *, struct domain *);
 struct domain * find_nsec(char *name, int namelen, struct domain *sd, ddDB *db);
 int 		nsec_comp(const void *a, const void *b);
@@ -313,7 +313,7 @@ out:
  */
 
 int
-reply_nsec3param(struct sreply *sreply)
+reply_nsec3param(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -713,7 +713,7 @@ out:
  */
 
 int
-reply_nsec(struct sreply *sreply)
+reply_nsec(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -899,7 +899,7 @@ out:
  */
 
 int
-reply_ds(struct sreply *sreply)
+reply_ds(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -1092,7 +1092,7 @@ out:
  */
 
 int
-reply_dnskey(struct sreply *sreply)
+reply_dnskey(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -2058,7 +2058,7 @@ out:
 
 
 int
-reply_cname(struct sreply *sreply)
+reply_cname(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -2364,7 +2364,7 @@ out:
  */
 
 int
-reply_ptr(struct sreply *sreply)
+reply_ptr(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -2547,7 +2547,7 @@ out:
 
 
 int
-reply_soa(struct sreply *sreply)
+reply_soa(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -2813,7 +2813,7 @@ out:
 
 
 int
-reply_txt(struct sreply *sreply)
+reply_txt(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -2980,7 +2980,7 @@ out:
 
 
 int
-reply_version(struct sreply *sreply)
+reply_version(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -3111,7 +3111,7 @@ reply_version(struct sreply *sreply)
 
 
 int
-reply_tlsa(struct sreply *sreply)
+reply_tlsa(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -3308,7 +3308,7 @@ out:
 
 
 int
-reply_sshfp(struct sreply *sreply)
+reply_sshfp(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -3909,7 +3909,7 @@ out:
 
 
 int
-reply_notimpl(struct sreply  *sreply)
+reply_notimpl(struct sreply  *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4394,7 +4394,7 @@ out:
  */
 
 int
-reply_refused(struct sreply *sreply)
+reply_refused(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4463,7 +4463,7 @@ reply_refused(struct sreply *sreply)
  */
 
 int
-reply_fmterror(struct sreply *sreply)
+reply_fmterror(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4941,7 +4941,7 @@ Lookup_zone(ddDB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcar
 }
 
 int
-reply_any(struct sreply *sreply)
+reply_any(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -6249,7 +6249,7 @@ truncate:
  */
 
 int
-reply_badvers(struct sreply *sreply)
+reply_badvers(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -6336,7 +6336,7 @@ reply_badvers(struct sreply *sreply)
  */
 
 int
-reply_nodata(struct sreply *sreply)
+reply_nodata(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
