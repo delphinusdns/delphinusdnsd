@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.46 2019/01/25 21:04:18 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.47 2019/01/29 16:32:54 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -107,7 +107,8 @@ void			mainloop(struct cfg *, struct imsgbuf **);
 void 			master_reload(int);
 void 			master_shutdown(int);
 void 			recurseheader(struct srecurseheader *, int, struct sockaddr_storage *, struct sockaddr_storage *, int);
-void 			setup_master(ddDB *, char **, struct imsgbuf *ibuf);
+void 			setup_master(ddDB *, char **, char *, struct imsgbuf *ibuf);
+void 			setup_unixsocket(char *, struct imsgbuf *);
 void 			slave_signal(int);
 void 			tcploop(struct cfg *, struct imsgbuf **);
 void 			parseloop(struct cfg *, struct imsgbuf **);
@@ -118,7 +119,6 @@ void 			parseloop(struct cfg *, struct imsgbuf **);
 #define DEFAULT_PRIVILEGE "_ddd"
 #endif
 
-#define PIDFILE "/var/run/delphinusdnsd.pid"
 #define MYDB_PATH "/var/db/delphinusdns"
 
 /* structs */
@@ -228,6 +228,7 @@ main(int argc, char *argv[], char *environ[])
 	char *conffile = CONFFILE;
 	char buf[512];
 	char **av = NULL;
+	char *socketpath = SOCKPATH;
 	
 	struct passwd *pw;
 	struct addrinfo hints, *res0, *res;
@@ -251,7 +252,7 @@ main(int argc, char *argv[], char *environ[])
 #endif
 
 
-	while ((ch = getopt(argc, argv, "b:df:i:ln:p:v")) != -1) {
+	while ((ch = getopt(argc, argv, "b:df:i:ln:p:s:v")) != -1) {
 		switch (ch) {
 		case 'b':
 			bflag = 1;
@@ -283,6 +284,9 @@ main(int argc, char *argv[], char *environ[])
 			break;
 		case 'p':
 			port = atoi(optarg) & 0xffff;
+			break;
+		case 's':
+			socketpath = optarg;
 			break;
 		case 'v':
 			verbose++;
@@ -385,8 +389,6 @@ main(int argc, char *argv[], char *environ[])
 		exit(1);
 	}
 
-	/* make a master program that holds the pidfile, boss of ... eek */
-
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]) < 0) {
 		dolog(LOG_INFO, "socketpair() failed\n");
 		slave_shutdown();
@@ -405,10 +407,24 @@ main(int argc, char *argv[], char *environ[])
 	default:
 		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
 		imsg_init(parent_ibuf[MY_IMSG_MASTER], cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]);
-		setup_master(db, av, parent_ibuf[MY_IMSG_MASTER]);
+
+		setup_master(db, av, socketpath, parent_ibuf[MY_IMSG_MASTER]);
 		/* NOTREACHED */
 		exit(1);
 	}
+
+	switch (pid = fork()) {
+	case -1:
+		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
+		exit(1);
+	case 0:
+		setup_unixsocket(socketpath, child_ibuf[MY_IMSG_MASTER]);
+		slave_shutdown();	
+		exit(1);
+	default:
+		break;
+	} 
+
 
 	/* end of setup_master code */
 		
@@ -2343,11 +2359,9 @@ recurseheader(struct srecurseheader *rh, int proto, struct sockaddr_storage *src
  */
 
 void 
-setup_master(ddDB *db, char **av, struct imsgbuf *ibuf)
+setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 {
-	char buf[512];
 	pid_t pid;
-	int fd;
 	int sel, max = 0;
 
 	ssize_t n;
@@ -2358,7 +2372,7 @@ setup_master(ddDB *db, char **av, struct imsgbuf *ibuf)
 	struct imsg imsg;
 
 #if __OpenBSD__
-	if (unveil(PIDFILE, "rwc")  < 0) {
+	if (unveil(socketpath, "rwc")  < 0) {
 		perror("unveil");
 		exit(1);
 	}
@@ -2382,19 +2396,7 @@ setup_master(ddDB *db, char **av, struct imsgbuf *ibuf)
 			
 	setproctitle("delphinusdnsd master");
 
-	fd = open(PIDFILE, O_WRONLY | O_APPEND | O_CREAT, 0644);
-	if (fd < 0) {
-		dolog(LOG_ERR, "couldn't install pid file, exiting...\n");
-		pid = getpgrp();
-		killpg(pid, SIGTERM);
-		exit(1);
-	}
-	
 	pid = getpid();
-	snprintf(buf, sizeof(buf), "%u\n", pid);
-
-	write(fd, buf, strlen(buf));	
-	close(fd);
 
 	signal(SIGTERM, master_shutdown);
 	signal(SIGINT, master_shutdown);
@@ -2403,7 +2405,7 @@ setup_master(ddDB *db, char **av, struct imsgbuf *ibuf)
 
 	FD_ZERO(&rset);	
 	for (;;) {
-		tv.tv_sec = 10;
+		tv.tv_sec = 1;
 		tv.tv_usec = 0;
 
 		FD_SET(ibuf->fd, &rset);
@@ -2420,7 +2422,7 @@ setup_master(ddDB *db, char **av, struct imsgbuf *ibuf)
 
 			if (mshutdown) {
 				dolog(LOG_INFO, "shutting down on signal %d\n", msig);
-				unlink(PIDFILE);
+				unlink(socketpath);
 
 				pid = getpgrp();
 				killpg(pid, msig);
@@ -2437,9 +2439,9 @@ setup_master(ddDB *db, char **av, struct imsgbuf *ibuf)
 					dolog(LOG_ERR, "munmap: %s\n", strerror(errno));
 				}
 			
-				unlink(PIDFILE);
+				unlink(socketpath);
 
-				dolog(LOG_INFO, "restarting on SIGHUP\n");
+				dolog(LOG_INFO, "restarting on SIGHUP or command\n");
 
 				closelog();
 				if (execvp("/usr/local/sbin/delphinusdnsd", av) < 0) {
@@ -2474,6 +2476,13 @@ setup_master(ddDB *db, char **av, struct imsgbuf *ibuf)
 					switch(imsg.hdr.type) {
 					case IMSG_HELLO_MESSAGE:
 						/* dolog(LOG_DEBUG, "received hello from child\n"); */
+						break;
+					case IMSG_RELOAD_MESSAGE:
+						reload = 1;
+						break;	
+					case IMSG_SHUTDOWN_MESSAGE:
+						mshutdown = 1;
+						msig = SIGTERM;
 						break;
 					}
 
@@ -3370,4 +3379,168 @@ convert_question(struct parsequestion *pq)
 	q->badvers = pq->badvers;
 
 	return (q);
+}
+
+void
+setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
+{
+	int so, nso;
+	int sel, slen;
+	int len;
+	char buf[512];
+	struct sockaddr_un sun, *psun;
+	struct timeval tv;
+	struct dddcomm *dc;
+	struct passwd *pw;
+	fd_set rset;
+	uid_t uid;
+	gid_t gid;
+
+	setproctitle("delphinusdnsd unix socket");
+
+	memset(&sun, 0, sizeof(sun));
+	sun.sun_family = AF_UNIX;
+	if (strlcpy(sun.sun_path, socketpath, sizeof(sun.sun_path)) >= sizeof(sun.sun_path)) {
+		slave_shutdown();
+		exit(1);
+	}
+	sun.sun_len = SUN_LEN(&sun);
+
+	if (umask(027) < 0) {
+		slave_shutdown();
+		exit(1);
+	}
+
+	so = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (so < 0) {
+		slave_shutdown();
+		exit(1);
+	}
+
+	if (bind(so, (struct sockaddr *)&sun, sizeof(sun)) < 0) {
+		slave_shutdown();
+		exit(1);
+	}
+
+	pw = getpwnam(DEFAULT_PRIVILEGE);
+	if (pw == NULL) {
+		perror("getpwnam");
+		slave_shutdown();
+		exit(1);
+	}
+
+	/* chroot to the drop priv user home directory */
+	if (chroot(pw->pw_dir) < 0) {
+		perror("chroot");
+		slave_shutdown();
+		exit(1);
+	}
+
+	if (chdir("/") < 0) {
+		perror("chdir");
+		slave_shutdown();
+		exit(1);
+	}
+
+	if (setgroups(1, &pw->pw_gid) < 0) {
+		perror("setgroups");
+		slave_shutdown();
+		exit(1);
+	}
+
+#if defined __OpenBSD__ || defined __FreeBSD__
+	if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) < 0) {
+		perror("setresgid");
+		slave_shutdown();
+		exit(1);
+	}
+
+	if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) < 0) {
+		perror("setresuid");
+		slave_shutdown();
+		exit(1);
+	}
+
+#else
+	if (setgid(pw->pw_gid) < 0) {
+		perror("setgid");
+		slave_shutdown();
+		exit(1);
+	}
+	if (setuid(pw->pw_uid) < 0) {
+		perror("setuid");
+		slave_shutdown();
+		exit(1);
+	}
+#endif
+
+	listen(so, 5);
+
+#if __OpenBSD__
+	if (unveil(NULL, NULL) < 0) {
+		perror("unveil");
+		slave_shutdown();
+		exit(1);
+	}
+
+	if (pledge("stdio rpath wpath cpath unix proc", NULL) < 0) {
+		perror("pledge");
+		slave_shutdown();
+		exit(1);
+	}
+#endif
+
+
+	for (;;) {
+		FD_ZERO(&rset);
+		FD_SET(so, &rset);
+
+		sel = select(so + 1, &rset, NULL, NULL, NULL);
+		if (sel < 0) {
+			continue;
+		}	
+					
+		
+		if (FD_ISSET(so, &rset)) {
+			if ((nso = accept(so, (struct sockaddr*)&psun, &slen)) < 0)
+				continue;
+
+#if __OpenBSD__
+			if (getpeereid(nso, &uid, &gid) < 0) {
+				close(nso);
+				continue;
+			}
+#endif
+			tv.tv_sec = 2;
+			tv.tv_usec = 0;
+			if (setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+				close(nso);
+				continue;
+			}
+
+			len = recv(nso, buf, sizeof(buf), 0);
+			if (len < 0 || len < sizeof(struct dddcomm)) {
+				close(nso);
+				continue;
+			}
+
+			dc = (struct dddcomm *)&buf[0];		
+			if (dc->command == IMSG_RELOAD_MESSAGE || 
+				dc->command == IMSG_SHUTDOWN_MESSAGE) {
+				int idata;
+				
+				idata = 1;
+				imsg_compose(ibuf, dc->command, 
+					0, 0, -1, &idata, sizeof(idata));
+				msgbuf_write(&ibuf->w);
+				send(nso, buf, len, 0);
+				close(nso);
+				exit(0);
+			}
+			send(nso, buf, len, 0);
+			close(nso);
+		} /* FD_ISSET */
+	} /* for (;;) */
+	
+	/* NOTREACHED */
 }

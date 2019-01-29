@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.29 2019/01/10 13:43:56 pjp Exp $
+ * $Id: dddctl.c,v 1.30 2019/01/29 16:32:54 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -132,6 +132,7 @@ void 	init_keys(void);
 uint32_t getkeypid(char *);
 pid_t 	getdaemonpid(void);
 void	debug_bindump(const char *, int);
+int	command_socket(char *);
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 
@@ -6787,9 +6788,9 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
-		fprintf(stderr, "\tstart [configfile]\n");
-		fprintf(stderr, "\tstop\n");
-		fprintf(stderr, "\trestart\n");
+		fprintf(stderr, "\tstart [-f configfile] [-s socket]\n");
+		fprintf(stderr, "\tstop [-s socket]\n");
+		fprintf(stderr, "\trestart [-s socket]\n");
 		retval = 0;
 	}
 
@@ -6799,8 +6800,32 @@ usage(int argc, char *argv[])
 int	
 start(int argc, char *argv[])
 {
+	struct stat sb;
 	char buf[MAXPATHLEN];
 	char *path = NULL;
+	char *socketpath = SOCKPATH;
+	char *configfile = CONFFILE;
+	int ch;
+
+	while ((ch = getopt(argc, argv, "f:s:")) != -1) {
+		switch (ch) {
+		case 'f':
+			configfile = optarg;
+			break;
+		case 's':
+			socketpath = optarg;
+			break;
+		default:
+			usage(argc, argv);
+			exit(1);
+		}
+	}
+
+	if (lstat(socketpath, &sb) != -1) {
+		fprintf(stderr, "%s exists, not clobbering\n", socketpath);
+		exit(1);
+	}
+	
 
 	if (geteuid() != 0) {
 		fprintf(stderr, "must be root\n");
@@ -6826,66 +6851,146 @@ start(int argc, char *argv[])
 	
 	fprintf(stderr, "starting delphinusdnsd\n");
 
-	if (argc == 2) {
-		path = realpath(argv[1], buf);
-		if (path == NULL) {
-			perror("realpath");
-			exit(1);
-		}
+	path = realpath(configfile, buf);
+	if (path == NULL) {
+		perror("realpath");
+		exit(1);
+	}
 
-		if (execl("/usr/local/sbin/delphinusdnsd", "delphinusdnsd", "-f", path, NULL) < 0) {
-			perror("execl");
-			exit(1);	
-		}
-	} else {
-		if (execl("/usr/local/sbin/delphinusdnsd", "delphinusdnsd", NULL) < 0) {
-			perror("execl");
-			exit(1);	
-		}
+	if (execl("/usr/local/sbin/delphinusdnsd", "delphinusdnsd", "-f", path, 
+		"-s", socketpath, NULL) < 0) {
+		perror("execl");
+		exit(1);	
 	}
 
 	return 1;
 }
 
+int
+command_socket(char *sockpath)
+{
+	int so;
+	struct sockaddr_un sun;
+
+	so = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (so < 0) {
+		return -1;
+	}
+
+	memset(&sun, 0, sizeof(sun));
+	sun.sun_family = AF_UNIX;
+	if (strlcpy(sun.sun_path, sockpath, sizeof(sun.sun_path)) >= sizeof(sun.sun_path)) {
+		close(so);
+		return -1;
+	}
+	sun.sun_len = SUN_LEN(&sun);
+
+	if (connect(so, (struct sockaddr *)&sun, sizeof(sun)) < 0) {
+		close(so);
+		return -1;
+	}
+
+	return (so);
+}
+
 int	
 restart(int argc, char *argv[])
 {
-	pid_t pid;
+	char buf[512];
+	char *socketpath = SOCKPATH;
+	struct dddcomm *dc;
+	int so;
+	int ch, len;
+
+	while ((ch = getopt(argc, argv, "s:")) != -1) {
+		switch (ch) {
+		case 's':
+			socketpath = optarg;
+			break;
+		default:
+			usage(argc, argv);
+			exit(1);
+		}
+	}
 
 	if (geteuid() != 0) {
 		fprintf(stderr, "must be root\n");
 		exit(1);
 	}
+
 	fprintf(stderr, "restarting delphinusdnsd\n");
 
-	/* read the pid file */
-	pid = getdaemonpid();
-	
-	if (kill(pid, SIGHUP) < 0) {
-		fprintf(stderr, "unable to kill -HUP the master process\n");
+	if ((so = command_socket(socketpath)) < 0) {
+		perror(socketpath);
+		exit(1);
+	}		
+
+	memset(&buf, 0, sizeof(buf));
+	dc = (struct dddcomm *)&buf[0];
+	dc->command = IMSG_RELOAD_MESSAGE;
+	if (send(so, buf, sizeof(struct dddcomm), 0) < 0) {
+		perror("send");
+		close(so);
 		exit(1);
 	}
-	
-	return 0;
+	if ((len = recv(so, buf, sizeof(struct dddcomm), 0)) < 0) {
+		perror("recv");
+		close(so);
+		exit(1);
+	}
+	close(so);
+		
+	return (0);
 }
 
 int	
 stop(int argc, char *argv[])
 {
-	pid_t pid;
+	char buf[512];
+	char *socketpath = SOCKPATH;
+	struct dddcomm *dc;
+	int so;
+	int ch, len;
+
+	while ((ch = getopt(argc, argv, "s:")) != -1) {
+		switch (ch) {
+		case 's':
+			socketpath = optarg;
+			break;
+		default:
+			usage(argc, argv);
+			exit(1);
+		}
+	}
 
 	if (geteuid() != 0) {
 		fprintf(stderr, "must be root\n");
 		exit(1);
 	}
+
 	fprintf(stderr, "stopping delphinusdnsd\n");
-	pid = getdaemonpid();
-	
-	if (kill(pid, SIGTERM) < 0) {
-		fprintf(stderr, "unable to kill -TERM the master process\n");
+
+	if ((so = command_socket(socketpath)) < 0) {
+		perror(socketpath);
+		exit(1);
+	}		
+
+	memset(&buf, 0, sizeof(buf));
+	dc = (struct dddcomm *)&buf[0];
+	dc->command = IMSG_SHUTDOWN_MESSAGE;
+	if (send(so, buf, sizeof(struct dddcomm), 0) < 0) {
+		perror("send");
+		close(so);
 		exit(1);
 	}
-	return 0;
+	if ((len = recv(so, buf, sizeof(struct dddcomm), 0)) < 0) {
+		perror("recv");
+		close(so);
+		exit(1);
+	}
+	close(so);
+		
+	return (0);
 }
 
 int	

@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2005-2015 Peter J. Philipp
+ * Copyright (c) 2005-2019 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.9 2018/03/03 10:41:02 pjp Exp $
+ * $Id: ddd-db.h,v 1.10 2019/01/29 16:32:54 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -45,6 +45,8 @@
 #define IMSG_XFRFD_MESSAGE  3		/* forward message fd to axfr proc */
 #define IMSG_PARSE_MESSAGE  4		/* pass message to pledge parser */
 #define IMSG_PARSEREPLY_MESSAGE 5	/* return message from pledge parser */
+#define IMSG_SHUTDOWN_MESSAGE 6		/* shut the server down */
+#define IMSG_RELOAD_MESSAGE 7		/* reload/restart the server */
 
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2
@@ -443,6 +445,17 @@ struct logging {
 	char *logport;
 	u_int16_t logport2;
 	char *logpasswd;
+};
+
+
+/* ddd command socket */
+
+#define SOCKPATH	"/var/run/delphinusdnsd.sock"
+struct dddcomm {
+	int command;
+	union {
+		pid_t rpid;
+	} ret;
 };
 
 

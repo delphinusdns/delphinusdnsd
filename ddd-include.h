@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2005-2015 Peter J. Philipp
+ * Copyright (c) 2005-2019 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-include.h,v 1.8 2017/10/26 15:49:29 pjp Exp $
+ * $Id: ddd-include.h,v 1.9 2019/01/29 16:32:54 pjp Exp $
  */
 
 #ifndef _INCLUDES_H
@@ -42,6 +42,7 @@
 #include <sys/queue.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
+#include <sys/un.h>
 
 #include <net/if.h>
 
@@ -93,16 +94,6 @@
 
 #ifndef NTOHS
 #include "endian.h"
-#endif
-
-#if !defined __OpenBSD__ && !defined __NetBSD__
-struct ip6_hdr_pseudo {
-        struct in6_addr ip6ph_src;
-        struct in6_addr ip6ph_dst;
-        u_int32_t       ip6ph_len;
-        u_int8_t        ip6ph_zero[3];
-        u_int8_t        ip6ph_nxt;
-} __packed;
 #endif
 
 #endif
