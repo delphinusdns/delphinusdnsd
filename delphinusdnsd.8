@@ -1,4 +1,4 @@
-.\" Copyright (c) 2005-2017 Peter J. Philipp
+.\" Copyright (c) 2005-2019 Peter J. Philipp
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 27, 2017
+.Dd January 29, 2019
 .Dt DELPHINUSDNSD 8
 .Os 
 .Sh NAME
@@ -38,6 +38,7 @@
 .Op Fl l
 .Op Fl n Ar instances
 .Op Fl p Ar port
+.Op Fl s Ar path
 .Op Fl v
 .Sh DESCRIPTION
 .Nm
@@ -92,6 +93,10 @@ should listen on.  This can be useful when using
 .Nm 
 with 
 .Xr pf 4 
+.It Fl s
+.Ar path
+Specifies the socket path to use with 
+.Xr dddctl 8 .
 .It Fl v
 Be more verbose in debug mode.  This shows configfile parsing logic.
 .El
