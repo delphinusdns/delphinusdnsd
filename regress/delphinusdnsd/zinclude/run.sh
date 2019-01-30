@@ -11,11 +11,11 @@ if [ $? -eq 1 ]; then
 	exit 1
 fi
 
-(delphinusdnsd  -dvvv -l -f `pwd`/$i > output  2>&1 ) &
+(delphinusdnsd  -dvvv -l -f `pwd`/$i -s `pwd`/control.sock > output  2>&1 ) &
 
-PID=$!
 sleep 3
-pkill -s 0 -U 0 delphinusdnsd
+dddctl stop -s `pwd`/control.sock
+sleep 3
 
 
 #
