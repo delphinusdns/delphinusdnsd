@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.47 2019/01/29 16:32:54 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.48 2019/01/30 07:36:50 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -2394,7 +2394,7 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 		exit(1);
 	}
 			
-	setproctitle("delphinusdnsd master");
+	setproctitle("master");
 
 	pid = getpid();
 
@@ -3396,7 +3396,7 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	uid_t uid;
 	gid_t gid;
 
-	setproctitle("delphinusdnsd unix socket");
+	setproctitle("unix controlling socket");
 
 	memset(&sun, 0, sizeof(sun));
 	sun.sun_family = AF_UNIX;
@@ -3406,7 +3406,8 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	}
 	sun.sun_len = SUN_LEN(&sun);
 
-	if (umask(027) < 0) {
+	/* only root, 0100 == nonexecute */
+	if (umask(0177) < 0) {
 		slave_shutdown();
 		exit(1);
 	}
