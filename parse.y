@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017 Peter J. Philipp.  All rights reserved.
+ * Copyright (c) 2014-2019 Peter J. Philipp.  All rights reserved.
  * Copyright (c) 2008 Gilles Chehade <gilles@poolp.org>
  * Copyright (c) 2008 Pierre-Yves Ritschard <pyr@openbsd.org>
  * Copyright (c) 2002, 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.52 2018/07/14 06:12:53 pjp Exp $
+ * $Id: parse.y,v 1.53 2019/02/04 19:04:52 pjp Exp $
  */
 
 %{
@@ -72,21 +72,33 @@ extern uint8_t vslen;
 
 
 TAILQ_HEAD(files, file)          files = TAILQ_HEAD_INITIALIZER(files);
+TAILQ_HEAD(rzonefiles, file)	 rzonefiles = TAILQ_HEAD_INITIALIZER(rzonefiles);
+
 static struct file {
-        TAILQ_ENTRY(file)        file_entry;
+        TAILQ_ENTRY(file)       file_entry;
         FILE                    *stream;
         char                    *name;
-        int                      lineno;
-        int                      errors;
+        int                     lineno;
+        int                     errors;
 	int			descend;
 #define DESCEND_NO		0
 #define DESCEND_YES		1
-} *file, *topfile;
+} *file, *topfile, *rzonefile;
+
+SLIST_HEAD(rzones, rzone)	rzones = SLIST_HEAD_INITIALIZER(rzones);
+struct rzone {
+	SLIST_ENTRY(rzone)	rzone_entry;
+	char 			*zonename;
+	u_int16_t		masterport;
+	char			*master;
+	char			*tsigkey;
+	char 			*filename;
+} *rz, *rz0;
 
 #define STATE_IP 1
 #define STATE_ZONE 2
 
-#define DELPHINUSVERSION	8 
+#define DELPHINUSVERSION	9
 
 #define CONFIG_START            0x1
 #define CONFIG_VERSION          0x2
@@ -99,6 +111,7 @@ static struct file {
 #define CONFIG_AXFRFOR          0x100
 #define CONFIG_AXFRPORT         0x200
 #define CONFIG_ZINCLUDE		0x400
+#define CONFIG_RZONE		0x800
 
 typedef struct {
 	union {
@@ -163,11 +176,14 @@ struct tab * 	lookup(struct tab *, char *);
 int             lungetc(int);
 int 		parse_file(ddDB *, char *);
 struct file     *pushfile(const char *, int, int);
+struct file     *pushfile_rzone(const char *, int, int);
 int             popfile(void);
 struct rrtab 	*rrlookup(char *);
 void 		set_record(struct domain *, int, char *, int);
 static int 	temp_inet_net_pton_ipv6(const char *, void *, size_t);
 int 		yyparse(void);
+static struct rzone * add_rzone(void);
+static int	pull_remote_zone(struct rzone *);
 
 
 struct rrtab {
@@ -203,10 +219,10 @@ struct rrtab {
 %}
 
 
-%token VERSION OBRACE EBRACE REGION AXFRFOR 
+%token VERSION OBRACE EBRACE REGION RZONE AXFRFOR 
 %token DOT COLON TEXT WOF INCLUDE ZONE COMMA CRLF 
 %token ERROR AXFRPORT LOGGING OPTIONS FILTER NOTIFY
-%token WHITELIST ZINCLUDE
+%token WHITELIST ZINCLUDE MASTER MASTERPORT
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -229,6 +245,7 @@ cmd_list:
 
 cmd	:  	
 	version 
+	| rzone
 	| axfrport
 	| include
 	| zinclude
@@ -352,6 +369,127 @@ quotedfilename:
 	{
 		if (debug)
 			printf("quotedfilename is %s\n", $$);
+	}
+	;
+
+
+rzone:
+	RZONE rzonelabel rzonecontent {
+		struct file     *nfile;
+		struct rzone *lrz;
+		struct stat sb;
+
+		/* we must pull the last zone added */
+		lrz = SLIST_FIRST(&rzones);
+		if (lrz == NULL || lrz->filename == NULL) {
+			fprintf(stderr, "incomplete rzone, missing filename\n");
+			return -1;
+		}
+		if (lstat(lrz->filename, &sb) < 0 || sb.st_size == 0) {
+			if (pull_remote_zone(lrz) < 0) {
+				dolog(LOG_ERR, "can't pull zone %s into filename %s, stop.\n", lrz->zonename, lrz->filename);
+				return -1;
+			}
+
+		}
+
+		if ((nfile = pushfile_rzone(lrz->filename, 0, DESCEND_YES)) == NULL) {
+			fprintf(stderr, "failed to include rzone file %s\n", lrz->filename);
+			return (-1);
+		}
+
+		rzonefile = nfile;
+
+		(void)add_rzone();
+	}
+	;
+
+rzonelabel:
+	QUOTEDSTRING
+	;
+
+rzonecontent:
+	OBRACE rzonestatements EBRACE CRLF
+	| OBRACE CRLF rzonestatements EBRACE CRLF
+	;
+
+rzonestatements 	:  		
+				rzonestatements rzonestatement 
+				| rzonestatement 
+				;
+
+rzonestatement:
+	
+	MASTERPORT NUMBER SEMICOLON CRLF
+	{
+		rz = SLIST_FIRST(&rzones);
+		if (rz == NULL) {
+				return -1;
+		}
+
+		rz->masterport = $2 & 0xffff;
+
+		if (debug)
+			printf("at rzone %x, set masterport to %d\n", (unsigned int)rz, rz->masterport);
+	}
+	|
+	MASTER ipcidr SEMICOLON CRLF
+	{	
+		char *p;
+
+		rz = SLIST_FIRST(&rzones);
+		if (rz == NULL) {
+				return -1;
+		}
+	
+		p = strdup($2);
+		if (p == NULL) {
+			perror("strdup");
+			return -1;
+		}
+
+		rz->master = p;
+
+		if (debug)
+			printf("at rzone %x, added master server at %s\n", (unsigned int)rz,
+				p);
+
+		free($2);
+	}
+	|
+	STRING QUOTEDSTRING SEMICOLON CRLF
+	{
+		char *p;
+
+		rz = SLIST_FIRST(&rzones);
+		if (rz == NULL) {
+			fprintf(stderr, "SLIST_FIRST failed\n");
+			return -1;
+		}
+
+		p = strdup($2);
+		if (p == NULL) {
+			perror("strdup");
+			return -1;
+		}
+
+		if (strcmp($1, "zonename") == 0) {
+			rz->zonename = p;
+			if (debug)
+				printf("at rzone %x, added zonename of %s\n", (unsigned int)rz, p);
+		} else if (strcmp($1, "filename") == 0) {
+			rz->filename = p;
+			if (debug)
+				printf("at rzone %x, added filename of %s\n", (unsigned int)rz, p);
+
+		} else if (strcmp($1, "tsigkey") == 0) {
+			rz->tsigkey = p;
+			if (debug)
+				printf("at rzone %x, added tsigkey of %s\n", (unsigned int)rz, p);
+		}
+
+		free($1);
+		free($2);
 	}
 	;
 
@@ -791,7 +929,7 @@ optionsstatement:
 				}	
 				ratelimit = 1;
 				ratelimit_packets_per_second = $2;
-				dolog(LOG_DEBUG, "ratelimiting to %d packets per second", ratelimit_packets_per_second);
+				dolog(LOG_DEBUG, "ratelimiting to %d packets per second\n", ratelimit_packets_per_second);
 			}
 			
 		}
@@ -1267,8 +1405,11 @@ struct tab cmdtab[] = {
 	{ "filter", FILTER, STATE_IP },
 	{ "include", INCLUDE, 0 },
 	{ "logging", LOGGING, 0 },
+	{ "master", MASTER, 0 },
+	{ "masterport", MASTERPORT, 0 },
 	{ "options", OPTIONS, 0 },
 	{ "region", REGION, STATE_IP },
+	{ "rzone", RZONE, 0 },
 	{ "wildcard-only-for", WOF, STATE_IP },
 	{ "version", VERSION, 0 },
 	{ "zinclude", ZINCLUDE, 0 },
@@ -1295,13 +1436,14 @@ yywrap()
 int
 parse_file(ddDB *db, char *filename)
 {
-	int errors;
+	int errors = 0;
 
 	mydb = db;
 
 	memset(&logging, 0, sizeof(struct logging));
 	logging.active = 0;
 
+	(void)add_rzone();
 
         if ((file = pushfile(filename, 0, DESCEND_YES)) == NULL) {
                 return (-1);
@@ -1309,12 +1451,28 @@ parse_file(ddDB *db, char *filename)
 
         topfile = file;
 
+
 	if (yyparse() < 0) {
-		dolog(LOG_ERR, "error: %s line: %d\n", file->name, file->lineno);
+		dolog(LOG_ERR, "error %d: %s line: %d\n", errors, file->name, file->lineno);
 		return (-1);
 	}
         errors = file->errors;
         popfile();
+
+
+	if (!TAILQ_EMPTY(&rzonefiles)) {
+		/* handle the rzone files */
+		topfile = file = rzonefile;
+
+		if (yyparse() < 0) {
+			dolog(LOG_ERR, "error: %s line: %d\n", file->name, file->lineno);
+			return (-1);
+		}
+
+		errors = file->errors;
+		popfile();
+	}
+
 
 #if DEBUG
 	dolog(LOG_INFO, "configuration file read\n");
@@ -1339,7 +1497,7 @@ yylex(void)
 		c = lgetc(0);
 	} while ((c == ' ') || (c == '\t'));
 	
-	if (c == EOF)	
+	if (c == EOF)
 		return 0;
 
 	if (c == '\n') {
@@ -3663,6 +3821,43 @@ set_record(struct domain *sdomain, int rs, char *converted_name, int converted_n
 	return;
 }
 	
+struct file *
+pushfile_rzone(const char *name, int secret, int descend)
+{
+	struct stat sb;
+        struct file     *nfile;
+	int fd;
+
+        if ((nfile = calloc(1, sizeof(struct file))) == NULL) {
+                dolog(LOG_INFO, "warn: malloc\n");
+                return (NULL);
+        }
+        if ((nfile->name = strdup(name)) == NULL) {
+                dolog(LOG_INFO, "warn: malloc\n");
+                free(nfile);
+                return (NULL);
+        }
+        if ((nfile->stream = fopen(nfile->name, "r")) == NULL) {
+                dolog(LOG_INFO, "warn: %s\n", nfile->name);
+                free(nfile->name);
+                free(nfile);
+		return (NULL);
+        }
+
+	fd = fileno(nfile->stream);
+	if (fstat(fd, &sb) < 0) {
+		dolog(LOG_INFO, "warn: %s\n", strerror(errno));
+	}
+
+	/* get the highest time of all included files */
+	if (time_changed < sb.st_ctime)
+		time_changed = (time_t)sb.st_ctime; /* ufs1 is only 32 bits */
+
+        nfile->lineno = 1;
+	nfile->descend = descend;
+        TAILQ_INSERT_TAIL(&rzonefiles, nfile, file_entry);
+        return (nfile);
+}
 
 struct file *
 pushfile(const char *name, int secret, int descend)
@@ -3708,7 +3903,6 @@ char    *parsebuf;
 int      parseindex;
 char     pushback_buffer[MAXPUSHBACK];
 int      pushback_index = 0;
-
 
 int
 lgetc(int quotec)
@@ -3763,12 +3957,12 @@ popfile(void)
         return (file ? 0 : EOF);
 }
 
-
 int
 lungetc(int c)
 {
-        if (c == EOF)
+        if (c == EOF) 
                 return (EOF);
+
         if (parsebuf) {
                 parseindex--;
                 if (parseindex >= 0)
@@ -3981,4 +4175,42 @@ hex2bin(char *input, int ilen, char *output)
 	}
 	
 	return (ret);	
+}
+
+/*
+ * ADD_RZONE - add a stub (template) remote zone 
+ */
+
+static struct rzone *
+add_rzone(void)
+{	
+	struct rzone *lrz;
+
+	lrz = (struct rzone *)calloc(1, sizeof(struct rzone));
+	if (lrz == NULL) {
+		perror("calloc");
+		return NULL;
+	}
+
+	lrz->zonename = NULL;
+	lrz->masterport = 53;
+	lrz->master = NULL;
+	lrz->tsigkey = NULL;
+	lrz->filename = NULL;
+
+	SLIST_INSERT_HEAD(&rzones, lrz, rzone_entry);
+	if (debug)
+		printf("added rzone at 0x%x\n", (unsigned int)lrz);
+	
+	return (lrz);
+}
+
+static int
+pull_remote_zone(struct rzone *lrz)
+{
+	if (rename("/etc/delphinusdns/sample.zone", lrz->filename) < 0) {
+		perror("rename");
+		return -1;
+	}
+	return 0;
 }
