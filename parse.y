@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.53 2019/02/04 19:04:52 pjp Exp $
+ * $Id: parse.y,v 1.54 2019/02/04 19:21:35 pjp Exp $
  */
 
 %{
@@ -97,6 +97,9 @@ struct rzone {
 
 #define STATE_IP 1
 #define STATE_ZONE 2
+
+#define NO_RZONEFILE	0
+#define RZONEFILE	1
 
 #define DELPHINUSVERSION	9
 
@@ -175,8 +178,7 @@ int             lgetc(int);
 struct tab * 	lookup(struct tab *, char *);
 int             lungetc(int);
 int 		parse_file(ddDB *, char *);
-struct file     *pushfile(const char *, int, int);
-struct file     *pushfile_rzone(const char *, int, int);
+struct file     *pushfile(const char *, int, int, int);
 int             popfile(void);
 struct rrtab 	*rrlookup(char *);
 void 		set_record(struct domain *, int, char *, int);
@@ -322,7 +324,7 @@ includes:
 		}
 
 		if (file->descend == DESCEND_YES) {
-			if ((nfile = pushfile($2, 0, DESCEND_YES)) == NULL) {
+			if ((nfile = pushfile($2, 0, DESCEND_YES, NO_RZONEFILE)) == NULL) {
 				fprintf(stderr, "failed to include file %s\n", $2);
 				free($2);
 				return (-1);
@@ -350,7 +352,7 @@ zincludes:
 		}
 
 		if (file->descend == DESCEND_YES) {
-			if ((nfile = pushfile($2, 0, DESCEND_NO)) == NULL) {
+			if ((nfile = pushfile($2, 0, DESCEND_NO, NO_RZONEFILE)) == NULL) {
 				fprintf(stderr, "failed to include file %s\n", $2);
 				free($2);
 				return (-1);
@@ -393,7 +395,7 @@ rzone:
 
 		}
 
-		if ((nfile = pushfile_rzone(lrz->filename, 0, DESCEND_YES)) == NULL) {
+		if ((nfile = pushfile(lrz->filename, 0, DESCEND_YES, RZONEFILE)) == NULL) {
 			fprintf(stderr, "failed to include rzone file %s\n", lrz->filename);
 			return (-1);
 		}
@@ -1445,7 +1447,7 @@ parse_file(ddDB *db, char *filename)
 
 	(void)add_rzone();
 
-        if ((file = pushfile(filename, 0, DESCEND_YES)) == NULL) {
+        if ((file = pushfile(filename, 0, DESCEND_YES, NO_RZONEFILE)) == NULL) {
                 return (-1);
         }
 
@@ -3822,7 +3824,7 @@ set_record(struct domain *sdomain, int rs, char *converted_name, int converted_n
 }
 	
 struct file *
-pushfile_rzone(const char *name, int secret, int descend)
+pushfile(const char *name, int secret, int descend, int rzone)
 {
 	struct stat sb;
         struct file     *nfile;
@@ -3855,45 +3857,12 @@ pushfile_rzone(const char *name, int secret, int descend)
 
         nfile->lineno = 1;
 	nfile->descend = descend;
-        TAILQ_INSERT_TAIL(&rzonefiles, nfile, file_entry);
-        return (nfile);
-}
 
-struct file *
-pushfile(const char *name, int secret, int descend)
-{
-	struct stat sb;
-        struct file     *nfile;
-	int fd;
+	if (rzone) 
+        	TAILQ_INSERT_TAIL(&rzonefiles, nfile, file_entry);
+	else
+        	TAILQ_INSERT_TAIL(&files, nfile, file_entry);
 
-        if ((nfile = calloc(1, sizeof(struct file))) == NULL) {
-                dolog(LOG_INFO, "warn: malloc\n");
-                return (NULL);
-        }
-        if ((nfile->name = strdup(name)) == NULL) {
-                dolog(LOG_INFO, "warn: malloc\n");
-                free(nfile);
-                return (NULL);
-        }
-        if ((nfile->stream = fopen(nfile->name, "r")) == NULL) {
-                dolog(LOG_INFO, "warn: %s\n", nfile->name);
-                free(nfile->name);
-                free(nfile);
-		return (NULL);
-        }
-
-	fd = fileno(nfile->stream);
-	if (fstat(fd, &sb) < 0) {
-		dolog(LOG_INFO, "warn: %s\n", strerror(errno));
-	}
-
-	/* get the highest time of all included files */
-	if (time_changed < sb.st_ctime)
-		time_changed = (time_t)sb.st_ctime; /* ufs1 is only 32 bits */
-
-        nfile->lineno = 1;
-	nfile->descend = descend;
-        TAILQ_INSERT_TAIL(&files, nfile, file_entry);
         return (nfile);
 }
 
