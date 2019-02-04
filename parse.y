@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.54 2019/02/04 19:21:35 pjp Exp $
+ * $Id: parse.y,v 1.55 2019/02/04 19:27:34 pjp Exp $
  */
 
 %{
@@ -395,12 +395,14 @@ rzone:
 
 		}
 
-		if ((nfile = pushfile(lrz->filename, 0, DESCEND_YES, RZONEFILE)) == NULL) {
-			fprintf(stderr, "failed to include rzone file %s\n", lrz->filename);
-			return (-1);
-		}
+		if (file->descend == DESCEND_YES) {
+			if ((nfile = pushfile(lrz->filename, 0, DESCEND_YES, RZONEFILE)) == NULL) {
+				fprintf(stderr, "failed to include rzone file %s\n", lrz->filename);
+				return (-1);
+			}
 
-		rzonefile = nfile;
+			rzonefile = nfile;
+		}
 
 		(void)add_rzone();
 	}
