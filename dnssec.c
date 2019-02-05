@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dnssec.c,v 1.19 2018/10/19 08:24:48 pjp Exp $
+ * $Id: dnssec.c,v 1.20 2019/02/05 09:48:31 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -526,6 +526,9 @@ convert_name(char *name, int namelen)
 	char *p, *p0;
 	int plen;
 	int i;
+
+	if (namelen == 0)
+		return NULL;
 
 	ret = calloc(namelen + 1, 1);
 	if (ret == NULL) {
