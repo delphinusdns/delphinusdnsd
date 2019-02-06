@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.30 2019/01/29 16:32:54 pjp Exp $
+ * $Id: dddctl.c,v 1.31 2019/02/06 18:59:30 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -6482,7 +6482,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6500,7 +6500,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6520,7 +6520,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6539,7 +6539,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6557,7 +6557,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6576,7 +6576,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6595,7 +6595,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6613,7 +6613,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6631,7 +6631,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone,sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6667,7 +6667,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6685,7 +6685,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6705,7 +6705,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6723,7 +6723,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -6741,7 +6741,7 @@ print_sd(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(sdomain->zone, sdomain->zonelen), 
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7559,7 +7559,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl,
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7577,7 +7577,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7597,7 +7597,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7616,7 +7616,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7634,7 +7634,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN rrsig (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7653,7 +7653,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7672,7 +7672,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7690,7 +7690,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7708,7 +7708,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone,sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7744,7 +7744,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7762,7 +7762,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7782,7 +7782,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7800,7 +7800,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
@@ -7818,7 +7818,7 @@ print_sd_bind(FILE *of, struct domain *sdomain)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(sdomain->zone, sdomain->zonelen), 
-				sdomain->ttl[INTERNAL_TYPE_RRSIG],
+				rss->original_ttl, 
 				get_dns_type(rss->type_covered, 0), 
 				rss->algorithm, rss->labels,
 				rss->original_ttl, 
