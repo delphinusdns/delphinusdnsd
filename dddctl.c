@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.35 2019/02/07 18:53:12 pjp Exp $
+ * $Id: dddctl.c,v 1.36 2019/02/07 19:08:18 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -135,7 +135,7 @@ pid_t 	getdaemonpid(void);
 void	debug_bindump(const char *, int);
 int	command_socket(char *);
 int 	connect_server(char *, int, u_int32_t);
-int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t);
+int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *, u_int16_t);
 int	lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t);
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -6990,7 +6990,7 @@ dig(int argc, char *argv[])
 		}
 				
 	} else {
-		if (lookup_name(f, so, domainname, type, &mysoa, format) < 0) {
+		if (lookup_name(f, so, domainname, type, &mysoa, format, nameserver, port) < 0) {
 			/* XXX maybe a packet dump here? */
 			exit(1);
 		}
@@ -7246,7 +7246,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 
 int
-lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mysoa, u_int32_t format)
+lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mysoa, u_int32_t format, char *nameserver, u_int16_t port)
 {
 	int len, i, answers;
 	int numansw, numaddi;
@@ -7391,9 +7391,17 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 		return -1;
 	}
 
-	if (htons(rwh->dh.query) & DNS_TRUNC) {
-		fprintf(stderr, "received a truncated answer, suggest retrying with TCP\n");
-		return -1;
+	if (!(format & TCP_FORMAT) && (htons(rwh->dh.query) & DNS_TRUNC)) {
+		fprintf(f,  ";; received a truncated answer, retrying with TCP\n");
+		format |= TCP_FORMAT;
+		close(so);
+		
+		so = connect_server(nameserver, port, format);
+		if (so < 0) {
+			exit(1);
+		}
+
+		return (lookup_name(f, so, zonename, myrrtype, mysoa, format, nameserver, port));
 	}
 	
 	numansw = ntohs(rwh->dh.answer);
