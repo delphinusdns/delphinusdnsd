@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.48 2019/01/30 07:36:50 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.49 2019/02/07 11:16:03 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -95,12 +95,12 @@ extern char 	*dns_label(char *, int *);
 extern void 	slave_shutdown(void);
 extern int 	get_record_size(ddDB *, char *, int);
 extern void *	find_substruct(struct domain *, u_int16_t);
+extern struct question		*build_question(char *, int, int);
+extern int			free_question(struct question *);
 
-struct question		*build_question(char *, int, int);
 struct question		*convert_question(struct parsequestion *);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct domain *, struct domain *, u_int8_t, int, int, struct recurses *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
-int			free_question(struct question *);
 struct domain * 	get_soa(ddDB *, struct question *);
 int			lookup_type(int);
 void			mainloop(struct cfg *, struct imsgbuf **);
@@ -1006,237 +1006,6 @@ main(int argc, char *argv[], char *environ[])
 }
 
 
-/*
- * BUILD_QUESTION - fill the question structure with the DNS query.
- */
-
-struct question *
-build_question(char *buf, int len, int additional) 
-{
-	u_int i;
-	u_int namelen = 0;
-	u_int16_t *qtype, *qclass;
-	u_int32_t ttl;
-	int num_label;
-
-	char *p, *end_name = NULL;
-
-	struct dns_optrr *opt = NULL;
-	struct question *q = NULL;
-	struct dns_header *hdr = (struct dns_header *)buf;
-
-	/* find the end of name */
-	for (i = sizeof(struct dns_header); i < len; i++) {
-		/* XXX */
-		if (buf[i] == 0) {
-			end_name = &buf[i];			
-			break;
-		}
-	}
-
-	/* 
-	 * implies i >= len , because end_name still points to NULL and not
-	 * &buf[i]
-	 */
-
-	if (end_name == NULL) {
-		dolog(LOG_INFO, "query name is not null terminated\n");
-		return NULL;
-	}
-
-	/* parse the size of the name */
-	for (i = sizeof(struct dns_header), num_label = 0; i < len && &buf[i] < end_name;) {
-		u_int labellen;
-
-		++num_label;
-		
-		labellen = (u_int)buf[i];	
-
-		/* 
-		 * do some checks on the label, if it's 0 or over 63 it's
-		 * illegal, also if it reaches beyond the entire name it's
-		 * also illegal.
-		 */
-		if (labellen == 0) {
-			dolog(LOG_INFO, "illegal label len (0)\n");
-			return NULL;
-		}
-		if (labellen > DNS_MAXLABEL) {
-			dolog(LOG_INFO, "illegal label len (> 63)\n");
-			return NULL;
-		}
-		if (labellen > (end_name - &buf[i])) {
-			dolog(LOG_INFO, "label len extends beyond name\n");
-			return NULL;
-		}
-
-		i += (labellen + 1);
-		namelen += labellen;
-	}
-	
-	if (&buf[i] != end_name || i >= len) {
-		dolog(LOG_INFO, "query name is maliciously malformed\n");
-		return NULL;
-	}
-
-	if (i > DNS_MAXNAME) {
-		dolog(LOG_INFO, "query name is too long (%u)\n", i);
-		return NULL;
-	}
-
-	
-	/* check if there is space for qtype and qclass */
-	if (len < ((end_name - &buf[0]) + (2 * sizeof(u_int16_t)))) {
-		dolog(LOG_INFO, "question rr is truncated\n");
-		return NULL;
-	}
-		
-	
-	q = (void *)calloc(1, sizeof(struct question));
-	if (q == NULL) {
-		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-		return NULL;
-	}
-	q->hdr = (void *)calloc(1, sizeof(struct dns_question_hdr));
-	if (q->hdr == NULL) {
-		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-		free(q);
-		return NULL;
-	}
-	q->hdr->namelen = (end_name - &buf[sizeof(struct dns_header)]) + 1;	/* XXX */
-	q->hdr->name = (void *) calloc(1, q->hdr->namelen);
-	if (q->hdr->name == NULL) {
-		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-		free(q->hdr);
-		free(q);
-		return NULL;
-	}
-	q->converted_name = (void *)calloc(1, namelen + num_label + 2);
-	if (q->converted_name == NULL) {
-		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));	
-		free(q->hdr->name);
-		free(q->hdr);
-		free(q);
-		return NULL;
-	}
-
-	p = q->converted_name;
-
-	/* 
-	 * parse the name again this time filling the labels 
-	 * XXX this is expensive going over the buffer twice
-	 */
-	for (i = sizeof(struct dns_header); i < len && &buf[i] < end_name;) {
-		u_int labelend;
-
-
-		/* check for compression */
-		if ((buf[i] & 0xc0) == 0xc0) {
-			dolog(LOG_INFO, "question has compressed name, drop\n");
-			free_question(q);
-			return NULL;	/* XXX should say error */
-		}
-
-		labelend = (u_int)buf[i] + 1 + i; /* i = offset, plus contents of buf[i], + 1 */
-
-		/* 
- 		 * i is reused here to count every character, this is not 
-		 * a bug!
-		 */
-
-		for (i++; i < labelend; i++) {
-			int c0; 
-
-			c0 = buf[i];
-			*p++ = tolower(c0);
-		}
-
-		*p++ = '.';
-	}
-
-	/* XXX */
-	if (&buf[sizeof(struct dns_header)] == end_name) 
-		*p++ = '.';
-
-	*p = '\0';
-
-	/* check for edns0 opt rr */
-	do {
-		/* if we don't have an additional section, break */
-		if (additional != 1)
-			break;
-
-		i += (2 * sizeof(u_int16_t)) + 1;
-
-		/* check that the minimum optrr fits */
-		/* 10 */
-		if (i + sizeof(struct dns_optrr) > len)
-			break;
-
-		opt = (struct dns_optrr *)&buf[i];
-		if (opt->name[0] != 0)
-			break;
-
-		if (ntohs(opt->type) != DNS_TYPE_OPT)
-			break;
-
-		/* RFC 3225 */
-		ttl = ntohl(opt->ttl);
-		if (((ttl >> 16) & 0xff) != 0)
-			q->ednsversion = (ttl >> 16) & 0xff;
-
-		q->edns0len = ntohs(opt->class);
-		if (q->edns0len < 512)
-			q->edns0len = 512;	/* RFC 6891 - page 10 */
-
-		if (ttl & DNSSEC_OK)
-			q->dnssecok = 1;
-	} while (0);
-
-	/* fill our name into the dns header struct */
-		
-	memcpy(q->hdr->name, &buf[sizeof(struct dns_header)], q->hdr->namelen);
-	
-	/* make it lower case */
-
-	for (i = 0; i < q->hdr->namelen; i++) {
-		int c0;
-
-		c0 = q->hdr->name[i];
-		if (isalpha(c0)) {
-			q->hdr->name[i] = tolower(c0);
-		}
-	}
-
-	/* parse type and class from the question */
-
-	qtype = (u_int16_t *)(end_name + 1);
-	qclass = (u_int16_t *)(end_name + sizeof(u_int16_t) + 1);		
-
-	memcpy((char *)&q->hdr->qtype, (char *)qtype, sizeof(u_int16_t));
-	memcpy((char *)&q->hdr->qclass, (char *)qclass, sizeof(u_int16_t));
-
-	/* make note of whether recursion is desired */
-	q->rd = ((ntohs(hdr->query) & DNS_RECURSE) == DNS_RECURSE);
-
-	return (q);
-}
-
-/*
- * FREE_QUESTION - free a question struct
- *
- */
-
-int
-free_question(struct question *q)
-{
-	free(q->hdr->name);
-	free(q->hdr);
-	free(q->converted_name);
-	free(q);
-	
-	return 0;
-}
 
 /*
  * COMPRESS_LABEL - 	compress a DNS name, must be passed an entire reply

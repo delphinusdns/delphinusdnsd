@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.56 2019/02/04 19:35:44 pjp Exp $
+ * $Id: parse.y,v 1.57 2019/02/07 11:16:03 pjp Exp $
  */
 
 %{
@@ -30,6 +30,7 @@
 #include "ddd-db.h"
 
 
+extern struct rrtab 	*rrlookup(char *);
 extern int	base32hex_decode(u_char *, u_char *);
 extern void 	dolog(int, char *, ...);
 extern char 	*dns_label(char *, int *);
@@ -180,42 +181,11 @@ int             lungetc(int);
 int 		parse_file(ddDB *, char *);
 struct file     *pushfile(const char *, int, int, int);
 int             popfile(void);
-struct rrtab 	*rrlookup(char *);
 void 		set_record(struct domain *, int, char *, int);
 static int 	temp_inet_net_pton_ipv6(const char *, void *, size_t);
 int 		yyparse(void);
 static struct rzone * add_rzone(void);
 static int	pull_remote_zone(struct rzone *);
-
-
-struct rrtab {
-        char *name;
-        u_int16_t type;
-	int16_t internal_type;
-} myrrtab[] =  { 
- { "a",         DNS_TYPE_A, 		INTERNAL_TYPE_A } ,
- { "aaaa",      DNS_TYPE_AAAA,		INTERNAL_TYPE_AAAA },
- { "cname",     DNS_TYPE_CNAME, 	INTERNAL_TYPE_CNAME },
- { "delegate",  DNS_TYPE_DELEGATE, 	INTERNAL_TYPE_NS },
- { "dnskey", 	DNS_TYPE_DNSKEY, 	INTERNAL_TYPE_DNSKEY },
- { "ds", 	DNS_TYPE_DS, 		INTERNAL_TYPE_DS },
- { "hint",      DNS_TYPE_HINT,		INTERNAL_TYPE_NS }, 
- { "mx",        DNS_TYPE_MX, 		INTERNAL_TYPE_MX },
- { "naptr", 	DNS_TYPE_NAPTR,		INTERNAL_TYPE_NAPTR },
- { "ns",        DNS_TYPE_NS,		INTERNAL_TYPE_NS },
- { "nsec", 	DNS_TYPE_NSEC, 		INTERNAL_TYPE_NSEC },
- { "nsec3", 	DNS_TYPE_NSEC3,		INTERNAL_TYPE_NSEC3 },
- { "nsec3param", DNS_TYPE_NSEC3PARAM,	INTERNAL_TYPE_NSEC3PARAM },
- { "ptr",       DNS_TYPE_PTR,		INTERNAL_TYPE_PTR },
- { "rrsig", 	DNS_TYPE_RRSIG, 	-1 },
- { "soa",       DNS_TYPE_SOA, 		INTERNAL_TYPE_SOA },
- { "srv",       DNS_TYPE_SRV, 		INTERNAL_TYPE_SRV },
- { "sshfp", 	DNS_TYPE_SSHFP,		INTERNAL_TYPE_SSHFP },
- { "tlsa", 	DNS_TYPE_TLSA,		INTERNAL_TYPE_TLSA },
- { "txt",       DNS_TYPE_TXT,		INTERNAL_TYPE_TXT },
-};
-
-
 
 
 %}
@@ -1792,26 +1762,6 @@ get_string(char *buf, int n)
 	
 	return (1);
 }
-
-/* probably Copyright 2012 Kenneth R Westerback <krw@openbsd.org> */
-
-int
-kw_cmp(const void *k, const void *e)
-{
-        return (strcasecmp(k, ((const struct rrtab *)e)->name));
-}
-
-
-struct rrtab * 
-rrlookup(char *keyword)
-{
-	static struct rrtab *p; 
-
-	p = bsearch(keyword, myrrtab, sizeof(myrrtab)/sizeof(myrrtab[0]), 
-		sizeof(myrrtab[0]), kw_cmp);
-	
-	return (p);
-}	
 
 struct tab *
 lookup(struct tab *cmdtab, char *keyword)

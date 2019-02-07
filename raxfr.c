@@ -26,12 +26,17 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.1 2019/02/07 07:34:28 pjp Exp $
+ * $Id: raxfr.c,v 1.2 2019/02/07 11:16:03 pjp Exp $
  */
 
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
+
+#define BIND_FORMAT 	0x1
+#define INDENT_FORMAT 	0x2
+#define ZONE_FORMAT	0x4
+
 
 int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
@@ -77,10 +82,9 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 		/* test for compression */
 		if ((*p & 0xc0) == 0xc0) {
 			/* do not allow recursive compress pointers */
-			if (save) {
-				return NULL;
+			if (! save) {
+				save = p + 2;
 			}
-			save = p + 2;
 			offset = (u_int16_t *)p;
 			/* do not allow forwards jumping */
 			if ((p - estart) <= (ntohs(*offset) & (~0xc000)))
@@ -153,6 +157,9 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 
 	*rrtype = ntohs(*rtype);
 
+	if (*rrtype == 41)	
+		goto out;
+
 	humanname = convert_name(expand, elen);
 	if (humanname == NULL) {
 		return -1;
@@ -174,6 +181,7 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 
 	free(humanname);
 
+out:
 	rrlen = (q - estart);
 	return (rrlen);
 }

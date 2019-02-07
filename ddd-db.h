@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.10 2019/01/29 16:32:54 pjp Exp $
+ * $Id: ddd-db.h,v 1.11 2019/02/07 11:16:03 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -492,6 +492,12 @@ struct node {
         int len;			/* length of domain name */
 	char *data;			/* data it points to */
 	size_t datalen;			/* the length of the data */
+};
+
+struct rrtab {
+        char *name;
+        u_int16_t type;
+	int16_t internal_type;
 };
 
 

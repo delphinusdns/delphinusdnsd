@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.31 2019/02/06 18:59:30 pjp Exp $
+ * $Id: dddctl.c,v 1.32 2019/02/07 11:16:03 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -125,6 +125,7 @@ int	start(int argc, char *argv[]);
 int	restart(int argc, char *argv[]);
 int	stop(int argc, char *argv[]);
 int	signmain(int argc, char *argv[]);
+int	dig(int argc, char *argv[]);
 int	configtest(int argc, char *argv[]);
 int	bindfile(int argc, char *argv[]);
 int	sshfp(int argc, char *argv[]);
@@ -133,6 +134,8 @@ uint32_t getkeypid(char *);
 pid_t 	getdaemonpid(void);
 void	debug_bindump(const char *, int);
 int	command_socket(char *);
+int 	connect_server(char *, int);
+int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t);
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 
@@ -155,6 +158,7 @@ struct _mycmdtab {
 } mycmdtab[] = {
 	{ "bindfile", bindfile },
 	{ "configtest", configtest },
+	{ "query", dig },
 	{ "help", usage },
 	{ "sign", signmain },
 	{ "sshfp", sshfp },
@@ -163,6 +167,7 @@ struct _mycmdtab {
 	{ "restart", restart },
 	{ NULL, NULL }
 };
+
 
 #define KEYTYPE_NONE	0
 #define KEYTYPE_KSK 	1
@@ -198,6 +203,14 @@ struct _mycmdtab {
 #define MASK_CREATE_DS			0x20
 #define MASK_DUMP_DB			0x40
 #define MASK_DUMP_BIND			0x80
+
+/* dig stuff */
+
+#define BIND_FORMAT 	0x1
+#define INDENT_FORMAT 	0x2
+#define ZONE_FORMAT	0x4
+#define DNSSEC_FORMAT	0x8
+
 
 /* glue */
 int insert_axfr(char *, char *);
@@ -244,12 +257,55 @@ extern char * hash_name(char *, int, struct nsec3param *);
 extern char * base32hex_encode(u_char *input, int len);
 extern int  	init_entlist(ddDB *);
 extern int	check_ent(char *, int);
+extern struct question          *build_question(char *, int, int);
+extern int                      free_question(struct question *);
+struct rrtab    *rrlookup(char *);
+
+
+extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
+extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int);
+extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, int);
 
 extern int dnssec;
 
 extern int domaincmp(struct node *e1, struct node *e2);
 RB_HEAD(domaintree, node) rbhead;
 RB_GENERATE_STATIC(domaintree, node, rbentry, domaincmp)
+
+
+static struct raxfr_logic {
+	int rrtype;
+	int dnssec;
+	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+} supported[] = {
+	{ DNS_TYPE_A, 0, raxfr_a },
+	{ DNS_TYPE_NS, 0, raxfr_ns },
+	{ DNS_TYPE_MX, 0, raxfr_mx },
+	{ DNS_TYPE_PTR, 0, raxfr_ptr },
+	{ DNS_TYPE_AAAA, 0, raxfr_aaaa },
+	{ DNS_TYPE_CNAME, 0, raxfr_cname },
+	{ DNS_TYPE_TXT, 0, raxfr_txt },
+	{ DNS_TYPE_DNSKEY, 1, raxfr_dnskey },
+	{ DNS_TYPE_RRSIG, 1, raxfr_rrsig },
+	{ DNS_TYPE_NSEC3PARAM, 1, raxfr_nsec3param },
+	{ DNS_TYPE_NSEC3, 1, raxfr_nsec3 },
+	{ DNS_TYPE_DS, 1, raxfr_ds },
+	{ DNS_TYPE_SSHFP, 0, raxfr_sshfp },
+	{ 0, 0, NULL }
+};
 
 
 int
@@ -6779,12 +6835,26 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\t-t ttl\t\ttime-to-live for dnskey's\n");
 		fprintf(stderr, "\t-z ZSK\t\tuse provided ZSK zone-signing keyname\n");	
 		return 0;
+	} else if (argc == 2 && strcmp(argv[1], "query") == 0) {
+		fprintf(stderr, "usage: dddctl query [-46BDFZ] [-@ server] [-P port] [-p file] name command\n");
+		fprintf(stderr, "\t-@ server\t\tUse server ip.\n");
+		fprintf(stderr, "\t-4\t\tUse IPv4 only.\n");
+		fprintf(stderr, "\t-6\t\tUse IPv6 only.\n");
+		fprintf(stderr, "\t-B\t\tOutput as a BIND file.\n");
+		fprintf(stderr, "\t-D\t\tUse DNSSEC (DO bit) lookup.\n");
+		fprintf(stderr, "\t-F\t\tOutput with formatting.\n");
+		fprintf(stderr, "\t-Z\t\tOutput as a zonefile.\n");
+		fprintf(stderr, "\t-P port\t\tUse specified port.\n");
+		fprintf(stderr, "\t-p file\t\tOutput to file.\n");
+		
+		return 0;
 	} else if (argc == 2) {
 		retval = 1;
 	} else {
 		fprintf(stderr, "usage: command [arg ...]\n");
 		fprintf(stderr, "\tbindfile zonename zonefile\n");
 		fprintf(stderr, "\tconfigtest [configfile]\n");
+		fprintf(stderr, "\tquery [-46BDFZ] [-@ server] [-P port] [-p file] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
@@ -6796,6 +6866,360 @@ usage(int argc, char *argv[])
 
 	return (retval);
 }
+
+int	
+dig(int argc, char *argv[])
+{
+	FILE *f = stdout;
+	struct soa mysoa;
+	struct stat sb;
+	struct rrtab *rt;
+	struct timeval tv, tv0;
+	char *outputfile = NULL;
+	char *domainname = NULL;
+	char *nameserver = "127.0.0.1";
+	int use_v4 = 0, use_v6 = 0;
+	u_int32_t format = 0;
+	u_int16_t port = 53;
+	int ch, so, ms;
+	int type = DNS_TYPE_A;
+	time_t now;
+
+	while ((ch = getopt(argc, argv, "@:46BDFP:Zp:")) != -1) {
+		switch (ch) {
+		case '@':
+			nameserver = optarg;
+			break;
+		case '4':
+			use_v4 = 1;
+			break;
+		case '6':
+			use_v6 = 1;
+			break;
+		case 'B':
+			format |= BIND_FORMAT;
+			break;
+		case 'D':
+			format |= DNSSEC_FORMAT;
+			break;
+		case 'F':
+			format |= INDENT_FORMAT;
+			break;
+		case 'P':
+			port = atoi(optarg);
+			break;
+		case 'Z':
+			format |= ZONE_FORMAT;
+			break;
+		case 'p':
+			outputfile = optarg;
+			break;
+		default:
+			usage(argc, argv);
+			exit(1);
+		}
+	}
+
+	argc -= optind;
+	argv += optind;
+
+	if (outputfile) {
+		if (lstat(outputfile, &sb) != -1) {
+			fprintf(stderr, "%s exists, not clobbering\n", outputfile);
+			exit(1);
+		}
+		
+		f = fopen(outputfile, "w");
+		if (f == NULL) {
+			perror("fopen");
+			exit(1);
+		}
+	
+	}
+
+
+	if (argc < 1) {
+		fprintf(stderr, "lookup what?\n");
+		exit(1);
+	}
+
+	if ((rt = rrlookup(argv[0])) != NULL) {
+		domainname = argv[1];
+		type = rt->type;
+	} else {
+		if (strcmp(argv[0], "any") == 0) {	
+			domainname = argv[1];
+			type = DNS_TYPE_ANY;
+		} else {
+			if (argc == 2) {
+				if ((rt = rrlookup(argv[1])) != NULL) {
+					domainname = argv[0];
+					type = rt->type;
+				} else {
+					if (strcmp(argv[1], "any") == 0) {	
+						domainname = argv[0];
+						type = DNS_TYPE_ANY;
+					}	
+				}
+			} else {
+				domainname = argv[0];
+			}
+		}
+	}
+			
+	gettimeofday(&tv0, NULL);	
+	now = time(NULL);
+
+	so = connect_server(nameserver, port);
+	if (so < 0) {
+		exit(1);
+	}
+
+
+	if (lookup_name(f, so, domainname, type, &mysoa, format) < 0) {
+		exit(1);
+	}
+
+	close(so);
+	gettimeofday(&tv, NULL);	
+
+	ms = 0;
+
+	if (tv.tv_usec < tv0.tv_usec) {
+		tv.tv_sec--;
+		ms += (((tv.tv_usec + 1000000) - tv0.tv_usec) / 1000);
+	} else
+		ms += (((tv.tv_usec) - tv0.tv_usec) / 1000);
+
+	if (tv.tv_sec - tv0.tv_sec > 0)
+		ms += 1000 * (tv.tv_sec - tv0.tv_sec);
+
+	printf(";; QUERY TIME: %d ms\n", ms);
+	printf(";; SERVER: %s#%u\n", nameserver, port);
+	printf(";; WHEN: %s", ctime(&now));
+
+
+	return 0;
+}
+
+int
+connect_server(char *nameserver, int port)
+{
+	struct sockaddr_in sin;
+	int so;
+
+	so =  socket(AF_INET, SOCK_DGRAM, 0);
+	if (so < 0) {
+		perror("socket");
+		return -1;
+	}
+
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(port);
+	sin.sin_addr.s_addr = inet_addr(nameserver);
+	
+	if (connect(so, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+		perror("connect");
+		return -1;
+	}
+
+	return (so);	
+}
+
+
+
+int
+lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mysoa, u_int32_t format)
+{
+	int len, i, answers;
+	int numansw, numaddi;
+	int rrtype, soacount = 0;
+	u_int16_t rdlen;
+	char query[512];
+	char *reply;
+	struct raxfr_logic *sr;
+	struct question *q;
+	struct dns_optrr *optrr;
+	struct whole_header {
+		struct dns_header dh;
+	} *wh, *rwh;
+	
+	u_char *p, *name;
+
+	u_char *end, *estart;
+	int totallen, zonelen, rrlen;
+	u_int16_t *class, *type;
+
+	memset(&query, 0, sizeof(query));
+	
+	wh = (struct whole_header *)&query[0];
+	
+	wh->dh.id = htons(arc4random() & 0xffff);
+	wh->dh.query = 0;
+	wh->dh.question = htons(1);
+	wh->dh.answer = 0;
+	wh->dh.nsrr = 0;
+	wh->dh.additional = htons(1);;
+
+	SET_DNS_QUERY(&wh->dh);
+	SET_DNS_RECURSION(&wh->dh);
+
+	
+	HTONS(wh->dh.query);
+
+	totallen = sizeof(struct whole_header);
+
+	name = dns_label(zonename, &len);
+	if (name == NULL) {
+		return -1;
+	}
+
+	zonelen = len;
+	
+	p = (char *)&wh[1];	
+	
+	memcpy(p, name, len);
+	totallen += len;
+
+	type = (u_int16_t *)&query[totallen];
+	*type = htons(myrrtype);
+	totallen += sizeof(u_int16_t);
+	
+	class = (u_int16_t *)&query[totallen];
+	*class = htons(DNS_CLASS_IN);
+	totallen += sizeof(u_int16_t);
+
+	/* attach EDNS0 */
+
+	optrr = (struct dns_optrr *)&query[totallen];
+
+	optrr->name[0] = 0;
+	optrr->type = htons(DNS_TYPE_OPT); 
+	optrr->class = htons(2048);
+	optrr->ttl = htonl(0);		/* EDNS version 0 */
+	if (format & DNSSEC_FORMAT)
+		SET_DNS_ERCODE_DNSSECOK(optrr);
+	HTONL(optrr->ttl);
+	optrr->rdlen = 0;
+	optrr->rdata[0] = 0;
+
+	totallen += (sizeof(struct dns_optrr));
+
+	if (send(so, query, totallen, 0) < 0) {
+		return -1;
+	}
+
+	/* catch reply */
+	reply = calloc(1, 2048);
+	if (reply == NULL) {
+		perror("calloc");
+		return -1;
+	}
+
+	if ((len = recv(so, reply, 2048, 0)) < 0) {
+		return -1;
+	}
+
+	rwh = (struct whole_header *)&reply[0];
+	fprintf(stdout, "; received %d bytes\n", len);
+
+	end = &reply[len];
+
+	if (rwh->dh.id != wh->dh.id) {
+		fprintf(stderr, "DNS ID mismatch\n");
+		return -1;
+	}
+
+	if (!(htons(rwh->dh.query) & DNS_REPLY)) {
+		fprintf(stderr, "NOT a DNS reply\n");
+		return -1;
+	}
+	
+	numansw = ntohs(rwh->dh.answer);
+	numaddi = ntohs(rwh->dh.nsrr);
+	answers = numansw + numaddi;
+
+	if (answers < 1) {	
+		fprintf(stderr, "NO ANSWER provided\n");
+		return -1;
+	}
+
+
+	q = build_question((char *)&wh->dh, len, wh->dh.additional);
+	if (q == NULL) {
+		fprintf(stderr, "failed to build_question\n");
+		return -1;
+	}
+		
+	if (memcmp(q->hdr->name, name, q->hdr->namelen) != 0) {
+		fprintf(stderr, "question name not for what we asked\n");
+		return -1;
+	}
+
+	if (q->hdr->qclass != *class || q->hdr->qtype != *type) {
+		fprintf(stderr, "wrong class or type\n");
+		return -1;
+	}
+	
+	p = (u_char *)&rwh[1];		
+	
+	p += q->hdr->namelen;
+	p += sizeof(u_int16_t);	 	/* type */
+	p += sizeof(u_int16_t);		/* class */
+
+	/* end of question */
+	
+	if (numansw)
+		printf(";; ANSWER SECTION:\n");
+
+	estart = (u_char *)&rwh->dh;
+
+	for (i = answers; i > 0; i--) {
+		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, 1)) < 0) {
+			fprintf(stderr, "not a SOA reply, or ERROR\n");
+			return -1;
+		}
+		
+		p = (estart + rrlen);
+
+		if (rrtype == DNS_TYPE_SOA) {
+			if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount)) < 0) {
+				fprintf(stderr, "raxxfr_soa failed\n");
+				return -1;
+			}
+			p = (estart + len);
+			soacount++;
+		} else {
+			for (sr = supported; sr->rrtype != 0; sr++) {
+				if (rrtype == sr->rrtype) {
+					if ((len = (*sr->raxfr)(f, p, estart, end, mysoa, rdlen)) < 0) {
+						fprintf(stderr, "error with rrtype %d\n", sr->rrtype);
+						return -1;
+					}
+					p = (estart + len);
+					break;
+				}
+			}
+
+			if (sr->rrtype == 0) {
+				fprintf(stderr, "unsupported RRTYPE\n");
+				return -1;
+			} 
+		} /* rrtype == DNS_TYPE_SOA */
+
+		if (--numansw == 0)
+			printf(";; AUTHORITY SECTION:\n");
+		if (numansw <= 0)
+			if (numaddi-- == 0)
+				printf(";; ADDITIONAL SECTION:\n");
+
+	} /* for () */
+
+	return 0;
+}
+
+
 
 int	
 start(int argc, char *argv[])
