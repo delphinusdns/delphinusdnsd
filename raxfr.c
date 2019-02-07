@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.3 2019/02/07 16:06:47 pjp Exp $
+ * $Id: raxfr.c,v 1.4 2019/02/07 18:53:12 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -82,8 +82,9 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 			}
 			offset = (u_int16_t *)p;
 			/* do not allow forwards jumping */
-			if ((p - estart) <= (ntohs(*offset) & (~0xc000)))
+			if ((p - estart) <= (ntohs(*offset) & (~0xc000))) {
 				return NULL;
+			}
 
 			p = (estart + (ntohs(*offset) & (~0xc000)));
 		} else {
@@ -342,11 +343,12 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	rs.signame_len = elen;
 
 	rs.signature_len = (rdlen - (q - p));
-	if (rs.signature_len > sizeof(rs.signature))
+
+	if (rs.signature_len > sizeof(rs.signature)) 
 		return -1;
 	memcpy(&rs.signature, q, rs.signature_len);
 	q += rs.signature_len;
-	
+
 	b = calloc(1, 2 * rs.signature_len);
 	if (b == NULL)
 		return -1;
@@ -542,7 +544,7 @@ raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	memcpy(&n.next, p, n.nextlen);
 	p += n.nextlen;
 	
-	n.bitmap_len = 	(rdlen - (p - brr));
+	n.bitmap_len = 	(rdlen - (p - brr)) + 1;
 	if (n.bitmap_len > sizeof(n.bitmap))
 		return -1;
 

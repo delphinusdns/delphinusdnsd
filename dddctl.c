@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.34 2019/02/07 16:11:02 pjp Exp $
+ * $Id: dddctl.c,v 1.35 2019/02/07 18:53:12 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -6829,13 +6829,14 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\t-z ZSK\t\tuse provided ZSK zone-signing keyname\n");	
 		return 0;
 	} else if (argc == 2 && strcmp(argv[1], "query") == 0) {
-		fprintf(stderr, "usage: dddctl query [-46BDFIZ] [-@ server] [-P port] [-p file] name command\n");
+		fprintf(stderr, "usage: dddctl query [-46BDITZ] [-@ server] [-P port] [-p file] name command\n");
 		fprintf(stderr, "\t-@ server\t\tUse server ip.\n");
 		fprintf(stderr, "\t-4\t\tUse IPv4 only.\n");
 		fprintf(stderr, "\t-6\t\tUse IPv6 only.\n");
 		fprintf(stderr, "\t-B\t\tOutput as a BIND file.\n");
 		fprintf(stderr, "\t-D\t\tUse DNSSEC (DO bit) lookup.\n");
 		fprintf(stderr, "\t-I\t\tIndent output.\n");
+		fprintf(stderr, "\t-T\t\tUse TCP.\n");
 		fprintf(stderr, "\t-Z\t\tOutput as a zonefile.\n");
 		fprintf(stderr, "\t-P port\t\tUse specified port.\n");
 		fprintf(stderr, "\t-p file\t\tOutput to file.\n");
@@ -6847,7 +6848,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "usage: command [arg ...]\n");
 		fprintf(stderr, "\tbindfile zonename zonefile\n");
 		fprintf(stderr, "\tconfigtest [configfile]\n");
-		fprintf(stderr, "\tquery [-46BDIZ] [-@ server] [-P port] [-p file] name command\n");
+		fprintf(stderr, "\tquery [-46BDITZ] [-@ server] [-P port] [-p file] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
@@ -6878,7 +6879,7 @@ dig(int argc, char *argv[])
 	int type = DNS_TYPE_A;
 	time_t now;
 
-	while ((ch = getopt(argc, argv, "@:46BDIP:Zp:")) != -1) {
+	while ((ch = getopt(argc, argv, "@:46BDIP:TZp:")) != -1) {
 		switch (ch) {
 		case '@':
 			nameserver = optarg;
@@ -6900,6 +6901,9 @@ dig(int argc, char *argv[])
 			break;
 		case 'P':
 			port = atoi(optarg);
+			break;
+		case 'T':
+			format |= TCP_FORMAT;
 			break;
 		case 'Z':
 			format |= ZONE_FORMAT;
@@ -7062,7 +7066,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	int len, totallen, zonelen, rrlen, rrtype;
 	int soacount = 0;
 	int elen = 0;
-	u_int16_t *class, *type, rdlen;
+	u_int16_t *class, *type, rdlen, *plen;
+	u_int16_t tcplen;
 	
 	if (!(format & TCP_FORMAT))
 		return -1;
@@ -7113,14 +7118,26 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 	/* catch reply */
 
-	reply = calloc(1, 0xffff);
+	reply = calloc(1, 0xffff + 2);
 	if (reply == NULL) {
 		perror("calloc");
 		return -1;
 	}
 
 
-	while ((len = recv(so, reply, 0xffff, 0)) > 0) {
+	for (;;) {
+		len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL);
+		if (len <= 0)	
+			break;
+
+		plen = (u_int16_t *)reply;
+		tcplen = ntohs(*plen) + 2;
+		
+		len = recv(so, reply, tcplen, MSG_WAITALL);
+		if (len < 0) {
+			perror("recv");
+			return -1;
+		}
 		rwh = (struct whole_header *)&reply[0];
 		printf("received %d bytes\n", rwh->len);
 
@@ -7210,10 +7227,11 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 				break;
 		}
 				
+		break;
 	}
 
-	if (recv(so, reply, 0xffff, 0) != 0) {	
-		fprintf(stderr, "should have received 0 from recv()\n");
+	if ((len = recv(so, reply, 0xffff, 0)) != 0) {	
+		fprintf(stderr, ";; WARN: recieved %d more bytes.\n", len);
 	}
 
 	if (f != NULL) {
@@ -7247,11 +7265,24 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 
 	u_char *end, *estart;
 	int totallen, zonelen, rrlen;
-	u_int16_t *class, *type;
+	int replysize = 0;
+	u_int16_t *class, *type, *tcpsize;
+	u_int16_t *plen;
+	u_int16_t tcplen;
+
+	if (format & TCP_FORMAT)
+		replysize = 0xffff;
+	else
+		replysize = 4096;
+
 
 	memset(&query, 0, sizeof(query));
 	
-	wh = (struct whole_header *)&query[0];
+	if (format & TCP_FORMAT) {
+		tcpsize = (u_int16_t *)&query[0];
+		wh = (struct whole_header *)&query[2];
+	} else
+		wh = (struct whole_header *)&query[0];
 	
 	wh->dh.id = htons(arc4random() & 0xffff);
 	wh->dh.query = 0;
@@ -7266,7 +7297,10 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	
 	HTONS(wh->dh.query);
 
-	totallen = sizeof(struct whole_header);
+	if (format & TCP_FORMAT)
+		totallen = sizeof(struct whole_header) + 2;
+	else
+		totallen = sizeof(struct whole_header);
 
 	name = dns_label(zonename, &len);
 	if (name == NULL) {
@@ -7294,7 +7328,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 
 	optrr->name[0] = 0;
 	optrr->type = htons(DNS_TYPE_OPT); 
-	optrr->class = htons(2048);
+	optrr->class = htons(replysize);
 	optrr->ttl = htonl(0);		/* EDNS version 0 */
 	if ((format & DNSSEC_FORMAT))
 		SET_DNS_ERCODE_DNSSECOK(optrr);
@@ -7304,33 +7338,61 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 
 	totallen += (sizeof(struct dns_optrr));
 
+	if (format & TCP_FORMAT)
+		*tcpsize = htons(totallen - 2);
+
 	if (send(so, query, totallen, 0) < 0) {
 		return -1;
 	}
 
 	/* catch reply */
-	reply = calloc(1, 2048);
+
+	reply = calloc(1, replysize + 2);
 	if (reply == NULL) {
 		perror("calloc");
 		return -1;
 	}
+	
+	if (format & TCP_FORMAT) {
+		if ((len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL)) < 0) {
+			perror("recv");
+			return -1;
+		}
 
-	if ((len = recv(so, reply, 2048, 0)) < 0) {
-		return -1;
+		plen = (u_int16_t *)reply;
+		tcplen = ntohs(*plen);
+
+		if ((len = recv(so, reply, tcplen + 2, MSG_WAITALL)) < 0) {
+			perror("recv");
+			return -1;
+		}
+	} else {
+		if ((len = recv(so, reply, replysize, 0)) < 0) {
+			return -1;
+		}
 	}
 
-	rwh = (struct whole_header *)&reply[0];
+	if (format & TCP_FORMAT)
+		rwh = (struct whole_header *)&reply[2];
+	else
+		rwh = (struct whole_header *)&reply[0];
+
 	fprintf(stdout, ";; received %d bytes\n", len);
 
 	end = &reply[len];
 
 	if (rwh->dh.id != wh->dh.id) {
-		fprintf(stderr, "DNS ID mismatch\n");
+		fprintf(stderr, "DNS ID mismatch 2\n");
 		return -1;
 	}
 
 	if (!(htons(rwh->dh.query) & DNS_REPLY)) {
 		fprintf(stderr, "NOT a DNS reply\n");
+		return -1;
+	}
+
+	if (htons(rwh->dh.query) & DNS_TRUNC) {
+		fprintf(stderr, "received a truncated answer, suggest retrying with TCP\n");
 		return -1;
 	}
 	
@@ -7401,7 +7463,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 			}
 
 			if (sr->rrtype == 0) {
-				fprintf(stderr, "unsupported RRTYPE\n");
+				fprintf(stderr, "unsupported RRTYPE %u\n", rrtype);
 				return -1;
 			} 
 		} /* rrtype == DNS_TYPE_SOA */
