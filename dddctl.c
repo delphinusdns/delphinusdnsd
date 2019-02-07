@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.32 2019/02/07 11:16:03 pjp Exp $
+ * $Id: dddctl.c,v 1.33 2019/02/07 16:06:47 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -134,8 +134,9 @@ uint32_t getkeypid(char *);
 pid_t 	getdaemonpid(void);
 void	debug_bindump(const char *, int);
 int	command_socket(char *);
-int 	connect_server(char *, int);
+int 	connect_server(char *, int, u_int32_t);
 int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t);
+int	lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t);
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 
@@ -204,14 +205,6 @@ struct _mycmdtab {
 #define MASK_DUMP_DB			0x40
 #define MASK_DUMP_BIND			0x80
 
-/* dig stuff */
-
-#define BIND_FORMAT 	0x1
-#define INDENT_FORMAT 	0x2
-#define ZONE_FORMAT	0x4
-#define DNSSEC_FORMAT	0x8
-
-
 /* glue */
 int insert_axfr(char *, char *);
 int insert_region(char *, char *);
@@ -276,8 +269,8 @@ extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int
 extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
-extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int);
-extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, int);
+extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t);
+extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t);
 
 extern int dnssec;
 
@@ -6836,13 +6829,13 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\t-z ZSK\t\tuse provided ZSK zone-signing keyname\n");	
 		return 0;
 	} else if (argc == 2 && strcmp(argv[1], "query") == 0) {
-		fprintf(stderr, "usage: dddctl query [-46BDFZ] [-@ server] [-P port] [-p file] name command\n");
+		fprintf(stderr, "usage: dddctl query [-46BDFIZ] [-@ server] [-P port] [-p file] name command\n");
 		fprintf(stderr, "\t-@ server\t\tUse server ip.\n");
 		fprintf(stderr, "\t-4\t\tUse IPv4 only.\n");
 		fprintf(stderr, "\t-6\t\tUse IPv6 only.\n");
 		fprintf(stderr, "\t-B\t\tOutput as a BIND file.\n");
 		fprintf(stderr, "\t-D\t\tUse DNSSEC (DO bit) lookup.\n");
-		fprintf(stderr, "\t-F\t\tOutput with formatting.\n");
+		fprintf(stderr, "\t-I\t\tIndent output.\n");
 		fprintf(stderr, "\t-Z\t\tOutput as a zonefile.\n");
 		fprintf(stderr, "\t-P port\t\tUse specified port.\n");
 		fprintf(stderr, "\t-p file\t\tOutput to file.\n");
@@ -6854,7 +6847,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "usage: command [arg ...]\n");
 		fprintf(stderr, "\tbindfile zonename zonefile\n");
 		fprintf(stderr, "\tconfigtest [configfile]\n");
-		fprintf(stderr, "\tquery [-46BDFZ] [-@ server] [-P port] [-p file] name command\n");
+		fprintf(stderr, "\tquery [-46BDIZ] [-@ server] [-P port] [-p file] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
@@ -6885,7 +6878,7 @@ dig(int argc, char *argv[])
 	int type = DNS_TYPE_A;
 	time_t now;
 
-	while ((ch = getopt(argc, argv, "@:46BDFP:Zp:")) != -1) {
+	while ((ch = getopt(argc, argv, "@:46BDIP:Zp:")) != -1) {
 		switch (ch) {
 		case '@':
 			nameserver = optarg;
@@ -6902,7 +6895,7 @@ dig(int argc, char *argv[])
 		case 'D':
 			format |= DNSSEC_FORMAT;
 			break;
-		case 'F':
+		case 'I':
 			format |= INDENT_FORMAT;
 			break;
 		case 'P':
@@ -6937,6 +6930,10 @@ dig(int argc, char *argv[])
 	
 	}
 
+	if ((format & ZONE_FORMAT) && (format & INDENT_FORMAT)) {
+		fprintf(stderr, "you may not specify -I and -Z together\n");
+		exit(1);
+	}
 
 	if (argc < 1) {
 		fprintf(stderr, "lookup what?\n");
@@ -6950,6 +6947,10 @@ dig(int argc, char *argv[])
 		if (strcmp(argv[0], "any") == 0) {	
 			domainname = argv[1];
 			type = DNS_TYPE_ANY;
+		} else if (strcmp(argv[0], "axfr") == 0) {
+			domainname = argv[1];
+			type = DNS_TYPE_AXFR;
+			format |= TCP_FORMAT;
 		} else {
 			if (argc == 2) {
 				if ((rt = rrlookup(argv[1])) != NULL) {
@@ -6959,7 +6960,11 @@ dig(int argc, char *argv[])
 					if (strcmp(argv[1], "any") == 0) {	
 						domainname = argv[0];
 						type = DNS_TYPE_ANY;
-					}	
+					} else if (strcmp(argv[1], "axfr") == 0) {
+						domainname = argv[0];
+						type = DNS_TYPE_AXFR;
+						format |= TCP_FORMAT;
+					}
 				}
 			} else {
 				domainname = argv[0];
@@ -6970,14 +6975,21 @@ dig(int argc, char *argv[])
 	gettimeofday(&tv0, NULL);	
 	now = time(NULL);
 
-	so = connect_server(nameserver, port);
+	so = connect_server(nameserver, port, format);
 	if (so < 0) {
 		exit(1);
 	}
 
-
-	if (lookup_name(f, so, domainname, type, &mysoa, format) < 0) {
-		exit(1);
+	if (type == DNS_TYPE_AXFR) {
+		if (lookup_axfr(f, so, domainname, &mysoa, format) < 0) {
+			exit(1);
+		}
+				
+	} else {
+		if (lookup_name(f, so, domainname, type, &mysoa, format) < 0) {
+			/* XXX maybe a packet dump here? */
+			exit(1);
+		}
 	}
 
 	close(so);
@@ -7003,12 +7015,16 @@ dig(int argc, char *argv[])
 }
 
 int
-connect_server(char *nameserver, int port)
+connect_server(char *nameserver, int port, u_int32_t format)
 {
 	struct sockaddr_in sin;
 	int so;
 
-	so =  socket(AF_INET, SOCK_DGRAM, 0);
+	if (format & TCP_FORMAT)
+		so =  socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	else
+		so =  socket(AF_INET, SOCK_DGRAM, 0);
+		
 	if (so < 0) {
 		perror("socket");
 		return -1;
@@ -7025,6 +7041,188 @@ connect_server(char *nameserver, int port)
 	}
 
 	return (so);	
+}
+
+
+int
+lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format)
+{
+	char query[512];
+	char *reply;
+	struct question *q;
+	struct whole_header {
+		u_int16_t len;
+		struct dns_header dh;
+	} *wh, *rwh;
+	struct raxfr_logic *sr;
+	
+	u_char *p, *name;
+
+	u_char *end, *estart;
+	int len, totallen, zonelen, rrlen, rrtype;
+	int soacount = 0;
+	int elen = 0;
+	u_int16_t *class, *type, rdlen;
+	
+	if (!(format & TCP_FORMAT))
+		return -1;
+
+	memset(&query, 0, sizeof(query));
+	
+	wh = (struct whole_header *)&query[0];
+	
+	wh->dh.id = htons(arc4random() & 0xffff);
+	wh->dh.query = 0;
+	wh->dh.question = htons(1);
+	wh->dh.answer = 0;
+	wh->dh.nsrr = 0;
+	wh->dh.additional = htons(1);;
+
+	SET_DNS_QUERY(&wh->dh);
+	SET_DNS_RECURSION(&wh->dh);
+	HTONS(wh->dh.query);
+
+	totallen = sizeof(struct whole_header);
+
+	name = dns_label(zonename, &len);
+	if (name == NULL) {
+		return -1;
+	}
+
+	zonelen = len;
+	
+	p = (char *)&wh[1];	
+	
+	memcpy(p, name, len);
+	totallen += len;
+
+	type = (u_int16_t *)&query[totallen];
+	*type = htons(DNS_TYPE_AXFR);
+	totallen += sizeof(u_int16_t);
+	
+	class = (u_int16_t *)&query[totallen];
+	*class = htons(DNS_CLASS_IN);
+	totallen += sizeof(u_int16_t);
+
+	wh->len = htons(totallen - 2);
+
+	if (send(so, query, totallen, 0) < 0) {
+		perror("send");
+		return -1;
+	}
+
+	/* catch reply */
+
+	reply = calloc(1, 0xffff);
+	if (reply == NULL) {
+		perror("calloc");
+		return -1;
+	}
+
+
+	while ((len = recv(so, reply, 0xffff, 0)) > 0) {
+		rwh = (struct whole_header *)&reply[0];
+		printf("received %d bytes\n", rwh->len);
+
+		end = &reply[len];
+		len = rwh->len;
+
+		if (rwh->dh.id != wh->dh.id) {
+			fprintf(stderr, "DNS ID mismatch\n");
+			return -1;
+		}
+
+		if (!(htons(rwh->dh.query) & DNS_REPLY)) {
+			fprintf(stderr, "NOT a DNS reply\n");
+			return -1;
+		}
+		
+		if (ntohs(rwh->dh.answer) < 1) {	
+			fprintf(stderr, "NO ANSWER provided\n");
+			return -1;
+		}
+
+		q = build_question((char *)&wh->dh, len, wh->dh.additional);
+		if (q == NULL) {
+			fprintf(stderr, "failed to build_question\n");
+			return -1;
+		}
+			
+		if (memcmp(q->hdr->name, name, q->hdr->namelen) != 0) {
+			fprintf(stderr, "question name not for what we asked\n");
+			return -1;
+		}
+
+		if (q->hdr->qclass != *class || q->hdr->qtype != *type) {
+			fprintf(stderr, "wrong class or type\n");
+			return -1;
+		}
+		
+		p = (char *)&rwh[1];		
+		p += q->hdr->namelen;
+		p += sizeof(u_int16_t);	 	/* type */
+		p += sizeof(u_int16_t);		/* class */
+		
+		/* end of question */
+		
+		estart = (u_char *)&rwh->dh;
+
+		if ((format & ZONE_FORMAT))
+			printf("zone \"%s\" {\n", zonename);
+
+		for (;;) {
+			elen = 0;
+
+			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format)) < 0) {
+				fprintf(stderr, "not a SOA reply, or ERROR\n");
+				return -1;
+			}
+
+			p = (estart + rrlen);
+
+			if (rrtype == DNS_TYPE_SOA) {
+				if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format)) < 0) {
+					fprintf(stderr, "raxxfr_soa failed\n");
+					return -1;
+				}
+				p = (estart + len);
+				soacount++;
+			} else {
+				for (sr = supported; sr->rrtype != 0; sr++) {
+					if (rrtype == sr->rrtype) {
+						if ((len = (*sr->raxfr)(f, p, estart, end, mysoa, rdlen)) < 0) {
+							fprintf(stderr, "error with rrtype %d\n", sr->rrtype);
+							return -1;
+						}
+						p = (estart + len);
+						break;
+					}
+				}
+
+				if (sr->rrtype == 0) {
+					fprintf(stderr, "unsupported RRTYPE\n");
+					return -1;
+				} 
+			}
+
+
+			if (soacount > 1)
+				break;
+		}
+				
+	}
+
+	if (recv(so, reply, 0xffff, 0) != 0) {	
+		fprintf(stderr, "should have received 0 from recv()\n");
+	}
+
+	if (f != NULL) {
+		if ((format & ZONE_FORMAT))
+			fprintf(f, "}\n");
+	}
+
+	return 0;
+
 }
 
 
@@ -7098,7 +7296,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	optrr->type = htons(DNS_TYPE_OPT); 
 	optrr->class = htons(2048);
 	optrr->ttl = htonl(0);		/* EDNS version 0 */
-	if (format & DNSSEC_FORMAT)
+	if ((format & DNSSEC_FORMAT))
 		SET_DNS_ERCODE_DNSSECOK(optrr);
 	HTONL(optrr->ttl);
 	optrr->rdlen = 0;
@@ -7122,7 +7320,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	}
 
 	rwh = (struct whole_header *)&reply[0];
-	fprintf(stdout, "; received %d bytes\n", len);
+	fprintf(stdout, ";; received %d bytes\n", len);
 
 	end = &reply[len];
 
@@ -7184,7 +7382,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 		p = (estart + rrlen);
 
 		if (rrtype == DNS_TYPE_SOA) {
-			if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount)) < 0) {
+			if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format)) < 0) {
 				fprintf(stderr, "raxxfr_soa failed\n");
 				return -1;
 			}

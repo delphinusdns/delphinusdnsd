@@ -26,17 +26,12 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.2 2019/02/07 11:16:03 pjp Exp $
+ * $Id: raxfr.c,v 1.3 2019/02/07 16:06:47 pjp Exp $
  */
 
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
-
-#define BIND_FORMAT 	0x1
-#define INDENT_FORMAT 	0x2
-#define ZONE_FORMAT	0x4
-
 
 int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
@@ -53,8 +48,8 @@ int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 
 u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
-int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int);
-int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, int);
+int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t);
+int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t);
 
 static char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
 
@@ -123,7 +118,7 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 }
 
 int
-raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soacount, u_int16_t *rdlen, int format)
+raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soacount, u_int16_t *rdlen, u_int32_t format)
 {
 	int rrlen;
 	char *save;
@@ -171,11 +166,24 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 		hightype[i] = tolower(hightype[i]);
 
 	if (f != NULL)  {
+
 		if (soacount < 1) {
-				fprintf(f, "%s%s,%s,%d,", (format == 1 ? "  " : ""), humanname, hightype , ntohl(*rttl));
+			if ((format & INDENT_FORMAT))
+				fprintf(f, "  %s,%s,%d,",  humanname, hightype , ntohl(*rttl));
+			else if ((format & ZONE_FORMAT)) {
+				fprintf(f, "  %s,%s,%d,",  humanname, hightype , ntohl(*rttl));
+			} else
+				fprintf(f, "%s,%s,%d,", humanname, hightype , ntohl(*rttl));
 		} else {
-			if  (ntohs(*rtype) != DNS_TYPE_SOA)
-				fprintf(f, "%s%s,%s,%d,", (format == 1 ? "  " : ""), humanname, hightype , ntohl(*rttl));
+			if ((format & INDENT_FORMAT))
+				fprintf(f, "  %s,%s,%d,",  humanname, hightype , ntohl(*rttl));
+			else if ((format & ZONE_FORMAT)) {
+				if (*rrtype != DNS_TYPE_SOA) {
+					fprintf(f, "  %s,%s,%d,",  humanname, hightype , ntohl(*rttl));
+				}
+			} else {
+				fprintf(f, "%s,%s,%d,", humanname, hightype , ntohl(*rttl));
+			}
 		}
 	}
 
@@ -201,7 +209,7 @@ raxfr_skip(FILE *f, u_char *p, u_char *estart)
 }
 
 int
-raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, int soacount)
+raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, int soacount, u_int32_t format)
 {
 	u_int32_t *rvalue;
 	char *save, *humanname;
@@ -209,6 +217,7 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	u_char expand[256];
 	int max = sizeof(expand);
 	int elen = 0;
+	int soalimit = (format & ZONE_FORMAT) ? 1 : 2;
 
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
@@ -227,7 +236,7 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 		return -1;
 	}
 
-	if (soacount < 1) {
+	if (soacount < soalimit) {
 		if (f != NULL)
 			fprintf(f, "%s,", humanname);
 	}
@@ -253,7 +262,7 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 		return -1;
 	}
 
-	if (soacount < 1) {
+	if (soacount < soalimit) {
 		if (f != NULL) 
 			fprintf(f, "%s,", humanname);
 	}
@@ -276,7 +285,7 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	mysoa->minttl = *rvalue;
 	q += sizeof(u_int32_t);
 	
-	if (soacount < 1) {
+	if (soacount < soalimit) {
 		if (f != NULL) {
 			fprintf(f, "%d,%d,%d,%d,%d\n", ntohl(mysoa->serial),
 				ntohl(mysoa->refresh), ntohl(mysoa->retry),

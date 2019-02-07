@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.11 2019/02/07 11:16:03 pjp Exp $
+ * $Id: ddd-db.h,v 1.12 2019/02/07 16:06:47 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -533,5 +533,12 @@ int dddbclose(ddDB *);
 int parse_file(ddDB *db, char *);
 ddDB * opendatabase(ddDB *);
 
+/* dig stuff */
+
+#define BIND_FORMAT 	0x1
+#define INDENT_FORMAT 	0x2
+#define ZONE_FORMAT		0x4
+#define DNSSEC_FORMAT	0x8
+#define TCP_FORMAT		0x10
 
 #endif /* _DB_H */
