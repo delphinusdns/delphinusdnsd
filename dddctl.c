@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.33 2019/02/07 16:06:47 pjp Exp $
+ * $Id: dddctl.c,v 1.34 2019/02/07 16:11:02 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -7374,7 +7374,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	estart = (u_char *)&rwh->dh;
 
 	for (i = answers; i > 0; i--) {
-		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, 1)) < 0) {
+		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format)) < 0) {
 			fprintf(stderr, "not a SOA reply, or ERROR\n");
 			return -1;
 		}
