@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.37 2019/02/08 01:47:05 pjp Exp $
+ * $Id: dddctl.c,v 1.38 2019/02/08 07:06:16 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -7253,7 +7253,8 @@ int
 lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mysoa, u_int32_t format, char *nameserver, u_int16_t port)
 {
 	int len, i, answers;
-	int numansw, numaddi;
+	int numansw, numaddi, numauth;
+	int printansw = 1, printauth = 1, printaddi = 1;
 	int rrtype, soacount = 0;
 	u_int16_t rdlen;
 	char query[512];
@@ -7414,8 +7415,9 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	}
 	
 	numansw = ntohs(rwh->dh.answer);
-	numaddi = ntohs(rwh->dh.nsrr);
-	answers = numansw + numaddi;
+	numauth = ntohs(rwh->dh.nsrr);
+	numaddi = ntohs(rwh->dh.additional);
+	answers = numansw + numauth + numaddi;
 
 	if (answers < 1) {	
 		fprintf(stderr, "NO ANSWER provided\n");
@@ -7447,12 +7449,35 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 
 	/* end of question */
 	
-	if (numansw)
-		printf(";; ANSWER SECTION:\n");
 
 	estart = (u_char *)&rwh->dh;
 
 	for (i = answers; i > 0; i--) {
+		if (numansw > 0) { 
+			numansw--;
+			if (printansw-- > 0) {
+				printf(";; ANSWER SECTION:\n");
+			}
+			goto skip;
+		}
+		if (numansw <= 0 && numauth > 0) {
+			numauth--;
+			if (printauth-- > 0) {
+				printf(";; AUTHORITY SECTION:\n");
+			}
+			goto skip;
+		}
+		if (numansw <= 0 && numauth <= 0 && numaddi > 0) {
+			numaddi--;
+			if (printaddi-- > 0) {
+				printf(";; ADDITIONAL SECTION:\n");
+			}
+			goto skip;
+		}
+
+skip:
+
+
 		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format)) < 0) {
 			fprintf(stderr, "not a SOA reply, or ERROR\n");
 			return -1;
@@ -7480,16 +7505,12 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 			}
 
 			if (sr->rrtype == 0) {
-				fprintf(stderr, "unsupported RRTYPE %u\n", rrtype);
+				if (rrtype != 41)
+					fprintf(stderr, "unsupported RRTYPE %u\n", rrtype);
 				return -1;
 			} 
 		} /* rrtype == DNS_TYPE_SOA */
 
-		if (--numansw == 0)
-			printf(";; AUTHORITY SECTION:\n");
-		if (numansw <= 0)
-			if (numaddi-- == 0)
-				printf(";; ADDITIONAL SECTION:\n");
 
 	} /* for () */
 
