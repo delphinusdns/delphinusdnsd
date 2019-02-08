@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.39 2019/02/08 07:12:29 pjp Exp $
+ * $Id: dddctl.c,v 1.40 2019/02/08 10:35:55 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -46,7 +46,7 @@ int debug = 0;
 int verbose = 0;
 static struct timeval tv0;
 static time_t current_time;
-static int bytes_received;
+static int bytes_received, answers;
 
 SLIST_HEAD(, keysentry) keyshead;
 
@@ -7015,7 +7015,15 @@ dig(int argc, char *argv[])
 	printf(";; QUERY TIME: %d ms\n", ms);
 	printf(";; SERVER: %s#%u\n", nameserver, port);
 	printf(";; WHEN: %s", ctime(&current_time));
-	printf(";; MSG SIZE  rcvd: %d\n", bytes_received);
+	if (type == DNS_TYPE_AXFR) {
+		if (format & ZONE_FORMAT)
+			answers--;
+
+		printf(";; XFR size %d records (bytes %d)\n", answers, \
+			bytes_received);
+	} else {
+		printf(";; MSG SIZE  rcvd: %d\n", bytes_received);
+	}
 
 
 	return 0;
@@ -7162,6 +7170,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			return -1;
 		}
 
+		answers = ntohs(rwh->dh.answer);
+
 		q = build_question((char *)&wh->dh, len, wh->dh.additional);
 		if (q == NULL) {
 			fprintf(stderr, "failed to build_question\n");
@@ -7251,7 +7261,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 int
 lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mysoa, u_int32_t format, char *nameserver, u_int16_t port)
 {
-	int len, i, answers;
+	int len, i;
 	int numansw, numaddi, numauth;
 	int printansw = 1, printauth = 1, printaddi = 1;
 	int rrtype, soacount = 0;
