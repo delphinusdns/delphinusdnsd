@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.41 2019/02/08 13:50:35 pjp Exp $
+ * $Id: dddctl.c,v 1.42 2019/02/08 15:00:10 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -7018,19 +7018,21 @@ dig(int argc, char *argv[])
 	if (tv.tv_sec - tv0.tv_sec > 0)
 		ms += 1000 * (tv.tv_sec - tv0.tv_sec);
 
-	printf(";; QUERY TIME: %d ms\n", ms);
-	printf(";; SERVER: %s#%u\n", nameserver, port);
-	printf(";; WHEN: %s", ctime(&current_time));
+	fprintf(f, ";; QUERY TIME: %d ms\n", ms);
+	fprintf(f, ";; SERVER: %s#%u\n", nameserver, port);
+	fprintf(f, ";; WHEN: %s", ctime(&current_time));
 	if (type == DNS_TYPE_AXFR) {
 		if (format & ZONE_FORMAT)
 			answers--;
 
-		printf(";; XFR size %d records (bytes %d)\n", answers, \
+		fprintf(f, ";; XFR size %d records (bytes %d)\n", answers, \
 			bytes_received);
 	} else {
-		printf(";; MSG SIZE  rcvd: %d\n", bytes_received);
+		fprintf(f, ";; MSG SIZE  rcvd: %d\n", bytes_received);
 	}
 
+	if (f != stdin && f != NULL)
+		fclose(f);
 
 	return 0;
 }
@@ -7203,8 +7205,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		
 		estart = (u_char *)&rwh->dh;
 
-		if ((format & ZONE_FORMAT))
-			printf("zone \"%s\" {\n", zonename);
+		if ((format & ZONE_FORMAT) && f != NULL) 
+			fprintf(f, "zone \"%s\" {\n", zonename);
 
 		for (;;) {
 			elen = 0;
