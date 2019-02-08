@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.4 2019/02/07 18:53:12 pjp Exp $
+ * $Id: raxfr.c,v 1.5 2019/02/08 10:36:59 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -170,20 +170,20 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 
 		if (soacount < 1) {
 			if ((format & INDENT_FORMAT))
-				fprintf(f, "  %s,%s,%d,",  humanname, hightype , ntohl(*rttl));
+				fprintf(f, "  %s,%s,%d,",  (*humanname == '\0' ? "." : humanname), hightype , ntohl(*rttl));
 			else if ((format & ZONE_FORMAT)) {
-				fprintf(f, "  %s,%s,%d,",  humanname, hightype , ntohl(*rttl));
+				fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(*rttl));
 			} else
-				fprintf(f, "%s,%s,%d,", humanname, hightype , ntohl(*rttl));
+				fprintf(f, "%s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(*rttl));
 		} else {
 			if ((format & INDENT_FORMAT))
-				fprintf(f, "  %s,%s,%d,",  humanname, hightype , ntohl(*rttl));
+				fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(*rttl));
 			else if ((format & ZONE_FORMAT)) {
 				if (*rrtype != DNS_TYPE_SOA) {
-					fprintf(f, "  %s,%s,%d,",  humanname, hightype , ntohl(*rttl));
+					fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(*rttl));
 				}
 			} else {
-				fprintf(f, "%s,%s,%d,", humanname, hightype , ntohl(*rttl));
+				fprintf(f, "%s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(*rttl));
 			}
 		}
 	}
@@ -238,8 +238,12 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	}
 
 	if (soacount < soalimit) {
-		if (f != NULL)
-			fprintf(f, "%s,", humanname);
+		if (f != NULL) {
+			if (*humanname == '\0')	
+				fprintf(f, ".,");
+			else
+				fprintf(f, "%s,", humanname);
+		}
 	}
 
 	free(humanname);
@@ -264,8 +268,12 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	}
 
 	if (soacount < soalimit) {
-		if (f != NULL) 
-			fprintf(f, "%s,", humanname);
+		if (f != NULL) {
+			if (*humanname == '\0')
+				fprintf(f, ".,");
+			else 
+				fprintf(f, "%s,", humanname);
+		}
 	}
 
 	free(humanname);
@@ -372,7 +380,8 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 			rs.algorithm, rs.labels, rs.original_ttl, 
 			timethuman(rs.signature_expiration), 
 			timethuman(rs.signature_inception),
-			rs.key_tag, humanname, b);
+			rs.key_tag, 
+			(*humanname == '\0' ? "." : humanname), b);
 	}
 
 	free(humanname);
@@ -508,8 +517,12 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 		return -1;
 	}
 
-	if (f != NULL)
-		fprintf(f, "%s\n", humanname);
+	if (f != NULL) {
+		if (*humanname == '\0')
+			fprintf(f, ".\n");
+		else
+			fprintf(f, "%s\n", humanname);
+	}
 
 	free(humanname);
 
@@ -640,8 +653,12 @@ raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 		return -1;
 	}
 
-	if (f != NULL)
-		fprintf(f, "%s\n", humanname);
+	if (f != NULL) {
+		if (*humanname == '\0')
+			fprintf(f, ".\n");
+		else
+			fprintf(f, "%s\n", humanname);
+	}
 
 	free(humanname);
 
