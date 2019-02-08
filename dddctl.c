@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.38 2019/02/08 07:06:16 pjp Exp $
+ * $Id: dddctl.c,v 1.39 2019/02/08 07:12:29 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -7142,7 +7142,6 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			return -1;
 		}
 		rwh = (struct whole_header *)&reply[0];
-		printf(";; received %d bytes\n", ntohs(rwh->len));
 		bytes_received = ntohs(rwh->len);
 
 		end = &reply[len];
@@ -7382,7 +7381,6 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	else
 		rwh = (struct whole_header *)&reply[0];
 
-	fprintf(stdout, ";; received %d bytes\n", len);
 	bytes_received = len;
 
 	end = &reply[len];
@@ -7507,7 +7505,6 @@ skip:
 			if (sr->rrtype == 0) {
 				if (rrtype != 41)
 					fprintf(stderr, "unsupported RRTYPE %u\n", rrtype);
-				return -1;
 			} 
 		} /* rrtype == DNS_TYPE_SOA */
 
