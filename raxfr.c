@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.5 2019/02/08 10:36:59 pjp Exp $
+ * $Id: raxfr.c,v 1.6 2019/02/08 13:50:35 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -46,6 +46,9 @@ int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16
 int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 
 u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t);
@@ -705,4 +708,161 @@ raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_in
 	p += sizeof(*ia);
 
 	return (p - estart);
+}
+
+int 
+raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+{
+	struct tlsa t;
+
+	t.usage = *p++;
+	t.selector = *p++;
+	t.matchtype = *p++;
+
+	t.datalen = (rdlen - 3);
+	
+	if (t.datalen > sizeof(t.data))
+		return -1;
+
+	memcpy(&t.data, p, t.datalen);
+	p += t.datalen;
+
+	if (f != NULL) {
+		fprintf(f, "%u,%u,%u,\"%s\"\n", t.usage, t.selector, 
+			t.matchtype, bin2hex(t.data, t.datalen));
+	}
+
+	return (p - estart);
+}
+
+int 
+raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+{
+	u_int16_t *tmp16;
+	struct srv s;
+	char *save, *humanname;
+	u_char *q = p;
+	u_char expand[256];
+	int max = sizeof(expand);
+	int elen = 0;
+
+	tmp16 = (u_int16_t *)q;
+	s.priority = ntohs(*tmp16);
+	q += 2;
+	tmp16 = (u_int16_t *)q;
+	s.weight = ntohs(*tmp16);
+	q += 2;
+	tmp16 = (u_int16_t *)q;
+	s.port = ntohs(*tmp16);
+	q += 2;
+
+	memset(&expand, 0, sizeof(expand));
+	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
+	if (save == NULL) {
+		fprintf(stderr, "expanding compression failure 2\n");
+		return -1;
+	} else  {
+		q = save;
+	}
+
+	humanname = convert_name(expand, elen);
+	if (humanname == NULL) {
+		return -1;
+	}
+
+	if (f != NULL) {
+		if (*humanname == '\0')
+			fprintf(f, "%u,%u,%u,.\n", s.priority, s.weight, s.port);
+		else
+			fprintf(f, "%u,%u,%u,%s\n", s.priority, s.weight,
+				s.port, humanname);
+	}
+
+	free(humanname);
+
+	return (q - estart);
+}
+
+int 
+raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+{
+	u_int16_t *tmp16;
+	struct naptr n;
+	char *save, *humanname;
+	u_char *q = p;
+	u_char expand[256];
+	int max = sizeof(expand);
+	int elen = 0;
+	int len, i;
+
+	tmp16 = (u_int16_t *)q;
+	n.order = ntohs(*tmp16);
+	q += 2;
+	tmp16 = (u_int16_t *)q;
+	n.preference = ntohs(*tmp16);
+	q += 2;
+
+	if (f != NULL) {
+		fprintf(f, "%u,%u,", n.order, n.preference);
+	}
+
+	
+	/* flags */
+	len = *q;
+	q++;
+
+	if (f != NULL) {
+		fprintf(f, "\"");
+		for (i = 0; i < len; i++) {
+			fprintf(f, "%c", *q++);
+		}
+		fprintf(f, "\",");
+	}
+	/* services */
+	len = *q;
+	q++;
+
+	if (f != NULL) {
+		fprintf(f, "\"");
+		for (i = 0; i < len; i++) {
+			fprintf(f, "%c", *q++);
+		}
+		fprintf(f, "\",");
+	}
+	/* regexp */
+	len = *q;
+	q++;
+
+	if (f != NULL) {
+		fprintf(f, "\"");
+		for (i = 0; i < len; i++) {
+			fprintf(f, "%c", *q++);
+		}
+		fprintf(f, "\",");
+	}
+
+	memset(&expand, 0, sizeof(expand));
+	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
+	if (save == NULL) {
+		fprintf(stderr, "expanding compression failure 2\n");
+		return -1;
+	} else  {
+		q = save;
+	}
+
+	humanname = convert_name(expand, elen);
+	if (humanname == NULL) {
+		return -1;
+	}
+
+	if (f != NULL) {
+		if (*humanname == '\0')
+			fprintf(f, ".\n");
+		else
+			fprintf(f, "%s\n", humanname);
+	}
+
+	free(humanname);
+
+	return (q - estart);
 }

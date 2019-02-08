@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.40 2019/02/08 10:35:55 pjp Exp $
+ * $Id: dddctl.c,v 1.41 2019/02/08 13:50:35 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -259,6 +259,9 @@ struct rrtab    *rrlookup(char *);
 
 
 extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
@@ -300,6 +303,9 @@ static struct raxfr_logic {
 	{ DNS_TYPE_NSEC3, 1, raxfr_nsec3 },
 	{ DNS_TYPE_DS, 1, raxfr_ds },
 	{ DNS_TYPE_SSHFP, 0, raxfr_sshfp },
+	{ DNS_TYPE_TLSA, 0, raxfr_tlsa },
+	{ DNS_TYPE_SRV, 0, raxfr_srv },
+	{ DNS_TYPE_NAPTR, 0, raxfr_naptr },
 	{ 0, 0, NULL }
 };
 
