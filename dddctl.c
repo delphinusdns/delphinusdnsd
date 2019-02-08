@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.36 2019/02/07 19:08:18 pjp Exp $
+ * $Id: dddctl.c,v 1.37 2019/02/08 01:47:05 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -44,6 +44,9 @@
 
 int debug = 0;
 int verbose = 0;
+static struct timeval tv0;
+static time_t current_time;
+static int bytes_received;
 
 SLIST_HEAD(, keysentry) keyshead;
 
@@ -6868,7 +6871,7 @@ dig(int argc, char *argv[])
 	struct soa mysoa;
 	struct stat sb;
 	struct rrtab *rt;
-	struct timeval tv, tv0;
+	struct timeval tv;
 	char *outputfile = NULL;
 	char *domainname = NULL;
 	char *nameserver = "127.0.0.1";
@@ -6877,7 +6880,6 @@ dig(int argc, char *argv[])
 	u_int16_t port = 53;
 	int ch, so, ms;
 	int type = DNS_TYPE_A;
-	time_t now;
 
 	while ((ch = getopt(argc, argv, "@:46BDIP:TZp:")) != -1) {
 		switch (ch) {
@@ -6977,7 +6979,7 @@ dig(int argc, char *argv[])
 	}
 			
 	gettimeofday(&tv0, NULL);	
-	now = time(NULL);
+	current_time = time(NULL);
 
 	so = connect_server(nameserver, port, format);
 	if (so < 0) {
@@ -7012,7 +7014,8 @@ dig(int argc, char *argv[])
 
 	printf(";; QUERY TIME: %d ms\n", ms);
 	printf(";; SERVER: %s#%u\n", nameserver, port);
-	printf(";; WHEN: %s", ctime(&now));
+	printf(";; WHEN: %s", ctime(&current_time));
+	printf(";; MSG SIZE  rcvd: %d\n", bytes_received);
 
 
 	return 0;
@@ -7139,7 +7142,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			return -1;
 		}
 		rwh = (struct whole_header *)&reply[0];
-		printf("received %d bytes\n", rwh->len);
+		printf(";; received %d bytes\n", ntohs(rwh->len));
+		bytes_received = ntohs(rwh->len);
 
 		end = &reply[len];
 		len = rwh->len;
@@ -7378,6 +7382,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 		rwh = (struct whole_header *)&reply[0];
 
 	fprintf(stdout, ";; received %d bytes\n", len);
+	bytes_received = len;
 
 	end = &reply[len];
 
@@ -7392,16 +7397,20 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	}
 
 	if (!(format & TCP_FORMAT) && (htons(rwh->dh.query) & DNS_TRUNC)) {
+		int ret;
+
 		fprintf(f,  ";; received a truncated answer, retrying with TCP\n");
 		format |= TCP_FORMAT;
-		close(so);
 		
+		gettimeofday(&tv0, NULL);	
 		so = connect_server(nameserver, port, format);
 		if (so < 0) {
 			exit(1);
 		}
 
-		return (lookup_name(f, so, zonename, myrrtype, mysoa, format, nameserver, port));
+		ret = lookup_name(f, so, zonename, myrrtype, mysoa, format, nameserver, port);
+		close(so);
+		return (ret);
 	}
 	
 	numansw = ntohs(rwh->dh.answer);
