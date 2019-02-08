@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.43 2019/02/08 15:24:05 pjp Exp $
+ * $Id: dddctl.c,v 1.44 2019/02/08 18:25:08 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -275,7 +275,7 @@ extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int
 extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
-extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t);
+extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t);
 extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t);
 
 extern int dnssec;
@@ -7219,7 +7219,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			p = (estart + rrlen);
 
 			if (rrtype == DNS_TYPE_SOA) {
-				if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format)) < 0) {
+				if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen)) < 0) {
 					fprintf(stderr, "raxxfr_soa failed\n");
 					return -1;
 				}
@@ -7502,7 +7502,7 @@ skip:
 		p = (estart + rrlen);
 
 		if (rrtype == DNS_TYPE_SOA) {
-			if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format)) < 0) {
+			if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen)) < 0) {
 				fprintf(stderr, "raxxfr_soa failed\n");
 				return -1;
 			}

@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.6 2019/02/08 13:50:35 pjp Exp $
+ * $Id: raxfr.c,v 1.7 2019/02/08 18:25:08 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -51,7 +51,7 @@ int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 
 u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
-int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t);
+int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t);
 int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t);
 
 static char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
@@ -66,6 +66,15 @@ extern char *convert_name(char *, int);
 extern char *base32hex_encode(u_char *, int);
 extern u_int64_t timethuman(time_t);
 
+/* The following alias helps with bounds checking all input, needed! */
+
+#define BOUNDS_CHECK(cur, begin, rdlen, end) 		do {	\
+	if ((cur - begin) > rdlen) {				\
+		return -1;					\
+	}							\
+	if (cur > end)						\
+		return -1;					\
+} while (0)
 
 
 static char *
@@ -136,6 +145,7 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 	char *hightype;
 	int i;
 
+
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
@@ -144,12 +154,27 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 	} else 
 		q = save;
 	
+	if ((q + 2) > end)
+		return -1;
+
 	rtype = (u_int16_t *)q;
 	q += 2;
+
+	if ((q + 2) > end)
+		return -1;
+
 	rclass = (u_int16_t *)q;
 	q += 2;
+
+	if ((q + 4) > end)
+		return -1;
+
 	rttl = (u_int32_t *)q;
 	q += 4;
+
+	if ((q + 2) > end)
+		return -1;
+
 	rdtmp = (u_int16_t *)q;
 	*rdlen = ntohs(*rdtmp);
 	q += 2;
@@ -213,7 +238,7 @@ raxfr_skip(FILE *f, u_char *p, u_char *estart)
 }
 
 int
-raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, int soacount, u_int32_t format)
+raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, int soacount, u_int32_t format, u_int16_t rdlen)
 {
 	u_int32_t *rvalue;
 	char *save, *humanname;
@@ -231,6 +256,8 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	} else  {
 		q = save;
 	}
+
+	BOUNDS_CHECK(q, p, rdlen, end);
 
 	memset(&mysoa->nsserver, 0, sizeof(mysoa->nsserver));
 	memcpy(&mysoa->nsserver, expand, elen);
@@ -261,6 +288,8 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 		q = save;
 	}
 
+	BOUNDS_CHECK(q, p, rdlen, end);
+
 	memset(&mysoa->responsible_person, 0, sizeof(mysoa->responsible_person));
 	memcpy(&mysoa->responsible_person, expand, elen);
 	mysoa->rp_len = elen;
@@ -281,18 +310,23 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 
 	free(humanname);
 
+	BOUNDS_CHECK((q + 4), p, rdlen, end);
 	rvalue = (u_int32_t *)q;
 	mysoa->serial = *rvalue;
 	q += sizeof(u_int32_t);
+	BOUNDS_CHECK((q + 4), p, rdlen, end);
 	rvalue = (u_int32_t *)q;
 	mysoa->refresh = *rvalue;
 	q += sizeof(u_int32_t);
+	BOUNDS_CHECK((q + 4), p, rdlen, end);
 	rvalue = (u_int32_t *)q;
 	mysoa->retry = *rvalue;
 	q += sizeof(u_int32_t);
+	BOUNDS_CHECK((q + 4), p, rdlen, end);
 	rvalue = (u_int32_t *)q;
 	mysoa->expire = *rvalue;
 	q += sizeof(u_int32_t);
+	BOUNDS_CHECK((q + 4), p, rdlen, end);
 	rvalue = (u_int32_t *)q;
 	mysoa->minttl = *rvalue;
 	q += sizeof(u_int32_t);
@@ -323,20 +357,27 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	int len;
 	u_char *b;
 
+	BOUNDS_CHECK((q + 2), p, rdlen, end);
 	tmp = (u_int16_t *)q;
 	rs.type_covered = ntohs(*tmp);
 	q += 2;
+	BOUNDS_CHECK((q + 1), p, rdlen, end);
 	rs.algorithm = *q++;
+	BOUNDS_CHECK((q + 1), p, rdlen, end);
 	rs.labels = *q++;
+	BOUNDS_CHECK((q + 4), p, rdlen, end);
 	tmp4 = (u_int32_t *)q;
 	rs.original_ttl = ntohl(*tmp4);
 	q += 4;
+	BOUNDS_CHECK((q + 4), p, rdlen, end);
 	tmp4 = (u_int32_t *)q;
 	rs.signature_expiration = ntohl(*tmp4);
 	q += 4;
+	BOUNDS_CHECK((q + 4), p, rdlen, end);
 	tmp4 = (u_int32_t *)q;
 	rs.signature_inception = ntohl(*tmp4);
 	q += 4;
+	BOUNDS_CHECK((q + 2), p, rdlen, end);
 	tmp = (u_int16_t *)q;
 	rs.key_tag = ntohs(*tmp);
 	q += 2;
@@ -398,13 +439,19 @@ raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 {
 	struct ds d;
 	u_int16_t *tmpshort;
+	u_char *q = p;
 
+	BOUNDS_CHECK((p + 2), q, rdlen, end);
 	tmpshort = (u_int16_t *)p;
 	d.key_tag = ntohs(*tmpshort);
 	p += 2;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	d.algorithm = *p++;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	d.digest_type = *p++;
-	
+
+	if ((rdlen - 4) < 0)
+		return -1;
 	d.digestlen = (rdlen - 4);
 	if (d.digestlen > sizeof(d.digest))
 		return -1;
@@ -425,10 +472,16 @@ raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 {
 	struct sshfp s;
 	char *hex;
+	u_char *q = p;
 
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	s.algorithm = *p++;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	s.fptype  = *p++;
 	
+	if (rdlen - 2 < 0)
+		return -1;
+
 	s.fplen = (rdlen - 2);
 	if (s.fplen > sizeof(s.fingerprint))
 		return -1;
@@ -451,14 +504,20 @@ raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 	struct dnskey dk;
 	u_int16_t *tmpshort;
 	char *b;
+	u_char *q = p;
 	int len;
 
+	BOUNDS_CHECK((p + 2), q, rdlen, end);
 	tmpshort = (u_int16_t *)p;
 	dk.flags = ntohs(*tmpshort);
 	p += 2;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	dk.protocol = *p++;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	dk.algorithm = *p++;
 	
+	if (rdlen - 4 < 0)
+		return -1;
 	dk.publickey_len = (rdlen - 4);
 	if (dk.publickey_len > sizeof(dk.public_key))
 		return -1;
@@ -499,6 +558,7 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 	int max = sizeof(expand);
 	int elen = 0;
 
+	BOUNDS_CHECK((q + 2), p, rdlen, end);
 	mxpriority = (u_int16_t *)q;
 
 	if (f != NULL)
@@ -545,21 +605,31 @@ raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	u_int16_t *iter;
 	u_char *brr = p;	/* begin of rd record :-) */
 
+	BOUNDS_CHECK((p + 1), brr, rdlen, end);
 	n.algorithm = *p++;
+	BOUNDS_CHECK((p + 1), brr, rdlen, end);
 	n.flags = *p++;
 
+	BOUNDS_CHECK((p + 2), brr, rdlen, end);
 	iter = (u_int16_t *)p;
 	n.iterations = ntohs(*iter);
 	p += 2;
 
+	BOUNDS_CHECK((p + 1), brr, rdlen, end);
 	n.saltlen = *p++;
 	memcpy(&n.salt, p, n.saltlen);
 	p += n.saltlen;
 
+	BOUNDS_CHECK((p + 1), brr, rdlen, end);
 	n.nextlen = *p++;
 	memcpy(&n.next, p, n.nextlen);
 	p += n.nextlen;
 	
+	
+	if (((rdlen - (p - brr)) + 1) < 0)
+		return -1;
+
+	/* XXX */
 	n.bitmap_len = 	(rdlen - (p - brr)) + 1;
 	if (n.bitmap_len > sizeof(n.bitmap))
 		return -1;
@@ -587,13 +657,19 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 	struct nsec3param np;
 	u_int16_t *iter;
 	char *hex;
+	u_char *q = p;
 
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	np.algorithm = *p++;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	np.flags = *p++;
+	BOUNDS_CHECK((p + 2), q, rdlen, end);
 	iter = (u_int16_t *)p;
 	np.iterations = ntohs(*iter);
 	p += 2;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	np.saltlen = *p++;
+	BOUNDS_CHECK((p + np.saltlen), q, rdlen, end);
 	memcpy(&np.salt, p, np.saltlen);
 	p += np.saltlen;
 	
@@ -614,7 +690,9 @@ raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 {
 	u_int8_t len;
 	int i;
+	u_char *q = p;
 
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	len = *p;
 	p++;
 
@@ -622,6 +700,7 @@ raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 		fprintf(f, "\"");
 
 	for (i = 0; i < len; i++) {
+		BOUNDS_CHECK((p + 1), q, rdlen, end);
 		if (f != NULL) 
 			fprintf(f, "%c", *p);	
 		p++;
@@ -680,7 +759,9 @@ raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 {
 	char buf[INET6_ADDRSTRLEN];
 	struct in6_addr *ia;
+	u_char *q = p;
 
+	BOUNDS_CHECK((p + sizeof(*ia)), q, rdlen, end);
 	ia = (struct in6_addr *)p;
 	inet_ntop(AF_INET6, ia, buf, sizeof(buf));
 
@@ -697,7 +778,9 @@ raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_in
 {
 	char buf[INET_ADDRSTRLEN];
 	struct in_addr *ia;
+	u_char *q = p;
 
+	BOUNDS_CHECK((p + sizeof(*ia)), q, rdlen, end);
 	ia = (struct in_addr *)p;
 
 	inet_ntop(AF_INET, ia, buf, sizeof(buf));
@@ -714,10 +797,17 @@ int
 raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
 {
 	struct tlsa t;
+	u_char *q = p;
 
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	t.usage = *p++;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	t.selector = *p++;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	t.matchtype = *p++;
+
+	if (rdlen - 3 < 0)
+		return -1;
 
 	t.datalen = (rdlen - 3);
 	
@@ -746,12 +836,15 @@ raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 	int max = sizeof(expand);
 	int elen = 0;
 
+	BOUNDS_CHECK((q + 2), p, rdlen, end);
 	tmp16 = (u_int16_t *)q;
 	s.priority = ntohs(*tmp16);
 	q += 2;
+	BOUNDS_CHECK((q + 2), p, rdlen, end);
 	tmp16 = (u_int16_t *)q;
 	s.weight = ntohs(*tmp16);
 	q += 2;
+	BOUNDS_CHECK((q + 2), p, rdlen, end);
 	tmp16 = (u_int16_t *)q;
 	s.port = ntohs(*tmp16);
 	q += 2;
@@ -795,9 +888,11 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	int elen = 0;
 	int len, i;
 
+	BOUNDS_CHECK((q + 2), p, rdlen, end);
 	tmp16 = (u_int16_t *)q;
 	n.order = ntohs(*tmp16);
 	q += 2;
+	BOUNDS_CHECK((q + 2), p, rdlen, end);
 	tmp16 = (u_int16_t *)q;
 	n.preference = ntohs(*tmp16);
 	q += 2;
@@ -808,34 +903,40 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 
 	
 	/* flags */
+	BOUNDS_CHECK((q + 1), p, rdlen, end);
 	len = *q;
 	q++;
 
 	if (f != NULL) {
 		fprintf(f, "\"");
 		for (i = 0; i < len; i++) {
+			BOUNDS_CHECK((q + 1), p, rdlen, end);
 			fprintf(f, "%c", *q++);
 		}
 		fprintf(f, "\",");
 	}
 	/* services */
+	BOUNDS_CHECK((q + 1), p, rdlen, end);
 	len = *q;
 	q++;
 
 	if (f != NULL) {
 		fprintf(f, "\"");
 		for (i = 0; i < len; i++) {
+			BOUNDS_CHECK((q + 1), p, rdlen, end);
 			fprintf(f, "%c", *q++);
 		}
 		fprintf(f, "\",");
 	}
 	/* regexp */
+	BOUNDS_CHECK((q + 1), p, rdlen, end);
 	len = *q;
 	q++;
 
 	if (f != NULL) {
 		fprintf(f, "\"");
 		for (i = 0; i < len; i++) {
+			BOUNDS_CHECK((q + 1), p, rdlen, end);
 			fprintf(f, "%c", *q++);
 		}
 		fprintf(f, "\",");
