@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.42 2019/02/08 15:00:10 pjp Exp $
+ * $Id: dddctl.c,v 1.43 2019/02/08 15:24:05 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -7031,7 +7031,7 @@ dig(int argc, char *argv[])
 		fprintf(f, ";; MSG SIZE  rcvd: %d\n", bytes_received);
 	}
 
-	if (f != stdin && f != NULL)
+	if (f != stdout && f != NULL)
 		fclose(f);
 
 	return 0;
