@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.46 2019/02/09 06:41:49 pjp Exp $
+ * $Id: dddctl.c,v 1.47 2019/02/09 07:50:06 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -8859,7 +8859,6 @@ count_db(ddDB *db)
 	struct node *n, *nx;
 	int count = 0;
 	int rs;
-	u_int64_t flags;
 	
 	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
 		rs = n->datalen;
@@ -8871,9 +8870,144 @@ count_db(ddDB *db)
 
 		memcpy((char *)sdomain, (char *)n->data, n->datalen);
 
-		for (flags = 1; flags < ((u_int64_t)1 << 62); flags <<= 1)
-			if (sdomain->flags & flags)
-				 count++;
+		if (sdomain->flags & DOMAIN_HAVE_DNSKEY) {
+			struct domain_dnskey *sdr = NULL;
+			if ((sdr = (struct domain_dnskey *)find_substruct(sdomain, INTERNAL_TYPE_DNSKEY)) == NULL) {
+				dolog(LOG_INFO, "no dnskeys in zone!\n");
+				return -1;
+			}
+		}
+		if (sdomain->flags & DOMAIN_HAVE_A) {
+			struct domain_a *sdr = NULL;
+			if ((sdr = (struct domain_a *)find_substruct(sdomain, INTERNAL_TYPE_A)) == NULL) {
+				dolog(LOG_INFO, "no as in zone!\n");
+				return -1;
+			}
+
+			count += sdr->a_count;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_MX) {
+			struct domain_mx *sdr = NULL;
+			if ((sdr = (struct domain_mx *)find_substruct(sdomain, INTERNAL_TYPE_MX)) == NULL) {
+				dolog(LOG_INFO, "no mxs in zone!\n");
+				return -1;
+			}
+
+			count += sdr->mx_count;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_NS) {
+			struct domain_ns *sdr = NULL;
+			if ((sdr = (struct domain_ns *)find_substruct(sdomain, INTERNAL_TYPE_NS)) == NULL) {
+				dolog(LOG_INFO, "no nss in zone!\n");
+				return -1;
+			}
+
+			count += sdr->ns_count;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_SOA) {
+			struct domain_soa *sdr = NULL;
+			if ((sdr = (struct domain_soa *)find_substruct(sdomain, INTERNAL_TYPE_SOA)) == NULL) {
+				dolog(LOG_INFO, "no soas in zone!\n");
+				return -1;
+			}
+
+			count++;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_TXT) {
+			struct domain_txt *sdr = NULL;
+			if ((sdr = (struct domain_txt *)find_substruct(sdomain, INTERNAL_TYPE_TXT)) == NULL) {
+				dolog(LOG_INFO, "no txts in zone!\n");
+				return -1;
+			}
+
+			count++;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_AAAA) {
+			struct domain_aaaa *sdr = NULL;
+			if ((sdr = (struct domain_aaaa *)find_substruct(sdomain, INTERNAL_TYPE_AAAA)) == NULL) {
+				dolog(LOG_INFO, "no aaaas in zone!\n");
+				return -1;
+			}
+
+			count += sdr->aaaa_count;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_NSEC3) { 
+			struct domain_nsec3 *sdr = NULL;
+			if ((sdr = (struct domain_nsec3 *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3)) == NULL) {
+				dolog(LOG_INFO, "no nsec3s in zone!\n");
+				return -1;
+			}
+
+			count++;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_NSEC3PARAM) {
+			struct domain_nsec3param *sdr = NULL;
+			if ((sdr = (struct domain_nsec3param *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
+				dolog(LOG_INFO, "no nsec3params in zone!\n");
+				return -1;
+			}
+			count++;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_CNAME) {
+			struct domain_cname *sdr = NULL;
+			if ((sdr = (struct domain_cname *)find_substruct(sdomain, INTERNAL_TYPE_CNAME)) == NULL) {
+				dolog(LOG_INFO, "no cnames in zone!\n");
+				return -1;
+			}
+			count++;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_PTR) {
+			struct domain_ptr *sdr = NULL;
+			if ((sdr = (struct domain_ptr *)find_substruct(sdomain, INTERNAL_TYPE_PTR)) == NULL) {
+				dolog(LOG_INFO, "no ptrs in zone!\n");
+				return -1;
+			}
+	
+			count++;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_NAPTR) {
+			struct domain_naptr *sdr = NULL;
+			if ((sdr = (struct domain_naptr *)find_substruct(sdomain, INTERNAL_TYPE_NAPTR)) == NULL) {
+				dolog(LOG_INFO, "no naptrs in zone!\n");
+				return -1;
+			}
+
+			count += sdr->naptr_count;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_SRV) {
+			struct domain_srv *sdr = NULL;
+			if ((sdr = (struct domain_srv *)find_substruct(sdomain, INTERNAL_TYPE_SRV)) == NULL) {
+				dolog(LOG_INFO, "no srvs in zone!\n");
+				return -1;
+			}
+			count += sdr->srv_count;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_SSHFP) {
+			struct domain_sshfp *sdr = NULL;
+			if ((sdr = (struct domain_sshfp *)find_substruct(sdomain, INTERNAL_TYPE_SSHFP)) == NULL) {
+				dolog(LOG_INFO, "no sshfps in zone!\n");
+				return -1;
+			}
+			count += sdr->sshfp_count;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_TLSA) {
+			struct domain_tlsa *sdr = NULL;
+			if ((sdr = (struct domain_tlsa *)find_substruct(sdomain, INTERNAL_TYPE_TLSA)) == NULL) {
+				dolog(LOG_INFO, "no tlsas in zone!\n");
+				return -1;
+			}
+		
+			count += sdr->tlsa_count;
+		}
+		if (sdomain->flags & DOMAIN_HAVE_DS) {
+			struct domain_ds *sdr = NULL;
+			if ((sdr = (struct domain_ds *)find_substruct(sdomain, INTERNAL_TYPE_DS)) == NULL) {
+				dolog(LOG_INFO, "no ds in zone!\n");
+				return -1;
+			}
+
+			count += sdr->ds_count;
+		}
 
 		free(sdomain);
 	}
