@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.57 2019/02/07 11:16:03 pjp Exp $
+ * $Id: parse.y,v 1.58 2019/02/09 09:05:18 pjp Exp $
  */
 
 %{
@@ -181,7 +181,7 @@ int             lungetc(int);
 int 		parse_file(ddDB *, char *);
 struct file     *pushfile(const char *, int, int, int);
 int             popfile(void);
-void 		set_record(struct domain *, int, char *, int);
+int		set_record(struct domain *, int, char *, int);
 static int 	temp_inet_net_pton_ipv6(const char *, void *, size_t);
 int 		yyparse(void);
 static struct rzone * add_rzone(void);
@@ -1942,7 +1942,8 @@ fill_cname(char *name, char *type, int myttl, char *hostname)
 
 	ssd->flags |= DOMAIN_HAVE_CNAME;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (converted_name)
 		free (converted_name);
@@ -2031,7 +2032,8 @@ fill_ptr(char *name, char *type, int myttl, char *hostname)
 
 	ssd->flags |= DOMAIN_HAVE_PTR;
 
-	set_record(ssd, rs,  converted_name, converted_namelen);
+	if (set_record(ssd, rs,  converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (converted_name)
 		free (converted_name);
@@ -2119,7 +2121,8 @@ fill_dnskey(char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t p
 
 	ssd->flags |= DOMAIN_HAVE_DNSKEY;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (converted_name)
 		free (converted_name);
@@ -2264,8 +2267,8 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 	
 	ssd->flags |= DOMAIN_HAVE_RRSIG;
 
-	/* pjp */
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen)  < 0)	
+		return -1;
 	
 	if (signers_name2)
 		free (signers_name2);
@@ -2357,7 +2360,8 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 		
 	ssd->flags |= DOMAIN_HAVE_DS;
 
-	set_record(sdomain, rs, converted_name, converted_namelen);
+	if (set_record(sdomain, rs, converted_name, converted_namelen) < 0)
+		return -1;
 
 	if (converted_name)
 		free (converted_name);
@@ -2466,7 +2470,8 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 	
 	ssd->flags |= DOMAIN_HAVE_NSEC3;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 
 	if (converted_name)
 		free (converted_name);
@@ -2553,7 +2558,8 @@ fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_i
 
 	ssd->flags |= DOMAIN_HAVE_NSEC3PARAM;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 
 	if (converted_name)
 		free (converted_name);
@@ -2651,7 +2657,8 @@ fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitma
 	
 	ssd->flags |= DOMAIN_HAVE_NSEC;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 
 	if (converted_name)
 		free (converted_name);
@@ -2759,7 +2766,8 @@ fill_naptr(char *name, char *type, int myttl, int order, int preference, char *f
 
 	ssd->flags |= DOMAIN_HAVE_NAPTR;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (naptrname)
 		free (naptrname);
@@ -2847,7 +2855,8 @@ fill_txt(char *name, char *type, int myttl, char *msg)
 
 	ssd->flags |= DOMAIN_HAVE_TXT;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (converted_name)
 		free (converted_name);
@@ -2960,7 +2969,8 @@ fill_tlsa(char *name, char *type, int myttl, uint8_t usage, uint8_t selector, ui
 
 	ssd->flags |= DOMAIN_HAVE_TLSA;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (converted_name)
 		free (converted_name);
@@ -3071,7 +3081,8 @@ fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerp
 
 	ssd->flags |= DOMAIN_HAVE_SSHFP;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (converted_name)
 		free (converted_name);
@@ -3175,7 +3186,8 @@ fill_srv(char *name, char *type, int myttl, int priority, int weight, int port, 
 
 	ssd->flags |= DOMAIN_HAVE_SRV;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (converted_name)
 		free (converted_name);
@@ -3274,7 +3286,8 @@ fill_mx(char *name, char *type, int myttl, int priority, char *mxhost)
 
 	ssd->flags |= DOMAIN_HAVE_MX;
 
-	set_record(sdomain, rs, converted_name, converted_namelen);
+	if (set_record(sdomain, rs, converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (converted_name)
 		free (converted_name);
@@ -3367,7 +3380,8 @@ fill_a(char *name, char *type, int myttl, char *a)
 
 	ssd->flags |= DOMAIN_HAVE_A;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (converted_name)
 		free (converted_name);
@@ -3463,7 +3477,8 @@ fill_aaaa(char *name, char *type, int myttl, char *aaaa)
 
 	ssd->flags |= DOMAIN_HAVE_AAAA;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (converted_name)
 		free (converted_name);
@@ -3588,7 +3603,8 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 
 	ssd->flags |= DOMAIN_HAVE_NS;
 
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (converted_name)
 		free (converted_name);
@@ -3710,7 +3726,8 @@ fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int seria
 
 	ssd->flags |= DOMAIN_HAVE_SOA;
 	
-	set_record(ssd, rs, converted_name, converted_namelen);
+	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+		return -1;
 	
 	if (converted_name)
 		free (converted_name);
@@ -3749,7 +3766,7 @@ get_record(struct domain *sdomain, char *converted_name, int converted_namelen)
 }
 	
 
-void
+int
 set_record(struct domain *sdomain, int rs, char *converted_name, int converted_namelen)
 {
 	ddDB *db = mydb; /* XXX */
@@ -3768,11 +3785,11 @@ set_record(struct domain *sdomain, int rs, char *converted_name, int converted_n
 	data.size = rs;
 
 	if ((ret = db->put(db, &key, &data)) != 0) {
-		//dolog(LOG_INFO, "db->put: %s\n" , db_strerror(ret));
-		return;
+		dolog(LOG_ERR, "db->put: %s / Out of Memory\n", strerror(errno));
+		return -1;
 	}
 
-	return;
+	return 0;
 }
 	
 struct file *
