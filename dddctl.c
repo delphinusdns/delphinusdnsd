@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.45 2019/02/09 06:34:46 pjp Exp $
+ * $Id: dddctl.c,v 1.46 2019/02/09 06:41:49 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -8871,7 +8871,7 @@ count_db(ddDB *db)
 
 		memcpy((char *)sdomain, (char *)n->data, n->datalen);
 
-		for (flags = 1; flags < ((u_int64_t)1 << 63); flags <<= 1)
+		for (flags = 1; flags < ((u_int64_t)1 << 62); flags <<= 1)
 			if (sdomain->flags & flags)
 				 count++;
 
