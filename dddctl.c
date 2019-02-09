@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.44 2019/02/08 18:25:08 pjp Exp $
+ * $Id: dddctl.c,v 1.45 2019/02/09 06:34:46 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -47,6 +47,7 @@ int verbose = 0;
 static struct timeval tv0;
 static time_t current_time;
 static int bytes_received, answers;
+static int segment;
 
 SLIST_HEAD(, keysentry) keyshead;
 
@@ -140,6 +141,7 @@ int	command_socket(char *);
 int 	connect_server(char *, int, u_int32_t);
 int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *, u_int16_t);
 int	lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t);
+int	count_db(ddDB *);
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 
@@ -1042,14 +1044,17 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 
 		memcpy((char *)sdomain, (char *)n->data, n->datalen);
 
-		if (strcmp(sdomain->zonename, zonename) == 0)
+		if (strcmp(sdomain->zonename, zonename) == 0) {
+			free(sdomain);
 			continue;
+		}
 
 		if (print_sd(of, sdomain) < 0) {
 			fprintf(stderr, "print_sd error\n");
 			return -1;
 		}
 
+		free(sdomain);
 
 		j++;
 	} 
@@ -1500,6 +1505,8 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 				return -1;
 			}
 
+
+		free(sd);
 		j++;
 	}
 	
@@ -6057,6 +6064,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 				TAILQ_INSERT_TAIL(&head, n1, entries);
 		}
 
+		free(sd);
 	}  /* RB_FOREACH_SAFE */
 
 	/* check ENT's which we'll create */
@@ -6117,6 +6125,8 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			}
 
 		} /* if len > rootlen */
+
+		free(sd);
 
 	} /* RB_FOREACH_SAFE */
 
@@ -6856,7 +6866,7 @@ usage(int argc, char *argv[])
 	} else {
 		fprintf(stderr, "usage: command [arg ...]\n");
 		fprintf(stderr, "\tbindfile zonename zonefile\n");
-		fprintf(stderr, "\tconfigtest [configfile]\n");
+		fprintf(stderr, "\tconfigtest [-c] [configfile]\n");
 		fprintf(stderr, "\tquery [-46BDITZ] [-@ server] [-P port] [-p file] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-z ZSK]\n");
@@ -7025,8 +7035,8 @@ dig(int argc, char *argv[])
 		if (format & ZONE_FORMAT)
 			answers--;
 
-		fprintf(f, ";; XFR size %d records (bytes %d)\n", answers, \
-			bytes_received);
+		fprintf(f, ";; XFR size %d records (segments %d, bytes %d)\n", 
+			answers, segment, bytes_received);
 	} else {
 		fprintf(f, ";; MSG SIZE  rcvd: %d\n", bytes_received);
 	}
@@ -7085,6 +7095,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	int len, totallen, zonelen, rrlen, rrtype;
 	int soacount = 0;
 	int elen = 0;
+	int segmentcount = 0;
+	int count = 0;
 	u_int16_t *class, *type, rdlen, *plen;
 	u_int16_t tcplen;
 	
@@ -7158,7 +7170,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			return -1;
 		}
 		rwh = (struct whole_header *)&reply[0];
-		bytes_received = ntohs(rwh->len);
+		bytes_received += ntohs(rwh->len);
 
 		end = &reply[len];
 		len = rwh->len;
@@ -7178,7 +7190,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			return -1;
 		}
 
-		answers = ntohs(rwh->dh.answer);
+		segmentcount = ntohs(rwh->dh.answer);
+		answers += segmentcount;
 
 		q = build_question((char *)&wh->dh, len, wh->dh.additional);
 		if (q == NULL) {
@@ -7205,10 +7218,12 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		
 		estart = (u_char *)&rwh->dh;
 
-		if ((format & ZONE_FORMAT) && f != NULL) 
+		if (segment == 0 && (format & ZONE_FORMAT) && f != NULL) 
 			fprintf(f, "zone \"%s\" {\n", zonename);
+	
+		segment++;
 
-		for (;;) {
+		for (count = 0; count < segmentcount; count++) {
 			elen = 0;
 
 			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format)) < 0) {
@@ -7246,9 +7261,9 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 			if (soacount > 1)
 				break;
+
 		}
 				
-		break;
 	}
 
 	if ((len = recv(so, reply, 0xffff, 0)) != 0) {	
@@ -7399,7 +7414,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	else
 		rwh = (struct whole_header *)&reply[0];
 
-	bytes_received = len;
+	bytes_received += len;
 
 	end = &reply[len];
 
@@ -7735,10 +7750,25 @@ configtest(int argc, char *argv[])
 {
 	ddDB *db;
 	char *zonefile = "/etc/delphinusdns.conf";
+	int ch, count = 0;
 
-	if (argc == 2) {
-		zonefile = argv[1];
+	
+	while ((ch = getopt(argc, argv, "c")) != -1) {
+		switch (ch) {
+		case 'c':
+			count = 1;
+			break;
+		default:
+			fprintf(stderr, "usage: dddctl configtest [-c] [input]\n");
+			exit(1);
+		}
 	}
+
+	argc -= optind;
+	argv += optind;
+
+	if (argc)
+		zonefile = argv[0];
 
 #if __OpenBSD__
 	if (pledge("stdio rpath wpath cpath", NULL) < 0) {
@@ -7762,6 +7792,9 @@ configtest(int argc, char *argv[])
 		dolog(LOG_INFO, "parsing config file failed\n");
 		return 1;
 	}
+
+	if (count)
+		count_db(db);
 
 	dddbclose(db);
 	
@@ -7974,14 +8007,17 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 
 		memcpy((char *)sdomain, (char *)n->data, n->datalen);
 
-		if (strcmp(convert_name(sdomain->zone, sdomain->zonelen), zonename) == 0)
+		if (strcmp(convert_name(sdomain->zone, sdomain->zonelen), zonename) == 0) {
+			free(sdomain);
 			continue;
+		}
 
 		if (print_sd_bind(of, sdomain) < 0) {
 			fprintf(stderr, "print_sd_bind error\n");
 			return -1;
 		}
 
+		free(sdomain);
 
 		j++;
 	} 
@@ -8815,3 +8851,34 @@ BN_GENCB_free(BN_GENCB *cb)
 
 
 #endif
+
+int
+count_db(ddDB *db)
+{
+	struct domain *sdomain;
+	struct node *n, *nx;
+	int count = 0;
+	int rs;
+	u_int64_t flags;
+	
+	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+		rs = n->datalen;
+		if ((sdomain = calloc(1, rs)) == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			exit(1);
+		}
+
+
+		memcpy((char *)sdomain, (char *)n->data, n->datalen);
+
+		for (flags = 1; flags < ((u_int64_t)1 << 63); flags <<= 1)
+			if (sdomain->flags & flags)
+				 count++;
+
+		free(sdomain);
+	}
+
+	printf("Records = %d , ", count);
+
+	return count;
+}
