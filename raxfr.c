@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.7 2019/02/08 18:25:08 pjp Exp $
+ * $Id: raxfr.c,v 1.8 2019/02/11 15:25:02 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -461,7 +461,7 @@ raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 
 	if (f != NULL) {
 		fprintf(f, "%u,%u,%u,\"%s\"\n", d.key_tag, d.algorithm, 
-			d.digest_type, base32hex_encode(d.digest, d.digestlen));
+			d.digest_type, bin2hex(d.digest, d.digestlen));
 	}
 
 	return (p - estart);
