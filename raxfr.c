@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.8 2019/02/11 15:25:02 pjp Exp $
+ * $Id: raxfr.c,v 1.9 2019/02/11 17:38:55 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -630,7 +630,7 @@ raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 		return -1;
 
 	/* XXX */
-	n.bitmap_len = 	(rdlen - (p - brr)) + 1;
+	n.bitmap_len = 	(rdlen - (p - brr));
 	if (n.bitmap_len > sizeof(n.bitmap))
 		return -1;
 
