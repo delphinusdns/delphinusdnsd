@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.17 2019/02/15 15:11:34 pjp Exp $
+ * $Id: util.c,v 1.18 2019/02/15 19:46:58 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -96,7 +96,7 @@ struct rrtab myrrtab[] =  {
  { "a",         DNS_TYPE_A, 		DNS_TYPE_A } ,
  { "aaaa",      DNS_TYPE_AAAA,		DNS_TYPE_AAAA },
  { "cname",     DNS_TYPE_CNAME, 	DNS_TYPE_CNAME },
- { "delegate",  DNS_TYPE_DELEGATE, 	DNS_TYPE_NS },
+ { "delegate",  DNS_TYPE_NS, 		DNS_TYPE_NS },
  { "dnskey", 	DNS_TYPE_DNSKEY, 	DNS_TYPE_DNSKEY },
  { "ds", 	DNS_TYPE_DS, 		DNS_TYPE_DS },
  { "hint",      DNS_TYPE_HINT,		DNS_TYPE_NS }, 

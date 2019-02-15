@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.13 2019/02/15 15:11:34 pjp Exp $
+ * $Id: ddd-db.h,v 1.14 2019/02/15 19:46:58 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -324,7 +324,7 @@ struct node {
 struct rrtab {
         char *name;
         u_int16_t type;
-	int16_t internal_type;
+	u_int16_t internal_type;
 };
 
 

@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.59 2019/02/15 15:11:34 pjp Exp $
+ * $Id: parse.y,v 1.60 2019/02/15 19:46:58 pjp Exp $
  */
 
 %{
@@ -2590,6 +2590,7 @@ fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerp
 		p += 2;
 	}
 
+	sshfp->ttl = myttl;
 
 	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_SSHFP, sshfp);
 	if (rbt == NULL) {

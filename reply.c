@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.66 2019/02/15 18:47:43 pjp Exp $
+ * $Id: reply.c,v 1.67 2019/02/15 19:46:58 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -54,7 +54,6 @@ extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, cha
 extern void 		slave_shutdown(void);
 extern int 		get_record_size(ddDB *, char *, int);
 extern char *		dns_label(char *, int *);
-extern int 		lookup_type(int internal_type);
 
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
@@ -5197,10 +5196,10 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		
 		offset += ((struct nsec3 *)rrp->rdata)->nextlen;
 
-		memcpy(&reply[offset], &((struct nsec *)rrp->rdata)->bitmap,
-			((struct nsec *)rrp->rdata)->bitmap_len);
+		memcpy(&reply[offset], &((struct nsec3 *)rrp->rdata)->bitmap,
+			((struct nsec3 *)rrp->rdata)->bitmap_len);
 
-		offset += ((struct nsec *)rrp->rdata)->bitmap_len;
+		offset += ((struct nsec3 *)rrp->rdata)->bitmap_len;
 
 		answer->rdlength = htons(&reply[offset] - answer->rdata);
 
