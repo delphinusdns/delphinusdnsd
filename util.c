@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.16 2019/02/07 11:16:03 pjp Exp $
+ * $Id: util.c,v 1.17 2019/02/15 15:11:34 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -42,12 +42,10 @@ int label_count(char *);
 char * dns_label(char *, int *);
 void slave_shutdown(void);
 int get_record_size(ddDB *, char *, int);
-void * find_substruct(struct domain *, u_int16_t);
-struct domain * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
-u_int16_t check_qtype(struct domain *, u_int16_t, int, int *);
+struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
+u_int16_t check_qtype(struct rbtree *, u_int16_t, int, int *);
 struct question		*build_fake_question(char *, int, u_int16_t);
 
-extern void 	dolog(int, char *, ...);
 char 			*get_dns_type(int, int);
 int 			memcasecmp(u_char *, u_char *, int);
 struct question		*build_question(char *, int, int);
@@ -58,6 +56,14 @@ struct rrtab 	*rrlookup(char *);
 
 extern int debug;
 extern int *ptr;
+
+extern void 	dolog(int, char *, ...);
+
+extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
+extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
+extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
+extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
+extern int display_rr(struct rrset *rrset);
 
 /* internals */
 struct typetable {
@@ -87,26 +93,26 @@ struct typetable {
 };
 
 struct rrtab myrrtab[] =  { 
- { "a",         DNS_TYPE_A, 		INTERNAL_TYPE_A } ,
- { "aaaa",      DNS_TYPE_AAAA,		INTERNAL_TYPE_AAAA },
- { "cname",     DNS_TYPE_CNAME, 	INTERNAL_TYPE_CNAME },
- { "delegate",  DNS_TYPE_DELEGATE, 	INTERNAL_TYPE_NS },
- { "dnskey", 	DNS_TYPE_DNSKEY, 	INTERNAL_TYPE_DNSKEY },
- { "ds", 	DNS_TYPE_DS, 		INTERNAL_TYPE_DS },
- { "hint",      DNS_TYPE_HINT,		INTERNAL_TYPE_NS }, 
- { "mx",        DNS_TYPE_MX, 		INTERNAL_TYPE_MX },
- { "naptr", 	DNS_TYPE_NAPTR,		INTERNAL_TYPE_NAPTR },
- { "ns",        DNS_TYPE_NS,		INTERNAL_TYPE_NS },
- { "nsec", 	DNS_TYPE_NSEC, 		INTERNAL_TYPE_NSEC },
- { "nsec3", 	DNS_TYPE_NSEC3,		INTERNAL_TYPE_NSEC3 },
- { "nsec3param", DNS_TYPE_NSEC3PARAM,	INTERNAL_TYPE_NSEC3PARAM },
- { "ptr",       DNS_TYPE_PTR,		INTERNAL_TYPE_PTR },
+ { "a",         DNS_TYPE_A, 		DNS_TYPE_A } ,
+ { "aaaa",      DNS_TYPE_AAAA,		DNS_TYPE_AAAA },
+ { "cname",     DNS_TYPE_CNAME, 	DNS_TYPE_CNAME },
+ { "delegate",  DNS_TYPE_DELEGATE, 	DNS_TYPE_NS },
+ { "dnskey", 	DNS_TYPE_DNSKEY, 	DNS_TYPE_DNSKEY },
+ { "ds", 	DNS_TYPE_DS, 		DNS_TYPE_DS },
+ { "hint",      DNS_TYPE_HINT,		DNS_TYPE_NS }, 
+ { "mx",        DNS_TYPE_MX, 		DNS_TYPE_MX },
+ { "naptr", 	DNS_TYPE_NAPTR,		DNS_TYPE_NAPTR },
+ { "ns",        DNS_TYPE_NS,		DNS_TYPE_NS },
+ { "nsec", 	DNS_TYPE_NSEC, 		DNS_TYPE_NSEC },
+ { "nsec3", 	DNS_TYPE_NSEC3,		DNS_TYPE_NSEC3 },
+ { "nsec3param", DNS_TYPE_NSEC3PARAM,	DNS_TYPE_NSEC3PARAM },
+ { "ptr",       DNS_TYPE_PTR,		DNS_TYPE_PTR },
  { "rrsig", 	DNS_TYPE_RRSIG, 	-1 },
- { "soa",       DNS_TYPE_SOA, 		INTERNAL_TYPE_SOA },
- { "srv",       DNS_TYPE_SRV, 		INTERNAL_TYPE_SRV },
- { "sshfp", 	DNS_TYPE_SSHFP,		INTERNAL_TYPE_SSHFP },
- { "tlsa", 	DNS_TYPE_TLSA,		INTERNAL_TYPE_TLSA },
- { "txt",       DNS_TYPE_TXT,		INTERNAL_TYPE_TXT },
+ { "soa",       DNS_TYPE_SOA, 		DNS_TYPE_SOA },
+ { "srv",       DNS_TYPE_SRV, 		DNS_TYPE_SRV },
+ { "sshfp", 	DNS_TYPE_SSHFP,		DNS_TYPE_SSHFP },
+ { "tlsa", 	DNS_TYPE_TLSA,		DNS_TYPE_TLSA },
+ { "txt",       DNS_TYPE_TXT,		DNS_TYPE_TXT },
 };
 
 
@@ -217,188 +223,29 @@ slave_shutdown(void)
 
 
 /*
- * GET_RECORD_SIZE - get the record size of a record
- */
-
-int 
-get_record_size(ddDB *db, char *converted_name, int converted_namelen)
-{
-	struct domain *sdomain;
-	ddDBT key, data;
-	int ret;
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-
-	key.data = (char *)converted_name;
-	key.size = converted_namelen;
-
-	data.data = NULL;
-	data.size = sizeof(struct domain);
-
-	if ((ret = db->get(db, &key, &data)) == 0) {
-		sdomain = (struct domain *)data.data;
-		return (sdomain->len);
-	} 
-
-	return sizeof(struct domain);
-}
-
-/*
- * FIND_SUBSTRUCT - find the substruct of a record
- *
- */
-
-void *
-find_substruct(struct domain *ssd, u_int16_t type)
-{
-	struct domain_generic *sdg = NULL;
-	void *ptr = NULL;
-	void *vssd = (void *)ssd;
-
-	switch (type) {
-	case INTERNAL_TYPE_SOA:
-		if (! (ssd->flags & DOMAIN_HAVE_SOA))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_A:
-		if (! (ssd->flags & DOMAIN_HAVE_A))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_AAAA:
-		if (! (ssd->flags & DOMAIN_HAVE_AAAA))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_MX:
-		if (! (ssd->flags & DOMAIN_HAVE_MX))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NS:
-		if (! (ssd->flags & DOMAIN_HAVE_NS))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_CNAME:
-		if (! (ssd->flags & DOMAIN_HAVE_CNAME))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_PTR:
-		if (! (ssd->flags & DOMAIN_HAVE_PTR))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_TXT:
-		if (! (ssd->flags & DOMAIN_HAVE_TXT))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_SRV:
-		if (! (ssd->flags & DOMAIN_HAVE_SRV))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_TLSA:
-		if (! (ssd->flags & DOMAIN_HAVE_TLSA))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_SSHFP:
-		if (! (ssd->flags & DOMAIN_HAVE_SSHFP))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NAPTR:
-		if (! (ssd->flags & DOMAIN_HAVE_NAPTR))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_DNSKEY:
-		if (! (ssd->flags & DOMAIN_HAVE_DNSKEY))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_DS:
-		if (! (ssd->flags & DOMAIN_HAVE_DS))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NSEC3PARAM:
-		if (! (ssd->flags & DOMAIN_HAVE_NSEC3PARAM))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NSEC3:
-		if (! (ssd->flags & DOMAIN_HAVE_NSEC3))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_NSEC:
-		if (! (ssd->flags & DOMAIN_HAVE_NSEC))
-			return NULL;
-		break;
-	case INTERNAL_TYPE_RRSIG:
-		if (! (ssd->flags & DOMAIN_HAVE_RRSIG))
-			return NULL;
-		break;
-	default:
-		return NULL;
-		break;
-	}
-	
-	for (ptr = (void *)(vssd + sizeof(struct domain)); \
-		ptr <= (void *)(vssd + ssd->len); \
-		ptr += sdg->len) {
-		sdg = (struct domain_generic *)ptr;
-		if (type == sdg->type) {
-			return (ptr);
-		}
-	}
-
-	return NULL;
-}
-
-
-/*
- * LOOKUP_ZONE - look up a zone filling sd and returning RR TYPE, if error
+ * LOOKUP_ZONE - look up a zone filling rbtree and returning RR TYPE, if error
  *		 occurs returns -1, and sets errno on what type of error.
  */
 
 
-struct domain *
+struct rbtree *
 lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, char *replystring)
 {
 
-	struct domain *sd = NULL;
-	struct domain_ns *nsd;
+	struct rbtree *rbt = NULL;
+	struct rrset *rrset = NULL;
 	int plen, onemore = 0;
-	int ret = 0;
 	int error;
-	int w = 0;
-	int rs;
 
 	char *p;
 	
-	ddDBT key, data;
-
 	p = question->hdr->name;
 	plen = question->hdr->namelen;
 	onemore = 0;
 
 
-	rs = get_record_size(db, p, plen);
-	if (rs < 0) {
-		*lzerrno = ERR_DROP;
-		*returnval = -1;
-		return (NULL);
-	}
-	if ((sd = (struct domain *)calloc(1, rs)) == NULL) {
-		*lzerrno = ERR_DROP; /* only free on ERR_DROP */
-		*returnval = -1;
-		return (NULL);	
-	}
-
 	*returnval = 0;
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-
-	key.data = (char *)p;
-	key.size = plen;
-
-	data.data = NULL;
-	data.size = rs;
-
-	ret = db->get(db, &key, &data);
-	if (ret != 0) {
+	if ((rbt = find_rrset(db, p, plen)) == NULL) {
 nsec3:
 		/*
 		 * We have a condition where a record does not exist but we
@@ -410,85 +257,45 @@ nsec3:
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
 
-			free(sd);
-			rs = get_record_size(db, p, plen);
-			if (rs < 0) {
-				*lzerrno = ERR_DROP;
-				*returnval = -1;
-				return (NULL);
-			}
-			if ((sd = (struct domain *)calloc(1, rs)) == NULL) {
-				*lzerrno = ERR_DROP; /* only free on ERR_DROP */
-				*returnval = -1;
-				return (NULL);	
-			}
-
-			memset(&key, 0, sizeof(key));
-			memset(&data, 0, sizeof(data));
-
-			key.data = (char *)p;
-			key.size = plen;
-
-			data.data = NULL;
-			data.size = rs;
-
-			ret = db->get(db, &key, &data);
-			if (ret == 0)
-				memcpy((char *)sd, (char *)data.data, data.size);
-			if (ret == 0 && (sd->flags & DOMAIN_HAVE_SOA)) {
-				*lzerrno = ERR_NXDOMAIN;
-				*returnval = -1;
-				return (sd);
+			free(rbt);
+			if ((rbt = find_rrset(db, p, plen)) != NULL) {
+				if (find_rr(rbt, DNS_TYPE_SOA) != NULL) {
+					*lzerrno = ERR_NXDOMAIN;
+					*returnval = -1;
+					return (rbt);
+				}
 			}
 		}
 		*lzerrno = ERR_REFUSED;
 		*returnval = -1;
-		return (sd);
+		return (rbt);
 	}
 	
-	if (data.size != rs) {
-		dolog(LOG_INFO, "btree db is damaged, drop\n");
-		free(sd);
-		sd = NULL;
-		*lzerrno = ERR_DROP;	/* free on ERR_DROP */
-		*returnval = -1;
-		return (NULL);
-	}
+	snprintf(replystring, DNS_MAXNAME, "%s", rbt->humanname);
 
-	memcpy((char *)sd, (char *)data.data, data.size);
-	snprintf(replystring, DNS_MAXNAME, "%s", sd->zonename);
+	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+		struct rr *rrp;
 
-
-	if (sd->flags & DOMAIN_HAVE_NS) {
-		nsd = (struct domain_ns *)find_substruct(sd, INTERNAL_TYPE_NS);
-		if (w && nsd->ns_type == 0) {	
-			*lzerrno = ERR_NXDOMAIN;
-			*returnval = -1;
-			return (sd);
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) != NULL) {
+			if (((struct ns *)(rrp->rdata))->ns_type > 0) {
+				*returnval = DNS_TYPE_NS;
+				*lzerrno = ERR_NOERROR;
+				return (rbt);
+			}
 		}
-
-		/*
-		 * we're of ns_type > 0, return an NS record
-		 */
-
-		if (nsd->ns_type > 0) {
-			*returnval = DNS_TYPE_NS;
-			*lzerrno = ERR_NOERROR;
-			goto out;
-		}
-	} else if (sd->flags & DOMAIN_HAVE_NSEC3) {
+	} else if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
 		goto nsec3;
-	}
+	} 
 
-	*returnval = check_qtype(sd, ntohs(question->hdr->qtype), 0, &error);
+
+	*returnval = check_qtype(rbt, ntohs(question->hdr->qtype), 0, &error);
 	if (*returnval == 0) {
 		*lzerrno = ERR_NOERROR;
 		*returnval = -1;
-		return (sd);
+		return (rbt);
 	}
 
-out:
-	return(sd);
+	return(rbt);
 }
 
 /*
@@ -500,7 +307,7 @@ out:
  */
 
 u_int16_t
-check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
+check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 {
 	u_int16_t returnval;
 
@@ -517,10 +324,10 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 			break;
 
 	case DNS_TYPE_A:
-		if ((sd->flags & DOMAIN_HAVE_A) == DOMAIN_HAVE_A)  {
+		if (find_rr(rbt, DNS_TYPE_A) != NULL) {
 			returnval = DNS_TYPE_A;
 			break;
-		} else if ((sd->flags & DOMAIN_HAVE_CNAME) == 						DOMAIN_HAVE_CNAME) {
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
 			returnval = DNS_TYPE_CNAME;
 			break;
 		}
@@ -528,10 +335,10 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		*error = -1;
 		return 0;
 	case DNS_TYPE_AAAA:
-		if ((sd->flags & DOMAIN_HAVE_AAAA) == DOMAIN_HAVE_AAAA)  {
+		if (find_rr(rbt, DNS_TYPE_AAAA) != NULL) {
 			returnval = DNS_TYPE_AAAA;
 			break;
-		} else if ((sd->flags & DOMAIN_HAVE_CNAME) == 						DOMAIN_HAVE_CNAME) {
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
 			returnval = DNS_TYPE_CNAME;
 			break;
 		}
@@ -539,11 +346,10 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		*error = -1;
 		return 0;
 	case DNS_TYPE_MX:
-		if ((sd->flags & DOMAIN_HAVE_MX) == 
-				DOMAIN_HAVE_MX)  {
+		if (find_rr(rbt, DNS_TYPE_MX) != NULL) {
 			returnval = DNS_TYPE_MX;
 			break;
-		} else if ((sd->flags & DOMAIN_HAVE_CNAME) == 						DOMAIN_HAVE_CNAME) {
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
 			returnval = DNS_TYPE_CNAME;
 			break;
 		}
@@ -551,10 +357,10 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		*error = -1;
 		return 0;
 	case DNS_TYPE_PTR:
-		if ((sd->flags & DOMAIN_HAVE_PTR) == DOMAIN_HAVE_PTR)  {
+		if (find_rr(rbt, DNS_TYPE_PTR) != NULL) {
 			returnval = DNS_TYPE_PTR;
 			break;
-		} else if ((sd->flags & DOMAIN_HAVE_CNAME) == 						DOMAIN_HAVE_CNAME) {
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
 			returnval = DNS_TYPE_CNAME;
 			break;
 		}
@@ -563,8 +369,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		return 0;
 
 	case DNS_TYPE_SOA:
-		if ((sd->flags & DOMAIN_HAVE_SOA) == DOMAIN_HAVE_SOA) {
-
+		if (find_rr(rbt, DNS_TYPE_SOA) != NULL) {
 			returnval = DNS_TYPE_SOA;
 			break;
 		}
@@ -577,7 +382,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		return 0;
 
 	case DNS_TYPE_TLSA:
-		if ((sd->flags & DOMAIN_HAVE_TLSA) == DOMAIN_HAVE_TLSA) {
+		if (find_rr(rbt, DNS_TYPE_TLSA) != NULL) {
 			returnval = DNS_TYPE_TLSA;
 			break;
 		}
@@ -586,7 +391,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		return 0;
 
 	case DNS_TYPE_SSHFP:
-		if ((sd->flags & DOMAIN_HAVE_SSHFP) == DOMAIN_HAVE_SSHFP) {
+		if (find_rr(rbt, DNS_TYPE_SSHFP) != NULL) {
 			returnval = DNS_TYPE_SSHFP;
 			break;
 		}
@@ -595,7 +400,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		return 0;
 
 	case DNS_TYPE_SRV:	
-		if ((sd->flags & DOMAIN_HAVE_SRV) == DOMAIN_HAVE_SRV) {
+		if (find_rr(rbt, DNS_TYPE_SRV) != NULL) {
 			returnval = DNS_TYPE_SRV;
 			break;
 		}
@@ -604,7 +409,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		return 0;
 
 	case DNS_TYPE_NAPTR:
-		if ((sd->flags & DOMAIN_HAVE_NAPTR) == DOMAIN_HAVE_NAPTR) {
+		if (find_rr(rbt, DNS_TYPE_NAPTR) != NULL) {
 				returnval = DNS_TYPE_NAPTR;
 				break;
 		}
@@ -612,7 +417,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		*error = -1;
 		return 0;
 	case DNS_TYPE_CNAME:
-		if ((sd->flags & DOMAIN_HAVE_CNAME) == DOMAIN_HAVE_CNAME) {
+		if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
 				returnval = DNS_TYPE_CNAME;
 				break;
 		}
@@ -621,7 +426,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		return 0;
 
 	case DNS_TYPE_NS:
-		if ((sd->flags & DOMAIN_HAVE_NS) == DOMAIN_HAVE_NS) {
+		if (find_rr(rbt, DNS_TYPE_NS) != NULL) {
 			returnval = DNS_TYPE_NS;
 			break;
 		}
@@ -629,7 +434,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		*error = -1;
 		return 0;
 	case DNS_TYPE_TXT:
-		if ((sd->flags & DOMAIN_HAVE_TXT) == DOMAIN_HAVE_TXT)  {
+		if (find_rr(rbt, DNS_TYPE_TXT) != NULL) {
 			returnval = DNS_TYPE_TXT;
 			break;
 		}
@@ -637,7 +442,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		*error = -1;
 		return 0;
 	case DNS_TYPE_RRSIG:
-		if ((sd->flags & DOMAIN_HAVE_RRSIG) == DOMAIN_HAVE_RRSIG)  {
+		if (find_rr(rbt, DNS_TYPE_RRSIG) != NULL) {
 			returnval = DNS_TYPE_RRSIG;
 			break;
 		}
@@ -645,7 +450,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		*error = -1;
 		return 0;
 	case DNS_TYPE_NSEC3PARAM:
-		if ((sd->flags & DOMAIN_HAVE_NSEC3PARAM) == DOMAIN_HAVE_NSEC3PARAM)  {
+		if (find_rr(rbt, DNS_TYPE_NSEC3PARAM) != NULL) {
 			returnval = DNS_TYPE_NSEC3PARAM;
 			break;
 		}
@@ -653,7 +458,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		*error = -1;
 		return 0;
 	case DNS_TYPE_NSEC3:
-		if ((sd->flags & DOMAIN_HAVE_NSEC3) == DOMAIN_HAVE_NSEC3)  {
+		if (find_rr(rbt, DNS_TYPE_NSEC3) != NULL) {
 			returnval = DNS_TYPE_NSEC3;
 			break;
 		}
@@ -661,7 +466,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		*error = -1;
 		return 0;
 	case DNS_TYPE_NSEC:
-		if ((sd->flags & DOMAIN_HAVE_NSEC) == DOMAIN_HAVE_NSEC)  {
+		if (find_rr(rbt, DNS_TYPE_NSEC) != NULL) {
 			returnval = DNS_TYPE_NSEC;
 			break;
 		}
@@ -669,7 +474,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		*error = -1;
 		return 0;
 	case DNS_TYPE_DS:
-		if ((sd->flags & DOMAIN_HAVE_DS) == DOMAIN_HAVE_DS)  {
+		if (find_rr(rbt, DNS_TYPE_DS) != NULL) {
 			returnval = DNS_TYPE_DS;
 			break;
 		}
@@ -677,7 +482,7 @@ check_qtype(struct domain *sd, u_int16_t type, int nxdomain, int *error)
 		*error = -1;
 		return 0;
 	case DNS_TYPE_DNSKEY:
-		if ((sd->flags & DOMAIN_HAVE_DNSKEY) == DOMAIN_HAVE_DNSKEY)  {
+		if (find_rr(rbt, DNS_TYPE_DNSKEY) != NULL) {
 			returnval = DNS_TYPE_DNSKEY;
 			break;
 		}

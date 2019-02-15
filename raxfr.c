@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.9 2019/02/11 17:38:55 pjp Exp $
+ * $Id: raxfr.c,v 1.10 2019/02/15 15:11:34 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -215,6 +215,8 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 			}
 		}
 	}
+
+	fflush(f);
 
 	free(humanname);
 

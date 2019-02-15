@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018 Peter J. Philipp
+ * Copyright (c) 2017-2019 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: ent.c,v 1.7 2018/10/19 08:24:48 pjp Exp $
+ * $Id: ent.c,v 1.8 2019/02/15 15:11:34 pjp Exp $
  */
 
 /*
@@ -53,7 +53,6 @@ SLIST_HEAD(listhead, ententry) enthead;
 static struct ententry {
 	char *name;
 	int len;
-	u_int64_t flags;
 	SLIST_ENTRY(ententry) ent_entry;
 } *ent2, *entp;
 
@@ -72,28 +71,27 @@ int
 init_entlist(ddDB *db)
 {
 	struct node *n, *nx;
-	struct domain *sd = NULL;
+	struct rbtree *rbt = NULL;
 
 	SLIST_INIT(&enthead);
 
 	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
-		sd = (struct domain *)n->data;
+		rbt = (struct rbtree *)n->data;
 		ent2 = malloc(sizeof(struct ententry));
 		if (ent2 == NULL) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 			return -1;
 		}	
 
-		ent2->name = malloc(sd->zonelen);
+		ent2->name = malloc(rbt->zonelen);
 		if (ent2->name == NULL) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 			return -1;
 		}
 	
 
-		memcpy(ent2->name, sd->zone, sd->zonelen);
-		ent2->len = sd->zonelen;
-		ent2->flags = sd->flags;	
+		memcpy(ent2->name, rbt->zone, rbt->zonelen);
+		ent2->len = rbt->zonelen;
 
 		SLIST_INSERT_HEAD(&enthead, ent2, ent_entry);
 	} 

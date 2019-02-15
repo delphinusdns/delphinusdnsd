@@ -1,4 +1,4 @@
-version "8";
+version "9";
 options "cool stuff" {
 	versionstring "DELPHINUSDNSD - http://delphinusdns.centroid.eu";
 	interface "lo0";

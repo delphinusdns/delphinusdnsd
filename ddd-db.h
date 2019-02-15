@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.12 2019/02/07 16:06:47 pjp Exp $
+ * $Id: ddd-db.h,v 1.13 2019/02/15 15:11:34 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -57,26 +57,6 @@
 #define RECORD_COUNT	20
 #define NEGATIVE_CACHE_TIME	600	/* DNS & Bind 3rd edition page 35 */
 
-#define INTERNAL_TYPE_SOA	0
-#define INTERNAL_TYPE_A		1
-#define INTERNAL_TYPE_AAAA	2
-#define INTERNAL_TYPE_MX	3
-#define INTERNAL_TYPE_NS	4
-#define INTERNAL_TYPE_CNAME	5
-#define INTERNAL_TYPE_PTR	6
-#define INTERNAL_TYPE_TXT	7
-#define INTERNAL_TYPE_SRV	8	
-#define INTERNAL_TYPE_SSHFP	9
-#define INTERNAL_TYPE_NAPTR	10
-#define INTERNAL_TYPE_DNSKEY	11
-#define INTERNAL_TYPE_DS	12
-#define INTERNAL_TYPE_NSEC	13
-#define INTERNAL_TYPE_RRSIG	14
-#define INTERNAL_TYPE_NSEC3	15
-#define INTERNAL_TYPE_NSEC3PARAM 16
-#define INTERNAL_TYPE_TLSA	17
-#define INTERNAL_TYPE_MAX	18
-
 /* db stuff */
 
 struct dnskey {
@@ -87,8 +67,8 @@ struct dnskey {
 	u_int8_t algorithm;		/* would be 5, RFC 3110 */
 	char public_key[4096];
 	u_int16_t publickey_len;
+	u_int32_t ttl;
 } __attribute__((packed)); 
-
 
 struct rrsig {
 	u_int16_t type_covered;
@@ -102,13 +82,25 @@ struct rrsig {
 	u_int8_t signame_len;
 	char signature[4096];
 	u_int16_t signature_len;
+	u_int32_t ttl;
+	int used;		/* if this RRSIG is used at all */
 } __attribute__((packed)); 
+
+#if 0
+struct rrsig {
+	struct internal_rrsig internal[3];
+#define	RRSIG_RRSET	0
+#define RRSIG_DNSKEY	1
+#define RRSIG_DS	2
+} __attribute__((packed)); 
+#endif
 
 struct nsec {
 	char next_domain_name[DNS_MAXNAME];
 	u_int8_t ndn_len;	/* next domain name length */
 	char bitmap[8192];
 	u_int16_t bitmap_len;
+	u_int32_t ttl;
 } __attribute__((packed));
 
 struct nsec3 {
@@ -121,6 +113,7 @@ struct nsec3 {
 	u_int8_t nextlen;	/* next domain name length */
 	char bitmap[8192];
 	u_int16_t bitmap_len;
+	u_int32_t ttl;
 } __attribute__((packed));
 
 struct nsec3param {
@@ -129,6 +122,7 @@ struct nsec3param {
 	u_int16_t iterations;
 	u_int8_t saltlen;
 	char salt[256];
+	u_int32_t ttl;
 } __attribute__((packed));
 
 struct ds {
@@ -137,6 +131,7 @@ struct ds {
 	u_int8_t digest_type;
 	char digest[4096];
 	u_int16_t digestlen;
+	u_int32_t ttl;
 } __attribute__((packed)); 
 
 
@@ -150,17 +145,24 @@ struct soa {
 	u_int32_t retry;
 	u_int32_t expire;
 	u_int32_t minttl;
+	u_int32_t ttl;
 } __attribute__((packed)); 
 
 struct smx {
 	u_int16_t preference;		/* MX preference */
 	char exchange[DNS_MAXNAME];	/* name of exchange server */
 	int exchangelen;		/* length of exchange server name */
+	u_int32_t ttl;
 } __attribute__((packed));
 
 struct ns {
 	char nsserver[DNS_MAXNAME];	/* NS name */
 	int nslen;			/* length of NS */
+        int ns_type;                    /* set if it's a delegation */
+#define NS_TYPE_DELEGATE        0x1
+#define NS_TYPE_HINT            0x2
+	u_int32_t ttl;
+
 } __attribute__((packed));
 
 struct srv {
@@ -169,6 +171,7 @@ struct srv {
 	u_int16_t port;			/* 16 bit port */
 	char target[DNS_MAXNAME];	/* SRV target name */
 	int targetlen;			/* SRV target name length */
+	u_int32_t ttl;
 } __attribute__((packed));
 
 struct sshfp {
@@ -176,6 +179,7 @@ struct sshfp {
 	u_int8_t fptype;		/* SSHFP fingerprint type */
 	char fingerprint[DNS_MAXNAME];  /* fingerprint */
 	int fplen;			/* fingerprint length */
+	u_int32_t ttl;
 } __attribute__((packed));
 
 struct tlsa {
@@ -184,6 +188,7 @@ struct tlsa {
 	u_int8_t matchtype;		/* TLSA matching type */
 	char data[DNS_MAXNAME];  	/* TLSA data */
 	int datalen;			/* data length */
+	u_int32_t ttl;
 } __attribute__((packed));
 
 struct naptr {
@@ -197,174 +202,37 @@ struct naptr {
 	int regexplen;			/* regexp len */
 	char replacement[DNS_MAXNAME];	/* replacement this is a domain */
 	int replacementlen;
+	u_int32_t ttl;
 } __attribute__((packed));
 
-struct domain {
-	u_int16_t type;
-	u_int32_t len;
-	char zone[DNS_MAXNAME];		/* name of zone in dns name format */
-	int zonelen;			/* length of zone, above */
-	char zonename[DNS_MAXNAME + 1]; /* name of zone in human readable */
-	u_int64_t flags;		/* flags of zone */
-#define DOMAIN_HAVE_A 		0x1
-#define DOMAIN_HAVE_SOA 	0x2
-#define DOMAIN_HAVE_CNAME 	0x4
-#define DOMAIN_HAVE_PTR	  	0x8
-#define DOMAIN_HAVE_MX		0x10
-#define DOMAIN_HAVE_AAAA	0x20
-#define DOMAIN_HAVE_NS		0x40
-#define DOMAIN_HAVE_TXT		0x80
-#define DOMAIN_HAVE_SRV		0x100
-#define DOMAIN_HAVE_SSHFP	0x200
-#define DOMAIN_HAVE_NAPTR	0x400
-#define DOMAIN_HAVE_DNSKEY	0x800
-#define DOMAIN_HAVE_DS		0x1000
-#define DOMAIN_HAVE_NSEC	0x2000
-#define DOMAIN_HAVE_RRSIG	0x4000
-#define DOMAIN_HAVE_NSEC3	0x8000
-#define DOMAIN_HAVE_NSEC3PARAM	0x10000
-#define DOMAIN_HAVE_TLSA	0x20000
-	u_int32_t ttl[INTERNAL_TYPE_MAX];	/* time to lives */
-	time_t created;			/* time created, for dynamic zones */
+struct cname {
+        char cname[DNS_MAXNAME];                /* CNAME RR */
+        int cnamelen;                           /* len of CNAME */
+	u_int32_t ttl;
 } __attribute__((packed));
 
-struct domain_generic {
-	u_int16_t type;
-	u_int32_t len;
+struct ptr {
+        char ptr[DNS_MAXNAME];                  /* PTR RR */
+        int ptrlen;                             /* len of PTR */
+	u_int32_t ttl;
 } __attribute__((packed));
 
-struct domain_soa {
-	u_int16_t type;
-	u_int32_t len;
-	struct soa soa;			/* start of authority */
+struct txt {
+        char txt[DNS_MAXNAME];                  /* TXT string */
+        int txtlen;                             /* len of TXT */
+	u_int32_t ttl;
 } __attribute__((packed));
 
-struct domain_rrsig {
-	u_int16_t type;
-	u_int32_t len;
-	struct rrsig rrsig[INTERNAL_TYPE_MAX * 2];	/* rrsig RR */
-	int rrsig_count;			/* how many ZSK's */
-	struct rrsig rrsig_dnskey[RECORD_COUNT];/* hack around dnskeys */
-	int rrsig_dnskey_count;			/* RRSIG count */
+struct a {
+        in_addr_t a;      /* IP addresses */
+	u_int32_t ttl;
 } __attribute__((packed));
 
-
-struct domain_a {
-	u_int16_t type;
-	u_int32_t len;
-	in_addr_t a[RECORD_COUNT];	/* IP addresses */
-	u_int8_t region[RECORD_COUNT];	/* region of IP address */
-	int a_ptr;			/* pointer to last used address */
-	int a_count;			/* IP address count (max 10) */
+struct aaaa {
+        struct in6_addr aaaa;     /* IPv6 addresses */
+	u_int32_t ttl;
 } __attribute__((packed));
 
-struct domain_aaaa {
-	u_int16_t type;
-	u_int32_t len;
-	struct in6_addr	aaaa[RECORD_COUNT];	/* IPv6 addresses */
-	int aaaa_count;			/* IPv6 address count (max 10) */
-	int aaaa_ptr;			/* pointer to last used IPv6 address */
-} __attribute__((packed));
-
-struct domain_mx {
-	u_int16_t type;
-	u_int32_t len;
-	struct smx mx[RECORD_COUNT];	/* MX addresses */
-	int mx_count;			/* MX address count, max 10 */
-	int mx_ptr;			/* pointer to last used MX adddress */
-} __attribute__((packed));
-
-struct domain_ns {
-	u_int16_t type;
-	u_int32_t len;
-	struct ns ns[RECORD_COUNT];	/* NS resource records (max 10) */
-	int ns_count;			/* count of NS records, (max 10) */
-	int ns_ptr;			/* pointer to last used NS address */
-	int ns_type;			/* set if it's a delegation */
-#define NS_TYPE_DELEGATE	0x1
-#define NS_TYPE_HINT		0x2
-} __attribute__((packed));
-
-struct domain_cname {
-	u_int16_t type;
-	u_int32_t len;
-	char cname[DNS_MAXNAME];		/* CNAME RR */
-	int cnamelen;				/* len of CNAME */
-} __attribute__((packed));
-
-struct domain_ptr {
-	u_int16_t type;
-	u_int32_t len;
-	char ptr[DNS_MAXNAME];			/* PTR RR */
-	int ptrlen;				/* len of PTR */
-} __attribute__((packed));
-
-struct domain_txt {
-	u_int16_t type;
-	u_int32_t len;
-	char txt[DNS_MAXNAME];			/* TXT string */
-	int txtlen;				/* len of TXT */
-} __attribute__((packed));
-
-struct domain_srv {
-	u_int16_t type;
-	u_int32_t len;
-	struct srv srv[RECORD_COUNT];		/* SRV resource record */
-	int srv_count;				/* count of SRV RR */
-} __attribute__((packed));
-
-struct domain_sshfp {
-	u_int16_t type;
-	u_int32_t len;
-	struct sshfp sshfp[RECORD_COUNT];	/* SSHFP resource record */
-	int sshfp_count;			/* SSHFP RR count */
-} __attribute__((packed));
-
-struct domain_tlsa {
-	u_int16_t type;
-	u_int32_t len;
-	struct tlsa tlsa[RECORD_COUNT];		/* TLSA resource record */
-	int tlsa_count;				/* TLSA RR count */
-} __attribute__((packed));
-
-struct domain_naptr {
-	u_int16_t type;
-	u_int32_t len;
-	struct naptr naptr[RECORD_COUNT];	/* NAPTR RR, eek 20K! */
-	int naptr_count;
-} __attribute__((packed));
-
-struct domain_dnskey {
-	u_int16_t type;
-	u_int32_t len;
-	struct dnskey dnskey[RECORD_COUNT];	/* DNSKEY RR */
-	int dnskey_count;			/* count of DNSKEY */
-} __attribute__((packed));
-
-struct domain_nsec {
-	u_int16_t type;
-	u_int32_t len;
-	struct nsec nsec;			/* NSEC RR */
-} __attribute__((packed));
-
-struct domain_nsec3 {
-	u_int16_t type;
-	u_int32_t len;
-	struct nsec3 nsec3;			/* NSEC3 RR */
-} __attribute__((packed));
-
-struct domain_nsec3param {
-	u_int16_t type;
-	u_int32_t len;
-	struct nsec3param nsec3param;		/* NSEC3PARAM RR */
-} __attribute__((packed));
-
-struct domain_ds {
-	u_int16_t type;
-	u_int32_t len;
-	struct ds ds[RECORD_COUNT];		/* DS RR */
-	int ds_count;				/* count of DS */
-} __attribute__((packed));
 
 
 struct sreply {
@@ -374,8 +242,8 @@ struct sreply {
 	struct question *q;	/* struct question */
 	struct sockaddr *sa;	/* struct sockaddr of question */
 	int salen;		/* length of struct sockaddr */
-	struct domain *sd1;	/* first resolved domain */
-	struct domain *sd2;	/* CNAME to second resolved domain */
+	struct rbtree *rbt1;	/* first resolved domain */
+	struct rbtree *rbt2;	/* CNAME to second resolved domain */
 	u_int8_t region;	/* region of question */
 	int istcp;		/* when set it's tcp */
 	int wildcard;		/* wildcarding boolean */
@@ -383,59 +251,7 @@ struct sreply {
 	char *replybuf;		/* reply buffer */
 };
 
-struct srecurseheader {
-	int af;					/* address family */
-	int proto;				/* protocol UDP/TCP */
-	struct sockaddr_storage source;		/* source + port */
-	struct sockaddr_storage dest;		/* dest + port */
-	int len;				/* length of question */
-	char buf[512];				/* question buffer */
-};
 
-
-SLIST_HEAD(listhead2, recurses) recurseshead;
-
-struct recurses {
-	char query[512];		/* the query we received */
-	int len;			/* length of query */
-
-	int isfake;			/* received or faked */
-	int launched;			/* is launched */
-	int replied;			/* we replied to this question */
-	int packetcount;		/* packet count of requests */
-        int af;                                 /* address family */
-        int proto;                              /* protocol UDP/TCP */
-        struct sockaddr_storage source;         /* source + port */
-        struct sockaddr_storage dest;           /* dest + port */
-
-	time_t received;		/* received request time */
-	time_t sent_last_query;		/* the last time we did a lookup */
-	
-	char upperlower[32];		/* uppercase / lowercase bitmap */
-	int so; 			/* the socket we did a lookup with */
-	u_short port;			/* port used on outgoing */
-	u_int16_t id;			/* last id used */
-
-	/* the below get loaded from the database upon each lookup */
-	in_addr_t a[RECORD_COUNT];	/* IPv4 addresses of nameservers */
-	int a_count;			/* IPv4 address count */
-	int a_ptr;			/* pointer to last used address */
-	struct in6_addr aaaa[RECORD_COUNT]; /* IPv6 addresses of nameservers */
-	int aaaa_count;			/* IPv6 address count */
-	int aaaa_ptr;			/* pointer to last used IPv6 address */
-
-	/* the below is our indicator which part of the lookup we're at */
-
-	u_char *lookrecord;		/* what zone lookup is it from */
-	int indicator;			/* indicator of ns lookup */
-	int authoritative;		/* last reply was authoritative, type */
-	int hascallback;		/* some request has callback don't remove */
-
-	struct question *question;	/* question struct */
-	SLIST_ENTRY(recurses) recurses_entry;
-	struct recurses *callback;	/* callback */
-} *sr, *sr1, *sr2;
-	
 struct logging {
 	int active;
 	char *hostname;
@@ -475,20 +291,31 @@ typedef struct __dddb {
 } ddDB; 
 
 
-#define SIZENODE ( sizeof(struct domain) + sizeof(struct domain_soa) + \
-		sizeof(struct domain_rrsig) + sizeof(struct domain_a) + \
-		sizeof(struct domain_aaaa) + sizeof(struct domain_mx) + \
-		sizeof(struct domain_ns) + sizeof(struct domain_cname) + \
-		sizeof(struct domain_ptr) + sizeof(struct domain_txt) +  \
-		sizeof(struct domain_srv) + sizeof(struct domain_sshfp) + \
-		sizeof(struct domain_tlsa) + sizeof(struct domain_naptr) + \
-		sizeof(struct domain_dnskey) + sizeof(struct domain_nsec) + \
-		sizeof(struct domain_nsec3) + \
-		sizeof(struct domain_nsec3param) + sizeof(struct domain_ds) )
+struct rr {
+	void *rdata;
+	u_int32_t ttl;
+	time_t changed;
+	TAILQ_ENTRY(rr) entries;
+};
+
+struct rrset {
+	u_int16_t rrtype;
+	TAILQ_ENTRY(rrset) entries;
+	TAILQ_HEAD(rrh, rr) rr_head;
+};
+
+
+struct rbtree {
+	char zone[DNS_MAXNAME];
+	int zonelen;
+	char humanname[DNS_MAXNAME + 1];
+
+	TAILQ_HEAD(, rrset) rrset_head;
+};
 
 struct node {
         RB_ENTRY(node) rbentry;		/* the node entry */
-	char domainname[256];		/* domain name key name */
+	char domainname[DNS_MAXNAME + 1]; /* domain name key name */
         int len;			/* length of domain name */
 	char *data;			/* data it points to */
 	size_t datalen;			/* the length of the data */

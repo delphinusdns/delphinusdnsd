@@ -27,24 +27,26 @@
  */
 
 /*
- * $Id: additional.c,v 1.18 2018/10/19 08:24:48 pjp Exp $
+ * $Id: additional.c,v 1.19 2019/02/15 15:11:34 pjp Exp $
  */
 
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-int additional_a(char *, int, struct domain *, char *, int, int, int *);
-int additional_aaaa(char *, int, struct domain *, char *, int, int, int *);
-int additional_mx(char *, int, struct domain *, char *, int, int, int *);
+int additional_a(char *, int, struct rbtree *, char *, int, int, int *);
+int additional_aaaa(char *, int, struct rbtree *, char *, int, int, int *);
+int additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_opt(struct question *, char *, int, int);
-int additional_ptr(char *, int, struct domain *, char *, int, int, int *);
-int additional_rrsig(char *, int, int, struct domain *, char *, int, int, int);
-int additional_nsec(char *, int, int, struct domain *, char *, int, int);
-int additional_nsec3(char *, int, int, struct domain *, char *, int, int);
+int additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
+int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int);
+int additional_nsec(char *, int, int, struct rbtree *, char *, int, int);
+int additional_nsec3(char *, int, int, struct rbtree *, char *, int, int);
 
 extern int 		compress_label(u_char *, int, int);
-extern void *		find_substruct(struct domain *, u_int16_t);
+extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
+extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
+extern int display_rr(struct rrset *rrset);
 
 extern int dnssec;
 
@@ -54,9 +56,9 @@ extern int dnssec;
  */
 
 int 
-additional_a(char *name, int namelen, struct domain *sd, char *reply, int replylen, int offset, int *retcount)
+additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
 {
-	int a_count;
+	int a_count = 0;
 	int tmplen;
 	int rroffset = offset;
 
@@ -69,21 +71,15 @@ additional_a(char *name, int namelen, struct domain *sd, char *reply, int replyl
 	} __attribute__((packed));
 
 	struct answer *answer;
-	struct domain_a *sda = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
 	*retcount = 0;
 
-	if ((sda = (struct domain_a *)find_substruct(sd, INTERNAL_TYPE_A)) == NULL)
-		return -1;
-	
+	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == NULL)
+		return 0;
 
-	/*
-	 * We loop through our sd->a entries starting at the ptr offset
-	 * first in the first loop and at the beginning until the ptr
-	 * in the last loop.  This will shift answers based on a_ptr.
-	 */
-
-	for (a_count = sda->a_ptr; a_count < sda->a_count; a_count++) {
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 		rroffset = offset;
 		if ((offset + namelen) > replylen)
 			goto out;
@@ -104,44 +100,15 @@ additional_a(char *name, int namelen, struct domain *sd, char *reply, int replyl
 		
 		answer->type = htons(DNS_TYPE_A);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_A]);
+		answer->ttl = htonl(((struct a *)rrp->rdata)->ttl);
 
 		answer->rdlength = htons(sizeof(in_addr_t));
 
-		memcpy((char *)&answer->rdata, (char *)&sda->a[a_count], sizeof(in_addr_t));
+		memcpy((char *)&answer->rdata, (char *)&((struct a *)rrp->rdata)->a, sizeof(in_addr_t));
 		offset += sizeof(struct answer);
 		(*retcount)++;
 
-	}
-
-	for (a_count = 0; a_count < sda->a_ptr; a_count++) {
-		rroffset = offset;
-		if ((offset + namelen) > replylen)
-			goto out;
-
-		memcpy(&reply[offset], name, namelen);
-		offset += namelen;
-		tmplen = compress_label((u_char*)reply, offset, namelen);
-		
-		if (tmplen != 0) {
-			offset = tmplen;
-		}	
-		if ((offset + sizeof(struct answer)) > replylen) {
-			offset = rroffset;
-			goto out;
-		}
-
-		answer = (struct answer *)&reply[offset];
-		
-		answer->type = htons(DNS_TYPE_A);
-		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_A]);
-
-		answer->rdlength = htons(sizeof(in_addr_t));
-
-		memcpy((char *)&answer->rdata, (char *)&sda->a[a_count], sizeof(in_addr_t));
-		offset += sizeof(struct answer);
-		(*retcount)++;
+		a_count++;
 	}
 
 
@@ -155,9 +122,9 @@ out:
  */
 
 int 
-additional_aaaa(char *name, int namelen, struct domain *sd, char *reply, int replylen, int offset, int *retcount)
+additional_aaaa(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
 {
-	int aaaa_count;
+	int aaaa_count = 0;
 	int tmplen;
 	int rroffset = offset;
 
@@ -170,20 +137,15 @@ additional_aaaa(char *name, int namelen, struct domain *sd, char *reply, int rep
 	} __attribute__((packed));
 
 	struct answer *answer;
-	struct domain_aaaa *sdaaaa = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
 	*retcount = 0;
 
-	if ((sdaaaa = (struct domain_aaaa *)find_substruct(sd, INTERNAL_TYPE_AAAA)) == NULL)
-		return -1;
+	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) == NULL)
+		return 0;
 
-	/*
-	 * We loop through our sd->aaaa entries starting at the ptr offset
-	 * first in the first loop and at the beginning until the ptr
-	 * in the last loop.  This will shift answers based on a_ptr.
-	 */
-
-	for (aaaa_count = sdaaaa->aaaa_ptr; aaaa_count < sdaaaa->aaaa_count; aaaa_count++) {
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 		rroffset = offset;
 		if ((offset + namelen) > replylen)
 			goto out;
@@ -205,48 +167,16 @@ additional_aaaa(char *name, int namelen, struct domain *sd, char *reply, int rep
 		
 		answer->type = htons(DNS_TYPE_AAAA);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_AAAA]);
+		answer->ttl = htonl(((struct aaaa *)rrp->rdata)->ttl);
 
 		answer->rdlength = htons(sizeof(struct in6_addr));
 
-		memcpy((char *)&answer->rdata, (char *)&sdaaaa->aaaa[aaaa_count], sizeof(struct in6_addr));
+		memcpy((char *)&answer->rdata, (char *)&((struct aaaa *)rrp->rdata)->aaaa, sizeof(struct in6_addr));
 		offset += sizeof(struct answer);
 		(*retcount)++;
 
+		aaaa_count++;
 	}
-
-	for (aaaa_count = 0; aaaa_count < sdaaaa->aaaa_ptr; aaaa_count++) {
-		rroffset = offset;
-		if ((offset + namelen) > replylen)
-			goto out;
-
-
-		memcpy(&reply[offset], name, namelen);
-		offset += namelen;
-		tmplen = compress_label((u_char*)reply, offset, namelen);
-		
-		if (tmplen != 0) {
-			offset = tmplen;
-		}	
-		if ((offset + sizeof(struct answer)) > replylen) {
-			offset = rroffset;
-			goto out;
-		}
-
-		answer = (struct answer *)&reply[offset];
-		
-		answer->type = htons(DNS_TYPE_AAAA);
-		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_AAAA]);
-
-		answer->rdlength = htons(sizeof(struct in6_addr));
-
-
-		memcpy((char *)&answer->rdata, (char *)&sdaaaa->aaaa[aaaa_count], sizeof(struct in6_addr));
-		offset += sizeof(struct answer);
-		(*retcount)++;
-	}
-
 
 out:
 	return (offset);
@@ -259,9 +189,9 @@ out:
  */
 
 int 
-additional_mx(char *name, int namelen, struct domain *sd, char *reply, int replylen, int offset, int *retcount)
+additional_mx(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
 {
-	int mx_count;
+	int mx_count = 0;
 	int tmplen;
 	int rroffset = offset;
 
@@ -274,24 +204,20 @@ additional_mx(char *name, int namelen, struct domain *sd, char *reply, int reply
 	} __attribute__((packed));
 
 	struct answer *answer;
-	struct domain_mx *sdmx = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
 	*retcount = 0;
 
-	if ((sdmx = (struct domain_mx *)find_substruct(sd, INTERNAL_TYPE_MX)) == NULL)
-		return -1;
+	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) == NULL)
+		return 0;
 
-	/*
-	 * We loop through our sdmx->mx entries starting at the ptr offset
-	 * first in the first loop and at the beginning until the ptr
-	 * in the last loop.  This will shift answers based on mx_ptr.
-	 */
 
-	for (mx_count = sdmx->mx_ptr; mx_count < sdmx->mx_count; mx_count++) {
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 		rroffset = offset;
 
 		if ((offset + namelen) > replylen)
-			goto out;
+			return 0;
 
 		memcpy(&reply[offset], name, namelen);
 		offset += namelen;
@@ -303,89 +229,40 @@ additional_mx(char *name, int namelen, struct domain *sd, char *reply, int reply
 
 		if ((offset + sizeof(struct answer)) > replylen) {
 			offset = rroffset;
-			goto out;
+			return 0;
 		}
 
 		answer = (struct answer *)&reply[offset];
 		
 		answer->type = htons(DNS_TYPE_MX);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_MX]);
-		answer->mx_priority = htons(sdmx->mx[mx_count].preference);
+		answer->ttl = htonl(((struct smx *)rrp->rdata)->ttl);
+		answer->mx_priority = htons(((struct smx *)rrp->rdata)->preference);
 
 		offset += sizeof(struct answer);
 
-		if ((offset + sdmx->mx[mx_count].exchangelen) > replylen) {
+		if ((offset + ((struct smx *)rrp->rdata)->exchangelen) > replylen) {
 			offset = rroffset;
-			goto out;
+			return 0;
 		}
 
-		memcpy((char *)&reply[offset], (char *)sdmx->mx[mx_count].exchange, sdmx->mx[mx_count].exchangelen);
+		memcpy((char *)&reply[offset], (char *)((struct smx *)rrp->rdata)->exchange, ((struct smx *)rrp->rdata)->exchangelen);
 
-		offset += sdmx->mx[mx_count].exchangelen; 
-		tmplen = compress_label((u_char*)reply, offset, sdmx->mx[mx_count].exchangelen);
+		offset += ((struct smx *)rrp->rdata)->exchangelen; 
+		tmplen = compress_label((u_char*)reply, offset, ((struct smx *)rrp->rdata)->exchangelen);
 		
 		if (tmplen != 0) {
-			answer->rdlength = htons((sdmx->mx[mx_count].exchangelen - (offset - tmplen)) + sizeof(u_int16_t));
+			answer->rdlength = htons((((struct smx *)rrp->rdata)->exchangelen - (offset - tmplen)) + sizeof(u_int16_t));
 			offset = tmplen;
 		} else
-			answer->rdlength = htons(sdmx->mx[mx_count].exchangelen + sizeof(u_int16_t));
+			answer->rdlength = htons(((struct smx *)rrp->rdata)->exchangelen + sizeof(u_int16_t));
 
 
 		(*retcount)++;
 
+		mx_count++;
 	}
 
-	for (mx_count = 0; mx_count < sdmx->mx_ptr; mx_count++) {
-		rroffset = offset;
-
-		if ((offset + namelen) > replylen)
-			goto out;
-
-
-		memcpy(&reply[offset], name, namelen);
-		offset += namelen;
-		tmplen = compress_label((u_char*)reply, offset, namelen);
-		
-		if (tmplen != 0) {
-			offset = tmplen;
-		}	
-
-		if ((offset + sizeof(struct answer)) > replylen) {
-			offset = rroffset;
-			goto out;
-		}
-
-		answer = (struct answer *)&reply[offset];
-		
-		answer->type = htons(DNS_TYPE_A);
-		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_A]);
-
-		offset += sizeof(struct answer);
-
-		if ((offset + sdmx->mx[mx_count].exchangelen) > replylen) {
-			offset = rroffset;
-			goto out;
-		}
-
-		memcpy((char *)&reply[offset], (char *)sdmx->mx[mx_count].exchange, sdmx->mx[mx_count].exchangelen);
-
-		offset += sdmx->mx[mx_count].exchangelen; 
-		tmplen = compress_label((u_char *)reply, offset, sdmx->mx[mx_count].exchangelen);
-		
-		if (tmplen != 0) {
-
-			answer->rdlength = htons((sdmx->mx[mx_count].exchangelen - (offset - tmplen)) + sizeof(u_int16_t));
-			offset = tmplen;
-		} else
-			answer->rdlength = htons(sdmx->mx[mx_count].exchangelen + sizeof(u_int16_t));
-
-		(*retcount)++;
-	}
-
-
-out:
 	return (offset);
 
 }
@@ -397,7 +274,7 @@ out:
 
 
 int 
-additional_ptr(char *name, int namelen, struct domain *sd, char *reply, int replylen, int offset, int *retcount)
+additional_ptr(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
 {
 	int tmplen;
 	int rroffset = offset;
@@ -410,12 +287,13 @@ additional_ptr(char *name, int namelen, struct domain *sd, char *reply, int repl
 	} __attribute__((packed));
 
 	struct answer *answer;
-	struct domain_ptr *sdptr = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
 	*retcount = 0;
 
-	if ((sdptr = (struct domain_ptr *)find_substruct(sd, INTERNAL_TYPE_PTR)) == NULL)
-		return -1;
+	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) == NULL)
+		return 0;
 
 	if ((offset + namelen) > replylen)
 		goto out;
@@ -433,29 +311,33 @@ additional_ptr(char *name, int namelen, struct domain *sd, char *reply, int repl
 		goto out;
 	}
 
+	rrp = TAILQ_FIRST(&rrset->rr_head);
+	if (rrp == NULL)
+		return 0;
+
 	answer = (struct answer *)&reply[offset];
 	
 	answer->type = htons(DNS_TYPE_PTR);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_PTR]);
+	answer->ttl = htonl(((struct ptr *)rrp->rdata)->ttl);
 
 	offset += sizeof(struct answer);
 
-	if ((offset + sdptr->ptrlen) > replylen) {
+	if ((offset + ((struct ptr *)rrp->rdata)->ptrlen) > replylen) {
 		offset = rroffset;
 		goto out;
 	}
 
-	memcpy((char *)&reply[offset], (char *)sdptr->ptr, sdptr->ptrlen);
+	memcpy((char *)&reply[offset], (char *)((struct ptr *)rrp->rdata)->ptr, ((struct ptr *)rrp->rdata)->ptrlen);
 
-	offset += sdptr->ptrlen;
-	tmplen = compress_label((u_char*)reply, offset, sdptr->ptrlen);
+	offset += ((struct ptr *)rrp->rdata)->ptrlen;
+	tmplen = compress_label((u_char*)reply, offset, ((struct ptr *)rrp->rdata)->ptrlen);
 		
 	if (tmplen != 0) {
-		answer->rdlength = htons(sdptr->ptrlen - (offset - tmplen));
+		answer->rdlength = htons(((struct ptr *)rrp->rdata)->ptrlen - (offset - tmplen));
 		offset = tmplen;
 	} else
-		answer->rdlength = htons(sdptr->ptrlen);
+		answer->rdlength = htons(((struct ptr *)rrp->rdata)->ptrlen);
 
 
 	(*retcount)++;
@@ -503,11 +385,11 @@ out:
 
 /*
  * ADDITIONAL_RRSIG - tag on an additional RRSIG to the answer
- * 		type passed must be an INTERNAL_TYPE!
+ * 		type passed must be a DNS_TYPE!
  */
 
 int 
-additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *reply, int replylen, int offset, int count)
+additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int count)
 {
 	struct answer {
 		u_int16_t type;
@@ -525,12 +407,11 @@ additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *
 
 
 	struct answer *answer;
-	struct domain_rrsig *sdrr;
-	struct rrsig *rrsig;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 	int tmplen, rroffset;
 
-	sdrr = (struct domain_rrsig *)find_substruct(sd, INTERNAL_TYPE_RRSIG);
-	if (sdrr == NULL) 
+	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) == NULL)
 		goto out;
 
 	rroffset = offset;
@@ -551,41 +432,39 @@ additional_rrsig(char *name, int namelen, int inttype, struct domain *sd, char *
 		return 0;
 	}
 
-	if (inttype == INTERNAL_TYPE_DNSKEY) {
-		rrsig = &sdrr->rrsig_dnskey[count];
-		if (rrsig->algorithm == 0)
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (inttype != ((struct rrsig *)rrp->rdata)->type_covered)
+			continue;
+
+		answer = (struct answer *)&reply[offset];
+		answer->type = htons(DNS_TYPE_RRSIG);
+		answer->class = htons(DNS_CLASS_IN);
+		answer->ttl = htonl(((struct rrsig *)rrp->rdata)->ttl);
+		answer->type_covered = htons(((struct rrsig *)rrp->rdata)->type_covered);
+		answer->algorithm = ((struct rrsig *)rrp->rdata)->algorithm;
+		answer->labels = ((struct rrsig *)rrp->rdata)->labels;
+		answer->original_ttl = htonl(((struct rrsig *)rrp->rdata)->original_ttl);
+		answer->sig_expiration = htonl(((struct rrsig *)rrp->rdata)->signature_expiration);	
+		answer->sig_inception = htonl(((struct rrsig *)rrp->rdata)->signature_inception);
+		answer->keytag = htons(((struct rrsig *)rrp->rdata)->key_tag);
+	
+		offset += sizeof(struct answer);
+		rroffset = offset;
+
+		if ((offset + ((struct rrsig *)rrp->rdata)->signame_len) > replylen)
 			return 0;
-	} else {
-		rrsig = &sdrr->rrsig[inttype];	
+
+		memcpy(&reply[offset], ((struct rrsig *)rrp->rdata)->signers_name, ((struct rrsig *)rrp->rdata)->signame_len);
+
+		offset += ((struct rrsig *)rrp->rdata)->signame_len;
+
+		if ((offset + ((struct rrsig *)rrp->rdata)->signature_len) > replylen)
+			return 0;
+
+		memcpy(&reply[offset], ((struct rrsig *)rrp->rdata)->signature, ((struct rrsig *)rrp->rdata)->signature_len);
+		offset += ((struct rrsig *)rrp->rdata)->signature_len;
 	}
 
-	answer = (struct answer *)&reply[offset];
-	answer->type = htons(DNS_TYPE_RRSIG);
-	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(sd->ttl[inttype]);
-	answer->type_covered = htons(rrsig->type_covered);
-	answer->algorithm = rrsig->algorithm;
-	answer->labels = rrsig->labels;
-	answer->original_ttl = htonl(rrsig->original_ttl);
-	answer->sig_expiration = htonl(rrsig->signature_expiration);	
-	answer->sig_inception = htonl(rrsig->signature_inception);
-	answer->keytag = htons(rrsig->key_tag);
-	
-	offset += sizeof(struct answer);
-	rroffset = offset;
-
-	if ((offset + rrsig->signame_len) > replylen)
-		return 0;
-
-	memcpy(&reply[offset], rrsig->signers_name, rrsig->signame_len);
-
-	offset += rrsig->signame_len;
-
-	if ((offset + rrsig->signature_len) > replylen)
-		return 0;
-
-	memcpy(&reply[offset], rrsig->signature, rrsig->signature_len);
-	offset += rrsig->signature_len;
 
 	answer->rdlength = htons((offset - rroffset) + 18);
 out:
@@ -595,11 +474,11 @@ out:
 
 /*
  * ADDITIONAL_NSEC - tag on an additional NSEC with RRSIG to the answer
- * 		type passed must be an INTERNAL_TYPE!
+ * 		type passed must be a DNS_TYPE!
  */
 
 int 
-additional_nsec(char *name, int namelen, int inttype, struct domain *sd, char *reply, int replylen, int offset)
+additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset)
 {
 	struct answer {
 		u_int16_t type;
@@ -609,13 +488,17 @@ additional_nsec(char *name, int namelen, int inttype, struct domain *sd, char *r
 	} __attribute__((packed));
 
 	struct answer *answer;
-	struct domain_nsec *sdnsec;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 	int tmplen, rroffset;
 
-	sdnsec = (struct domain_nsec *)find_substruct(sd, INTERNAL_TYPE_NSEC);
-	if (sdnsec == NULL) 
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) == NULL)
 		goto out;
 
+	rrp = TAILQ_FIRST(&rrset->rr_head);
+	if (rrp == NULL)
+		goto out;
+	
 	rroffset = offset;
 
 	/* check if we go over our return length */
@@ -637,21 +520,22 @@ additional_nsec(char *name, int namelen, int inttype, struct domain *sd, char *r
 	answer = (struct answer *)&reply[offset];
 	answer->type = htons(DNS_TYPE_NSEC);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(sd->ttl[inttype]);
-	answer->rdlength = htons(sdnsec->nsec.ndn_len + 
-			sdnsec->nsec.bitmap_len);
+	answer->ttl = htonl(((struct nsec *)rrp->rdata)->ttl);
+	answer->rdlength = htons(((struct nsec *)rrp->rdata)->ndn_len + 
+			((struct nsec *)rrp->rdata)->bitmap_len);
 	
 	offset += sizeof(*answer);
 
-	memcpy(&reply[offset], sdnsec->nsec.next_domain_name,
-                sdnsec->nsec.ndn_len);
+	memcpy(&reply[offset], ((struct nsec *)rrp->rdata)->next_domain_name,
+                ((struct nsec *)rrp->rdata)->ndn_len);
 
-	offset += sdnsec->nsec.ndn_len;
+	offset += ((struct nsec *)rrp->rdata)->ndn_len;
 
-	memcpy(&reply[offset], sdnsec->nsec.bitmap, sdnsec->nsec.bitmap_len);
-	offset += sdnsec->nsec.bitmap_len;
+	memcpy(&reply[offset], ((struct nsec *)rrp->rdata)->bitmap, 
+			((struct nsec *)rrp->rdata)->bitmap_len);
+	offset += ((struct nsec *)rrp->rdata)->bitmap_len;
 
-	tmplen = additional_rrsig(name, namelen, INTERNAL_TYPE_NSEC, sd, reply, replylen, offset, 0);
+	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC, rbt, reply, replylen, offset, 0);
 
 	if (tmplen == 0) {
 		goto out;
@@ -666,11 +550,11 @@ out:
 
 /*
  * ADDITIONAL_NSEC3 - tag on an additional NSEC3 with RRSIG to the answer
- * 		type passed must be an INTERNAL_TYPE!
+ * 		type passed must be an DNS_TYPE!
  */
 
 int 
-additional_nsec3(char *name, int namelen, int inttype, struct domain *sd, char *reply, int replylen, int offset)
+additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset)
 {
 	struct answer {
 		u_int16_t type;
@@ -684,14 +568,19 @@ additional_nsec3(char *name, int namelen, int inttype, struct domain *sd, char *
 	} __attribute__((packed));
 
 	struct answer *answer;
-	struct domain_nsec3 *sdnsec3;
+	struct rrset *rrset;
+	struct rr *rrp;
+
 	int tmplen, rroffset;
 	u_int8_t *somelen;
 
-	sdnsec3 = (struct domain_nsec3 *)find_substruct(sd, INTERNAL_TYPE_NSEC3);
-	if (sdnsec3 == NULL) 
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) == NULL)
 		goto out;
 
+	rrp = TAILQ_FIRST(&rrset->rr_head);
+	if (rrp == NULL)
+		goto out;
+	
 	rroffset = offset;
 
 	/* check if we go over our return length */
@@ -713,42 +602,44 @@ additional_nsec3(char *name, int namelen, int inttype, struct domain *sd, char *
 	answer = (struct answer *)&reply[offset];
 	answer->type = htons(DNS_TYPE_NSEC3);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(sd->ttl[inttype]);
-	answer->rdlength = htons(6 + sdnsec3->nsec3.saltlen + 
-			sdnsec3->nsec3.nextlen + sdnsec3->nsec3.bitmap_len);
-	answer->algorithm = sdnsec3->nsec3.algorithm;
-	answer->flags = sdnsec3->nsec3.flags;
-	answer->iterations = htons(sdnsec3->nsec3.iterations);
-	answer->saltlen = sdnsec3->nsec3.saltlen;
+	answer->ttl = htonl(((struct nsec3 *)rrp->rdata)->ttl);
+	answer->rdlength = htons(6 + ((struct nsec3 *)rrp->rdata)->saltlen + 
+			((struct nsec3 *)rrp->rdata)->nextlen + 
+			((struct nsec3 *)rrp->rdata)->bitmap_len);
+	answer->algorithm = ((struct nsec3 *)rrp->rdata)->algorithm;
+	answer->flags = ((struct nsec3 *)rrp->rdata)->flags;
+	answer->iterations = htons(((struct nsec3 *)rrp->rdata)->iterations);
+	answer->saltlen = ((struct nsec3 *)rrp->rdata)->saltlen;
 	
 	offset += sizeof(*answer);
 
-	if (sdnsec3->nsec3.saltlen) {
-		memcpy(&reply[offset], &sdnsec3->nsec3.salt, sdnsec3->nsec3.saltlen);
-		offset += sdnsec3->nsec3.saltlen;
+	if (((struct nsec3 *)rrp->rdata)->saltlen) {
+		memcpy(&reply[offset], &((struct nsec3 *)rrp->rdata)->salt, 
+				((struct nsec3 *)rrp->rdata)->saltlen);
+		offset += ((struct nsec3 *)rrp->rdata)->saltlen;
 	}
 
 	somelen = (u_int8_t *)&reply[offset];
-	*somelen = sdnsec3->nsec3.nextlen;
+	*somelen = ((struct nsec3 *)rrp->rdata)->nextlen;
 
 	offset += 1;
 
-	memcpy(&reply[offset], sdnsec3->nsec3.next, sdnsec3->nsec3.nextlen);
+	memcpy(&reply[offset], ((struct nsec3 *)rrp->rdata)->next, 
+			((struct nsec3 *)rrp->rdata)->nextlen);
 
-	offset += sdnsec3->nsec3.nextlen;
+	offset += ((struct nsec3 *)rrp->rdata)->nextlen;
 
-	memcpy(&reply[offset], sdnsec3->nsec3.bitmap, sdnsec3->nsec3.bitmap_len);
-	offset += sdnsec3->nsec3.bitmap_len;
+	memcpy(&reply[offset], ((struct nsec3 *)rrp->rdata)->bitmap, 
+			((struct nsec3 *)rrp->rdata)->bitmap_len);
+	offset += ((struct nsec3 *)rrp->rdata)->bitmap_len;
 
-#if 1
-	tmplen = additional_rrsig(name, namelen, INTERNAL_TYPE_NSEC3, sd, reply, replylen, offset, 0);
+	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, rbt, reply, replylen, offset, 0);
 
 	if (tmplen == 0) {
 		goto out;
 	}
 
 	offset = tmplen;
-#endif
 
 out:
 	return (offset);

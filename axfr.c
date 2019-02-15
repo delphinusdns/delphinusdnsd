@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.19 2019/01/25 20:00:15 pjp Exp $
+ * $Id: axfr.c,v 1.20 2019/02/15 15:11:34 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -38,8 +38,8 @@
 void	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *ibuf);
 void	axfr_connection(int, char *, int, ddDB *, char *, int);
 int	build_header(ddDB *, char *, char *, struct question *, int);
-int	build_soa(ddDB *, char *, int, struct domain *, struct question *);
-int	checklabel(ddDB *, struct domain *, struct domain *, struct question *);
+int	build_soa(ddDB *, char *, int, struct rbtree *, struct question *);
+int	checklabel(ddDB *, struct rbtree *, struct rbtree *, struct question *);
 int	find_axfr(struct sockaddr_storage *, int);
 void	gather_notifydomains(ddDB *);
 void	init_axfr(void);
@@ -55,15 +55,19 @@ extern in_addr_t 	getmask(int);
 extern int 		getmask6(int, struct sockaddr_in6 *);
 extern void		reply_fmterror(struct sreply *, ddDB *);
 extern void		reply_nxdomain(struct sreply *, ddDB *);
-extern struct domain *	get_soa(ddDB *, struct question *);
-extern void *		find_substruct(struct domain *, u_int16_t);
+extern struct rbtree *	get_soa(ddDB *, struct question *);
 extern int		compress_label(u_char *, int, int);
 extern u_int16_t	create_anyreply(struct sreply *, char *, int, int, int);
 extern struct question	*build_fake_question(char *, int, u_int16_t);
 extern struct question	*build_question(char *, int, int);
 extern int		free_question(struct question *);
 extern void		dolog(int, char *, ...);
-extern void 		build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct domain *, struct domain *, u_int8_t, int, int, struct recurses *);
+extern void 		build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, struct recurses *);
+
+extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
+extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
+extern int display_rr(struct rrset *rrset);
+extern int rotate_rr(struct rrset *rrset);
 
 
 int notify = 0;				/* do not notify when set to 0 */
@@ -732,9 +736,8 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 	int len, dnslen;
 	int offset = 0;
-	int ret;
 	int qlen;
-	int outlen, i;
+	int outlen;
 	int rrcount;
 	int rs;
 
@@ -744,8 +747,9 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 	struct dns_header *dh, *odh;
 	struct sreply sreply;
 	struct question *question, *fq;
-	struct domain *soa = NULL, *sdomain = NULL, *nsdomain = NULL, *savesd = NULL;
-	struct domain_ns *savesdns;
+	struct rbtree *rbt = NULL, *rbt2 = NULL, *saverbt = NULL, *soa = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
 	ddDBT key, data;
 
@@ -838,62 +842,36 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		q = question->hdr->name;
 		qlen = question->hdr->namelen;
 
-		rs = get_record_size(db, q, qlen);
-		if (rs < 0) {
-			dolog(LOG_INFO, "internal error: %s\n", strerror(errno));
-			goto drop;
-		}
-
-		memset(&key, 0, sizeof(key));	
-		memset(&data, 0, sizeof(data));
-	
-		key.data = (char *)q;
-		key.size = qlen;
-		
-		data.data = NULL;
-		data.size = rs;
-
-		ret = db->get(db, &key, &data);
-		
-		if (ret != 0) {
-			sdomain = get_soa(db, question);
-			if (sdomain == NULL) {
+		rbt = find_rrset(db, q, qlen);
+		if (rbt == NULL) {
+			rbt2 = get_soa(db, question);
+			if (rbt2 == NULL) {
 				dolog(LOG_INFO, "internal error: %s\n", strerror(errno));
 				goto drop;
 			}
-			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, sdomain, NULL, 0xff, 1, 0, NULL);
+			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, rbt2, NULL, 0xff, 1, 0, NULL);
 			reply_nxdomain(&sreply, NULL);
 			dolog(LOG_INFO, "AXFR request for zone %s, no db entry, nxdomain -> drop\n", question->converted_name);
 			goto drop;
 		}
 		
-		if (data.size != rs) {
-			dolog(LOG_INFO, "AXFR btree db is damaged, drop\n");
-			goto drop;
-		}
-
-		if ((soa = calloc(1, rs)) == NULL) {
-			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-			goto drop;
-		}
-
-		memcpy((char *)soa, (char *)data.data, data.size);
-
 		/*
 		 * check if we have an SOA record 
 		 */
 
-		if (! (soa->flags & DOMAIN_HAVE_SOA)) {
-			sdomain = get_soa(db, question);
-			if (sdomain == NULL) {
+		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
+			rbt2 = get_soa(db, question);
+			if (rbt2 == NULL) {
 				dolog(LOG_INFO, "internal error: %s\n", strerror(errno));
 				goto drop;
 			}
-			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, sdomain, NULL, 0xff, 1, 0, NULL);
+			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, rbt2, NULL, 0xff, 1, 0, NULL);
 			reply_nxdomain(&sreply, NULL);
 			
 			dolog(LOG_INFO, "AXFR request for zone %s, which has no SOA for the zone, nxdomain -> drop\n", question->converted_name);
 			goto drop;
+		} else {
+			soa = rbt;
 		}
 
 		if (ntohs(question->hdr->qtype) == DNS_TYPE_SOA) {
@@ -927,87 +905,51 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		outlen = build_soa(db, (reply + 2), outlen, soa, question);
 		rrcount = 1;
 		
-		memset(&key, 0, sizeof(key));	
-		memset(&data, 0, sizeof(data));
-		
 		RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
 			rs = n->datalen;
-			if ((sdomain = calloc(1, rs)) == NULL) {
+			if ((rbt = calloc(1, sizeof(struct rbtree))) == NULL) {
 				dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 				goto drop;
 			}
-			if ((savesd = calloc(1, rs)) == NULL) {
+			if ((saverbt = calloc(1, sizeof(struct rbtree))) == NULL) {
 				dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 				goto drop;
 			}
-				
-			memcpy((char*)sdomain,(char*)n->data, rs);
-			memcpy((char*)savesd,(char*)n->data, rs);
 
-			if (checklabel(db, sdomain, soa, question)) {
-				fq = build_fake_question(sdomain->zone, sdomain->zonelen, 0);
-				build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, sdomain, NULL, 0xff, 1, 0, NULL);
+			memcpy((char*)rbt, (char*)n->data, sizeof(struct rbtree));
+			memcpy((char*)saverbt,(char*)n->data, sizeof(struct rbtree));
+
+			if (checklabel(db, rbt, soa, question)) {
+				fq = build_fake_question(rbt->zone, rbt->zonelen, 0);
+				build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, rbt, NULL, 0xff, 1, 0, NULL);
 				outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0);
 				free_question(fq);
 	
-				if (savesd->flags & DOMAIN_HAVE_NS) {
-					savesdns = (struct domain_ns *)find_substruct(savesd, INTERNAL_TYPE_NS);
-				}
+				if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+					rrp = TAILQ_FIRST(&rrset->rr_head);
+					if (rrp != NULL && 
+						((struct ns *)rrp->rdata)->ns_type & NS_TYPE_DELEGATE) {
+						TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+							fq = build_fake_question(((struct ns *)rrp->rdata)->nsserver,
+								((struct ns *)rrp->rdata)->nslen, 0);
+							rbt2 = find_rrset(db, fq->hdr->name, fq->hdr->namelen);
+							if (rbt2 == NULL) {
+								free_question(fq);
+								continue;
+							}
 
-				if ((savesd->flags & DOMAIN_HAVE_NS) &&
-					(savesdns->ns_type & NS_TYPE_DELEGATE)) {
-		
-					for (i = 0; i < savesdns->ns_count; i++) {
-						fq = build_fake_question(savesdns->ns[i].nsserver,
-							savesdns->ns[i].nslen, 0);
-
-
-						rs = get_record_size(db, fq->hdr->name, fq->hdr->namelen);
-						if (rs < 0) {	
-							dolog(LOG_INFO, "AXFR btree db is damaged (%d), drop\n", __LINE__);
+							build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, rbt2, NULL, 0xff, 1, 0, NULL);
+							outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0);
+							if (rbt2) {
+								free(rbt2);
+								rbt2 = NULL;
+							}
 							free_question(fq);
-							goto drop;
-						}
-
-						memset(&key, 0, sizeof(key));	
-						memset(&data, 0, sizeof(data));
-
-						key.data = fq->hdr->name;
-						key.size = fq->hdr->namelen;
-
-						data.data = NULL;
-						data.size = rs;
-	
-						ret = db->get(db, &key, &data);
-						if (ret != 0) {		
-							free_question(fq);
-							continue;
-						}
-
-						if (data.size != rs) {
-							dolog(LOG_INFO, "AXFR btree db is damaged (%d), drop\n", __LINE__);
-							goto drop;
-						}
-
-						if ((nsdomain = calloc(1, rs)) == NULL) {
-							dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-							free_question(fq);
-							goto drop;
-						}
-						memcpy((char *)nsdomain, (char*)data.data, data.size);	
-
-						build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, nsdomain, NULL, 0xff, 1, 0, NULL);
-						outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0);
-						if (nsdomain) {
-							free(nsdomain);
-							nsdomain = NULL;
-						}
-						free_question(fq);
 						
-					} /* for (i.. */
-				} /* if (sdomain.flags */
-
-			} /* if (checklabel */
+						} /* TAILQ_FOREACH */
+					} /* if (rrp != NULL */
+				} /* if (find_rr */
+			} /* if checklabel */
 
 			/*
 			 * if we accumulate 60000 bytes out of the maximum
@@ -1035,13 +977,13 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 			memset(&key, 0, sizeof(key));	
 			memset(&data, 0, sizeof(data));
-			if (sdomain) {
-				free(sdomain);
-				sdomain = NULL;
+			if (rbt) {
+				free(rbt);
+				rbt = NULL;
 			}
-			if (savesd) {
-				free(savesd);
-				savesd = NULL;
+			if (rbt2) {
+				free(rbt2);
+				rbt2 = NULL;
 			}
 		}  /* RB_FOREACH */
 
@@ -1073,19 +1015,19 @@ drop:
 		soa = NULL;
 	}
 
-	if (sdomain) {
-		free (sdomain);
-		sdomain = NULL;
+	if (rbt) {
+		free (rbt);
+		rbt = NULL;
 	}
 	
-	if (nsdomain) {
-		free (nsdomain);
-		nsdomain = NULL;
+	if (rbt2) {
+		free (rbt2);
+		rbt2 = NULL;
 	}
 
-	if (savesd) {
-		free (savesd);
-		savesd = NULL;
+	if (saverbt) {
+		free (saverbt);
+		saverbt = NULL;
 	}
 
 	close(so);
@@ -1149,7 +1091,7 @@ build_header(ddDB *db, char *reply, char *buf, struct question *q, int answercou
  */
 
 int
-build_soa(ddDB *db, char *reply, int offset, struct domain *sd, struct question *q)
+build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question *q)
 {
 	char *p;
 	char *label;
@@ -1169,24 +1111,31 @@ build_soa(ddDB *db, char *reply, int offset, struct domain *sd, struct question 
         } __attribute__((packed));
 
 	struct answer *answer;
-	struct domain_soa *sdsoa = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;	
 
-	sdsoa = (struct domain_soa *)find_substruct(sd, INTERNAL_TYPE_SOA);
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
+		return 0;
+	}
+	if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+		return 0;
+	}
+	
 	answer = (struct answer *)(&reply[offset]);
 
 	answer->name[0] = 0xc0;
 	answer->name[1] = 0x0c;
 	answer->type = htons(DNS_TYPE_SOA);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(sd->ttl[INTERNAL_TYPE_SOA]);
+	answer->ttl = htonl(((struct soa *)rrp->rdata)->ttl);
 
 	offset += 12;			/* up to rdata length */
 
 	p = (char *)&answer->rdata;
 
 
-	label = sdsoa->soa.nsserver;
-	labellen = sdsoa->soa.nsserver_len;
+	label = ((struct soa *)rrp->rdata)->nsserver;
+	labellen = ((struct soa *)rrp->rdata)->nsserver_len;
 
 	plabel = label;
 
@@ -1202,8 +1151,8 @@ build_soa(ddDB *db, char *reply, int offset, struct domain *sd, struct question 
 		offset = tmplen;
 	}
 
-	label = sdsoa->soa.responsible_person;
-	labellen = sdsoa->soa.rp_len;
+	label = ((struct soa *)rrp->rdata)->responsible_person;
+	labellen = ((struct soa *)rrp->rdata)->rp_len;
 	plabel = label;
 
 	if (offset + labellen <= 65535)
@@ -1221,42 +1170,41 @@ build_soa(ddDB *db, char *reply, int offset, struct domain *sd, struct question 
 
 
 	/* XXX */
-	if ((offset + sizeof(sdsoa->soa.serial)) >= 65535 ) {
+	if ((offset + sizeof(u_int32_t)) >= 65535 ) {
 		/* XXX server error reply? */
 		return (offset);
 	}
 	soa_val = (u_int32_t *)&reply[offset];
-	*soa_val = htonl(sdsoa->soa.serial);
-	offset += sizeof(sdsoa->soa.serial);	/* XXX */
+	*soa_val = htonl(((struct soa *)rrp->rdata)->serial);
+	offset += sizeof(u_int32_t);
 	
-	/* XXX */
-	if ((offset + sizeof(sdsoa->soa.refresh)) >= 65535 ) {
+	if ((offset + sizeof(u_int32_t)) >= 65535 ) {
 		return (offset);
 	}
 	soa_val = (u_int32_t *)&reply[offset];
-	*soa_val = htonl(sdsoa->soa.refresh);
-	offset += sizeof(sdsoa->soa.refresh);	/* XXX */
+	*soa_val = htonl(((struct soa *)rrp->rdata)->refresh);
+	offset += sizeof(u_int32_t);
 
-	if ((offset + sizeof(sdsoa->soa.retry)) >= 65535 ) {
+	if ((offset + sizeof(u_int32_t)) >= 65535 ) {
 		return (offset);
 	}
 	soa_val = (u_int32_t *)&reply[offset];
-	*soa_val = htonl(sdsoa->soa.retry);
-	offset += sizeof(sdsoa->soa.retry);	/* XXX */
+	*soa_val = htonl(((struct soa *)rrp->rdata)->retry);
+	offset += sizeof(u_int32_t);
 
-	if ((offset + sizeof(sdsoa->soa.expire)) >= 65535 ) {
+	if ((offset + sizeof(u_int32_t)) >= 65535 ) {
 		return (offset);
 	}
 	soa_val = (u_int32_t *)&reply[offset];
-	*soa_val = htonl(sdsoa->soa.expire);
-	offset += sizeof(sdsoa->soa.expire);
+	*soa_val = htonl(((struct soa *)rrp->rdata)->expire);
+	offset += sizeof(u_int32_t);
 
-	if ((offset + sizeof(sdsoa->soa.minttl)) > 65535 ) {
+	if ((offset + sizeof(u_int32_t)) > 65535 ) {
 		return (offset);
 	}
 	soa_val = (u_int32_t *)&reply[offset];
-	*soa_val = htonl(sdsoa->soa.minttl);
-	offset += sizeof(sdsoa->soa.minttl);
+	*soa_val = htonl(((struct soa *)rrp->rdata)->minttl);
+	offset += sizeof(u_int32_t);
 
 	answer->rdlength = htons(&reply[offset] - &answer->rdata);
 	
@@ -1264,68 +1212,39 @@ build_soa(ddDB *db, char *reply, int offset, struct domain *sd, struct question 
 }
 
 int
-checklabel(ddDB *db, struct domain *sd, struct domain *soa, struct question *q)
+checklabel(ddDB *db, struct rbtree *rbt, struct rbtree *soa, struct question *q)
 {
-	struct domain *tmpsd;
+	struct rbtree *tmprbt;
+	struct rrset *rrset;
 	char *p;
-	int plen, ret;
-	int rs;
+	int plen;
 
-	ddDBT key, data;
-
-	if (memcmp(sd, soa, sizeof(struct domain)) == 0)	
+	if (memcmp(rbt, soa, sizeof(struct rbtree)) == 0)	
 		return 1;
 	
-	p = sd->zone;
-	plen = sd->zonelen;
+	p = rbt->zone;
+	plen = rbt->zonelen;
 
 	do {
 		if (*p == '\0')
 			return (0);
 
-		rs = get_record_size(db, p, plen);
-		if (rs < 0) {
-			return (0);
-		}
-	
-		tmpsd = calloc(1, rs);
-		if (tmpsd == NULL) {
-			return (0);
-		}
-
-		memset(&key, 0, sizeof(key));
-		memset(&data, 0, sizeof(data));
-
-		key.data = (char *)p;
-		key.size = plen;
-		
-		data.data = NULL;
-		data.size = rs;
-	
-		ret = db->get(db, &key, &data);
-		if (ret == DDDB_NOTFOUND) {
+		tmprbt = find_rrset(db, p, plen);
+		if (tmprbt == NULL) {
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
 
-			free(tmpsd);
+			free(tmprbt);
 			continue;
 		}
 	
-		if (data.size != rs) {
-			dolog(LOG_INFO, "AXFR btree db is damaged (%d), drop\n", __LINE__);
-			free(tmpsd);
-			return (0);
-		}
-		
-		memcpy(tmpsd, data.data, data.size);
-		
 		/*
  		 * the encountered label has an SOA before we got to the
 		 * root, so we skip this record entirely...
 		 */
 
-		if (tmpsd->flags & DOMAIN_HAVE_SOA) {
-			free (tmpsd);
+		if ((rrset = find_rr(tmprbt, DNS_TYPE_SOA)) != NULL) {
+			free (tmprbt);
 			return (0);
 		}
 
@@ -1337,7 +1256,7 @@ checklabel(ddDB *db, struct domain *sd, struct domain *soa, struct question *q)
 		plen -= (*p + 1);
 		p = (p + (*p + 1));
 
-		free(tmpsd);
+		free(tmprbt);
 		
 	} while (memcmp(p, q->hdr->name, q->hdr->namelen) != 0);
 
@@ -1357,8 +1276,9 @@ gather_notifydomains(ddDB *db)
 	char buf[128];
 
 	struct node *n, *nx;
-	struct domain *sd;
-	struct domain_soa *sdsoa = NULL;
+	struct rbtree *rbt;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
 	SLIST_INIT(&notifyhead);
 	
@@ -1375,10 +1295,10 @@ gather_notifydomains(ddDB *db)
 	memset(&data, 0, sizeof(data));
 	
 	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
-		sd = (struct domain *)n->data;
+		rbt = (struct rbtree *)n->data;
 
-		if ((sd->flags & DOMAIN_HAVE_SOA) == DOMAIN_HAVE_SOA) {
-			sdsoa = (struct domain_soa *)find_substruct(sd, INTERNAL_TYPE_SOA);
+		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
 			notn2 = malloc(sizeof(struct notifyentry));
 			if (notn2 == NULL) {
 				continue;
@@ -1396,21 +1316,21 @@ gather_notifydomains(ddDB *db)
 				continue;
 			}
 	
-			memcpy(notn2->domain, sd->zone, sd->zonelen);
-			notn2->domainlen = sd->zonelen;
+			memcpy(notn2->domain, rbt->zone, rbt->zonelen);
+			notn2->domainlen = rbt->zonelen;
 
-			soatime = (time_t)sdsoa->soa.serial;
-			snprintf(buf, sizeof(buf), "%u", sdsoa->soa.serial);
+			soatime = (time_t)((struct soa *)rrp->rdata)->serial;
+			snprintf(buf, sizeof(buf), "%u", ((struct soa *)rrp->rdata)->serial);
 
 			if (strncmp(buf, timestring, strlen(timestring)) == 0) {
-				dolog(LOG_INFO, "inserting zone \"%s\" for notification...\n", sd->zonename);
+				dolog(LOG_INFO, "inserting zone \"%s\" for notification...\n", rbt->humanname);
 				SLIST_INSERT_HEAD(&notifyhead, notn2, notify_entry);
 			} else if (difftime(now, soatime) < 1800 && difftime(now, soatime) > 0) {
-				dolog(LOG_INFO, "2 inserting zone \"%s\" for notification...\n", sd->zonename);
+				dolog(LOG_INFO, "2 inserting zone \"%s\" for notification...\n", rbt->humanname);
 				SLIST_INSERT_HEAD(&notifyhead, notn2, notify_entry);
 			} else {
 #if 0
-				dolog(LOG_INFO, "SOA serial for zone \"%s\" did not make sense (%s), not notifying\n", sd->zonename, buf);
+				dolog(LOG_INFO, "SOA serial for zone \"%s\" did not make sense (%s), not notifying\n", rbt->humanname, buf);
 #endif
 				free(notn2);
 			}

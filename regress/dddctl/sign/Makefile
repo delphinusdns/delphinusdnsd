@@ -15,7 +15,7 @@ ldns-verify-zone:
 	@test -f  /usr/local/bin/ldns-verify-zone
 
 jdnssec-verifyzone:
-	@test -f /home/pjp/Delphinusdns/tools/jdnssec-tools-0.13/bin/jdnssec-verifyzone
+	#@test -f /home/pjp/Delphinusdns/tools/jdnssec-tools-0.13/bin/jdnssec-verifyzone
 
 depend: named-checkzone ldns-verify-zone jdnssec-verifyzone 
 
@@ -33,7 +33,7 @@ test-sign: depend
 	@echo "--> checking against ldns-verify-zone"
 	/usr/local/bin/ldns-verify-zone ${i}.bind
 	@echo "--> checking against jdnssec-verifyzone"
-	/home/pjp/Delphinusdns/tools/jdnssec-tools-0.13/bin/jdnssec-verifyzone ${i}.bind
+	#/home/pjp/Delphinusdns/tools/jdnssec-tools-0.13/bin/jdnssec-verifyzone ${i}.bind
 .endfor
 	@echo "--> If you reach here everything verified"
 	@echo "--> OK."

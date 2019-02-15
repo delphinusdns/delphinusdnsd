@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.49 2019/02/07 11:16:03 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.50 2019/02/15 15:11:34 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -42,25 +42,21 @@ extern void 	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *);
 extern struct question	*build_fake_question(char *, int, u_int16_t);
 extern int 	check_ent(char *, int);
 extern int 	check_rrlimit(int, u_int16_t *, int, char *);
-extern u_int16_t check_qtype(struct domain *, u_int16_t, int, int *);
 extern void 	collects_init(void);
 extern void 	dolog(int, char *, ...);
 extern int     	find_axfr(struct sockaddr_storage *, int);
 extern int 	find_filter(struct sockaddr_storage *, int);
-extern int 	find_recurse(struct sockaddr_storage *, int);
 extern u_int8_t find_region(struct sockaddr_storage *, int);
 extern int 	find_whitelist(struct sockaddr_storage *, int);
 extern char *	get_dns_type(int, int);
 extern void 	init_dnssec(void);
-extern void 	init_recurse(void);
 extern void 	init_region(void);
 extern int	init_entlist(ddDB *);
 extern void 	init_filter(void);
 extern void 	init_notifyslave(void);
 extern void 	init_whitelist(void);
-extern struct domain * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
+extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
 extern int 	memcasecmp(u_char *, u_char *, int);
-extern void 	recurseloop(int sp, int *, ddDB *);
 extern void 	receivelog(char *, int);
 extern int 	reply_a(struct sreply *, ddDB *);
 extern int 	reply_aaaa(struct sreply *, ddDB *);
@@ -94,19 +90,22 @@ extern char 	*rrlimit_setup(int);
 extern char 	*dns_label(char *, int *);
 extern void 	slave_shutdown(void);
 extern int 	get_record_size(ddDB *, char *, int);
-extern void *	find_substruct(struct domain *, u_int16_t);
 extern struct question		*build_question(char *, int, int);
 extern int			free_question(struct question *);
+extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
+extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
+extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
+extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
+extern int display_rr(struct rrset *rrset);
+
 
 struct question		*convert_question(struct parsequestion *);
-void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct domain *, struct domain *, u_int8_t, int, int, struct recurses *, char *);
+void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, void *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
-struct domain * 	get_soa(ddDB *, struct question *);
-int			lookup_type(int);
+struct rbtree * 	get_soa(ddDB *, struct question *);
 void			mainloop(struct cfg *, struct imsgbuf **);
 void 			master_reload(int);
 void 			master_shutdown(int);
-void 			recurseheader(struct srecurseheader *, int, struct sockaddr_storage *, struct sockaddr_storage *, int);
 void 			setup_master(ddDB *, char **, char *, struct imsgbuf *ibuf);
 void 			setup_unixsocket(char *, struct imsgbuf *);
 void 			slave_signal(int);
@@ -1284,67 +1283,38 @@ out:
  * GET_SOA - get authoritative soa for a particular domain
  */
 
-struct domain *
+struct rbtree *
 get_soa(ddDB *db, struct question *question)
 {
-	struct domain *sd = NULL;
+	struct rbtree *rbt = NULL;
 
 	int plen;
-	int ret = 0;
-	int rs;
-	
-	ddDBT key, data;
-
 	char *p;
 
 	p = question->hdr->name;
 	plen = question->hdr->namelen;
 
 	do {
+		struct rrset *rrset;
 
-		rs = get_record_size(db, p, plen);
-		if (rs < 0) {
-			return NULL;
-		}
-
-		if ((sd = calloc(1, rs)) == NULL) {
-			return NULL;
-		}
-
-		memset(&key, 0, sizeof(key));
-		memset(&data, 0, sizeof(data));
-
-		key.data = (char *)p;
-		key.size = plen;
-
-		data.data = NULL;
-		data.size = rs;
-
-		ret = db->get(db, &key, &data);
-		if (ret != 0) {
+		rbt = find_rrset(db, p, plen);
+		if (rbt == NULL) {
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
-			free (sd);
+			free (rbt);
 			continue;
 		}
 		
-		if (data.size != rs) {
-			dolog(LOG_INFO, "btree db is damaged, drop\n");
-			free(sd);
-			return (NULL);
-		}
-
-		memcpy((char *)sd, (char *)data.data, data.size);
-
-		if ((sd->flags & DOMAIN_HAVE_SOA) == DOMAIN_HAVE_SOA)  {
+		rrset = find_rr(rbt, DNS_TYPE_SOA);
+		if (rrset != NULL) {
 			/* we'll take this one */
-			return (sd);	
+			return (rbt);	
 		} else {
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
 		} 
 
-		free(sd);
+		free(rbt);
 	} while (*p);
 
 	return (NULL);
@@ -1406,8 +1376,9 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 
 	struct question *question = NULL, *fakequestion = NULL;
 	struct parsequestion pq;
-	struct domain *sd0 = NULL, *sd1 = NULL;
-	struct domain_cname *csd;
+	struct rbtree *rbt0 = NULL, *rbt1 = NULL;
+	struct rrset *csd;
+	struct rr *rr_csd;
 	
 	struct sreply sreply;
 	struct reply_logic *rl = NULL;
@@ -1797,7 +1768,7 @@ axfrentry:
 
 				fakequestion = NULL;
 
-				sd0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring);
+				rbt0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring);
 				if (type0 < 0) {
 					switch (lzerrno) {
 					default:
@@ -1817,7 +1788,7 @@ axfrentry:
 						}
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 
-						build_reply(&sreply, so, buf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+						build_reply(&sreply, so, buf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_refused(&sreply, NULL);
 						goto udpout;
 						break;
@@ -1828,7 +1799,7 @@ axfrentry:
 								goto udpnoerror;
 							} else {
 								snprintf(replystring, DNS_MAXNAME, "NODATA");
-								build_reply(&sreply, so, buf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+								build_reply(&sreply, so, buf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
 								slen = reply_nodata(&sreply, NULL);
 								goto udpout;
 								break;
@@ -1849,16 +1820,16 @@ udpnoerror:
 							 * lookup an authoritative soa
 							 */
 
-							if (sd0) {
-								free (sd0);
-								sd0 = NULL;
+							if (rbt0) {
+								free (rbt0);
+								rbt0 = NULL;
 							}
 						
-							sd0 = get_soa(cfg->db, question);
-							if (sd0 != NULL) {
+							rbt0 = get_soa(cfg->db, question);
+							if (rbt0 != NULL) {
 
 									build_reply(&sreply, so, buf, len, question, from, \
-										fromlen, sd0, NULL, aregion, istcp, 0, 
+										fromlen, rbt0, NULL, aregion, istcp, 0, 
 										NULL, replybuf);
 
 									slen = reply_noerror(&sreply, cfg->db);
@@ -1875,7 +1846,7 @@ udpnxdomain:
 								goto udpnoerror;
 							} else {
 								snprintf(replystring, DNS_MAXNAME, "NODATA");
-								build_reply(&sreply, so, buf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+								build_reply(&sreply, so, buf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
 								slen = reply_nodata(&sreply, NULL);
 								goto udpout;
 							}	
@@ -1891,23 +1862,30 @@ udpnxdomain:
 						 * lookup an authoritative soa 
 						 */
 					
-						if (sd0 != NULL) {
+						if (rbt0 != NULL) {
 								build_reply(&sreply, so, buf, len, question, from, \
-								fromlen, sd0, NULL, aregion, istcp, \
+								fromlen, rbt0, NULL, aregion, istcp, \
 								0, NULL, replybuf);
 
 								slen = reply_nxdomain(&sreply, cfg->db);
 						}
 						goto udpout;
 				case DNS_TYPE_CNAME:
-					csd = (struct domain_cname *)find_substruct(sd0, INTERNAL_TYPE_CNAME);
-					fakequestion = build_fake_question(csd->cname, csd->cnamelen, question->hdr->qtype);
+					csd = find_rr(rbt0, DNS_TYPE_SOA);
+					if (csd == NULL)
+						break;
+
+					rr_csd = TAILQ_FIRST(&csd->rr_head);
+					if (rr_csd == NULL)
+						break;
+					
+					fakequestion = build_fake_question(((struct cname *)rr_csd)->cname, ((struct cname *)rr_csd)->cnamelen, question->hdr->qtype);
 					if (fakequestion == NULL) {	
 						dolog(LOG_INFO, "fakequestion failed\n");
 						break;
 					}
 
-					sd1 = lookup_zone(cfg->db, fakequestion, &type1, &lzerrno, (char *)&fakereplystring);
+					rbt1 = lookup_zone(cfg->db, fakequestion, &type1, &lzerrno, (char *)&fakereplystring);
 					/* break CNAMES pointing to CNAMES */
 					if (type1 == DNS_TYPE_CNAME)
 						type1 = 0;
@@ -1943,12 +1921,12 @@ udpnxdomain:
 							switch (rl->buildtype) {
 							case BUILD_CNAME:
 								build_reply(&sreply, so, buf, len, question,
-									from, fromlen, sd0, ((type1 > 0) ? sd1 : 
+									from, fromlen, rbt0, ((type1 > 0) ? rbt1 : 
 									NULL), aregion, istcp, 0, NULL, replybuf);
 								break;
 							case BUILD_OTHER:
 								build_reply(&sreply, so, buf, len, question, 
-									from, fromlen, sd0, NULL, aregion, istcp,
+									from, fromlen, rbt0, NULL, aregion, istcp,
 									0, NULL, replybuf);
 								break;
 							}
@@ -1972,7 +1950,7 @@ udpnxdomain:
 					if (type0 == DNS_TYPE_NS) {
 
 						build_reply(&sreply, so, buf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 0, \
+							fromlen, rbt0, NULL, aregion, istcp, 0, \
 							NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -2004,13 +1982,13 @@ udpnxdomain:
 	
 				free_question(question);
 
-				if (sd0) {
-					free (sd0);
-					sd0 = NULL;
+				if (rbt0) {
+					free (rbt0);
+					rbt0 = NULL;
 				}
-				if (sd1) {
-					free (sd1);
-					sd1 = NULL;
+				if (rbt1) {
+					free (rbt1);
+					rbt1 = NULL;
 				}
 
 			}	/* END ISSET */
@@ -2028,14 +2006,14 @@ udpnxdomain:
 
 	drop:
 		
-		if (sd0) {	
-			free(sd0);
-			sd0 = NULL;
+		if (rbt0) {	
+			free(rbt0);
+			rbt0 = NULL;
 		}
 
-		if (sd1) {
-			free(sd1);
-			sd1 = NULL;
+		if (rbt1) {
+			free(rbt1);
+			rbt1 = NULL;
 		}
 
 		continue;
@@ -2051,7 +2029,7 @@ udpnxdomain:
  */
 
 void
-build_reply(struct sreply *reply, int so, char *buf, int len, struct question *q, struct sockaddr *sa, socklen_t slen, struct domain *sd1, struct domain *sd2, u_int8_t region, int istcp, int deprecated0, struct recurses *sr, char *replybuf)
+build_reply(struct sreply *reply, int so, char *buf, int len, struct question *q, struct sockaddr *sa, socklen_t slen, struct rbtree *rbt1, struct rbtree *rbt2, u_int8_t region, int istcp, int deprecated0, void *sr, char *replybuf)
 {
 	reply->so = so;
 	reply->buf = buf;
@@ -2059,67 +2037,17 @@ build_reply(struct sreply *reply, int so, char *buf, int len, struct question *q
 	reply->q = q;
 	reply->sa = sa;
 	reply->salen = slen;
-	reply->sd1 = sd1;
-	reply->sd2 = sd2;
+	reply->rbt1 = rbt1;
+	reply->rbt2 = rbt2;
 	reply->region = region;
 	reply->istcp = istcp;
 	reply->wildcard = 0;
-	reply->sr = sr;
+	reply->sr = NULL;
 	reply->replybuf = replybuf;
 
 	return;
 }
 		
-
-void
-recurseheader(struct srecurseheader *rh, int proto, struct sockaddr_storage *src, struct sockaddr_storage *dst, int family) 
-{
-	struct sockaddr_in *sin, *sin0;
-	struct sockaddr_in6 *sin6, *sin60;
-
-	rh->af = family;
-	rh->proto = proto;
-
-	if (family == AF_INET) {
-		sin = (struct sockaddr_in *)&rh->dest;
-		sin0 = (struct sockaddr_in *)dst;
-		sin->sin_family = sin0->sin_family;
-		sin->sin_port = sin0->sin_port;
-		memcpy((char *)&sin->sin_addr.s_addr, 
-			(char *)&sin0->sin_addr.s_addr,
-			sizeof(sin->sin_addr.s_addr));
-		sin = (struct sockaddr_in *)&rh->source;
-		sin0 = (struct sockaddr_in *)src;
-		sin->sin_family = sin0->sin_family;
-		sin->sin_port = sin0->sin_port;
-		memcpy((char *)&sin->sin_addr.s_addr, 
-			(char *)&sin0->sin_addr.s_addr,
-			sizeof(sin->sin_addr.s_addr));
-	} else if (family == AF_INET6) {
-		sin6 = (struct sockaddr_in6 *)&rh->dest;
-		sin60 = (struct sockaddr_in6 *)dst;
-
-		sin6->sin6_family = sin60->sin6_family;
-		sin6->sin6_port = sin60->sin6_port;
-		
-		memcpy((char *)&sin6->sin6_addr, 
-			(char *)&sin60->sin6_addr,
-			sizeof(sin6->sin6_addr));
-
-		sin6 = (struct sockaddr_in6 *)&rh->source;
-		sin60 = (struct sockaddr_in6 *)src;
-
-		sin6->sin6_family = sin60->sin6_family;
-		sin6->sin6_port = sin60->sin6_port;
-		
-		memcpy((char *)&sin6->sin6_addr, 
-			(char *)&sin60->sin6_addr,
-			sizeof(sin6->sin6_addr));
-	}
-	
-	
-	return;
-}
 
 /*
  * The master process, waits to be killed, if any other processes are killed
@@ -2137,7 +2065,6 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 	fd_set rset;
 
 	struct timeval tv;
-	struct domain *idata;
 	struct imsg imsg;
 
 #if __OpenBSD__
@@ -2155,14 +2082,6 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 	}
 #endif
 	
-	idata = (struct domain *)calloc(1, SIZENODE); 
-	if (idata == NULL) {
-		dolog(LOG_ERR, "couldn't malloc memory for idata\n");
-		pid = getpgrp();
-		killpg(pid, SIGTERM);
-		exit(1);
-	}
-			
 	setproctitle("master");
 
 	pid = getpid();
@@ -2298,36 +2217,6 @@ master_reload(int sig)
 }
 
 
-int
-lookup_type(int internal_type)
-{
-	int array[INTERNAL_TYPE_MAX];
-
-	array[INTERNAL_TYPE_A] = DOMAIN_HAVE_A;
-	array[INTERNAL_TYPE_AAAA] = DOMAIN_HAVE_AAAA;
-	array[INTERNAL_TYPE_CNAME] = DOMAIN_HAVE_CNAME;
-	array[INTERNAL_TYPE_NS] = DOMAIN_HAVE_NS;
-	array[INTERNAL_TYPE_DNSKEY] =DOMAIN_HAVE_DNSKEY;
-	array[INTERNAL_TYPE_DS] = DOMAIN_HAVE_DS;
-	array[INTERNAL_TYPE_MX] = DOMAIN_HAVE_MX;
-	array[INTERNAL_TYPE_NAPTR] = DOMAIN_HAVE_NAPTR;
-	array[INTERNAL_TYPE_NSEC] = DOMAIN_HAVE_NSEC;
-	array[INTERNAL_TYPE_NSEC3] = DOMAIN_HAVE_NSEC3;
-	array[INTERNAL_TYPE_NSEC3PARAM] = DOMAIN_HAVE_NSEC3PARAM;
-	array[INTERNAL_TYPE_PTR] = DOMAIN_HAVE_PTR;
-	array[INTERNAL_TYPE_RRSIG] = -1;
-	array[INTERNAL_TYPE_SOA] = DOMAIN_HAVE_SOA;
-	array[INTERNAL_TYPE_SRV] = DOMAIN_HAVE_SRV;
-	array[INTERNAL_TYPE_SSHFP] = DOMAIN_HAVE_SSHFP;
-	array[INTERNAL_TYPE_TLSA] = DOMAIN_HAVE_TLSA;
-	array[INTERNAL_TYPE_TXT] = DOMAIN_HAVE_TXT;
-
-	if (internal_type < 0 || internal_type > INTERNAL_TYPE_MAX)
-		return -1;
-
-	return(array[internal_type]);
-}
-
 /*
  * TCPLOOP - does the polling of tcp descriptors and if ready receives the 
  * 		requests, builds the question and calls for replies, loops
@@ -2376,8 +2265,9 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	struct sockaddr_in6 *sin6;
 
 	struct question *question = NULL, *fakequestion = NULL;
-	struct domain *sd0 = NULL, *sd1 = NULL;
-	struct domain_cname *csd;
+	struct rbtree *rbt0 = NULL, *rbt1 = NULL;
+	struct rrset *csd;
+	struct rr *rr_csd;
 	
 	struct sreply sreply;
 	struct reply_logic *rl = NULL;
@@ -2706,7 +2596,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					break;
 				}
 
-				sd0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring);
+				rbt0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring);
 				if (type0 < 0) {
 	
 					switch (lzerrno) {
@@ -2727,7 +2617,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 								goto tcpout;
 						}
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
-						build_reply(&sreply, so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+						build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_refused(&sreply, NULL);
 						goto tcpout;
 						break;
@@ -2738,7 +2628,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 								goto tcpnoerror;
 							} else {
 								snprintf(replystring, DNS_MAXNAME, "NODATA");
-								build_reply(&sreply, so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+								build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
 								slen = reply_nodata(&sreply, NULL);
 								goto tcpout;
 								break;
@@ -2758,17 +2648,17 @@ tcpnoerror:
 						 * lookup an authoritative soa
 						 */
 
-						if (sd0) {
-							free(sd0);
-							sd0 = NULL;
+						if (rbt0) {
+							free(rbt0);
+							rbt0 = NULL;
 						}
 
-						sd0 = get_soa(cfg->db, question);
-						if (sd0 != NULL) {
+						rbt0 = get_soa(cfg->db, question);
+						if (rbt0 != NULL) {
 
 								build_reply(	&sreply, so, pbuf, len, 
 												question, from, fromlen, 
-												sd0, NULL, aregion, istcp, 
+												rbt0, NULL, aregion, istcp, 
 												0, NULL, replybuf);
 
 								slen = reply_noerror(&sreply, cfg->db);
@@ -2786,7 +2676,7 @@ tcpnoerror:
 							goto tcpnoerror;
 						} else {
 							snprintf(replystring, DNS_MAXNAME, "NODATA");
-							build_reply(&sreply, so, pbuf, len, question, from, fromlen, sd0, NULL, aregion, istcp, 0, NULL, replybuf);
+							build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
 							slen = reply_nodata(&sreply, NULL);
 							goto tcpout;
 						}	
@@ -2803,10 +2693,10 @@ tcpnxdomain:
 					/* 
 					 * lookup an authoritative soa 
 					 */
-					if (sd0 != NULL) {
+					if (rbt0 != NULL) {
 			
 							build_reply(	&sreply, so, pbuf, len, question, 
-											from, fromlen, sd0, NULL, 
+											from, fromlen, rbt0, NULL, 
 											aregion, istcp, 0, NULL,
 											replybuf);
 
@@ -2814,14 +2704,21 @@ tcpnxdomain:
 					}
 					goto tcpout;
 				case DNS_TYPE_CNAME:
-					csd = (struct domain_cname *)find_substruct(sd0, INTERNAL_TYPE_CNAME);
-					fakequestion = build_fake_question(csd->cname, csd->cnamelen, question->hdr->qtype);
+					csd = find_rr(rbt0, DNS_TYPE_SOA);
+					if (csd == NULL)
+						break;
+
+					rr_csd = TAILQ_FIRST(&csd->rr_head);
+					if (rr_csd == NULL)
+						break;
+					
+					fakequestion = build_fake_question(((struct cname *)rr_csd)->cname, ((struct cname *)rr_csd)->cnamelen, question->hdr->qtype);
 					if (fakequestion == NULL) {	
 						dolog(LOG_INFO, "fakequestion failed\n");
 						break;
 					}
 
-					sd1 = lookup_zone(cfg->db, fakequestion, &type1, &lzerrno, (char *)&fakereplystring);
+					rbt1 = lookup_zone(cfg->db, fakequestion, &type1, &lzerrno, (char *)&fakereplystring);
 					/* break CNAMES pointing to CNAMES */
 					if (type1 == DNS_TYPE_CNAME)
 						type1 = 0;
@@ -2871,12 +2768,12 @@ tcpnxdomain:
 							switch (rl->buildtype) {
 							case BUILD_CNAME:
 								build_reply(&sreply, so, pbuf, len, question, 
-									from, fromlen, sd0, ((type1 > 0) ? sd1 : 
+									from, fromlen, rbt0, ((type1 > 0) ? rbt1 : 
 									NULL), aregion, istcp, 0, NULL, replybuf);
 								break;
 							case BUILD_OTHER:
 								build_reply(&sreply, so, pbuf, len, question, 
-									from, fromlen, sd0, NULL, aregion, istcp, 
+									from, fromlen, rbt0, NULL, aregion, istcp, 
 									0, NULL, replybuf);
 								break;
 							}
@@ -2900,7 +2797,7 @@ tcpnxdomain:
 					
 					if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, so, pbuf, len, question, from, \
-							fromlen, sd0, NULL, aregion, istcp, 
+							fromlen, rbt0, NULL, aregion, istcp, 
 							0, NULL, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
@@ -2927,13 +2824,13 @@ tcpnxdomain:
 	
 				free_question(question);
 				
-				if (sd0) {
-					free(sd0);
-					sd0 = NULL;
+				if (rbt0) {
+					free(rbt0);
+					rbt0 = NULL;
 				}
-				if (sd1) {
-					free (sd1);
-					sd1 = NULL;
+				if (rbt1) {
+					free (rbt1);
+					rbt1 = NULL;
 				}
 
 				close(so);
@@ -2941,14 +2838,14 @@ tcpnxdomain:
 		} /* for (i = 0;;)... */
 	drop:
 		
-		if (sd0) {	
-			free(sd0);
-			sd0 = NULL;
+		if (rbt0) {	
+			free(rbt0);
+			rbt0 = NULL;
 		}
 
-		if (sd1) {
-			free(sd1);
-			sd1 = NULL;
+		if (rbt1) {
+			free(rbt1);
+			rbt1 = NULL;
 		}
 
 		close(so);

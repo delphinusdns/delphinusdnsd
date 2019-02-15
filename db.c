@@ -27,14 +27,21 @@
  */
 
 /*
- * $Id: db.c,v 1.5 2017/10/26 15:49:29 pjp Exp $
+ * $Id: db.c,v 1.6 2019/02/15 15:11:34 pjp Exp $
  */
 
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
+struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
+struct rbtree * find_rrset(ddDB *db, char *name, int len);
+struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
+int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
+int display_rr(struct rrset *rrset);
+int rotate_rr(struct rrset *rrset);
 
+extern char * convert_name(char *, int);
 
 int
 domaincmp(struct node *e1, struct node *e2)
@@ -80,11 +87,6 @@ dddbput(ddDB *db, ddDBT *key, ddDBT *data)
 	struct node find, *n, *res;
 	char *map;
 
-	if (data->size > SIZENODE) {
-		errno = E2BIG;
-		return -1;
-	}
-
 	strlcpy(find.domainname, key->data, sizeof(find.domainname));
 	find.len = key->size;
 
@@ -92,15 +94,13 @@ dddbput(ddDB *db, ddDBT *key, ddDBT *data)
 	if (res == NULL) {
 		/* does not exist, create it */
 		
-		map = (char *)mmap(NULL, SIZENODE, PROT_READ|PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-		if (map == MAP_FAILED) {
-			errno = EINVAL;
+		map = calloc(1, data->size);
+		if (map == NULL) {
 			return -1;
 		}
 
 		n = calloc(sizeof(struct node), 1);
 		if (n == NULL) {
-			errno = ENOMEM;
 			return -1;
 		}
 		memset(n, 0, sizeof(struct node));
@@ -112,8 +112,10 @@ dddbput(ddDB *db, ddDBT *key, ddDBT *data)
 
 		RB_INSERT(domaintree, &rbhead, n);
 	} else {
-		res->datalen = data->size;
-		memcpy(res->data, data->data, data->size);
+		if (res->datalen != data->size)
+			return -1;
+
+		memcpy(res->data, data->data, res->datalen);
 	}
 
 	return 0;
@@ -141,5 +143,188 @@ dddbget(ddDB *db, ddDBT *key, ddDBT *data)
 int
 dddbclose(ddDB *db)
 {
+	return 0;
+}
+
+struct rbtree *
+create_rr(ddDB *db, char *name, int len, int type, void *rdata)
+{
+	struct rbtree *rbt = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *myrr = NULL;
+	ddDBT key, data;
+	int nc = 1;
+	char *humanname = NULL;
+
+
+	rbt = find_rrset(db, name, len);
+	if (rbt == NULL) {
+		rbt = (struct rbtree *) calloc(1, sizeof(struct rbtree));
+		if (! rbt) {
+			perror("calloc");
+			return NULL;
+		}
+
+		strlcpy(rbt->zone, name, sizeof(rbt->zone));
+		rbt->zonelen = len;
+		humanname = convert_name(name, len);
+		strlcpy(rbt->humanname, humanname, sizeof(rbt->humanname));
+		TAILQ_INIT(&rbt->rrset_head);
+		nc = 1;
+	}
+	
+	rrset = find_rr(rbt, type);
+	if (rrset == NULL) {
+		rrset = (struct rrset *)calloc(1, sizeof(struct rrset));
+		if (! rrset){
+			perror("calloc");
+
+			if (nc)
+				free(rbt);
+			return NULL;
+		}
+
+		rrset->rrtype = type;
+		TAILQ_INIT(&rrset->rr_head);
+
+		TAILQ_INSERT_TAIL(&rbt->rrset_head, rrset, entries);
+	}
+
+
+	if (nc) {
+		/* save this new rbtree (it changed) */
+
+		memset(&key, 0, sizeof(key));
+		memset(&data, 0, sizeof(data));
+
+		key.data = (char *)name;
+		key.size = len;
+
+		data.data = (void*)rbt;
+		data.size = sizeof(struct rbtree);
+
+		if (db->put(db, &key, &data) != 0) {
+			return NULL;
+		}
+	}
+
+	myrr = (struct rr *)calloc(1, sizeof(struct rr));
+	if (! myrr) {
+		perror("calloc");
+		return NULL;
+	}
+
+	myrr->ttl = 86400;
+	myrr->rdata = rdata;
+	myrr->changed = time(NULL);
+
+	TAILQ_INSERT_HEAD(&rrset->rr_head, myrr, entries);
+
+	return (rbt);
+}
+
+	
+struct rbtree *
+find_rrset(ddDB *db, char *name, int len)
+{
+	static struct rbtree *rb;
+	ddDBT key, data;
+
+	memset(&key, 0, sizeof(key));
+	memset(&data, 0, sizeof(data));
+
+	key.data = (char *)name;
+	key.size = len;
+
+	if (db->get(db, &key, &data) != 0) {
+		return (NULL);
+	}
+
+	if ((rb = calloc(1, sizeof(struct rbtree))) == NULL)
+		return NULL;
+
+	memcpy((char *)rb, (char *)data.data, sizeof(struct rbtree));
+
+	return (rb);
+}
+
+
+int
+add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata)
+{
+	struct rrset *rp0, *rp;
+	struct rr *rt;
+
+	TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
+		if (rrtype == rp->rrtype)
+			break;
+	}
+	
+	if (rp == NULL) {
+		/* the rrset doesn't exist, create it */
+		rp = (struct rrset *)calloc(1, sizeof(struct rrset));
+		if (! rp) {
+			perror("calloc");
+			return -1;
+		}
+
+		rp->rrtype = rrtype;
+		TAILQ_INIT(&rp->rr_head);
+
+		TAILQ_INSERT_TAIL(&rbt->rrset_head, rp, entries);
+	}
+
+	rt = calloc(1, sizeof(struct rr));
+	if (rt == NULL) {
+		perror("calloc");
+		return -1;
+	}
+
+	rt->ttl = 86400;
+	rt->changed = time(NULL);
+	rt->rdata = rdata;
+
+	TAILQ_INSERT_HEAD(&rp->rr_head, rt, entries);
+
+	return 0;
+}
+
+struct rrset *
+find_rr(struct rbtree *rbt, u_int16_t rrtype)
+{
+	struct rrset *rp, *rp0;
+
+	TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
+		if (rrtype == rp->rrtype)
+			break;
+	}
+	
+	return (rp);
+}
+
+int
+display_rr(struct rrset *rrset)
+{
+	struct rr *rrp, *rrp0;
+
+	TAILQ_FOREACH_SAFE(rrp, &rrset->rr_head, entries, rrp0) {
+		printf("%lld:%u:%s\n", rrp->changed, rrp->ttl, (char *)rrp->rdata);
+	}
+
+	return 0;
+}
+
+int
+rotate_rr(struct rrset *rrset)
+{
+	struct rr *rrp;
+
+	rrp = TAILQ_LAST(&rrset->rr_head, rrh);
+	if (rrp == NULL)
+		return -1;
+
+	TAILQ_REMOVE(&rrset->rr_head, rrp, entries);
+	TAILQ_INSERT_HEAD(&rrset->rr_head, rrp, entries);
+
 	return 0;
 }

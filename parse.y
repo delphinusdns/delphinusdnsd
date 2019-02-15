@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.58 2019/02/09 09:05:18 pjp Exp $
+ * $Id: parse.y,v 1.59 2019/02/15 15:11:34 pjp Exp $
  */
 
 %{
@@ -29,6 +29,8 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
+void 		yyerror(const char *);
+int		yylex(void);
 
 extern struct rrtab 	*rrlookup(char *);
 extern int	base32hex_decode(u_char *, u_char *);
@@ -45,10 +47,12 @@ extern int 	insert_whitelist(char *, char *);
 extern void 	slave_shutdown(void);
 extern int 	mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int 	mybase64_decode(char const *, u_char *, size_t);
-extern int 	get_record_size(ddDB *, char *, int);
-extern void *	find_substruct(struct domain *, u_int16_t);
-void 		yyerror(const char *);
-int		yylex(void);
+extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
+extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
+extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
+extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
+extern int display_rr(struct rrset *rrset);
+
 
 extern int whitelist;
 extern int notify;
@@ -172,7 +176,6 @@ int             findeol(void);
 int 		get_ip(char *, int);
 char 		*get_prefixlen(char *, char *, int);
 int 		get_quotedstring(char *, int);
-int 		get_record(struct domain *, char *, int);
 int 		get_string(char *, int);
 int		hex2bin(char *, int, char *);
 int             lgetc(int);
@@ -181,7 +184,6 @@ int             lungetc(int);
 int 		parse_file(ddDB *, char *);
 struct file     *pushfile(const char *, int, int, int);
 int             popfile(void);
-int		set_record(struct domain *, int, char *, int);
 static int 	temp_inet_net_pton_ipv6(const char *, void *, size_t);
 int 		yyparse(void);
 static struct rzone * add_rzone(void);
@@ -1865,12 +1867,11 @@ int
 fill_cname(char *name, char *type, int myttl, char *hostname)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_cname *ssd_cname;
+	struct rbtree *rbt;
+	struct cname *cname;
 	char *myname, *converted_name;
 	int len, converted_namelen;
-	int i, rs;
+	int i;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -1881,48 +1882,11 @@ fill_cname(char *name, char *type, int myttl, char *hostname)
 		return -1;
 	}
 
-	rs = get_record_size(db, converted_name, converted_namelen);
-	if (rs < 0) {
-		return (-1);
-	}
-
-	if ((sdomain = calloc(1, rs)) == NULL) {
+	if ((cname = calloc(1, sizeof(struct cname))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		return -1;
 	}
-	
-	ssd = (struct domain *)sdomain;
 
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd->ttl[INTERNAL_TYPE_CNAME] = myttl;
-
-	ssd_cname = (struct domain_cname *) find_substruct(ssd, INTERNAL_TYPE_CNAME);
-	if (ssd_cname == NULL) {
-		rs += sizeof(struct domain_cname);	
-#ifdef __OpenBSD__
-		tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-		if (tp == NULL)
-			return -1;
-		sdomain = tp;
-		ssd_cname = (sdomain + (rs - sizeof(struct domain_cname)));
-		memset((char *)ssd_cname, 0, sizeof(struct domain_cname));
-		ssd = (struct domain *)sdomain;
-		ssd_cname->len = sizeof(struct domain_cname);
-		ssd_cname->type = INTERNAL_TYPE_CNAME;
-	} 
-
-	ssd_cname->type = DNS_TYPE_CNAME;
-	ssd_cname->len = sizeof(struct domain_cname);
 
 	myname = dns_label(hostname, (int *)&len);	
 	if (myname == NULL) {
@@ -1935,35 +1899,35 @@ fill_cname(char *name, char *type, int myttl, char *hostname)
 		return -1;
 	}
 
-	ssd_cname->cnamelen = len;
-	memcpy((char *)ssd_cname->cname, myname, len);
+	cname->cnamelen = len;
+	memcpy((char *)cname->cname, myname, len);
+	cname->ttl = myttl;
 
 	free(myname);
 
-	ssd->flags |= DOMAIN_HAVE_CNAME;
-
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_CNAME, cname);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
+	}
 	
 	if (converted_name)
 		free (converted_name);
 
-	free (sdomain);
+	free (rbt);
 	
 	return (0);
-
 }
 
 int
 fill_ptr(char *name, char *type, int myttl, char *hostname)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_ptr *ssd_ptr;
+	struct ptr *ptr;
+	struct rbtree *rbt;
 	int len, converted_namelen;
 	char *myname, *converted_name;
-	int i, rs;
+	int i;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -1974,46 +1938,6 @@ fill_ptr(char *name, char *type, int myttl, char *hostname)
 		return -1;
 	}
 
-       	rs = get_record_size(db, converted_name, converted_namelen);
-        if (rs < 0) {
-                return (-1);
-        }
-
-        if ((sdomain = calloc(1, rs)) == NULL) {
-                return -1;
-        }
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		 return (-1);
-	}
-
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd->ttl[INTERNAL_TYPE_PTR] = myttl;
-
-	ssd_ptr = (struct domain_ptr *) find_substruct(ssd, INTERNAL_TYPE_PTR);
-        if (ssd_ptr == NULL) {
-                rs += sizeof(struct domain_ptr);
-#ifdef __OpenBSD__
-                tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-                if (tp == NULL)
-                        return -1;
-                sdomain = tp;
-                ssd_ptr = (sdomain + (rs - sizeof(struct domain_ptr)));
-                memset((char *)ssd_ptr, 0, sizeof(struct domain_ptr));
-		ssd = (struct domain *)sdomain;
-		ssd_ptr->len = sizeof(struct domain_ptr);
-		ssd_ptr->type = INTERNAL_TYPE_PTR;
-        }
-
 	myname = dns_label(hostname, (int *)&len);	
 	if (myname == NULL) {
 		dolog(LOG_INFO, "illegal nameserver, skipping line %d\n", file->lineno);
@@ -2025,20 +1949,27 @@ fill_ptr(char *name, char *type, int myttl, char *hostname)
 		return -1;
 	}
 
-	ssd_ptr->ptrlen = len;
-	memcpy((char *)ssd_ptr->ptr, myname, len);
+	if ((ptr = calloc(1, sizeof(struct ptr))) == NULL) {
+		dolog(LOG_ERR, "calloc %s\n", strerror(errno));
+		return -1;
+	}
+
+	ptr->ptrlen = len;
+	memcpy((char *)ptr->ptr, myname, len);
+	ptr->ttl = myttl;
 
 	free(myname);
 
-	ssd->flags |= DOMAIN_HAVE_PTR;
-
-	if (set_record(ssd, rs,  converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_PTR, ptr);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
+	}
 	
 	if (converted_name)
 		free (converted_name);
 
-	free (sdomain);
+	free (rbt);
 	
 	return (0);
 
@@ -2049,12 +1980,11 @@ int
 fill_dnskey(char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t protocol, u_int8_t algorithm, char *pubkey)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_dnskey *ssd_dnskey;
+	struct dnskey *dnskey;
+	struct rbtree *rbt;
 	int converted_namelen;
 	char *converted_name;
-	int i, ret, rs;
+	int i, ret;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2065,69 +1995,35 @@ fill_dnskey(char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t p
 		return -1;
 	}
 
-        rs = get_record_size(db, converted_name, converted_namelen);
-        if (rs < 0) {
-                return (-1);
-        }
-
-        if ((sdomain = calloc(1, rs)) == NULL) {
-                return (-1);
-        }
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
+	if ((dnskey = calloc(1, sizeof(struct dnskey))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
 	}
 
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd->ttl[INTERNAL_TYPE_DNSKEY] = myttl;
-
-        ssd_dnskey = (struct domain_dnskey *) find_substruct(ssd, INTERNAL_TYPE_DNSKEY);
-        if (ssd_dnskey == NULL) {
-                rs += sizeof(struct domain_dnskey);
-#ifdef __OpenBSD__
-                tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-                if (tp == NULL)
-                        return -1;
-                sdomain = tp;
-                ssd_dnskey = (sdomain + (rs - sizeof(struct domain_dnskey)));
-                memset((char *)ssd_dnskey, 0, sizeof(struct domain_dnskey));
-		ssd = (struct domain *)sdomain;
-		ssd_dnskey->len = sizeof(struct domain_dnskey);
-		ssd_dnskey->type = INTERNAL_TYPE_DNSKEY;
-        }
-
-	ssd_dnskey->dnskey[ssd_dnskey->dnskey_count].flags = flags;
-	ssd_dnskey->dnskey[ssd_dnskey->dnskey_count].protocol = protocol;
-	ssd_dnskey->dnskey[ssd_dnskey->dnskey_count].algorithm = algorithm;
+	dnskey->flags = flags;
+	dnskey->protocol = protocol;
+	dnskey->algorithm = algorithm;
+	dnskey->ttl = myttl;
 
 	/* feed our base64 key to the public key */
-	ret = mybase64_decode(pubkey, ssd_dnskey->dnskey[ssd_dnskey->dnskey_count].public_key, sizeof(ssd_dnskey->dnskey[ssd_dnskey->dnskey_count].public_key));
-
+	ret = mybase64_decode(pubkey, dnskey->public_key, sizeof(dnskey->public_key));
 	if (ret < 0) 
 		return (-1);
 
-	ssd_dnskey->dnskey[ssd_dnskey->dnskey_count].publickey_len = ret;
+	dnskey->publickey_len = ret;
 	
-	ssd_dnskey->dnskey_count++;
-
-	ssd->flags |= DOMAIN_HAVE_DNSKEY;
-
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_DNSKEY, dnskey);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
+	}
+	
 	
 	if (converted_name)
 		free (converted_name);
 
-	free (sdomain);
+	free (rbt);
 	
 	return (0);
 
@@ -2137,17 +2033,18 @@ int
 fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t algorithm, u_int8_t labels, u_int32_t original_ttl, u_int64_t sig_expiration, u_int64_t sig_inception, u_int16_t keytag, char *signers_name, char *signature)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_rrsig *ssd_rrsig;
+	struct rbtree *rbt;
 	struct rrsig *rrsig;
 	int converted_namelen, signers_namelen;
 	char *converted_name, *signers_name2;
 	struct rrtab *rr;
-	int i, ret, rs;
+	int i, ret;
 	char tmpbuf[32];
 	struct tm tmbuf;
 	time_t timebuf;
+#if 0
+	int rrtype = RRSIG_RRSET;
+#endif
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2157,27 +2054,6 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 	if (converted_name == NULL) {
 		return -1;
 	}
-
-        rs = get_record_size(db, converted_name, converted_namelen);
-        if (rs < 0) {
-                return (-1);
-        }
-
-        if ((sdomain = calloc(1, rs)) == NULL) {
-                return -1;
-        }
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd->ttl[INTERNAL_TYPE_RRSIG] = myttl;
 
 	if ((rr = rrlookup(typecovered)) == NULL) {
 		return (-1);
@@ -2190,46 +2066,16 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 		break;
 	}
 
-        ssd_rrsig = (struct domain_rrsig *) find_substruct(ssd, INTERNAL_TYPE_RRSIG);
-        if (ssd_rrsig == NULL) {
-                rs += sizeof(struct domain_rrsig);
-#ifdef __OpenBSD__
-                tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-                if (tp == NULL)
-                        return -1;
-                sdomain = tp;
-                ssd_rrsig = (sdomain + (rs - sizeof(struct domain_rrsig)));
-                memset((char *)ssd_rrsig, 0, sizeof(struct domain_rrsig));
-		ssd = (struct domain *)sdomain;
-		ssd_rrsig->len = sizeof(struct domain_rrsig);
-		ssd_rrsig->type = INTERNAL_TYPE_RRSIG;
-        }
-
-	if (rr->internal_type == INTERNAL_TYPE_DNSKEY) {
-#if DEBUG
-		printf("filling hackaround type dnskey\n");
-#endif
-		rrsig = &ssd_rrsig->rrsig_dnskey[ssd_rrsig->rrsig_dnskey_count++];
-	} else {
-#if DEBUG
-		printf("filling internal type %d\n", rr->internal_type);
-#endif
-		rrsig = &ssd_rrsig->rrsig[rr->internal_type];
+	if ((rrsig = calloc(1, sizeof(struct rrsig))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
 	}
 
-
+	
 	rrsig->type_covered = rr->type;
 	rrsig->algorithm = algorithm;
 	rrsig->labels = labels;
-
-#if 0
-	if (ssd->ttl[rr->internal_type] != original_ttl) {
-		return (-1);
-	}
-#endif
+	rrsig->ttl = original_ttl;
 
 	rrsig->original_ttl = original_ttl;
 	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_expiration);
@@ -2253,7 +2099,7 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 		return (-1);
 	}
 
-	memcpy(rrsig->signers_name, signers_name2, signers_namelen);
+	memcpy(&rrsig->signers_name, signers_name2, signers_namelen);
 	rrsig->signame_len = signers_namelen;
 
 	
@@ -2264,19 +2110,21 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 		return (-1);
 
 	rrsig->signature_len = ret;
-	
-	ssd->flags |= DOMAIN_HAVE_RRSIG;
 
-	if (set_record(ssd, rs, converted_name, converted_namelen)  < 0)	
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_RRSIG, rrsig);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
+	}
+	
 	
 	if (signers_name2)
-		free (signers_name2);
+		free(signers_name2);
 
 	if (converted_name)
 		free (converted_name);
 
-	free (sdomain);
+	free (rbt);
 
 	return (0);
 
@@ -2286,12 +2134,11 @@ int
 fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algorithm, u_int8_t digesttype, char *digest)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_ds *ssd_ds;
+	struct rbtree *rbt;
+	struct ds *ds;
 	int converted_namelen;
 	char *converted_name;
-	int i, rs;
+	int i;
 	int ret;
 
 	for (i = 0; i < strlen(name); i++) {
@@ -2303,70 +2150,29 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 		return -1;
 	}
 
-        rs = get_record_size(db, converted_name, converted_namelen);
-        if (rs < 0) {
-                return (-1);
-        }
-
-        if ((sdomain = calloc(1, rs)) == NULL) {
-                return -1;
-        }
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
+	if ((ds = calloc(1, sizeof(struct ds))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
 	}
 
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd->ttl[INTERNAL_TYPE_DS] = myttl;
-
-        ssd_ds = (struct domain_ds *) find_substruct(ssd, INTERNAL_TYPE_DS);
-        if (ssd_ds == NULL) {
-                rs += sizeof(struct domain_ds);
-#ifdef __OpenBSD__
-                tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-                if (tp == NULL)
-                        return -1;
-                sdomain = tp;
-                ssd_ds = (sdomain + (rs - sizeof(struct domain_ds)));
-                memset((char *)ssd_ds, 0, sizeof(struct domain_ds));
-		ssd = (struct domain *)sdomain;
-		ssd_ds->len = sizeof(struct domain_ds);
-		ssd_ds->type = INTERNAL_TYPE_DS;
-        }
-
-	ssd_ds->ds[ssd_ds->ds_count].key_tag = keytag;
-	ssd_ds->ds[ssd_ds->ds_count].algorithm = algorithm;
-	ssd_ds->ds[ssd_ds->ds_count].digest_type = digesttype; 
+	ds->key_tag = keytag;
+	ds->algorithm = algorithm;
+	ds->digest_type = digesttype; 
 	
-#if 0
-	memcpy(ssd_ds->ds[ssd_ds->ds_count].digest, digest, strlen(digest));
-	ssd_ds->ds[ssd_ds->ds_count].digestlen = strlen(digest);	
-#endif
+	ret = hex2bin(digest, strlen(digest), ds->digest);
+	ds->digestlen = ret;
+	ds->ttl = myttl;
 
-	ret = hex2bin(digest, strlen(digest), ssd_ds->ds[ssd_ds->ds_count].digest);
-
-	ssd_ds->ds[ssd_ds->ds_count].digestlen = ret;
-
-	ssd_ds->ds_count++;
-		
-	ssd->flags |= DOMAIN_HAVE_DS;
-
-	if (set_record(sdomain, rs, converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_DS, ds);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
-
+	}
+	
 	if (converted_name)
 		free (converted_name);
 
-	free(sdomain);
+	free(rbt);
 	
 	return (0);
 
@@ -2376,10 +2182,9 @@ int
 fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt, char *nextname, char *bitmap)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_nsec3 *ssd_nsec3;
-	int i, rs;
+	struct nsec3 *nsec3;
+	struct rbtree *rbt;
+	int i;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2397,86 +2202,47 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 		insert_nsec3(current_zone, name, converted_name, converted_namelen);
 	}
 
-        rs = get_record_size(db, converted_name, converted_namelen);
-        if (rs < 0) {
-		if (debug)
-			dolog(LOG_INFO, "get_record_size failed\n");
-                return (-1);
-        }
-
-        if ((sdomain = calloc(1, rs)) == NULL) {
-		if (debug)
-			dolog(LOG_INFO, "calloc failed\n");
-                return -1;
-        }
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd->ttl[INTERNAL_TYPE_NSEC3] = myttl;
-
-
 	for (i = 0; i < strlen(nextname); i++) {
 		nextname[i] = tolower((int)nextname[i]);
 	}
 
-	ssd_nsec3 = (struct domain_nsec3 *)find_substruct(ssd, INTERNAL_TYPE_NSEC3);
-	if (ssd_nsec3 == NULL) {
-		rs += sizeof(struct domain_nsec3);
-#ifdef __OpenBSD__
-		tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-		if (tp == NULL) {
-			dolog(LOG_INFO, "reallocarray failed\n");
-			free (sdomain);
-			return -1;
-		}
-		sdomain = tp;
-		ssd_nsec3 = (sdomain + (rs - sizeof(struct domain_nsec3)));
-		memset((char *)ssd_nsec3, 0, sizeof(struct domain_nsec3));
-		ssd = (struct domain *)sdomain;
-		ssd_nsec3->len = sizeof(struct domain_nsec3);
-		ssd_nsec3->type = INTERNAL_TYPE_NSEC3;
+
+	if ((nsec3 = calloc(1, sizeof(struct nsec3))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
 	}
 
-	ssd_nsec3->nsec3.algorithm = algorithm;
-	ssd_nsec3->nsec3.flags = flags;
-	ssd_nsec3->nsec3.iterations = iterations;
+	nsec3->algorithm = algorithm;
+	nsec3->flags = flags;
+	nsec3->iterations = iterations;
 	if (strcasecmp(salt, "-") == 0) {
-		ssd_nsec3->nsec3.saltlen = 0;
+		nsec3->saltlen = 0;
 	} else {
-		ssd_nsec3->nsec3.saltlen = (strlen(salt) / 2);
-		hex2bin(salt, strlen(salt), ssd_nsec3->nsec3.salt);
+		nsec3->saltlen = (strlen(salt) / 2);
+		hex2bin(salt, strlen(salt), nsec3->salt);
 	}
 
-	ssd_nsec3->nsec3.nextlen = base32hex_decode(nextname, (u_char*)&ssd_nsec3->nsec3.next);
-	if (ssd_nsec3->nsec3.nextlen == 0) {
+	nsec3->nextlen = base32hex_decode(nextname, (u_char*)&nsec3->next);
+	if (nsec3->nextlen == 0) {
 		dolog(LOG_INFO, "base32_decode faulty");
 		return -1;
 	}
 
 	/* XXX create/manage bitmap */
-	create_nsec_bitmap(bitmap, ssd_nsec3->nsec3.bitmap, (int *)&ssd_nsec3->nsec3.bitmap_len);
+	create_nsec_bitmap(bitmap, nsec3->bitmap, (int *)&nsec3->bitmap_len);
 	
-	ssd->flags |= DOMAIN_HAVE_NSEC3;
+	nsec3->ttl = myttl;
 
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NSEC3, nsec3);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
+	}
 
 	if (converted_name)
 		free (converted_name);
 	
-	free (sdomain);
+	free (rbt);
 
 	return (0);
 }
@@ -2485,10 +2251,9 @@ int
 fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_nsec3param *ssd_nsec3param;
-	int i, rs;
+	struct rbtree *rbt;
+	struct nsec3param *nsec3param;
+	int i;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2499,72 +2264,32 @@ fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_i
 		return -1;
 	}
 
-        rs = get_record_size(db, converted_name, converted_namelen);
-        if (rs < 0) {
-		if (debug)
-			dolog(LOG_INFO, "get_record_size failed\n");
-                return (-1);
-        }
-
-        if ((sdomain = calloc(1, rs)) == NULL) {
-		if (debug)
-			dolog(LOG_INFO, "calloc failed\n");
-                return -1;
-        }
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd->ttl[INTERNAL_TYPE_NSEC3PARAM] = myttl;
-
-	ssd_nsec3param = (struct domain_nsec3param *)find_substruct(ssd, INTERNAL_TYPE_NSEC3PARAM);
-	if (ssd_nsec3param == NULL) {
-		rs += sizeof(struct domain_nsec3param);
-#ifdef __OpenBSD__
-		tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-		if (tp == NULL) {
-			dolog(LOG_INFO, "reallocarray failed\n");
-			free (sdomain);
-			return -1;
-		}
-		sdomain = tp;
-		ssd_nsec3param = (sdomain + (rs - sizeof(struct domain_nsec3param)));
-		memset((char *)ssd_nsec3param, 0, sizeof(struct domain_nsec3param));
-		ssd = (struct domain *)sdomain;
-		ssd_nsec3param->len = sizeof(struct domain_nsec3param);
-		ssd_nsec3param->type = INTERNAL_TYPE_NSEC3PARAM;
-	}
-
-	ssd_nsec3param->nsec3param.algorithm = algorithm;
-	ssd_nsec3param->nsec3param.flags = flags;
-	ssd_nsec3param->nsec3param.iterations = iterations;
-	if (strcasecmp(salt, "-") == 0) {
-		ssd_nsec3param->nsec3param.saltlen = 0;
-	} else {
-		ssd_nsec3param->nsec3param.saltlen = (strlen(salt) / 2);
-		hex2bin(salt, strlen(salt), ssd_nsec3param->nsec3param.salt);
-	}
-
-	ssd->flags |= DOMAIN_HAVE_NSEC3PARAM;
-
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	if ((nsec3param = calloc(1, sizeof(struct nsec3param))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		return -1;
+	}
+
+	nsec3param->algorithm = algorithm;
+	nsec3param->flags = flags;
+	nsec3param->iterations = iterations;
+	if (strcasecmp(salt, "-") == 0) {
+		nsec3param->saltlen = 0;
+	} else {
+		nsec3param->saltlen = (strlen(salt) / 2);
+		hex2bin(salt, strlen(salt), nsec3param->salt);
+	}
+	nsec3param->ttl = myttl;
+
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NSEC3PARAM, nsec3param);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
 
 	if (converted_name)
 		free (converted_name);
 	
-	free (sdomain);
+	free (rbt);
 
 	return (0);
 }
@@ -2573,12 +2298,11 @@ int
 fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitmap)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_nsec *ssd_nsec;
+	struct nsec *nsec;
+	struct rbtree *rbt;
 	int converted_namelen, converted_domainnamelen;
 	char *converted_name, *converted_domainname;
-	int i, rs;
+	int i;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2588,33 +2312,6 @@ fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitma
 	if (converted_name == NULL) {
 		return -1;
 	}
-
-        rs = get_record_size(db, converted_name, converted_namelen);
-        if (rs < 0) {
-		if (debug)
-			dolog(LOG_INFO, "get_record_size failed\n");
-                return (-1);
-        }
-
-        if ((sdomain = calloc(1, rs)) == NULL) {
-		if (debug)
-			dolog(LOG_INFO, "calloc failed\n");
-                return -1;
-        }
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd->ttl[INTERNAL_TYPE_NSEC] = myttl;
-
 
 	for (i = 0; i < strlen(domainname); i++) {
 		domainname[i] = tolower((int)domainname[i]);
@@ -2627,43 +2324,27 @@ fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitma
 		return -1;
 	}
 
-	ssd_nsec = (struct domain_nsec *)find_substruct(ssd, INTERNAL_TYPE_NSEC);
-	if (ssd_nsec == NULL) {
-		rs += sizeof(struct domain_nsec);
-#ifdef __OpenBSD__
-		tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-		if (tp == NULL) {
-			dolog(LOG_INFO, "reallocarray failed\n");
-			free (sdomain);
-			return -1;
-		}
-		sdomain = tp;
-		ssd_nsec = (sdomain + (rs - sizeof(struct domain_nsec)));
-		memset((char *)ssd_nsec, 0, sizeof(struct domain_nsec));
-		ssd = (struct domain *)sdomain;
-		ssd_nsec->len = sizeof(struct domain_nsec);
-		ssd_nsec->type = INTERNAL_TYPE_NSEC;
+	if ((nsec = calloc(1, sizeof(struct nsec))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
 	}
 
+	memcpy(nsec->next_domain_name, converted_domainname, converted_domainnamelen);
+	nsec->ndn_len = converted_domainnamelen;
 
-	memcpy(ssd_nsec->nsec.next_domain_name, converted_domainname, converted_domainnamelen);
-	ssd_nsec->nsec.ndn_len = converted_domainnamelen;
-
-	/* XXX create/manage bitmap */
-	create_nsec_bitmap(bitmap, ssd_nsec->nsec.bitmap, (int *)&ssd_nsec->nsec.bitmap_len);
+	create_nsec_bitmap(bitmap, nsec->bitmap, (int *)&nsec->bitmap_len);
+	nsec->ttl = myttl;
 	
-	ssd->flags |= DOMAIN_HAVE_NSEC;
-
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NSEC, nsec);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
+	}
 
 	if (converted_name)
 		free (converted_name);
 	
-	free (sdomain);
+	free (rbt);
 
 	return (0);
 
@@ -2674,14 +2355,12 @@ int
 fill_naptr(char *name, char *type, int myttl, int order, int preference, char *flags, char *services, char *regexp, char *replacement)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_naptr *ssd_naptr;
+	struct rbtree *rbt;
+	struct naptr *naptr;
 	int converted_namelen;
 	char *converted_name, *naptrname;
 	int flagslen, serviceslen, regexplen, replacementlen;
 	int i, naptr_namelen;
-	int rs;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2701,73 +2380,37 @@ fill_naptr(char *name, char *type, int myttl, int order, int preference, char *f
 		return -1;
 	}
 
-	rs = get_record_size(db, converted_name, converted_namelen);
-	if (rs < 0) {
-		return (-1);
-	}
-
-	if ((sdomain = calloc(1, rs)) == NULL) {
+	if ((naptr = (struct naptr *)calloc(1, sizeof(struct naptr))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		return -1;
 	}
 
-	ssd = (struct domain *)sdomain;
+	naptr->order = order;
+	naptr->preference = preference;
 
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
+	memcpy(&naptr->flags, flags, flagslen);
+	naptr->flagslen = flagslen;
 
+	memcpy(&naptr->services, services, serviceslen);
+	naptr->serviceslen = serviceslen;
 
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd->ttl[INTERNAL_TYPE_NAPTR] = myttl;
-
-	ssd_naptr = (struct domain_naptr *)find_substruct(ssd, INTERNAL_TYPE_NAPTR);
-	if (ssd_naptr == NULL) {
-		rs += sizeof(struct domain_naptr);
-#ifdef __OpenBSD__
-		tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-		if (tp == NULL) 
-			return -1;
-	
-		sdomain = tp;
-		ssd_naptr = (sdomain + (rs - sizeof(struct domain_naptr)));
-		memset((char *)ssd_naptr, 0, sizeof(struct domain_naptr));
-		ssd = (struct domain *)sdomain;
-		ssd_naptr->len = sizeof(struct domain_naptr);
-		ssd_naptr->type = INTERNAL_TYPE_NAPTR;
-	}
-
-	ssd_naptr->naptr[ssd_naptr->naptr_count].order = order;
-	ssd_naptr->naptr[ssd_naptr->naptr_count].preference = preference;
-
-	memcpy(ssd_naptr->naptr[ssd_naptr->naptr_count].flags, flags, flagslen);
-	ssd_naptr->naptr[ssd_naptr->naptr_count].flagslen = flagslen;
-
-	memcpy(ssd_naptr->naptr[ssd_naptr->naptr_count].services, services, serviceslen);
-	ssd_naptr->naptr[ssd_naptr->naptr_count].serviceslen = serviceslen;
-
-	memcpy(ssd_naptr->naptr[ssd_naptr->naptr_count].regexp, regexp, regexplen);
-	ssd_naptr->naptr[ssd_naptr->naptr_count].regexplen = regexplen;
+	memcpy(&naptr->regexp, regexp, regexplen);
+	naptr->regexplen = regexplen;
 
 	naptrname = check_rr(replacement, type, DNS_TYPE_NAPTR, &naptr_namelen);
 	if (naptrname == NULL) {
 		return -1;
 	}
 
-	memcpy(ssd_naptr->naptr[ssd_naptr->naptr_count].replacement, naptrname, naptr_namelen);
-	ssd_naptr->naptr[ssd_naptr->naptr_count].replacementlen = naptr_namelen;
-	
-	ssd_naptr->naptr_count++;
+	memcpy(&naptr->replacement, naptrname, naptr_namelen);
+	naptr->replacementlen = naptr_namelen;
+	naptr->ttl = myttl;
 
-	ssd->flags |= DOMAIN_HAVE_NAPTR;
-
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NAPTR, naptr);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
+	}
 	
 	if (naptrname)
 		free (naptrname);
@@ -2775,7 +2418,7 @@ fill_naptr(char *name, char *type, int myttl, int order, int preference, char *f
 	if (converted_name)
 		free (converted_name);
 
-	free (sdomain);
+	free (rbt);
 	
 	return (0);
 
@@ -2785,13 +2428,11 @@ int
 fill_txt(char *name, char *type, int myttl, char *msg)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_txt *ssd_txt;
+	struct rbtree *rbt;
+	struct txt *txt;
 	int converted_namelen;
 	char *converted_name;
 	int len, i;
-	int rs;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2807,61 +2448,25 @@ fill_txt(char *name, char *type, int myttl, char *msg)
 		return -1;
 	}
 
-	rs = get_record_size(db, converted_name, converted_namelen);
-	if (rs < 0) {
-			return -1;
-	}
-
-	if ((sdomain = calloc(1, rs)) == NULL) {
+	if ((txt = (struct txt *)calloc(1, sizeof(struct txt))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		return -1;
 	}
 
-	ssd = (struct domain *)sdomain;
+	memcpy(&txt->txt, msg, len);
+	txt->txtlen = len;
+	txt->ttl = myttl;
 
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_TXT, txt);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
 	}
-
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd->ttl[INTERNAL_TYPE_TXT] = myttl;
-
-	ssd_txt = (struct domain_txt *) find_substruct(ssd, INTERNAL_TYPE_TXT);
-	if (ssd_txt == NULL) {
-		rs += sizeof(struct domain_txt);
-#ifdef __OpenBSD__
-		tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-		if (tp == NULL) {
-			free(sdomain);
-			return -1;
-		}
-	
-		sdomain = tp;
-		ssd_txt = (sdomain + (rs - sizeof(struct domain_txt)));
-		memset((char *)ssd_txt, 0, sizeof(struct domain_txt));
-		ssd = (struct domain *)sdomain;
-		ssd_txt->len = sizeof(struct domain_txt);
-		ssd_txt->type = INTERNAL_TYPE_TXT;
-	}
-
-	memcpy(ssd_txt->txt, msg, len);
-	ssd_txt->txtlen = len;
-
-	ssd->flags |= DOMAIN_HAVE_TXT;
-
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
-		return -1;
 	
 	if (converted_name)
 		free (converted_name);
 	
-	free (sdomain);
+	free (rbt);
 
 
 	return (0);
@@ -2872,14 +2477,12 @@ int
 fill_tlsa(char *name, char *type, int myttl, uint8_t usage, uint8_t selector, uint8_t matchtype, char *data)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_tlsa *ssd_tlsa;
+	struct rbtree *rbt;
+	struct tlsa *tlsa;
 	int converted_namelen;
 	char *converted_name;
 	char *p, *ep, save;
 	int len, i;
-	int rs;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2890,65 +2493,21 @@ fill_tlsa(char *name, char *type, int myttl, uint8_t usage, uint8_t selector, ui
 		return -1;
 	}
 
-	rs = get_record_size(db, converted_name, converted_namelen);
-	if (rs < 0) {
+	if ((tlsa = (struct tlsa *)calloc(1, sizeof(struct tlsa))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		return -1;
 	}
 
-	if ((sdomain = calloc(1, rs)) == NULL) {
-		return -1;
-	}
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd_tlsa = (struct domain_tlsa *)find_substruct(ssd, INTERNAL_TYPE_TLSA);
-	if (ssd_tlsa == NULL) {
-		rs += sizeof(struct domain_tlsa);
-#ifdef __OpenBSD__
-		tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-		if (tp == NULL) {
-			free (sdomain);
-			return -1;
-		}
-
-		sdomain = tp;
-		ssd_tlsa = (sdomain + (rs - sizeof(struct domain_tlsa)));
-		memset((char *)ssd_tlsa, 0, sizeof(struct domain_tlsa));
-		ssd = (struct domain *)sdomain;
-		ssd_tlsa->len = sizeof(struct domain_tlsa);
-		ssd_tlsa->type = INTERNAL_TYPE_TLSA;
-		
-	}
-
-	if (ssd_tlsa->tlsa_count >= RECORD_COUNT) {
-		dolog(LOG_INFO, "%s: too many TLSA records for zone \"%s\", skipping line %d\n", file->name, name, file->lineno);
-		return (-1);
-	}
-
-	ssd->ttl[INTERNAL_TYPE_TLSA] = myttl;
-
-	ssd_tlsa->tlsa[ssd_tlsa->tlsa_count].usage = usage;
-	ssd_tlsa->tlsa[ssd_tlsa->tlsa_count].selector = selector;
-	ssd_tlsa->tlsa[ssd_tlsa->tlsa_count].matchtype = matchtype;
+	tlsa->usage = usage;
+	tlsa->selector = selector;
+	tlsa->matchtype = matchtype;
 
 	switch (matchtype) {
 	case 1:
-		len = ssd_tlsa->tlsa[ssd_tlsa->tlsa_count].datalen = DNS_TLSA_SIZE_SHA256;
+		len = tlsa->datalen = DNS_TLSA_SIZE_SHA256;
 		break;
 	case 2:
-		len = ssd_tlsa->tlsa[ssd_tlsa->tlsa_count].datalen = DNS_TLSA_SIZE_SHA512;
+		len = tlsa->datalen = DNS_TLSA_SIZE_SHA512;
 		break;
 	default:
 		dolog(LOG_ERR, "tlsa: unknown match type!\n");
@@ -2959,23 +2518,24 @@ fill_tlsa(char *name, char *type, int myttl, uint8_t usage, uint8_t selector, ui
 	for (i = 0; i < len; i++) {
 		save = p[2];
 		p[2] = '\0';
-		ssd_tlsa->tlsa[ssd_tlsa->tlsa_count].data[i] = strtol(p, &ep, 16);
+		tlsa->data[i] = strtol(p, &ep, 16);
 		p[2] = save;
 		p += 2;
 	}
 
 
-	ssd_tlsa->tlsa_count++;
+	tlsa->ttl = myttl;
 
-	ssd->flags |= DOMAIN_HAVE_TLSA;
-
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_TLSA, tlsa);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
-	
+	}
+
 	if (converted_name)
 		free (converted_name);
 
-	free (sdomain);
+	free (rbt);
 	
 	return (0);
 
@@ -2985,14 +2545,12 @@ int
 fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerprint)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_sshfp *ssd_sshfp;
+	struct sshfp *sshfp;
+	struct rbtree *rbt;
 	int converted_namelen;
 	char *converted_name;
 	char *p, *ep, save;
 	int len, i;
-	int rs;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -3003,64 +2561,20 @@ fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerp
 		return -1;
 	}
 
-	rs = get_record_size(db, converted_name, converted_namelen);
-	if (rs < 0) {
+	if ((sshfp = (struct sshfp *)calloc(1, sizeof(struct sshfp))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		return -1;
 	}
 
-	if ((sdomain = calloc(1, rs)) == NULL) {
-		return -1;
-	}
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd_sshfp = (struct domain_sshfp *)find_substruct(ssd, INTERNAL_TYPE_SSHFP);
-	if (ssd_sshfp == NULL) {
-		rs += sizeof(struct domain_sshfp);
-#ifdef __OpenBSD__
-		tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-		if (tp == NULL) {
-			free (sdomain);
-			return -1;
-		}
-
-		sdomain = tp;
-		ssd_sshfp = (sdomain + (rs - sizeof(struct domain_sshfp)));
-		memset((char *)ssd_sshfp, 0, sizeof(struct domain_sshfp));
-		ssd = (struct domain *)sdomain;
-		ssd_sshfp->len = sizeof(struct domain_sshfp);
-		ssd_sshfp->type = INTERNAL_TYPE_SSHFP;
-		
-	}
-
-	if (ssd_sshfp->sshfp_count >= RECORD_COUNT) {
-		dolog(LOG_INFO, "%s: too many SSHFP records for zone \"%s\", skipping line %d\n", file->name, name, file->lineno);
-		return (-1);
-	}
-
-	ssd->ttl[INTERNAL_TYPE_SSHFP] = myttl;
-
-	ssd_sshfp->sshfp[ssd_sshfp->sshfp_count].algorithm = alg;
-	ssd_sshfp->sshfp[ssd_sshfp->sshfp_count].fptype = fptype;
+	sshfp->algorithm = alg;
+	sshfp->fptype = fptype;
 
 	switch (fptype) {
 	case 1:
-		len = ssd_sshfp->sshfp[ssd_sshfp->sshfp_count].fplen = DNS_SSHFP_SIZE_SHA1;
+		len = sshfp->fplen = DNS_SSHFP_SIZE_SHA1;
 		break;
 	case 2:
-		len = ssd_sshfp->sshfp[ssd_sshfp->sshfp_count].fplen = DNS_SSHFP_SIZE_SHA256;
+		len = sshfp->fplen = DNS_SSHFP_SIZE_SHA256;
 		break;
 	default:
 		dolog(LOG_ERR, "sshfp: unknown fingerprint type!\n");
@@ -3071,23 +2585,23 @@ fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerp
 	for (i = 0; i < len; i++) {
 		save = p[2];
 		p[2] = '\0';
-		ssd_sshfp->sshfp[ssd_sshfp->sshfp_count].fingerprint[i] = strtol(p, &ep, 16);
+		sshfp->fingerprint[i] = strtol(p, &ep, 16);
 		p[2] = save;
 		p += 2;
 	}
 
 
-	ssd_sshfp->sshfp_count++;
-
-	ssd->flags |= DOMAIN_HAVE_SSHFP;
-
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_SSHFP, sshfp);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
-	
+	}
+
+
 	if (converted_name)
 		free (converted_name);
 
-	free (sdomain);
+	free (rbt);
 	
 	return (0);
 
@@ -3097,14 +2611,12 @@ int
 fill_srv(char *name, char *type, int myttl, int priority, int weight, int port, char *srvhost)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_srv *ssd_srv;
+	struct srv *srv;
+	struct rbtree *rbt;
 	int converted_namelen;
 	char *converted_name;
 	char *srvname;
 	int len, i;
-	int rs;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -3115,57 +2627,15 @@ fill_srv(char *name, char *type, int myttl, int priority, int weight, int port, 
 		return -1;
 	}
 
-	rs = get_record_size(db, converted_name, converted_namelen);
-	if (rs < 0) {
-		return (-1);
-	}
-
-	if ((sdomain = calloc(1, rs)) == NULL) {
+	if ((srv = (struct srv *)calloc(1, sizeof(struct srv))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		return -1;
 	}
 
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd_srv = (struct domain_srv *)find_substruct(ssd, INTERNAL_TYPE_SRV);
-	if (ssd_srv == NULL) {
-		rs += sizeof(struct domain_srv);
-#ifdef __OpenBSD__
-		tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-		if (tp == NULL) {
-			free (sdomain);
-			return -1;
-		}
-
-		sdomain = tp;
-		ssd_srv = (sdomain + (rs - sizeof(struct domain_srv)));
-		memset((char *)ssd_srv, 0, sizeof(struct domain_srv));
-		ssd = (struct domain *)sdomain;
-		ssd_srv->len = sizeof(struct domain_srv);
-		ssd_srv->type = INTERNAL_TYPE_SRV;
-	}
-
-	if (ssd_srv->srv_count >= RECORD_COUNT) {
-		dolog(LOG_INFO, "%s: too many SRV records for zone \"%s\", skipping line %d\n", file->name, name, file->lineno);
-		return (-1);
-	}
-
-	ssd->ttl[INTERNAL_TYPE_SRV] = myttl;
-
-	ssd_srv->srv[ssd_srv->srv_count].priority = priority;
-	ssd_srv->srv[ssd_srv->srv_count].weight = weight;
-	ssd_srv->srv[ssd_srv->srv_count].port = port;
+	srv->ttl = myttl;
+	srv->priority = priority;
+	srv->weight = weight;
+	srv->port = port;
 
 	srvname = dns_label(srvhost, &len);
 	if (srvname == NULL) {
@@ -3173,26 +2643,26 @@ fill_srv(char *name, char *type, int myttl, int priority, int weight, int port, 
 		return (-1);
 	}
 
-	ssd_srv->srv[ssd_srv->srv_count].targetlen = len;
-	memcpy((char *)ssd_srv->srv[ssd_srv->srv_count].target, srvname, len);
+	srv->targetlen = len;
+	memcpy((char *)&srv->target, srvname, len);
 
 	/* bad hack workaround !!! */
 	if (strcmp(srvhost, ".") == 0 && len > 1) 
-		ssd_srv->srv[ssd_srv->srv_count].targetlen = 1;
+		srv->targetlen = 1;
 
 	free (srvname);
+	srv->ttl = myttl;
 
-	ssd_srv->srv_count++;
-
-	ssd->flags |= DOMAIN_HAVE_SRV;
-
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_SRV, srv);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
+	}
 	
 	if (converted_name)
 		free (converted_name);
 	
-	free (sdomain);
+	free (rbt);
 	
 	return (0);
 
@@ -3202,14 +2672,12 @@ int
 fill_mx(char *name, char *type, int myttl, int priority, char *mxhost)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_mx *ssd_mx;
+	struct smx *mx;	
+	struct rbtree *rbt;
 	int converted_namelen;
 	char *converted_name;
 	char *mxname;
 	int len, i;
-	int rs;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -3220,57 +2688,12 @@ fill_mx(char *name, char *type, int myttl, int priority, char *mxhost)
 		return -1;
 	}
 
-	rs = get_record_size(db, converted_name, converted_namelen);
-	if (rs < 0) {
+	if ((mx = (struct smx *)calloc(1, sizeof(struct smx))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		return -1;
 	}
-	
-	if ((sdomain = calloc(1, rs)) == NULL) {
-		return -1;
-	}
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd_mx = (struct domain_mx *)find_substruct(ssd, INTERNAL_TYPE_MX);
-
-	if (ssd_mx == NULL) {
-
-		rs += sizeof(struct domain_mx);
-#ifdef __OpenBSD__
-		tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-		if (tp == NULL) {
-			free (sdomain);
-			return -1;
-		}
-
-		sdomain = tp;
-		ssd_mx = (sdomain + (rs - sizeof(struct domain_mx)));
-		memset((char *)ssd_mx, 0, sizeof(struct domain_mx));
-		ssd = (struct domain *)sdomain;
-		ssd_mx->len = sizeof(struct domain_mx);
-		ssd_mx->type = INTERNAL_TYPE_MX;
-
-	}
-
-	if (ssd_mx->mx_count >= RECORD_COUNT) {
-		dolog(LOG_INFO, "%s: too many MX records for zone \"%s\", skipping line %d\n", file->name, name, file->lineno);
-		return (-1);
-	}
-
-	ssd->ttl[INTERNAL_TYPE_MX] = myttl;
-	ssd_mx->mx[ssd_mx->mx_count].preference = priority;
+	mx->preference = priority;
+	mx->ttl = myttl;
 
 	mxname = dns_label(mxhost, &len);
 	if (mxname == NULL) {
@@ -3278,21 +2701,21 @@ fill_mx(char *name, char *type, int myttl, int priority, char *mxhost)
 		return (-1);
 	}
 
-	ssd_mx->mx[ssd_mx->mx_count].exchangelen = len;
-	memcpy((char *)ssd_mx->mx[ssd_mx->mx_count].exchange, mxname, len);
+	mx->exchangelen = len;
+	memcpy((char *)&mx->exchange, mxname, len);
 	free (mxname);
 
-	ssd_mx->mx_count++;
-
-	ssd->flags |= DOMAIN_HAVE_MX;
-
-	if (set_record(sdomain, rs, converted_name, converted_namelen) < 0)
-		return -1;
 	
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_MX, mx);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+
 	if (converted_name)
 		free (converted_name);
 	
-	free (sdomain);
+	free (rbt);
 
 	return (0);
 
@@ -3302,13 +2725,12 @@ int
 fill_a(char *name, char *type, int myttl, char *a)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_a *ssd_a;
+	struct a *sa;
+	struct rbtree *rbt;
 	int converted_namelen;
 	char *converted_name;
 	in_addr_t *ia;
-	int i, rs;
+	int i;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -3319,74 +2741,28 @@ fill_a(char *name, char *type, int myttl, char *a)
 		return -1;
 	}
 	
-	rs = get_record_size(db, converted_name, converted_namelen);
-	if (rs < 0) {
+	if ((sa = (struct a *)calloc(1, sizeof(struct a))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		return -1;
 	}
 
-	if ((sdomain = calloc(1, rs)) == NULL) {
-		return -1;
-	}
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd_a = (struct domain_a *)find_substruct(ssd, INTERNAL_TYPE_A);
-	if (ssd_a == NULL) {
-		rs += sizeof(struct domain_a);
-#ifdef __OpenBSD__
-		tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-		if (tp == NULL) {
-			free (sdomain);
-			return -1;
-		}
-		sdomain = tp;
-
-		ssd_a = (sdomain + (rs - sizeof(struct domain_a)));
-		memset((char *)ssd_a, 0, sizeof(struct domain_a));
-		ssd = (struct domain *)sdomain;
-		ssd_a->len = sizeof(struct domain_a);
-		ssd_a->type = INTERNAL_TYPE_A;
-
-	}
-
-	if (ssd_a->a_count >= RECORD_COUNT) {
-		dolog(LOG_INFO, "%s: too many A records for zone \"%s\", skipping line %d\n", file->name, name, file->lineno);
-		return (-1);
-	}
-
-	ssd->ttl[INTERNAL_TYPE_A] = myttl;
-	ia = (in_addr_t *)&ssd_a->a[ssd_a->a_count];
-
+	ia = (in_addr_t *)&sa->a;
 	if ((*ia = inet_addr(a)) == INADDR_ANY) {
 		dolog(LOG_INFO, "could not parse A record on line %d\n", file->lineno);
 		return (-1);
 	}
+	sa->ttl = myttl;
 		
-	ssd_a->region[ssd_a->a_count] = 0xff;
-
-	ssd_a->a_count++;
-	ssd_a->a_ptr = 0;
-
-	ssd->flags |= DOMAIN_HAVE_A;
-
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_A, sa);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
+	}
 	
 	if (converted_name)
 		free (converted_name);
 
-	free (sdomain);
+	free (rbt);
 	
 	return (0);
 
@@ -3397,13 +2773,12 @@ int
 fill_aaaa(char *name, char *type, int myttl, char *aaaa)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain_aaaa *ssd_aaaa;
-	struct domain *ssd;
+	struct aaaa *saaaa;
+	struct rbtree *rbt;
 	int converted_namelen;
 	char *converted_name;
 	struct in6_addr *ia6;
-	int i, rs;
+	int i;
 
 	
 	for (i = 0; i < strlen(name); i++) {
@@ -3415,75 +2790,29 @@ fill_aaaa(char *name, char *type, int myttl, char *aaaa)
 		return -1;
 	}
 
-	rs = get_record_size(db, converted_name, converted_namelen);
-	if (rs < 0) {
-		return (-1);
-	}
-
-	if ((sdomain = calloc(1, rs)) == NULL) {
+	if ((saaaa = (struct aaaa *)calloc(1, sizeof(struct aaaa))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		return -1;
 	}
 
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd_aaaa = (struct domain_aaaa *)find_substruct(ssd, INTERNAL_TYPE_AAAA);
-	if (ssd_aaaa == NULL) {
-
-			rs += sizeof(struct domain_aaaa);	
-#ifdef __OpenBSD__
-			tp = reallocarray(sdomain, 1, rs);
-#else
-			tp = realloc(sdomain, rs);
-#endif
-			if (tp == NULL) {
-				free (sdomain);
-				return -1;
-			}
-
-			sdomain = tp;
-			
-			ssd_aaaa = (sdomain + (rs - sizeof(struct domain_aaaa)));
-			memset((char *)ssd_aaaa, 0, sizeof(struct domain_aaaa));
-			ssd = (struct domain *)sdomain;
-			ssd_aaaa->len = sizeof(struct domain_aaaa);
-			ssd_aaaa->type = INTERNAL_TYPE_AAAA;
-
-	}
-
-	if (ssd_aaaa->aaaa_count >= RECORD_COUNT) {
-		dolog(LOG_INFO, "%s: too many AAAA records for zone \"%s\", skipping line %d\n", file->name, name, file->lineno);
-		return (-1);
-	}
-
-	ssd->ttl[INTERNAL_TYPE_AAAA] = myttl;
-
-	ia6 = (struct in6_addr *)&ssd_aaaa->aaaa[ssd_aaaa->aaaa_count];
+	ia6 = (struct in6_addr *)&saaaa->aaaa;
 	if (inet_pton(AF_INET6, (char *)aaaa, (char *)ia6) != 1) {
 		dolog(LOG_INFO, "AAAA \"%s\" unparseable line %d\n", aaaa, file->lineno);
 			return -1;
 	}
 		
-	ssd_aaaa->aaaa_count++;
-	ssd_aaaa->aaaa_ptr = 0;
+	saaaa->ttl = myttl;
 
-	ssd->flags |= DOMAIN_HAVE_AAAA;
-
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_AAAA, saaaa);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
+	}
 	
 	if (converted_name)
 		free (converted_name);
 
-	free (sdomain);
+	free (rbt);
 	
 	return (0);
 
@@ -3494,13 +2823,12 @@ int
 fill_ns(char *name, char *type, int myttl, char *nameserver)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_ns *ssd_ns;
+	struct ns *ns;
+	struct rbtree *rbt;
 	int len, converted_namelen;
 	char *myname, *converted_name;
 	char *n;
-	int nstype, i, rs;
+	int nstype, i;
 
 
 	for (i = 0; i < strlen(name); i++) {
@@ -3522,25 +2850,6 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 		return -1;
 	}
 
-	rs = get_record_size(db, converted_name, converted_namelen);
-	if (rs < 0) {
-		return -1;
-	}
-
-	if ((sdomain = calloc(1, rs)) == NULL) {
-		return -1;
-	}
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
 	/*
 	 * check if this is not the apex of a zone, if it was we're almost
 	 * guaranteed to have come across a SOA already and it's not flagged
@@ -3548,37 +2857,21 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 	 * internal
 	 */
 
-	if (!(ssd->flags & DOMAIN_HAVE_SOA))
-		nstype = NS_TYPE_DELEGATE;
+	if ((rbt = find_rrset(db, converted_name, converted_namelen)) != NULL) {
+		struct rrset *rrset;
+		rrset = find_rr(rbt, DNS_TYPE_SOA);
+		if (rrset == NULL)
+			nstype = NS_TYPE_DELEGATE;
 
-	ssd_ns = (struct domain_ns *) find_substruct(ssd, INTERNAL_TYPE_NS);
-	if (ssd_ns == NULL) {
-			rs += sizeof(struct domain_ns);
-#ifdef __OpenBSD__
-			tp = reallocarray(sdomain, 1, rs);
-#else
-			tp = realloc(sdomain, rs);
-#endif
-			if (tp == NULL) {
-				free (sdomain);
-				return -1;
-			}
-			sdomain = tp;
-			ssd_ns = (sdomain + (rs - sizeof(struct domain_ns)));
-			memset((char *)ssd_ns, 0, sizeof(struct domain_ns));
-			ssd = (struct domain *)sdomain;
-			ssd_ns->len = sizeof(struct domain_ns);
-			ssd_ns->type = INTERNAL_TYPE_NS;
-	}
-	if (debug)
-		dolog(LOG_INFO, "after substruct\n");
-			
-	if (ssd_ns->ns_count >= RECORD_COUNT) {
-		dolog(LOG_INFO, "%s: too many NS records for zone \"%s\", skipping line %d\n", file->name, name, file->lineno);
-		return (-1);
-	}
+		free(rbt);
+	} else 
+		return -1;
 
-	ssd->ttl[INTERNAL_TYPE_NS] = myttl;
+
+	if ((ns = (struct ns *)calloc(1, sizeof(struct ns))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
 
 	myname = dns_label(nameserver, (int *)&len);	
 	if (myname == NULL) {
@@ -3591,25 +2884,25 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 		return -1;
 	}
 
-	n = (char *)ssd_ns->ns[ssd_ns->ns_count].nsserver;
-	ssd_ns->ns[ssd_ns->ns_count].nslen = len;
-	memcpy((char *)n, myname, ssd_ns->ns[ssd_ns->ns_count].nslen);
+	n = (char *)ns->nsserver;
+	ns->nslen = len;
+	memcpy((char *)n, myname, ns->nslen);
 
 	free(myname);
 
-	ssd_ns->ns_count++;
-	ssd_ns->ns_ptr = 0;
-	ssd_ns->ns_type = nstype; 
+	ns->ns_type = nstype; 
+	ns->ttl = myttl;
 
-	ssd->flags |= DOMAIN_HAVE_NS;
-
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NS, ns);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
+	}
 	
 	if (converted_name)
 		free (converted_name);
 
-	free (sdomain);
+	free (rbt);
 	
 	return (0);
 
@@ -3619,12 +2912,11 @@ int
 fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int serial, int refresh, int retry, int expire, int ttl)
 {
 	ddDB *db = mydb;
-	void *sdomain, *tp;
-	struct domain *ssd;
-	struct domain_soa *ssd_soa;
+	struct rbtree *rbt;
+	struct soa *soa;
 	int len, converted_namelen;
 	char *myname, *converted_name;
-	int i, rs;
+	int i;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -3641,26 +2933,10 @@ fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int seria
 		current_zone = strdup(name);
 	}
 
-	rs = get_record_size(db, converted_name, converted_namelen);
-	if (rs < 0) {
+	if ((soa = (struct soa *)calloc(1, sizeof(struct soa))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		return -1;
 	}
-
-	if ((sdomain = calloc(1, rs)) == NULL) {
-		return -1;
-	}
-
-	ssd = (struct domain *)sdomain;
-
-	if (get_record(ssd, converted_name, converted_namelen) < 0) {
-		return (-1);
-	}
-
-	strlcpy((char *)ssd->zonename, (char *)name, DNS_MAXNAME + 1);
-	memcpy(ssd->zone, converted_name, converted_namelen);
-	ssd->zonelen = converted_namelen;
-
-	ssd->ttl[INTERNAL_TYPE_SOA] = myttl;
 
 	myname = dns_label(auth, (int *)&len);	
 	if (myname == NULL) {
@@ -3673,32 +2949,8 @@ fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int seria
 		return -1;
 	}
 
-	ssd_soa = (struct domain_soa *)find_substruct(ssd, INTERNAL_TYPE_SOA);
-	if (ssd_soa == NULL) {
-		rs += sizeof(struct domain_soa);
-#ifdef __OpenBSD__
-		tp = reallocarray(sdomain, 1, rs);
-#else
-		tp = realloc(sdomain, rs);
-#endif
-		if (tp == NULL) {
-			if (debug)
-				dolog(LOG_DEBUG, "reallocarray failed %s\n", strerror(errno));
-			
-			free (sdomain);
-			return -1;
-		}
-
-		sdomain = tp;
-		ssd_soa = (sdomain + (rs - sizeof(struct domain_soa)));
-		memset((char *)ssd_soa, 0, sizeof(struct domain_soa));
-		ssd = (struct domain *)sdomain;
-		ssd_soa->len = sizeof(struct domain_soa);
-		ssd_soa->type = INTERNAL_TYPE_SOA;
-	}
-
-	ssd_soa->soa.nsserver_len = len;
-	memcpy((char *)&ssd_soa->soa.nsserver[0], myname, len);
+	soa->nsserver_len = len;
+	memcpy((char *)&soa->nsserver, myname, len);
 		
 	free(myname);
 
@@ -3713,85 +2965,33 @@ fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int seria
 		return -1;
 	}
 
-	ssd_soa->soa.rp_len = len;
-	memcpy((char *)&ssd_soa->soa.responsible_person[0], myname, len);
+	soa->rp_len = len;
+	memcpy((char *)&soa->responsible_person, myname, len);
 
 	free (myname);
 
-	ssd_soa->soa.serial = serial;
-	ssd_soa->soa.refresh = refresh;
-	ssd_soa->soa.retry = retry;
-	ssd_soa->soa.expire = expire;
-	ssd_soa->soa.minttl = ttl;
+	soa->serial = serial;
+	soa->refresh = refresh;
+	soa->retry = retry;
+	soa->expire = expire;
+	soa->minttl = ttl;
+	soa->ttl = myttl;
 
-	ssd->flags |= DOMAIN_HAVE_SOA;
-	
-	if (set_record(ssd, rs, converted_name, converted_namelen) < 0)
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_SOA, soa);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
+	}
 	
 	if (converted_name)
 		free (converted_name);
 
-	free (sdomain);
+	free (rbt);
 	
 	return (0);
 
 }
 
-int
-get_record(struct domain *sdomain, char *converted_name, int converted_namelen)
-{
-	ddDB *db = mydb; /* XXX */
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-
-	key.data = (char *)converted_name;
-	key.size = converted_namelen;
-
-	data.data = NULL;
-	data.size = 0;
-
-	if (db->get(db, &key, &data) == 0) {
-
-		memcpy((char *)sdomain, (char *)data.data, data.size);
-	} else {
-		if (debug)
-			dolog(LOG_INFO, "db->get: %s\n", strerror(errno));
-
-		memset((char *)sdomain, 0, sizeof(struct domain));
-	}
-
-	return 0;
-}
-	
-
-int
-set_record(struct domain *sdomain, int rs, char *converted_name, int converted_namelen)
-{
-	ddDB *db = mydb; /* XXX */
-	int ret;
-
-	/* everythign in parse.y should get this flag! */
-	sdomain->len = rs;
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-
-	key.data = (char *)converted_name;
-	key.size = converted_namelen;
-
-	data.data = (void*)sdomain;
-	data.size = rs;
-
-	if ((ret = db->put(db, &key, &data)) != 0) {
-		dolog(LOG_ERR, "db->put: %s / Out of Memory\n", strerror(errno));
-		return -1;
-	}
-
-	return 0;
-}
-	
 struct file *
 pushfile(const char *name, int secret, int descend, int rzone)
 {

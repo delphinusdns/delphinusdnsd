@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.47 2019/02/09 07:50:06 pjp Exp $
+ * $Id: dddctl.c,v 1.48 2019/02/15 15:11:34 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -94,22 +94,22 @@ char * 	alg_to_name(int);
 int 	alg_to_rsa(int);
 int 	construct_nsec3(ddDB *, char *, int, char *);
 int 	calculate_rrsigs(ddDB *, char *, int);
-int	sign_dnskey(ddDB *, char *, struct keysentry *, int, struct domain *);
-int 	sign_a(ddDB *, char *, struct keysentry *, int, struct domain *);
-int 	sign_mx(ddDB *, char *, struct keysentry *, int, struct domain *);
-int 	sign_ns(ddDB *, char *, struct keysentry *, int, struct domain *);
-int 	sign_srv(ddDB *, char *, struct keysentry *, int, struct domain *);
-int 	sign_cname(ddDB *, char *, struct keysentry *, int, struct domain *);
-int 	sign_soa(ddDB *, char *, struct keysentry  *, int, struct domain *);
-int	sign_txt(ddDB *, char *, struct keysentry *, int, struct domain *);
-int	sign_aaaa(ddDB *, char *, struct keysentry  *, int, struct domain *);
-int	sign_ptr(ddDB *, char *, struct keysentry *, int, struct domain *);
-int	sign_nsec3(ddDB *, char *, struct keysentry *, int, struct domain *);
-int	sign_nsec3param(ddDB *, char *, struct keysentry *, int, struct domain *);
-int	sign_naptr(ddDB *, char *, struct keysentry *, int, struct domain *);
-int	sign_sshfp(ddDB *, char *, struct keysentry *, int, struct domain *);
-int	sign_tlsa(ddDB *, char *, struct keysentry *, int, struct domain *);
-int	sign_ds(ddDB *, char *, struct keysentry *, int, struct domain *);
+int	sign_dnskey(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int 	sign_a(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int 	sign_mx(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int 	sign_ns(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int 	sign_srv(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int 	sign_cname(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int 	sign_soa(ddDB *, char *, struct keysentry  *, int, struct rbtree *);
+int	sign_txt(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int	sign_aaaa(ddDB *, char *, struct keysentry  *, int, struct rbtree *);
+int	sign_ptr(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int	sign_nsec3(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int	sign_nsec3param(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int	sign_naptr(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int	sign_sshfp(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int	sign_tlsa(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int	sign_ds(ddDB *, char *, struct keysentry *, int, struct rbtree *);
 int 	create_ds(ddDB *, char *, struct keysentry *);
 u_int 	keytag(u_char *key, u_int keysize);
 void 	pack(char *, char *, int);
@@ -122,8 +122,8 @@ int	store_private_key(struct keysentry *, char *, int, int);
 u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
 char * 	bin2hex(char *, int);
-int 	print_sd(FILE *, struct domain *);
-int 	print_sd_bind(FILE *, struct domain *);
+int 	print_rbt(FILE *, struct rbtree *);
+int 	print_rbt_bind(FILE *, struct rbtree *);
 int	usage(int argc, char *argv[]);
 int	start(int argc, char *argv[]);
 int	restart(int argc, char *argv[]);
@@ -245,10 +245,9 @@ extern char * convert_name(char *name, int namelen);
 
 extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int      mybase64_decode(char const *, u_char *, size_t);
-extern struct domain *         lookup_zone(ddDB *, struct question *, int *, int *, char *);
+extern struct rbtree *         lookup_zone(ddDB *, struct question *, int *, int *, char *);
 extern struct question         *build_fake_question(char *, int, u_int16_t);
 extern char * dns_label(char *, int *);
-extern void * find_substruct(struct domain *, u_int16_t);
 extern int label_count(char *);
 extern char *get_dns_type(int, int);
 extern char * hash_name(char *, int, struct nsec3param *);
@@ -259,6 +258,10 @@ extern struct question          *build_question(char *, int, int);
 extern int                      free_question(struct question *);
 struct rrtab    *rrlookup(char *);
 
+extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
+extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
+extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
+extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 
 extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
 extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
@@ -1001,7 +1004,7 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 	
 	struct node *n, *nx;
 	struct question *q;
-	struct domain *sdomain;
+	struct rbtree *rbt;
 	
 	char replystring[512];
 	char *dnsname;
@@ -1022,12 +1025,12 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 		return -1;
 	}
 
-	if ((sdomain = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
+	if ((rbt = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
 		return -1;
 	}
 
-	if (print_sd(of, sdomain) < 0) {
-		fprintf(stderr, "print_sd error\n");
+	if (print_rbt(of, rbt) < 0) {
+		fprintf(stderr, "print_rbt error\n");
 		return -1;
 	}
 	
@@ -1037,24 +1040,24 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 	j = 0;
 	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
 		rs = n->datalen;
-		if ((sdomain = calloc(1, rs)) == NULL) {
+		if ((rbt = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			exit(1);
 		}
 
-		memcpy((char *)sdomain, (char *)n->data, n->datalen);
+		memcpy((char *)rbt, (char *)n->data, n->datalen);
 
-		if (strcmp(sdomain->zonename, zonename) == 0) {
-			free(sdomain);
+		if (strcmp(rbt->humanname, zonename) == 0) {
+			free(rbt);
 			continue;
 		}
 
-		if (print_sd(of, sdomain) < 0) {
-			fprintf(stderr, "print_sd error\n");
+		if (print_rbt(of, rbt) < 0) {
+			fprintf(stderr, "print_rbt error\n");
 			return -1;
 		}
 
-		free(sdomain);
+		free(rbt);
 
 		j++;
 	} 
@@ -1382,7 +1385,8 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 {
 	struct keysentry *zsk_key = NULL;
 	struct node *n, *nx;
-	struct domain *sd;
+	struct rbtree *rbt;
+	struct rrset *rrset = NULL;
 	int j, rs;
 
 	time_t now, twoweeksago; 
@@ -1417,96 +1421,112 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 
 	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
 		rs = n->datalen;
-		if ((sd = calloc(1, rs)) == NULL) {
+		if ((rbt = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			exit(1);
 		}
 
-		memcpy((char *)sd, (char *)n->data, n->datalen);
+		memcpy((char *)rbt, (char *)n->data, n->datalen);
 		
-		if (sd->flags & DOMAIN_HAVE_DNSKEY)
-			if (sign_dnskey(db, zonename, zsk_key, expiry, sd) < 0) {
+		if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
+			if (sign_dnskey(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_dnskey error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_A)
-			if (sign_a(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
+			if (sign_a(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_a error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_MX)
-			if (sign_mx(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
+			if (sign_mx(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_mx error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_NS)
-			if (sign_ns(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+			if (sign_ns(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_ns error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_SOA)
-			if (sign_soa(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
+			if (sign_soa(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_soa error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_TXT)
-			if (sign_txt(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
+			if (sign_txt(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_txt error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_AAAA)
-			if (sign_aaaa(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
+			if (sign_aaaa(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_aaaa error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_NSEC3) 
-			if (sign_nsec3(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
+			if (sign_nsec3(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_nsec3 error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_NSEC3PARAM)
-			if (sign_nsec3param(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
+			if (sign_nsec3param(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_nsec3param error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_CNAME)
-			if (sign_cname(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
+			if (sign_cname(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_cname error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_PTR)
-			if (sign_ptr(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
+			if (sign_ptr(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_ptr error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_NAPTR)
-			if (sign_naptr(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
+			if (sign_naptr(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_naptr error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_SRV)
-			if (sign_srv(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
+			if (sign_srv(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_srv error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_SSHFP)
-			if (sign_sshfp(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
+			if (sign_sshfp(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_sshfp error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_TLSA)
-			if (sign_tlsa(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
+			if (sign_tlsa(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_tlsa error\n");
 				return -1;
 			}
-		if (sd->flags & DOMAIN_HAVE_DS)
-			if (sign_ds(db, zonename, zsk_key, expiry, sd) < 0) {
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
+			if (sign_ds(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_ds error\n");
 				return -1;
 			}
+		}
 
 
-		free(sd);
+		free(rbt);
 		j++;
 	}
 	
@@ -1519,9 +1539,10 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
  */
 
 int
-sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_soa *sdsoa = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -1586,7 +1607,7 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -1596,11 +1617,15 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_SOA) {
-                if ((sdsoa = (struct domain_soa *)find_substruct(sd, INTERNAL_TYPE_SOA)) == NULL) {
-			dolog(LOG_INFO, "no SOA records but have flags!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
+			dolog(LOG_INFO, "no SOA records but have rrset entry!\n");
                         return -1;
 		}
+	} else  {
+		dolog(LOG_INFO, "no SOA records\n");
+		return -1;
 	}
 	
 	p = key;
@@ -1611,7 +1636,7 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_SOA]));
+	pack32(p, htonl(((struct soa *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -1633,30 +1658,30 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	pack(p, sd->zone, sd->zonelen);
-	p += sd->zonelen;
+	pack(p, rbt->zone, rbt->zonelen);
+	p += rbt->zonelen;
 	pack16(p, htons(DNS_TYPE_SOA));
 	p += 2;
 	pack16(p, htons(DNS_CLASS_IN));
 	p += 2;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_SOA]));
+	pack32(p, htonl(((struct soa *)rrp->rdata)->ttl));
 	p += 4;
-	pack16(p, htons(sdsoa->soa.nsserver_len + sdsoa->soa.rp_len + 4 + 4 + 4 + 4 + 4));
+	pack16(p, htons(((struct soa *)rrp->rdata)->nsserver_len + ((struct soa *)rrp->rdata)->rp_len + 4 + 4 + 4 + 4 + 4));
 	p += 2;
-	pack(p, sdsoa->soa.nsserver, sdsoa->soa.nsserver_len);
-	p += sdsoa->soa.nsserver_len;
-	pack(p, sdsoa->soa.responsible_person, sdsoa->soa.rp_len);
-	p += sdsoa->soa.rp_len;
-	pack32(p, htonl(sdsoa->soa.serial));
-	p += 4;
-	pack32(p, htonl(sdsoa->soa.refresh));
-	p += 4;
-	pack32(p, htonl(sdsoa->soa.retry));
-	p += 4;
-	pack32(p, htonl(sdsoa->soa.expire));
-	p += 4;
-	pack32(p, htonl(sdsoa->soa.minttl));
-	p += 4;
+	pack(p, ((struct soa *)rrp->rdata)->nsserver, ((struct soa *)rrp->rdata)->nsserver_len);
+	p += ((struct soa *)rrp->rdata)->nsserver_len;
+	pack(p, ((struct soa *)rrp->rdata)->responsible_person, ((struct soa *)rrp->rdata)->rp_len);
+	p += ((struct soa *)rrp->rdata)->rp_len;
+	pack32(p, htonl(((struct soa *)rrp->rdata)->serial));
+	p += sizeof(u_int32_t);
+	pack32(p, htonl(((struct soa *)rrp->rdata)->refresh));
+	p += sizeof(u_int32_t);
+	pack32(p, htonl(((struct soa *)rrp->rdata)->retry));
+	p += sizeof(u_int32_t);
+	pack32(p, htonl(((struct soa *)rrp->rdata)->expire));
+	p += sizeof(u_int32_t);
+	pack32(p, htonl(((struct soa *)rrp->rdata)->minttl));
+	p += sizeof(u_int32_t);
 
 	keylen = (p - key);	
 
@@ -1710,7 +1735,7 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_SOA], "SOA", algorithm, labels, sd->ttl[INTERNAL_TYPE_SOA], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct soa *)rrp->rdata)->ttl, "SOA", algorithm, labels, ((struct soa *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -1723,9 +1748,10 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
  */
 
 int
-sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_txt *sdtxt = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -1790,7 +1816,7 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -1800,11 +1826,15 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_TXT) {
-                if ((sdtxt = (struct domain_txt *)find_substruct(sd, INTERNAL_TYPE_TXT)) == NULL) {
-			dolog(LOG_INFO, "no TXT records but have flags!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
+			dolog(LOG_INFO, "no TXT records but have rrset entry!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no TXT records\n");
+		return -1;
 	}
 	
 	p = key;
@@ -1815,8 +1845,8 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_TXT]));
-	p += 4;
+	pack32(p, htonl(((struct txt *)rrp->rdata)->ttl));
+	p += sizeof(u_int32_t);
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
 	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
@@ -1837,20 +1867,20 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 
-	pack(p, sd->zone, sd->zonelen);
-	p += sd->zonelen;
+	pack(p, rbt->zone, rbt->zonelen);
+	p += rbt->zonelen;
 	pack16(p, htons(DNS_TYPE_TXT));
 	p += 2;
 	pack16(p, htons(DNS_CLASS_IN));
 	p += 2;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_TXT]));
+	pack32(p, htonl(((struct txt *)rrp->rdata)->ttl));
 	p += 4;
-	pack16(p, htons(sdtxt->txtlen + 1));
+	pack16(p, htons(((struct txt *)rrp->rdata)->txtlen + 1));
 	p += 2;
-	pack8(p, sdtxt->txtlen);
+	pack8(p, ((struct txt *)rrp->rdata)->txtlen);
 	p++;
-	pack(p, sdtxt->txt, sdtxt->txtlen);
-	p += sdtxt->txtlen;
+	pack(p, ((struct txt *)rrp->rdata)->txt, ((struct txt *)rrp->rdata)->txtlen);
+	p += ((struct txt *)rrp->rdata)->txtlen;
 
 	keylen = (p - key);	
 
@@ -1903,7 +1933,7 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_TXT], "TXT", algorithm, labels, sd->ttl[INTERNAL_TYPE_TXT], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct txt *)rrp->rdata)->ttl, "TXT", algorithm, labels, ((struct txt *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -1914,11 +1944,12 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 /*
  * create a RRSIG for an AAAA record
  */
-
 int
-sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_aaaa *sdaaaa = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -1938,7 +1969,7 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	uint8_t protocol;
 	uint8_t algorithm;
 
-	int labellen, i;
+	int labellen;
 	int keyid;
 	int len;
 	int keylen, siglen;
@@ -1997,7 +2028,7 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -2007,11 +2038,15 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_AAAA) {
-                if ((sdaaaa = (struct domain_aaaa *)find_substruct(sd, INTERNAL_TYPE_AAAA)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no AAAA records but have flags!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no AAAA records\n");
+		return -1;
 	}
 	
 	p = key;
@@ -2022,7 +2057,7 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_AAAA]));
+	pack32(p, htonl(((struct aaaa *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -2043,19 +2078,20 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 
 	/* no signature here */	
 	
-	for (i = 0; i < sdaaaa->aaaa_count; i++) {
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 		q = tmpkey;
-		pack(q, sd->zone, sd->zonelen);
-		q += sd->zonelen;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
 		pack16(q, htons(DNS_TYPE_AAAA));
 		q += 2;
 		pack16(q, htons(DNS_CLASS_IN));
 		q += 2;
-		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_AAAA]));
+		/* the below uses rrp! because we can't have an rrsig differ */
+		pack32(q, htonl(((struct aaaa *)rrp->rdata)->ttl));
 		q += 4;
 		pack16(q, htons(sizeof(struct in6_addr)));
 		q += 2;
-		pack(q, (char *)&sdaaaa->aaaa[i], sizeof(struct in6_addr));
+		pack(q, (char *)&((struct aaaa *)rrp2->rdata)->aaaa, sizeof(struct in6_addr));
 		q += sizeof(struct in6_addr);
 
 	        c1 = malloc(sizeof(struct canonical));
@@ -2153,7 +2189,7 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_AAAA], "AAAA", algorithm, labels, sd->ttl[INTERNAL_TYPE_AAAA], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct aaaa *)rrp->rdata)->ttl, "AAAA", algorithm, labels, ((struct aaaa *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -2166,9 +2202,10 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
  */
 
 int
-sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_nsec3 *sdnsec3 = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2233,7 +2270,7 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -2243,11 +2280,15 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_NSEC3) {
-                if ((sdnsec3 = (struct domain_nsec3 *)find_substruct(sd, INTERNAL_TYPE_NSEC3)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no NSEC3 records but have flags!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no NSEC3 records\n");
+                return -1;
 	}
 	
 	p = key;
@@ -2258,7 +2299,7 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_NSEC3]));
+	pack32(p, htonl(((struct nsec3 *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -2280,38 +2321,38 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	pack(p, sd->zone, sd->zonelen);
-	p += sd->zonelen;
+	pack(p, rbt->zone, rbt->zonelen);
+	p += rbt->zonelen;
 
 	pack16(p, htons(DNS_TYPE_NSEC3));
 	p += 2;
 	pack16(p, htons(DNS_CLASS_IN));
 	p += 2;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_NSEC3]));
+	pack32(p, htonl(((struct nsec3 *)rrp->rdata)->ttl));
 	p += 4;
-	pack16(p, htons(1 + 1 + 2 + 1 + sdnsec3->nsec3.saltlen + 1 + sdnsec3->nsec3.nextlen + sdnsec3->nsec3.bitmap_len));
+	pack16(p, htons(1 + 1 + 2 + 1 + ((struct nsec3 *)rrp->rdata)->saltlen + 1 + ((struct nsec3 *)rrp->rdata)->nextlen + ((struct nsec3 *)rrp->rdata)->bitmap_len));
 	p += 2;
-	pack8(p, sdnsec3->nsec3.algorithm);
+	pack8(p, ((struct nsec3 *)rrp->rdata)->algorithm);
 	p++;
-	pack8(p, sdnsec3->nsec3.flags);
+	pack8(p, ((struct nsec3 *)rrp->rdata)->flags);
 	p++;
-	pack16(p, htons(sdnsec3->nsec3.iterations));
+	pack16(p, htons(((struct nsec3 *)rrp->rdata)->iterations));
 	p += 2;
 	
-	pack8(p, sdnsec3->nsec3.saltlen);
+	pack8(p, ((struct nsec3 *)rrp->rdata)->saltlen);
 	p++;
 		
-	if (sdnsec3->nsec3.saltlen) {
-		pack(p, sdnsec3->nsec3.salt, sdnsec3->nsec3.saltlen);
-		p += sdnsec3->nsec3.saltlen;
+	if (((struct nsec3 *)rrp->rdata)->saltlen) {
+		pack(p, ((struct nsec3 *)rrp->rdata)->salt, ((struct nsec3 *)rrp->rdata)->saltlen);
+		p += ((struct nsec3 *)rrp->rdata)->saltlen;
 	} 
 	
-	pack8(p, sdnsec3->nsec3.nextlen);
+	pack8(p, ((struct nsec3 *)rrp->rdata)->nextlen);
 	p++;
-	pack(p, sdnsec3->nsec3.next, sdnsec3->nsec3.nextlen);
-	p += sdnsec3->nsec3.nextlen;
-	pack(p, sdnsec3->nsec3.bitmap, sdnsec3->nsec3.bitmap_len);
-	p += sdnsec3->nsec3.bitmap_len;
+	pack(p, ((struct nsec3 *)rrp->rdata)->next, ((struct nsec3 *)rrp->rdata)->nextlen);
+	p += ((struct nsec3 *)rrp->rdata)->nextlen;
+	pack(p, ((struct nsec3 *)rrp->rdata)->bitmap, ((struct nsec3 *)rrp->rdata)->bitmap_len);
+	p += ((struct nsec3 *)rrp->rdata)->bitmap_len;
 	
 	keylen = (p - key);	
 
@@ -2364,7 +2405,7 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_NSEC3], "NSEC3", algorithm, labels, sd->ttl[INTERNAL_TYPE_NSEC3], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct nsec3 *)rrp->rdata)->ttl, "NSEC3", algorithm, labels, ((struct nsec3 *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -2378,9 +2419,10 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
  */
 
 int
-sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_nsec3param *sdnsec3 = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2445,7 +2487,7 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -2455,11 +2497,15 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_NSEC3PARAM) {
-                if ((sdnsec3 = (struct domain_nsec3param *)find_substruct(sd, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no NSEC3PARAM records but have flags!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no NSEC3PARAM records\n");
+                return -1;
 	}
 	
 	p = key;
@@ -2470,7 +2516,7 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_NSEC3PARAM]));
+	pack32(p, htonl(((struct nsec3param *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -2492,29 +2538,29 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	pack(p, sd->zone, sd->zonelen);
-	p += sd->zonelen;
+	pack(p, rbt->zone, rbt->zonelen);
+	p += rbt->zonelen;
 	pack16(p, htons(DNS_TYPE_NSEC3PARAM));
 	p += 2;
 	pack16(p, htons(DNS_CLASS_IN));
 	p += 2;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_NSEC3PARAM]));
+	pack32(p, htonl(((struct nsec3param *)rrp->rdata)->ttl));
 	p += 4;
-	pack16(p, htons(1 + 1 + 2 + 1 + sdnsec3->nsec3param.saltlen));
+	pack16(p, htons(1 + 1 + 2 + 1 + ((struct nsec3param *)rrp->rdata)->saltlen));
 	p += 2;
-	pack8(p, sdnsec3->nsec3param.algorithm);
+	pack8(p, ((struct nsec3param *)rrp->rdata)->algorithm);
 	p++;
-	pack8(p, sdnsec3->nsec3param.flags);
+	pack8(p, ((struct nsec3param *)rrp->rdata)->flags);
 	p++;
-	pack16(p, htons(sdnsec3->nsec3param.iterations));
+	pack16(p, htons(((struct nsec3param *)rrp->rdata)->iterations));
 	p += 2;
 
-	pack8(p, sdnsec3->nsec3param.saltlen);
+	pack8(p, ((struct nsec3param *)rrp->rdata)->saltlen);
 	p++;
 		
-	if (sdnsec3->nsec3param.saltlen) {
-		pack(p, sdnsec3->nsec3param.salt, sdnsec3->nsec3param.saltlen);
-		p += sdnsec3->nsec3param.saltlen;
+	if (((struct nsec3param *)rrp->rdata)->saltlen) {
+		pack(p, ((struct nsec3param *)rrp->rdata)->salt, ((struct nsec3param *)rrp->rdata)->saltlen);
+		p += ((struct nsec3param *)rrp->rdata)->saltlen;
 	} 
 
 	keylen = (p - key);	
@@ -2568,7 +2614,7 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", 0, "NSEC3PARAM", algorithm, labels, 0, expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", 0, "NSEC3PARAM", algorithm, labels, 0, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -2581,9 +2627,10 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
  */
 
 int
-sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_cname *sdc = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2648,7 +2695,7 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -2658,11 +2705,16 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_CNAME) {
-                if ((sdc = (struct domain_cname *)find_substruct(sd, INTERNAL_TYPE_CNAME)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no CNAME records but have flags!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no CNAME records\n");
+                return -1;
+
 	}
 	
 	p = key;
@@ -2673,7 +2725,7 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_CNAME]));
+	pack32(p, htonl(((struct cname *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -2695,18 +2747,18 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	pack(p, sd->zone, sd->zonelen);
-	p += sd->zonelen;
+	pack(p, rbt->zone, rbt->zonelen);
+	p += rbt->zonelen;
 	pack16(p, htons(DNS_TYPE_CNAME));
 	p += 2;
 	pack16(p, htons(DNS_CLASS_IN));
 	p += 2;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_CNAME]));
+	pack32(p, htonl(((struct cname *)rrp->rdata)->ttl));
 	p += 4;
-	pack16(p, htons(sdc->cnamelen));
+	pack16(p, htons(((struct cname *)rrp->rdata)->cnamelen));
 	p += 2;
-	pack(p, sdc->cname, sdc->cnamelen);
-	p += sdc->cnamelen;
+	pack(p, ((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen);
+	p += ((struct cname *)rrp->rdata)->cnamelen;
 
 	keylen = (p - key);	
 
@@ -2759,7 +2811,7 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_CNAME], "CNAME", algorithm, labels, sd->ttl[INTERNAL_TYPE_CNAME], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct cname *)rrp->rdata)->ttl, "CNAME", algorithm, labels, ((struct cname *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -2772,9 +2824,10 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
  */
 
 int
-sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_ptr *sdptr = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2839,7 +2892,7 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -2849,12 +2902,17 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_PTR) {
-                if ((sdptr = (struct domain_ptr *)find_substruct(sd, INTERNAL_TYPE_PTR)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no PTR records but have flags!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no PTR records\n");
+                return -1;
 	}
+		
 	
 	p = key;
 
@@ -2864,7 +2922,7 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_PTR]));
+	pack32(p, htonl(((struct ptr *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -2886,18 +2944,18 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	pack(p, sd->zone, sd->zonelen);
-	p += sd->zonelen;
+	pack(p, rbt->zone, rbt->zonelen);
+	p += rbt->zonelen;
 	pack16(p, htons(DNS_TYPE_PTR));
 	p += 2;
 	pack16(p, htons(DNS_CLASS_IN));
 	p += 2;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_PTR]));
+	pack32(p, htonl(((struct ptr *)rrp->rdata)->ttl));
 	p += 4;
-	pack16(p, htons(sdptr->ptrlen));
+	pack16(p, htons(((struct ptr *)rrp->rdata)->ptrlen));
 	p += 2;
-	pack(p, sdptr->ptr, sdptr->ptrlen);
-	p += sdptr->ptrlen;
+	pack(p, ((struct ptr *)rrp->rdata)->ptr, ((struct ptr *)rrp->rdata)->ptrlen);
+	p += ((struct ptr *)rrp->rdata)->ptrlen;
 
 	keylen = (p - key);	
 
@@ -2950,7 +3008,7 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_PTR], "PTR", algorithm, labels, sd->ttl[INTERNAL_TYPE_PTR], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct ptr *)rrp->rdata)->ttl, "PTR", algorithm, labels, ((struct ptr *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -2963,9 +3021,11 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
  */
 
 int
-sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_naptr *sdnaptr = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2985,7 +3045,7 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	uint8_t protocol;
 	uint8_t algorithm;
 
-	int labellen, i;
+	int labellen;
 	int keyid;
 	int len;
 	int keylen, siglen;
@@ -3044,7 +3104,7 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -3054,11 +3114,15 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_NAPTR) {
-                if ((sdnaptr = (struct domain_naptr *)find_substruct(sd, INTERNAL_TYPE_NAPTR)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no NAPTR records but have flags!\n");
                         return -1;
 		}
+	} else {
+			dolog(LOG_INFO, "no NAPTR records\n");
+                        return -1;
 	}
 	
 	p = key;
@@ -3069,7 +3133,7 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_NAPTR]));
+	pack32(p, htonl(((struct naptr *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -3091,40 +3155,40 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	for (i = 0; i < sdnaptr->naptr_count; i++) {
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 		q = tmpkey;
-		pack(q, sd->zone, sd->zonelen);
-		q += sd->zonelen;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
 		pack16(q, htons(DNS_TYPE_NAPTR));
 		q += 2;
 		pack16(q, htons(DNS_CLASS_IN));
 		q += 2;
-		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_NAPTR]));
+		pack32(q, htonl(((struct naptr *)rrp->rdata)->ttl));
 		q += 4;
-		pack16(q, htons(2 + 2 + 1 + sdnaptr->naptr[i].flagslen + 1 + sdnaptr->naptr[i].serviceslen + 1 + sdnaptr->naptr[i].regexplen + sdnaptr->naptr[i].replacementlen));
+		pack16(q, htons(2 + 2 + 1 + ((struct naptr *)rrp2->rdata)->flagslen + 1 + ((struct naptr *)rrp2->rdata)->serviceslen + 1 + ((struct naptr *)rrp2->rdata)->regexplen + ((struct naptr *)rrp2->rdata)->replacementlen));
 		q += 2;
-		pack16(q, htons(sdnaptr->naptr[i].order));
+		pack16(q, htons(((struct naptr *)rrp2->rdata)->order));
 		q += 2;
-		pack16(q, htons(sdnaptr->naptr[i].preference));
+		pack16(q, htons(((struct naptr *)rrp2->rdata)->preference));
 		q += 2;
 
-		pack8(q, sdnaptr->naptr[i].flagslen);
+		pack8(q, ((struct naptr *)rrp2->rdata)->flagslen);
 		q++;
-		pack(q, sdnaptr->naptr[i].flags, sdnaptr->naptr[i].flagslen);
-		q += sdnaptr->naptr[i].flagslen;
+		pack(q, ((struct naptr *)rrp2->rdata)->flags, ((struct naptr *)rrp2->rdata)->flagslen);
+		q += ((struct naptr *)rrp2->rdata)->flagslen;
 
-		pack8(q, sdnaptr->naptr[i].serviceslen);
+		pack8(q, ((struct naptr *)rrp2->rdata)->serviceslen);
 		q++;
-		pack(q, sdnaptr->naptr[i].services, sdnaptr->naptr[i].serviceslen);
-		q += sdnaptr->naptr[i].serviceslen;
+		pack(q, ((struct naptr *)rrp2->rdata)->services, ((struct naptr *)rrp2->rdata)->serviceslen);
+		q += ((struct naptr *)rrp2->rdata)->serviceslen;
 
-		pack8(q, sdnaptr->naptr[i].regexplen);
+		pack8(q, ((struct naptr *)rrp2->rdata)->regexplen);
 		q++;
-		pack(q, sdnaptr->naptr[i].regexp, sdnaptr->naptr[i].regexplen);
-		q += sdnaptr->naptr[i].regexplen;
+		pack(q, ((struct naptr *)rrp2->rdata)->regexp, ((struct naptr *)rrp2->rdata)->regexplen);
+		q += ((struct naptr *)rrp2->rdata)->regexplen;
 
-		pack(q, sdnaptr->naptr[i].replacement, sdnaptr->naptr[i].replacementlen);
-		q += sdnaptr->naptr[i].replacementlen;
+		pack(q, ((struct naptr *)rrp2->rdata)->replacement, ((struct naptr *)rrp2->rdata)->replacementlen);
+		q += ((struct naptr *)rrp2->rdata)->replacementlen;
 
 		c1 = malloc(sizeof(struct canonical));
                 if (c1 == NULL) {
@@ -3221,7 +3285,7 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_NAPTR], "NAPTR", algorithm, labels, sd->ttl[INTERNAL_TYPE_NAPTR], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct naptr *)rrp->rdata)->ttl, "NAPTR", algorithm, labels, ((struct naptr *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -3234,9 +3298,11 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
  */
 
 int
-sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_srv *sdsrv = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -3256,7 +3322,7 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	uint8_t protocol;
 	uint8_t algorithm;
 
-	int labellen, i;
+	int labellen;
 	int keyid;
 	int len;
 	int keylen, siglen;
@@ -3315,7 +3381,7 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -3325,11 +3391,15 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_SRV) {
-                if ((sdsrv = (struct domain_srv *)find_substruct(sd, INTERNAL_TYPE_SRV)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no SRV records but have flags!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no SRV records\n");
+                return -1;
 	}
 	
 	p = key;
@@ -3340,7 +3410,7 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_SRV]));
+	pack32(p, htonl(((struct srv *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -3362,26 +3432,26 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	for (i = 0; i < sdsrv->srv_count; i++) {
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 		q = tmpkey;
-		pack(q, sd->zone, sd->zonelen);
-		q += sd->zonelen;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
 		pack16(q, htons(DNS_TYPE_SRV));
 		q += 2;
 		pack16(q, htons(DNS_CLASS_IN));
 		q += 2;
-		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_SRV]));
+		pack32(q, htonl(((struct srv *)rrp->rdata)->ttl));
 		q += 4;
-		pack16(q, htons(2 + 2 + 2 + sdsrv->srv[i].targetlen));
+		pack16(q, htons(2 + 2 + 2 + ((struct srv *)rrp2->rdata)->targetlen));
 		q += 2;
-		pack16(q, htons(sdsrv->srv[i].priority));
+		pack16(q, htons(((struct srv *)rrp2->rdata)->priority));
 		q += 2;
-		pack16(q, htons(sdsrv->srv[i].weight));
+		pack16(q, htons(((struct srv *)rrp2->rdata)->weight));
 		q += 2;
-		pack16(q, htons(sdsrv->srv[i].port));
+		pack16(q, htons(((struct srv *)rrp2->rdata)->port));
 		q += 2;
-		pack(q, sdsrv->srv[i].target, sdsrv->srv[i].targetlen);
-		q += sdsrv->srv[i].targetlen;
+		pack(q, ((struct srv *)rrp2->rdata)->target, ((struct srv *)rrp2->rdata)->targetlen);
+		q += ((struct srv *)rrp2->rdata)->targetlen;
 		
 		c1 = malloc(sizeof(struct canonical));
                 if (c1 == NULL) {
@@ -3479,7 +3549,7 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_SRV], "SRV", algorithm, labels, sd->ttl[INTERNAL_TYPE_SRV], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct srv *)rrp->rdata)->ttl, "SRV", algorithm, labels, ((struct srv *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -3493,9 +3563,11 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
  */
 
 int
-sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_sshfp *sdsshfp = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -3515,7 +3587,7 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	uint8_t protocol;
 	uint8_t algorithm;
 
-	int labellen, i;
+	int labellen;
 	int keyid;
 	int len;
 	int keylen, siglen;
@@ -3574,7 +3646,7 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -3584,11 +3656,15 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_SSHFP) {
-                if ((sdsshfp = (struct domain_sshfp *)find_substruct(sd, INTERNAL_TYPE_SSHFP)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no SSHFP records but have flags!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no SSHFP records\n");
+                return -1;
 	}
 	
 	p = key;
@@ -3599,7 +3675,7 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_SSHFP]));
+	pack32(p, htonl(((struct sshfp *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -3621,24 +3697,24 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	for (i = 0; i < sdsshfp->sshfp_count; i++) {
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 		q = tmpkey;
-		pack(q, sd->zone, sd->zonelen);
-		q += sd->zonelen;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
 		pack16(q, htons(DNS_TYPE_SSHFP));
 		q += 2;
 		pack16(q, htons(DNS_CLASS_IN));
 		q += 2;
-		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_SSHFP]));
+		pack32(q, htonl(((struct sshfp *)rrp->rdata)->ttl));
 		q += 4;
-		pack16(q, htons(1 + 1 + sdsshfp->sshfp[i].fplen));
+		pack16(q, htons(1 + 1 + ((struct sshfp *)rrp2->rdata)->fplen));
 		q += 2;
-		pack8(q, sdsshfp->sshfp[i].algorithm);
+		pack8(q, ((struct sshfp *)rrp2->rdata)->algorithm);
 		q++;
-		pack8(q, sdsshfp->sshfp[i].fptype);
+		pack8(q, ((struct sshfp *)rrp2->rdata)->fptype);
 		q++;
-		pack(q, sdsshfp->sshfp[i].fingerprint, sdsshfp->sshfp[i].fplen);
-		q += sdsshfp->sshfp[i].fplen;
+		pack(q, ((struct sshfp *)rrp2->rdata)->fingerprint, ((struct sshfp *)rrp2->rdata)->fplen);
+		q += ((struct sshfp *)rrp2->rdata)->fplen;
 
 		c1 = malloc(sizeof(struct canonical));
                 if (c1 == NULL) {
@@ -3736,7 +3812,7 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_SSHFP], "SSHFP", algorithm, labels, sd->ttl[INTERNAL_TYPE_SSHFP], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct sshfp *)rrp->rdata)->ttl, "SSHFP", algorithm, labels, ((struct sshfp *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -3749,9 +3825,11 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
  */
 
 int
-sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_tlsa *sdtlsa = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -3771,7 +3849,7 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	uint8_t protocol;
 	uint8_t algorithm;
 
-	int labellen, i;
+	int labellen;
 	int keyid;
 	int len;
 	int keylen, siglen;
@@ -3830,7 +3908,7 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -3840,11 +3918,16 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_TLSA) {
-                if ((sdtlsa = (struct domain_tlsa *)find_substruct(sd, INTERNAL_TYPE_TLSA)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no TLSA records but have flags!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no TLSA records\n");
+                return -1;
+
 	}
 	
 	p = key;
@@ -3855,7 +3938,7 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_TLSA]));
+	pack32(p, htonl(((struct tlsa *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -3877,26 +3960,27 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	for (i = 0; i < sdtlsa->tlsa_count; i++) {
+	
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 		q = tmpkey;
-		pack(q, sd->zone, sd->zonelen);
-		q += sd->zonelen;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
 		pack16(q, htons(DNS_TYPE_TLSA));
 		q += 2;
 		pack16(q, htons(DNS_CLASS_IN));
 		q += 2;
-		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_TLSA]));
+		pack32(q, htonl(((struct tlsa *)rrp->rdata)->ttl));
 		q += 4;
-		pack16(q, htons(1 + 1 + 1 + sdtlsa->tlsa[i].datalen));
+		pack16(q, htons(1 + 1 + 1 + ((struct tlsa *)rrp2->rdata)->datalen));
 		q += 2;
-		pack8(q, sdtlsa->tlsa[i].usage);
+		pack8(q, ((struct tlsa *)rrp2->rdata)->usage);
 		q++;
-		pack8(q, sdtlsa->tlsa[i].selector);
+		pack8(q, ((struct tlsa *)rrp2->rdata)->selector);
 		q++;
-		pack8(q, sdtlsa->tlsa[i].matchtype);
+		pack8(q, ((struct tlsa *)rrp2->rdata)->matchtype);
 		q++;
-		pack(q, sdtlsa->tlsa[i].data, sdtlsa->tlsa[i].datalen);
-		q += sdtlsa->tlsa[i].datalen;
+		pack(q, ((struct tlsa *)rrp2->rdata)->data, ((struct tlsa *)rrp2->rdata)->datalen);
+		q += ((struct tlsa *)rrp2->rdata)->datalen;
 
                 c1 = malloc(sizeof(struct canonical));
                 if (c1 == NULL) {
@@ -3993,7 +4077,7 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_TLSA], "TLSA", algorithm, labels, sd->ttl[INTERNAL_TYPE_TLSA], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct tlsa *)rrp->rdata)->ttl, "TLSA", algorithm, labels, ((struct tlsa *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -4006,9 +4090,11 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
  */
 
 int
-sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct domain *sd)
+sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_ds *sdds = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -4028,7 +4114,7 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 	uint8_t protocol;
 	uint8_t algorithm;
 
-	int labellen, i;
+	int labellen;
 	int keyid;
 	int len;
 	int keylen, siglen;
@@ -4087,7 +4173,7 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -4097,11 +4183,15 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_DS) {
-                if ((sdds = (struct domain_ds *)find_substruct(sd, INTERNAL_TYPE_DS)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no DS records but have flags!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no DS records\n");
+                return -1;
 	}
 	
 	p = key;
@@ -4112,7 +4202,7 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DS]));
+	pack32(p, htonl(((struct ds *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -4134,26 +4224,26 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	for (i = 0; i < sdds->ds_count; i++) {
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 		q = tmpkey;
-		pack(q, sd->zone, sd->zonelen);
-		q += sd->zonelen;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
 		pack16(q, htons(DNS_TYPE_DS));
 		q += 2;
 		pack16(q, htons(DNS_CLASS_IN));
 		q += 2;
-		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_DS]));
+		pack32(q, htonl(((struct ds *)rrp->rdata)->ttl));
 		q += 4;
-		pack16(q, htons(2 + 1 + 1 + sdds->ds[i].digestlen));
+		pack16(q, htons(2 + 1 + 1 + ((struct ds *)rrp2->rdata)->digestlen));
 		q += 2;
-		pack16(q, htons(sdds->ds[i].key_tag));
+		pack16(q, htons(((struct ds *)rrp2->rdata)->key_tag));
 		q += 2;
-		pack8(q, sdds->ds[i].algorithm);
+		pack8(q, ((struct ds *)rrp2->rdata)->algorithm);
 		q++;
-		pack8(q, sdds->ds[i].digest_type);
+		pack8(q, ((struct ds *)rrp2->rdata)->digest_type);
 		q++;
-		pack(q, sdds->ds[i].digest, sdds->ds[i].digestlen);
-		q += sdds->ds[i].digestlen;
+		pack(q, ((struct ds *)rrp2->rdata)->digest, ((struct ds *)rrp2->rdata)->digestlen);
+		q += ((struct ds *)rrp2->rdata)->digestlen;
 
                c1 = malloc(sizeof(struct canonical));
                 if (c1 == NULL) {
@@ -4249,7 +4339,7 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_DS], "DS", algorithm, labels, sd->ttl[INTERNAL_TYPE_DS], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct ds *)rrp->rdata)->ttl, "DS", algorithm, labels, ((struct ds *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -4261,11 +4351,12 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 /*
  * create a RRSIG for an NS record
  */
-
 int
-sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_ns *sdns = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -4285,7 +4376,7 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	uint8_t protocol;
 	uint8_t algorithm;
 
-	int labellen, i;
+	int labellen;
 	int keyid;
 	int len;
 	int keylen, siglen;
@@ -4344,7 +4435,7 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -4354,11 +4445,16 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_NS) {
-                if ((sdns = (struct domain_ns *)find_substruct(sd, INTERNAL_TYPE_NS)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no NS records but have flags!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no NS records\n");
+                return -1;
+
 	}
 	
 	p = key;
@@ -4369,7 +4465,7 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_NS]));
+	pack32(p, htonl(((struct ns *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -4391,20 +4487,20 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	for (i = 0; i < sdns->ns_count; i++) {
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 		q = tmpkey;
-		pack(q, sd->zone, sd->zonelen);
-		q += sd->zonelen;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
 		pack16(q, htons(DNS_TYPE_NS));
 		q += 2;
 		pack16(q, htons(DNS_CLASS_IN));
 		q += 2;
-		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_NS]));
+		pack32(q, htonl(((struct ns *)rrp->rdata)->ttl));
 		q += 4;
-		pack16(q, htons(sdns->ns[i].nslen));
+		pack16(q, htons(((struct ns *)rrp2->rdata)->nslen));
 		q += 2;
-		memcpy(q, sdns->ns[i].nsserver, sdns->ns[i].nslen);
-		q += sdns->ns[i].nslen;
+		memcpy(q, ((struct ns *)rrp2->rdata)->nsserver, ((struct ns *)rrp2->rdata)->nslen);
+		q += ((struct ns *)rrp2->rdata)->nslen;
 
                c1 = malloc(sizeof(struct canonical));
                 if (c1 == NULL) {
@@ -4500,7 +4596,7 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_NS], "NS", algorithm, labels, sd->ttl[INTERNAL_TYPE_NS], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct ns *)rrp->rdata)->ttl, "NS", algorithm, labels, ((struct ns *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -4513,9 +4609,11 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
  */
 
 int
-sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_mx *sdmx = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -4535,7 +4633,7 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	uint8_t protocol;
 	uint8_t algorithm;
 
-	int labellen, i;
+	int labellen;
 	int keyid;
 	int len;
 	int keylen, siglen;
@@ -4594,7 +4692,7 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -4604,11 +4702,15 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_MX) {
-                if ((sdmx = (struct domain_mx *)find_substruct(sd, INTERNAL_TYPE_MX)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no MX records but have flags!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no MX records\n");
+                return -1;
 	}
 	
 	p = key;
@@ -4619,7 +4721,7 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_MX]));
+	pack32(p, htonl(((struct smx *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -4641,22 +4743,22 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	for (i = 0; i < sdmx->mx_count; i++) {
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 		q = tmpkey;
-		pack(q, sd->zone, sd->zonelen);
-		q += sd->zonelen;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
 		pack16(q, htons(DNS_TYPE_MX));
 		q += 2;
 		pack16(q, htons(DNS_CLASS_IN));
 		q += 2;
-		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_MX]));
+		pack32(q, htonl(((struct smx *)rrp->rdata)->ttl));
 		q += 4;
-		pack16(q, htons(2 + sdmx->mx[i].exchangelen));
+		pack16(q, htons(2 + ((struct smx *)rrp2->rdata)->exchangelen));
 		q += 2;
-		pack16(q, htons(sdmx->mx[i].preference));
+		pack16(q, htons(((struct smx *)rrp2->rdata)->preference));
 		q += 2;
-		memcpy(q, sdmx->mx[i].exchange, sdmx->mx[i].exchangelen);
-		q += sdmx->mx[i].exchangelen;
+		memcpy(q, ((struct smx *)rrp2->rdata)->exchange, ((struct smx *)rrp2->rdata)->exchangelen);
+		q += ((struct smx *)rrp2->rdata)->exchangelen;
 
                 c1 = malloc(sizeof(struct canonical));
                 if (c1 == NULL) {
@@ -4752,7 +4854,7 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_MX], "MX", algorithm, labels, sd->ttl[INTERNAL_TYPE_MX], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct smx *)rrp->rdata)->ttl, "MX", algorithm, labels, ((struct smx *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -4766,9 +4868,11 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
  */
 
 int
-sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_a *sda = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -4788,7 +4892,7 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct d
 	uint8_t protocol;
 	uint8_t algorithm;
 
-	int labellen, i;
+	int labellen;
 	int keyid;
 	int len;
 	int keylen, siglen;
@@ -4847,7 +4951,7 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct d
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -4857,11 +4961,15 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct d
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_A) {
-                if ((sda = (struct domain_a *)find_substruct(sd, INTERNAL_TYPE_A)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no A records but have flags!\n");
                         return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no A records\n");
+                return -1;
 	}
 	
 	p = key;
@@ -4872,7 +4980,7 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct d
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_A]));
+	pack32(p, htonl(((struct a *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -4894,19 +5002,19 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct d
 	/* no signature here */	
 	/* XXX this should probably be done on a canonical sorted records */
 	
-	for (i = 0; i < sda->a_count; i++) {
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 		q = tmpkey;
-		pack(q, sd->zone, sd->zonelen);
-		q += sd->zonelen;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
 		pack16(q, htons(DNS_TYPE_A));
 		q += 2;
 		pack16(q, htons(DNS_CLASS_IN));
 		q += 2;
-		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_A]));
+		pack32(q, htonl(((struct a *)rrp->rdata)->ttl));
 		q += 4;
 		pack16(q, htons(sizeof(in_addr_t)));
 		q += 2;
-		pack32(q, sda->a[i]);
+		pack32(q, ((struct a *)rrp2->rdata)->a);
 		q += 4;
 
                 c1 = malloc(sizeof(struct canonical));
@@ -5003,7 +5111,7 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct d
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", sd->ttl[INTERNAL_TYPE_A], "A", algorithm, labels, sd->ttl[INTERNAL_TYPE_A], expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct a *)rrp->rdata)->ttl, "A", algorithm, labels, ((struct a *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -5016,8 +5124,9 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 {
 	FILE *f;
 
-	struct domain *sd;
-	struct domain_dnskey *sddk = NULL;
+	struct rbtree *rbt = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 	struct stat sb;
 
 	char *mytmp;
@@ -5066,8 +5175,8 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 		return -1;
 	}
 
-	if ((sd = lookup_zone(db, qp, &retval, &lzerrno, (char *)&replystring)) == NULL) {
-		dolog(LOG_INFO, "sd == NULL\n");
+	if ((rbt = lookup_zone(db, qp, &retval, &lzerrno, (char *)&replystring)) == NULL) {
+		dolog(LOG_INFO, "rbt == NULL\n");
 		return -1;
 	}
 
@@ -5105,7 +5214,7 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -5115,20 +5224,21 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_DNSKEY) {
-		if ((sddk = (struct domain_dnskey *)find_substruct(sd, INTERNAL_TYPE_DNSKEY)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in apex!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
+			dolog(LOG_INFO, "no ds!\n");
 			return -1;
 		}
-	}
+	} 
 	
 	keylen = (p - key);	
 
 	/* work out the digest */
 
 	p = key;
-	pack(p, sd->zone, sd->zonelen);
-	p += sd->zonelen;
+	pack(p, rbt->zone, rbt->zonelen);
+	p += rbt->zonelen;
 	pack16(p, htons(flags));
 	p += 2;
 	pack8(p, protocol);
@@ -5156,7 +5266,7 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 		*p = toupper(*p);
 	}
 	
-	snprintf(buf, sizeof(buf), "dsset-%s", convert_name(sd->zone, sd->zonelen));
+	snprintf(buf, sizeof(buf), "dsset-%s", convert_name(rbt->zone, rbt->zonelen));
 
 	errno = 0;
 	if (lstat(buf, &sb) < 0 && errno != ENOENT) {
@@ -5179,7 +5289,7 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 		return -1;
 	}
 
-	fprintf(f, "%s\t\tIN DS %u %d 1 %s\n", convert_name(sd->zone, sd->zonelen), keyid, algorithm, mytmp);
+	fprintf(f, "%s\t\tIN DS %u %d 1 %s\n", convert_name(rbt->zone, rbt->zonelen), keyid, algorithm, mytmp);
 
 
 	SHA256_Init(&sha256);
@@ -5197,7 +5307,7 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 		*p = toupper(*p);
 	}
 
-	fprintf(f, "%s\t\tIN DS %u %d 2 %s\n", convert_name(sd->zone, sd->zonelen), keyid, algorithm, mytmp);
+	fprintf(f, "%s\t\tIN DS %u %d 2 %s\n", convert_name(rbt->zone, rbt->zonelen), keyid, algorithm, mytmp);
 
 	fclose(f);
 
@@ -5209,9 +5319,11 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
  */
 
 int
-sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct domain *sd)
+sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
-	struct domain_dnskey *sddk = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -5231,7 +5343,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 	uint8_t protocol;
 	uint8_t algorithm;
 
-	int labellen, i;
+	int labellen;
 	int keyid;
 	int len;
 	int keylen, siglen;
@@ -5293,7 +5405,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 				return -1;
 			}
 			
-			labels = label_count(sd->zone);
+			labels = label_count(rbt->zone);
 			if (labels < 0) {
 				dolog(LOG_INFO, "label_count");
 				return -1;
@@ -5303,12 +5415,16 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 			if (dnsname == NULL)
 				return -1;
 
-			if (sd->flags & DOMAIN_HAVE_DNSKEY) {
-				if ((sddk = (struct domain_dnskey *)find_substruct(sd, INTERNAL_TYPE_DNSKEY)) == NULL) {
+			if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
+				rrp = TAILQ_FIRST(&rrset->rr_head);
+				if (rrp == NULL) {
 					dolog(LOG_INFO, "no dnskeys in apex!\n");
 					return -1;
 				}
-			} 
+			} else {
+				dolog(LOG_INFO, "no dnskeys\n");
+				return -1;
+			}
 			
 			p = key;
 
@@ -5318,7 +5434,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 			p++;
 			pack8(p, labels);
 			p++;
-			pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
+			pack32(p, htonl(((struct dnskey *)rrp->rdata)->ttl));
 			p += 4;
 				
 			snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -5339,7 +5455,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 
 			/* no signature here */	
 			
-			for (i = 0; i < sddk->dnskey_count; i++) {
+			TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 				q = tmpkey;
 				pack(q, dnsname, labellen);
 				q += labellen;
@@ -5347,18 +5463,18 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 				q += 2;
 				pack16(q, htons(DNS_CLASS_IN));
 				q += 2;
-				pack32(q, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
+				pack32(q, htonl(((struct dnskey *)rrp->rdata)->ttl));
 				q += 4;
-				pack16(q, htons(2 + 1 + 1 + sddk->dnskey[i].publickey_len));
+				pack16(q, htons(2 + 1 + 1 + ((struct dnskey *)rrp2->rdata)->publickey_len));
 				q += 2;
-				pack16(q, htons(sddk->dnskey[i].flags));
+				pack16(q, htons(((struct dnskey *)rrp2->rdata)->flags));
 				q += 2;
-				pack8(q, sddk->dnskey[i].protocol);
+				pack8(q, ((struct dnskey *)rrp2->rdata)->protocol);
 				q++;
-				pack8(q, sddk->dnskey[i].algorithm);
+				pack8(q, ((struct dnskey *)rrp2->rdata)->algorithm);
 				q++;
-				pack(q, sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len);
-				q += sddk->dnskey[i].publickey_len;
+				pack(q, ((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len);
+				q += ((struct dnskey *)rrp2->rdata)->publickey_len;
 
 
 				c1 = malloc(sizeof(struct canonical));
@@ -5456,7 +5572,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 			len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 			tmp[len] = '\0';
 
-			if (fill_rrsig(sd->zonename, "RRSIG", ttl, "DNSKEY", algorithm, labels, 		ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			if (fill_rrsig(rbt->humanname, "RRSIG", ttl, "DNSKEY", algorithm, labels, 		ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 				dolog(LOG_INFO, "fill_rrsig\n");
 				return -1;
 			}
@@ -5486,7 +5602,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 		return -1;
 	}
 	
-	labels = label_count(sd->zone);
+	labels = label_count(rbt->zone);
 	if (labels < 0) {
 		dolog(LOG_INFO, "label_count");
 		return -1;
@@ -5496,12 +5612,17 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 	if (dnsname == NULL)
 		return -1;
 
-	if (sd->flags & DOMAIN_HAVE_DNSKEY) {
-		if ((sddk = (struct domain_dnskey *)find_substruct(sd, INTERNAL_TYPE_DNSKEY)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
 			dolog(LOG_INFO, "no dnskeys in apex!\n");
 			return -1;
 		}
+	} else {
+		dolog(LOG_INFO, "no dnskeys\n");
+		return -1;
 	}
+		
 	
 	p = key;
 
@@ -5511,7 +5632,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 	p++;
 	pack8(p, labels);
 	p++;
-	pack32(p, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
+	pack32(p, htonl(((struct dnskey *)rrp->rdata)->ttl));
 	p += 4;
 		
 	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -5532,7 +5653,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 
 	/* no signature here */	
 	
-	for (i = 0; i < sddk->dnskey_count; i++) {
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 		q = tmpkey;
 		pack(q, dnsname, labellen);
 		q += labellen;
@@ -5540,18 +5661,18 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 		q += 2;
 		pack16(q, htons(DNS_CLASS_IN));
 		q += 2;
-		pack32(q, htonl(sd->ttl[INTERNAL_TYPE_DNSKEY]));
+		pack32(q, htonl(((struct dnskey *)rrp->rdata)->ttl));
 		q += 4;
-		pack16(q, htons(2 + 1 + 1 + sddk->dnskey[i].publickey_len));
+		pack16(q, htons(2 + 1 + 1 + ((struct dnskey *)rrp2->rdata)->publickey_len));
 		q += 2;
-		pack16(q, htons(sddk->dnskey[i].flags));
+		pack16(q, htons(((struct dnskey *)rrp2->rdata)->flags));
 		q += 2;
-		pack8(q, sddk->dnskey[i].protocol);
+		pack8(q, ((struct dnskey *)rrp2->rdata)->protocol);
 		q++;
-		pack8(q, sddk->dnskey[i].algorithm);
+		pack8(q, ((struct dnskey *)rrp2->rdata)->algorithm);
 		q++;
-		pack(q, sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len);
-		q += sddk->dnskey[i].publickey_len;
+		pack(q, ((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len);
+		q += ((struct dnskey *)rrp2->rdata)->publickey_len;
 
 		c1 = malloc(sizeof(struct canonical));
 		if (c1 == NULL) {
@@ -5648,7 +5769,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(sd->zonename, "RRSIG", ttl, "DNSKEY", algorithm, labels, 			ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", ttl, "DNSKEY", algorithm, labels, 			ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -5909,12 +6030,14 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 {
 	struct node *n, *nx;
 
-	struct domain *sd;
 	struct question *q;
-
 	struct nsec3param n3p;
-	struct domain_nsec3param *sdn3p;
-	
+
+	struct rbtree *rbt = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
+
 	char replystring[512];
 	char buf[4096];
 	char bitmap[4096];
@@ -5955,82 +6078,95 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		return -1;
 	}
 
-	if ((sd = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
+	if ((rbt = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
 		return -1;
 	}
 
 	/* get the rootzone's len */
-	rootlen = sd->zonelen;
+	rootlen = rbt->zonelen;
+
+	rrset = find_rr(rbt, DNS_TYPE_SOA);
+	if (rrset == NULL)
+		return -1;
+	rrp = TAILQ_FIRST(&rrset->rr_head);
+	if (rrp == NULL)
+		return -1;
 
 	/* RFC 5155 page 3 */
-	ttl = sd->ttl[INTERNAL_TYPE_SOA];
+	ttl = ((struct soa *)rrp->rdata)->ttl;
 
-        if ((sdn3p = find_substruct(sd, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
-                return -1;
-        }
+	
+	rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM);
+	if (rrset == NULL)
+		return -1;
+	rrp2 = TAILQ_FIRST(&rrset->rr_head);
+	if (rrp2 == NULL)
+		return -1;
 
 	n3p.algorithm = 1;	/* still in conformance with above */
 	n3p.flags = 0;
-	n3p.iterations = sdn3p->nsec3param.iterations;
-	n3p.saltlen = sdn3p->nsec3param.saltlen;
-	memcpy(&n3p.salt, sdn3p->nsec3param.salt, n3p.saltlen);
+	n3p.iterations = ((struct nsec3param *)rrp2->rdata)->iterations;
+	n3p.saltlen = ((struct nsec3param *)rrp2->rdata)->saltlen;
+	memcpy(&n3p.salt, ((struct nsec3param *)rrp2->rdata)->salt, 
+			((struct nsec3param *)rrp2->rdata)->saltlen);
 
 	j = 0;
 
 	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
 		rs = n->datalen;
-		if ((sd = calloc(1, rs)) == NULL) {
+		if ((rbt = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			exit(1);
 		}
 
-		memcpy((char *)sd, (char *)n->data, n->datalen);
+		memcpy((char *)rbt, (char *)n->data, n->datalen);
 
-		hashname = hash_name(sd->zone, sd->zonelen, &n3p);
+		hashname = hash_name(rbt->zone, rbt->zonelen, &n3p);
 		if (hashname == NULL) {
 			dolog(LOG_INFO, "hash_name return NULL");
 			return -1;
 		}
 		
+
 		bitmap[0] = '\0';
-		if (sd->flags & DOMAIN_HAVE_A)
+		if (find_rr(rbt, DNS_TYPE_A) != NULL)
 			strlcat(bitmap, "A ", sizeof(bitmap));	
-		if (sd->flags & DOMAIN_HAVE_NS)
+		if (find_rr(rbt, DNS_TYPE_NS) != NULL)
 			strlcat(bitmap, "NS ", sizeof(bitmap));	
-		if (sd->flags & DOMAIN_HAVE_CNAME)
+		if (find_rr(rbt, DNS_TYPE_CNAME) != NULL)
 			strlcat(bitmap, "CNAME ", sizeof(bitmap));	
-		if (sd->flags & DOMAIN_HAVE_SOA)
+		if (find_rr(rbt, DNS_TYPE_SOA) != NULL)
 			strlcat(bitmap, "SOA ", sizeof(bitmap));	
-		if (sd->flags & DOMAIN_HAVE_PTR)
+		if (find_rr(rbt, DNS_TYPE_PTR) != NULL)
 			strlcat(bitmap, "PTR ", sizeof(bitmap));	
-		if (sd->flags & DOMAIN_HAVE_MX)
+		if (find_rr(rbt, DNS_TYPE_MX) != NULL)
 			strlcat(bitmap, "MX ", sizeof(bitmap));	
-		if (sd->flags & DOMAIN_HAVE_TXT)
+		if (find_rr(rbt, DNS_TYPE_TXT) != NULL)
 			strlcat(bitmap, "TXT ", sizeof(bitmap));	
-		if (sd->flags & DOMAIN_HAVE_AAAA)
+		if (find_rr(rbt, DNS_TYPE_AAAA) != NULL)
 			strlcat(bitmap, "AAAA ", sizeof(bitmap));	
-		if (sd->flags & DOMAIN_HAVE_SRV)
+		if (find_rr(rbt, DNS_TYPE_SRV) != NULL)
 			strlcat(bitmap, "SRV ", sizeof(bitmap));	
-		if (sd->flags & DOMAIN_HAVE_NAPTR)
+		if (find_rr(rbt, DNS_TYPE_NAPTR) != NULL)
 			strlcat(bitmap, "NAPTR ", sizeof(bitmap));	
-		if (sd->flags & DOMAIN_HAVE_DS)
+		if (find_rr(rbt, DNS_TYPE_DS) != NULL)
 			strlcat(bitmap, "DS ", sizeof(bitmap));	
-		if (sd->flags & DOMAIN_HAVE_SSHFP)
+		if (find_rr(rbt, DNS_TYPE_SSHFP) != NULL)
 			strlcat(bitmap, "SSHFP ", sizeof(bitmap));	
 
 		/* they all have RRSIG */
 		strlcat(bitmap, "RRSIG ", sizeof(bitmap));	
 
-		if (sd->flags & DOMAIN_HAVE_DNSKEY)
+		if (find_rr(rbt, DNS_TYPE_DNSKEY) != NULL)
 			strlcat(bitmap, "DNSKEY ", sizeof(bitmap));	
 
-		if (sd->flags & DOMAIN_HAVE_NSEC3)
+		if (find_rr(rbt, DNS_TYPE_NSEC3) != NULL)
 			strlcat(bitmap, "NSEC3 ", sizeof(bitmap));	
 
-		if (sd->flags & DOMAIN_HAVE_NSEC3PARAM)
+		if (find_rr(rbt, DNS_TYPE_NSEC3PARAM) != NULL)
 			strlcat(bitmap, "NSEC3PARAM ", sizeof(bitmap));	
 
-		if (sd->flags & DOMAIN_HAVE_TLSA)
+		if (find_rr(rbt, DNS_TYPE_TLSA) != NULL)
 			strlcat(bitmap, "TLSA ", sizeof(bitmap));	
 
 #if 0
@@ -6064,22 +6200,22 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 				TAILQ_INSERT_TAIL(&head, n1, entries);
 		}
 
-		free(sd);
+		free(rbt);
 	}  /* RB_FOREACH_SAFE */
 
 	/* check ENT's which we'll create */
 
 	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
 		rs = n->datalen;
-		if ((sd = calloc(1, rs)) == NULL) {
+		if ((rbt = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			exit(1);
 		}
 
-		memcpy((char *)sd, (char *)n->data, n->datalen);
+		memcpy((char *)rbt, (char *)n->data, n->datalen);
 
-		len = sd->zonelen;
-		for (p = sd->zone; *p && len > rootlen; p++, len--) {
+		len = rbt->zonelen;
+		for (p = rbt->zone; *p && len > rootlen; p++, len--) {
 			if (check_ent(p, len))
 				break;
 			
@@ -6126,7 +6262,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 
 		} /* if len > rootlen */
 
-		free(sd);
+		free(rbt);
 
 	} /* RB_FOREACH_SAFE */
 
@@ -6251,572 +6387,275 @@ bitmap2human(char *bitmap, int len)
 }
 
 int
-print_sd(FILE *of, struct domain *sdomain)
+print_rbt(FILE *of, struct rbtree *rbt)
 {
 	int i, x, len;
 
-	struct domain_soa *sdsoa;
-	struct domain_ns *sdns;
-	struct domain_mx *sdmx;
-	struct domain_a *sda;
-	struct domain_aaaa *sdaaaa;
-	struct domain_cname *sdcname;
-	struct domain_ptr *sdptr;
-	struct domain_txt *sdtxt;
-	struct domain_naptr *sdnaptr;
-	struct domain_srv *sdsrv;
-	struct domain_rrsig *sdrr;
-	struct domain_dnskey *sddk;
-	struct domain_ds *sdds;
-	struct domain_nsec3 *sdn3;
-	struct domain_nsec3param *sdn3param;
-	struct domain_sshfp *sdsshfp;
-	struct domain_tlsa *sdtlsa;
-	struct rrsig *rss;
-	
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
+
 	char buf[4096];
 
-	if (sdomain->flags & DOMAIN_HAVE_SOA) {
-		if ((sdsoa = (struct domain_soa *)find_substruct(sdomain, INTERNAL_TYPE_SOA)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no soa in zone!\n");
 			return -1;
 		}
 		fprintf(of, "  %s,soa,%d,%s,%s,%u,%d,%d,%d,%d\n", 
-			convert_name(sdomain->zone, sdomain->zonelen),
-			sdomain->ttl[INTERNAL_TYPE_SOA],
-			convert_name(sdsoa->soa.nsserver, sdsoa->soa.nsserver_len),
-			convert_name(sdsoa->soa.responsible_person, sdsoa->soa.rp_len),
-			sdsoa->soa.serial, sdsoa->soa.refresh, sdsoa->soa.retry, 
-			sdsoa->soa.expire, sdsoa->soa.minttl);
+			convert_name(rbt->zone, rbt->zonelen),
+			((struct soa *)rrp->rdata)->ttl, 
+			convert_name(((struct soa *)rrp->rdata)->nsserver, ((struct soa *)rrp->rdata)->nsserver_len),
+			convert_name(((struct soa *)rrp->rdata)->responsible_person, ((struct soa *)rrp->rdata)->rp_len),
+			((struct soa *)rrp->rdata)->serial, 
+			((struct soa *)rrp->rdata)->refresh, 
+			((struct soa *)rrp->rdata)->retry, 
+			((struct soa *)rrp->rdata)->expire, 
+			((struct soa *)rrp->rdata)->minttl);
 	}
-	if (sdomain->flags & DOMAIN_HAVE_NS) {
-		if ((sdns = (struct domain_ns *)find_substruct(sdomain, INTERNAL_TYPE_NS)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no ns in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdns->ns_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,ns,%d,%s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_NS],
-				convert_name(sdns->ns[i].nsserver, sdns->ns[i].nslen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct ns *)rrp->rdata)->ttl, 
+				convert_name(((struct ns *)rrp2->rdata)->nsserver, ((struct ns *)rrp2->rdata)->nslen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_MX) {
-		if ((sdmx = (struct domain_mx *)find_substruct(sdomain, INTERNAL_TYPE_MX)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no mx in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdmx->mx_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,mx,%d,%d,%s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_MX],
-				sdmx->mx[i].preference,
-				convert_name(sdmx->mx[i].exchange, sdmx->mx[i].exchangelen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct smx *)rrp->rdata)->ttl, 
+				((struct smx *)rrp2->rdata)->preference,
+				convert_name(((struct smx *)rrp2->rdata)->exchange, ((struct smx *)rrp2->rdata)->exchangelen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_DS) {
-		if ((sdds = (struct domain_ds *)find_substruct(sdomain, INTERNAL_TYPE_DS)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no ds in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdds->ds_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,ds,%d,%d,%d,%d,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_DS],
-				sdds->ds[i].key_tag,
-				sdds->ds[i].algorithm,
-				sdds->ds[i].digest_type,
-				bin2hex(sdds->ds[i].digest, sdds->ds[i].digestlen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct ds *)rrp->rdata)->ttl, 
+				((struct ds *)rrp2->rdata)->key_tag,
+				((struct ds *)rrp2->rdata)->algorithm,
+				((struct ds *)rrp2->rdata)->digest_type,
+				bin2hex(((struct ds *)rrp2->rdata)->digest, ((struct ds *)rrp2->rdata)->digestlen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_CNAME) {
-		if ((sdcname = (struct domain_cname *)find_substruct(sdomain, INTERNAL_TYPE_CNAME)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no cname in zone!\n");
 			return -1;
 		}
 		fprintf(of, "  %s,cname,%d,%s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_CNAME],
-				convert_name(sdcname->cname, sdcname->cnamelen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct ds *)rrp->rdata)->ttl, 
+				convert_name(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen));
 	}
-	if (sdomain->flags & DOMAIN_HAVE_NAPTR) {
-		if ((sdnaptr = (struct domain_naptr *)find_substruct(sdomain, INTERNAL_TYPE_NAPTR)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no naptr in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdnaptr->naptr_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,naptr,%d,%d,%d,\"", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_NAPTR],
-				sdnaptr->naptr[i].order,
-				sdnaptr->naptr[i].preference);
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct naptr *)rrp->rdata)->ttl, 
+				((struct naptr *)rrp2->rdata)->order,
+				((struct naptr *)rrp2->rdata)->preference);
 			
-			for (x = 0; x < sdnaptr->naptr[i].flagslen; x++) {
-				fprintf(of, "%c", sdnaptr->naptr[i].flags[x]);
+			for (x = 0; x < ((struct naptr *)rrp2->rdata)->flagslen; x++) {
+				fprintf(of, "%c", ((struct naptr *)rrp2->rdata)->flags[x]);
 			}
 			fprintf(of, "\",\"");
-			for (x = 0; x < sdnaptr->naptr[i].serviceslen; x++) {
-				fprintf(of, "%c", sdnaptr->naptr[i].services[x]);
+			for (x = 0; x < ((struct naptr *)rrp2->rdata)->serviceslen; x++) {
+				fprintf(of, "%c", ((struct naptr *)rrp2->rdata)->services[x]);
 			}
 			fprintf(of, "\",\"");
-			for (x = 0; x < sdnaptr->naptr[i].regexplen; x++) {
-				fprintf(of, "%c", sdnaptr->naptr[i].regexp[x]);
+			for (x = 0; x < ((struct naptr *)rrp2->rdata)->regexplen; x++) {
+				fprintf(of, "%c", ((struct naptr *)rrp2->rdata)->regexp[x]);
 			}
-			fprintf(of, "\",%s\n", (sdnaptr->naptr[i].replacement[0] == '\0') ? "." : convert_name(sdnaptr->naptr[i].replacement, sdnaptr->naptr[i].replacementlen));
+			fprintf(of, "\",%s\n", (((struct naptr *)rrp2->rdata)->replacement[0] == '\0') ? "." : convert_name(((struct naptr *)rrp2->rdata)->replacement, ((struct naptr *)rrp2->rdata)->replacementlen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_TXT) {
-		if ((sdtxt = (struct domain_txt *)find_substruct(sdomain, INTERNAL_TYPE_TXT)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no txt in zone!\n");
 			return -1;
 		}
 		fprintf(of, "  %s,txt,%d,\"", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_TXT]);
-		for (i = 0; i < sdtxt->txtlen; i++) {
-			fprintf(of, "%c", sdtxt->txt[i]);
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct txt *)rrp->rdata)->ttl);
+
+		for (i = 0; i < ((struct txt *)rrp->rdata)->txtlen; i++) {
+			fprintf(of, "%c", ((struct txt *)rrp->rdata)->txt[i]);
 		}
 		fprintf(of, "\"\n");
 	}
-	if (sdomain->flags & DOMAIN_HAVE_PTR) {
-		if ((sdptr = (struct domain_ptr *)find_substruct(sdomain, INTERNAL_TYPE_PTR)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no naptr in zone!\n");
 			return -1;
 		}
 		fprintf(of, "  %s,ptr,%d,%s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_PTR],
-				convert_name(sdptr->ptr, sdptr->ptrlen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct ptr *)rrp->rdata)->ttl,
+				convert_name(((struct ptr *)rrp->rdata)->ptr, ((struct ptr *)rrp->rdata)->ptrlen));
 	}
-	if (sdomain->flags & DOMAIN_HAVE_SRV) {
-		if ((sdsrv = (struct domain_srv *)find_substruct(sdomain, INTERNAL_TYPE_SRV)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no naptr in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdsrv->srv_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,srv,%d,%d,%d,%d,%s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_SRV],
-				sdsrv->srv[i].priority,
-				sdsrv->srv[i].weight,
-				sdsrv->srv[i].port,
-				convert_name(sdsrv->srv[i].target,sdsrv->srv[i].targetlen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct srv *)rrp->rdata)->ttl,
+				((struct srv *)rrp2->rdata)->priority,
+				((struct srv *)rrp2->rdata)->weight,
+				((struct srv *)rrp2->rdata)->port,
+				convert_name(((struct srv *)rrp2->rdata)->target,((struct srv *)rrp2->rdata)->targetlen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_TLSA) {
-		if ((sdtlsa = (struct domain_tlsa *)find_substruct(sdomain, INTERNAL_TYPE_TLSA)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no naptr in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdtlsa->tlsa_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,tlsa,%d,%d,%d,%d,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_TLSA],
-				sdtlsa->tlsa[i].usage,
-				sdtlsa->tlsa[i].selector,
-				sdtlsa->tlsa[i].matchtype,
-				bin2hex(sdtlsa->tlsa[i].data, sdtlsa->tlsa[i].datalen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct tlsa *)rrp->rdata)->ttl,
+				((struct tlsa *)rrp2->rdata)->usage,
+				((struct tlsa *)rrp2->rdata)->selector,
+				((struct tlsa *)rrp2->rdata)->matchtype,
+				bin2hex(((struct tlsa *)rrp2->rdata)->data, ((struct tlsa *)rrp2->rdata)->datalen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_SSHFP) {
-		if ((sdsshfp = (struct domain_sshfp *)find_substruct(sdomain, INTERNAL_TYPE_SSHFP)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no naptr in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdsshfp->sshfp_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,sshfp,%d,%d,%d,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_SSHFP],
-				sdsshfp->sshfp[i].algorithm,
-				sdsshfp->sshfp[i].fptype,
-				bin2hex(sdsshfp->sshfp[i].fingerprint, sdsshfp->sshfp[i].fplen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct sshfp *)rrp->rdata)->ttl,
+				((struct sshfp *)rrp2->rdata)->algorithm,
+				((struct sshfp *)rrp2->rdata)->fptype,
+				bin2hex(((struct sshfp *)rrp2->rdata)->fingerprint, ((struct sshfp *)rrp2->rdata)->fplen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_A) {
-		if ((sda = (struct domain_a *)find_substruct(sdomain, INTERNAL_TYPE_A)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no naptr in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sda->a_count; i++) {
-			inet_ntop(AF_INET, &sda->a[i], buf, sizeof(buf));
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			inet_ntop(AF_INET, &((struct a *)rrp2->rdata)->a, buf, sizeof(buf));
 			fprintf(of, "  %s,a,%d,%s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_A],
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct a *)rrp->rdata)->ttl,
 				buf);
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_AAAA) {
-		if ((sdaaaa = (struct domain_aaaa *)find_substruct(sdomain, INTERNAL_TYPE_AAAA)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no naptr in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdaaaa->aaaa_count; i++) {
-			inet_ntop(AF_INET6, &sdaaaa->aaaa[i], buf, sizeof(buf));
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			inet_ntop(AF_INET6, &((struct aaaa *)rrp2->rdata)->aaaa, buf, sizeof(buf));
 			fprintf(of, "  %s,aaaa,%d,%s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_AAAA],
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct aaaa *)rrp->rdata)->ttl,
 				buf);
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_DNSKEY) {
-#if DEBUG
-		printf(" has dnskey\n");
-#endif
-		if ((sddk = (struct domain_dnskey *)find_substruct(sdomain, INTERNAL_TYPE_DNSKEY)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no naptr in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sddk->dnskey_count; i++) {
-			len = mybase64_encode(sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len, buf, sizeof(buf));
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			len = mybase64_encode(((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len, buf, sizeof(buf));
 			buf[len] = '\0';
 			fprintf(of, "  %s,dnskey,%d,%d,%d,%d,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_DNSKEY],
-				sddk->dnskey[i].flags,
-				sddk->dnskey[i].protocol,
-				sddk->dnskey[i].algorithm,
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct dnskey *)rrp->rdata)->ttl,
+				((struct dnskey *)rrp2->rdata)->flags,
+				((struct dnskey *)rrp2->rdata)->protocol,
+				((struct dnskey *)rrp2->rdata)->algorithm,
 				buf);
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_NSEC3PARAM) {
-#if DEBUG
-		printf("has nsec3param\n");
-#endif
-		if ((sdn3param = (struct domain_nsec3param *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
-			dolog(LOG_INFO, "no nsec3param in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no naptr in zone!\n");
 			return -1;
 		}
-		
+
 		fprintf(of, "  %s,nsec3param,0,%d,%d,%d,\"%s\"\n",
-			convert_name(sdomain->zone, sdomain->zonelen),
-			sdn3param->nsec3param.algorithm,
-			sdn3param->nsec3param.flags,
-			sdn3param->nsec3param.iterations,
-			(sdn3param->nsec3param.saltlen == 0) ? "-" : bin2hex(sdn3param->nsec3param.salt, sdn3param->nsec3param.saltlen));
+			convert_name(rbt->zone, rbt->zonelen),
+			((struct nsec3param *)rrp->rdata)->algorithm,
+			((struct nsec3param *)rrp->rdata)->flags,
+			((struct nsec3param *)rrp->rdata)->iterations,
+			(((struct nsec3param *)rrp->rdata)->saltlen == 0) ? "-" : bin2hex(((struct nsec3param *)rrp->rdata)->salt, ((struct nsec3param *)rrp->rdata)->saltlen));
 	}
-	if (sdomain->flags & DOMAIN_HAVE_NSEC3) {
-#if DEBUG
-		printf("has nsec3\n");
-#endif
-		if ((sdn3 = (struct domain_nsec3 *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3)) == NULL) {
-			dolog(LOG_INFO, "no nsec3 in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no naptr in zone!\n");
 			return -1;
 		}
 		
 		fprintf(of, "  %s,nsec3,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\"\n",
-			convert_name(sdomain->zone, sdomain->zonelen),
-			sdomain->ttl[INTERNAL_TYPE_NSEC3],
-			sdn3->nsec3.algorithm,
-			sdn3->nsec3.flags,
-			sdn3->nsec3.iterations,
-			(sdn3->nsec3.saltlen == 0) ? "-" : bin2hex(sdn3->nsec3.salt, sdn3->nsec3.saltlen),
-			base32hex_encode(sdn3->nsec3.next, sdn3->nsec3.nextlen),
-			bitmap2human(sdn3->nsec3.bitmap, sdn3->nsec3.bitmap_len));
+			convert_name(rbt->zone, rbt->zonelen),
+			((struct nsec3 *)rrp->rdata)->ttl,
+			((struct nsec3 *)rrp->rdata)->algorithm, 
+			((struct nsec3 *)rrp->rdata)->flags,
+			((struct nsec3 *)rrp->rdata)->iterations,
+			(((struct nsec3 *)rrp->rdata)->saltlen == 0) ? "-" : bin2hex(((struct nsec3 *)rrp->rdata)->salt, ((struct nsec3 *)rrp->rdata)->saltlen),
+			base32hex_encode(((struct nsec3 *)rrp->rdata)->next, ((struct nsec3 *)rrp->rdata)->nextlen),
+			bitmap2human(((struct nsec3 *)rrp->rdata)->bitmap, ((struct nsec3 *)rrp->rdata)->bitmap_len));
 
 	}
-	if (sdomain->flags & DOMAIN_HAVE_RRSIG) {
-#if DEBUG
-		printf(" has rrsig\n");
-#endif
-		
-		if ((sdrr = (struct domain_rrsig *)find_substruct(sdomain, INTERNAL_TYPE_RRSIG)) == NULL) {
-			dolog(LOG_INFO, "no rrsigs in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no naptr in zone!\n");
 			return -1;
 		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+#if 0
+			if (((struct rrsig *)rrp2->rdata)->type_covered != DNS_TYPE_DNSKEY)
+				continue;
+#endif 
 
-		if ((sdomain->flags & DOMAIN_HAVE_DNSKEY) && sdrr->rrsig_dnskey_count > 0) {
-			for (i = 0; i < sdrr->rrsig_dnskey_count; i++) {
-				rss = (struct rrsig *)&sdrr->rrsig_dnskey[i];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
-
-				fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-					convert_name(sdomain->zone, sdomain->zonelen),
-					sdomain->ttl[INTERNAL_TYPE_DNSKEY],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
-			}
-		}
-		if (sdomain->flags & DOMAIN_HAVE_SOA) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_SOA];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+			len = mybase64_encode(((struct rrsig *)rrp2->rdata)->signature, ((struct rrsig *)rrp2->rdata)->signature_len, buf, sizeof(buf));
 			buf[len] = '\0';
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_DS) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_DS];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-
-
-		if (sdomain->flags & DOMAIN_HAVE_TLSA) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_TLSA];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-
-		if (sdomain->flags & DOMAIN_HAVE_SSHFP) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_SSHFP];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_SRV) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_SRV];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-
-		if (sdomain->flags & DOMAIN_HAVE_NAPTR) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NAPTR];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-
-		if (sdomain->flags & DOMAIN_HAVE_TXT) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_TXT];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_AAAA) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_AAAA];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_NSEC3) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NSEC3];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone,sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-
-		if (sdomain->flags & DOMAIN_HAVE_NSEC3PARAM) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NSEC3PARAM];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,0,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				0, /* original ttl */
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_CNAME) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_CNAME];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_PTR) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_PTR];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-
-
-		if (sdomain->flags & DOMAIN_HAVE_NS) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NS];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_MX) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_MX];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_A) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_A];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
-				convert_name(sdomain->zone, sdomain->zonelen), 
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct rrsig *)rrp2->rdata)->ttl,
+				
+				get_dns_type(((struct rrsig *)rrp2->rdata)->type_covered, 0), 
+				((struct rrsig *)rrp2->rdata)->algorithm, 
+				((struct rrsig *)rrp2->rdata)->labels,
+				((struct rrsig *)rrp2->rdata)->original_ttl, 
+				timethuman(((struct rrsig *)rrp2->rdata)->signature_expiration),
+				timethuman(((struct rrsig *)rrp2->rdata)->signature_inception), 
+				((struct rrsig *)rrp2->rdata)->key_tag,
+				convert_name(((struct rrsig *)rrp2->rdata)->signers_name, ((struct rrsig *)rrp2->rdata)->signame_len),
 				buf);	
 		}
 	}
@@ -7052,6 +6891,7 @@ connect_server(char *nameserver, int port, u_int32_t format)
 {
 	struct sockaddr_in sin;
 	int so;
+	int window = 32768;
 
 	if (format & TCP_FORMAT)
 		so =  socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -7063,6 +6903,14 @@ connect_server(char *nameserver, int port, u_int32_t format)
 		return -1;
 	}
 
+	/* biggen the window */
+
+	while (setsockopt(so, SOL_SOCKET, SO_RCVBUF, &window, sizeof(window)) != -1)
+		window <<= 1;
+
+	printf("receive window set to %d bytes\n", window >> 1);
+	
+
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(port);
@@ -7072,6 +6920,7 @@ connect_server(char *nameserver, int port, u_int32_t format)
 		perror("connect");
 		return -1;
 	}
+
 
 	return (so);	
 }
@@ -7157,7 +7006,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 
 	for (;;) {
-		len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL);
+		len = recv(so, reply, 0xffff, MSG_PEEK | MSG_WAITALL);
 		if (len <= 0)	
 			break;
 
@@ -7967,7 +7816,8 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 	
 	struct node *n, *nx;
 	struct question *q;
-	struct domain *sdomain;
+	struct rbtree *rbt = NULL;
+	
 	
 	char replystring[512];
 	char *dnsname;
@@ -7985,12 +7835,12 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 		return -1;
 	}
 
-	if ((sdomain = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
+	if ((rbt = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
 		return -1;
 	}
 
-	if (print_sd_bind(of, sdomain) < 0) {
-		fprintf(stderr, "print_sd_bind error\n");
+	if (print_rbt_bind(of, rbt) < 0) {
+		fprintf(stderr, "print_rbt_bind error\n");
 		return -1;
 	}
 	
@@ -8000,24 +7850,24 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 	j = 0;
 	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
 		rs = n->datalen;
-		if ((sdomain = calloc(1, rs)) == NULL) {
+		if ((rbt = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			exit(1);
 		}
 
-		memcpy((char *)sdomain, (char *)n->data, n->datalen);
+		memcpy((char *)rbt, (char *)n->data, n->datalen);
 
-		if (strcmp(convert_name(sdomain->zone, sdomain->zonelen), zonename) == 0) {
-			free(sdomain);
+		if (strcmp(convert_name(rbt->zone, rbt->zonelen), zonename) == 0) {
+			free(rbt);
 			continue;
 		}
 
-		if (print_sd_bind(of, sdomain) < 0) {
-			fprintf(stderr, "print_sd_bind error\n");
+		if (print_rbt_bind(of, rbt) < 0) {
+			fprintf(stderr, "print_rbt_bind error\n");
 			return -1;
 		}
 
-		free(sdomain);
+		free(rbt);
 
 		j++;
 	} 
@@ -8033,578 +7883,276 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
  */
 
 int
-print_sd_bind(FILE *of, struct domain *sdomain)
+print_rbt_bind(FILE *of, struct rbtree *rbt)
 {
 	int i, x, len;
 
-	struct domain_soa *sdsoa;
-	struct domain_ns *sdns;
-	struct domain_mx *sdmx;
-	struct domain_a *sda;
-	struct domain_aaaa *sdaaaa;
-	struct domain_cname *sdcname;
-	struct domain_ptr *sdptr;
-	struct domain_txt *sdtxt;
-	struct domain_naptr *sdnaptr;
-	struct domain_srv *sdsrv;
-	struct domain_rrsig *sdrr;
-	struct domain_dnskey *sddk;
-	struct domain_ds *sdds;
-	struct domain_nsec3 *sdn3;
-	struct domain_nsec3param *sdn3param;
-	struct domain_sshfp *sdsshfp;
-	struct domain_tlsa *sdtlsa;
-	struct rrsig *rss;
-	
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
+
 	char buf[4096];
 
-	if (sdomain->flags & DOMAIN_HAVE_SOA) {
-		if ((sdsoa = (struct domain_soa *)find_substruct(sdomain, INTERNAL_TYPE_SOA)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no soa in zone!\n");
 			return -1;
 		}
 		fprintf(of, "%s %d IN SOA %s %s (\n\t\t\t\t%u\t; Serial\n\t\t\t\t%d\t; Refresh\n\t\t\t\t%d\t; Retry\n\t\t\t\t%d\t; Expire\n\t\t\t\t%d )\t; Minimum TTL\n\n", 
-			convert_name(sdomain->zone, sdomain->zonelen),
-			sdomain->ttl[INTERNAL_TYPE_SOA],
-			convert_name(sdsoa->soa.nsserver, sdsoa->soa.nsserver_len),
-			convert_name(sdsoa->soa.responsible_person, sdsoa->soa.rp_len),
-			sdsoa->soa.serial, sdsoa->soa.refresh, sdsoa->soa.retry, 
-			sdsoa->soa.expire, sdsoa->soa.minttl);
+			convert_name(rbt->zone, rbt->zonelen),
+			((struct soa *)rrp->rdata)->ttl, 
+			convert_name(((struct soa *)rrp->rdata)->nsserver, ((struct soa *)rrp->rdata)->nsserver_len),
+			convert_name(((struct soa *)rrp->rdata)->responsible_person, ((struct soa *)rrp->rdata)->rp_len),
+			((struct soa *)rrp->rdata)->serial, 
+			((struct soa *)rrp->rdata)->refresh, 
+			((struct soa *)rrp->rdata)->retry, 
+			((struct soa *)rrp->rdata)->expire, 
+			((struct soa *)rrp->rdata)->minttl);
 	}
-	if (sdomain->flags & DOMAIN_HAVE_NS) {
-		if ((sdns = (struct domain_ns *)find_substruct(sdomain, INTERNAL_TYPE_NS)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no soa in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdns->ns_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN NS %s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_NS],
-				convert_name(sdns->ns[i].nsserver, sdns->ns[i].nslen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct ns *)rrp2->rdata)->ttl, 
+				convert_name(((struct ns *)rrp2->rdata)->nsserver, ((struct ns *)rrp2->rdata)->nslen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_MX) {
-		if ((sdmx = (struct domain_mx *)find_substruct(sdomain, INTERNAL_TYPE_MX)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no mx in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdmx->mx_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN MX %d %s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_MX],
-				sdmx->mx[i].preference,
-				convert_name(sdmx->mx[i].exchange, sdmx->mx[i].exchangelen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct smx *)rrp2->rdata)->ttl, 
+				((struct smx *)rrp2->rdata)->preference, 
+				convert_name(((struct smx *)rrp2->rdata)->exchange, ((struct smx *)rrp2->rdata)->exchangelen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_DS) {
-		if ((sdds = (struct domain_ds *)find_substruct(sdomain, INTERNAL_TYPE_DS)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no ds in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdds->ds_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN DS %d %d %d (%s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_DS],
-				sdds->ds[i].key_tag,
-				sdds->ds[i].algorithm,
-				sdds->ds[i].digest_type,
-				bin2hex(sdds->ds[i].digest, sdds->ds[i].digestlen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct ds *)rrp2->rdata)->ttl, 
+				((struct ds *)rrp2->rdata)->key_tag, 
+				((struct ds *)rrp2->rdata)->algorithm, 
+				((struct ds *)rrp2->rdata)->digest_type, 
+				bin2hex(((struct ds *)rrp2->rdata)->digest, ((struct ds *)rrp2->rdata)->digestlen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_CNAME) {
-		if ((sdcname = (struct domain_cname *)find_substruct(sdomain, INTERNAL_TYPE_CNAME)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no soa in zone!\n");
 			return -1;
 		}
 		fprintf(of, "%s %d IN CNAME %s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_CNAME],
-				convert_name(sdcname->cname, sdcname->cnamelen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct cname *)rrp->rdata)->ttl, 
+				convert_name(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen));
 	}
-	if (sdomain->flags & DOMAIN_HAVE_NAPTR) {
-		if ((sdnaptr = (struct domain_naptr *)find_substruct(sdomain, INTERNAL_TYPE_NAPTR)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no ds in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdnaptr->naptr_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN NAPTR %d\t%d\t\"", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_NAPTR],
-				sdnaptr->naptr[i].order,
-				sdnaptr->naptr[i].preference);
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct naptr *)rrp2->rdata)->ttl, 
+				((struct naptr *)rrp2->rdata)->order, 
+				((struct naptr *)rrp2->rdata)->preference);
 			
-			for (x = 0; x < sdnaptr->naptr[i].flagslen; x++) {
-				fprintf(of, "%c", sdnaptr->naptr[i].flags[x]);
+			for (x = 0; x < ((struct naptr *)rrp2->rdata)->flagslen; x++) {
+				fprintf(of, "%c", ((struct naptr *)rrp2->rdata)->flags[x]);
 			}
 			fprintf(of, "\"\t\"");
-			for (x = 0; x < sdnaptr->naptr[i].serviceslen; x++) {
-				fprintf(of, "%c", sdnaptr->naptr[i].services[x]);
+			for (x = 0; x < ((struct naptr *)rrp2->rdata)->serviceslen; x++) {
+				fprintf(of, "%c", ((struct naptr *)rrp2->rdata)->services[x]);
 			}
 			fprintf(of, "\"\t\"");
-			for (x = 0; x < sdnaptr->naptr[i].regexplen; x++) {
-				fprintf(of, "%c", sdnaptr->naptr[i].regexp[x]);
+			for (x = 0; x < ((struct naptr *)rrp2->rdata)->regexplen; x++) {
+				fprintf(of, "%c", ((struct naptr *)rrp2->rdata)->regexp[x]);
 			}
-			fprintf(of, "\"\t%s\n", (sdnaptr->naptr[i].replacement[0] == '\0') ? "." : convert_name(sdnaptr->naptr[i].replacement, sdnaptr->naptr[i].replacementlen));
+			fprintf(of, "\"\t%s\n", (((struct naptr *)rrp2->rdata)->replacement[0] == '\0') ? "." : convert_name(((struct naptr *)rrp2->rdata)->replacement, ((struct naptr *)rrp2->rdata)->replacementlen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_TXT) {
-		if ((sdtxt = (struct domain_txt *)find_substruct(sdomain, INTERNAL_TYPE_TXT)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no ds in zone!\n");
 			return -1;
 		}
 		fprintf(of, "%s %d IN TXT \"", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_TXT]);
-		for (i = 0; i < sdtxt->txtlen; i++) {
-			fprintf(of, "%c", sdtxt->txt[i]);
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct txt *)rrp->rdata)->ttl);
+				
+		for (i = 0; i < ((struct txt *)rrp->rdata)->txtlen; i++) {
+			fprintf(of, "%c", ((struct txt *)rrp->rdata)->txt[i]);
 		}
 		fprintf(of, "\"\n");
 	}
-	if (sdomain->flags & DOMAIN_HAVE_PTR) {
-		if ((sdptr = (struct domain_ptr *)find_substruct(sdomain, INTERNAL_TYPE_PTR)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no ds in zone!\n");
 			return -1;
 		}
 		fprintf(of, "%s %d IN PTR %s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_PTR],
-				convert_name(sdptr->ptr, sdptr->ptrlen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct ptr *)rrp->rdata)->ttl,
+				convert_name(((struct ptr *)rrp->rdata)->ptr, ((struct ptr *)rrp->rdata)->ptrlen));
 	}
-	if (sdomain->flags & DOMAIN_HAVE_SRV) {
-		if ((sdsrv = (struct domain_srv *)find_substruct(sdomain, INTERNAL_TYPE_SRV)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no srv in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdsrv->srv_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN SRV %d %d %d %s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_SRV],
-				sdsrv->srv[i].priority,
-				sdsrv->srv[i].weight,
-				sdsrv->srv[i].port,
-				convert_name(sdsrv->srv[i].target,sdsrv->srv[i].targetlen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct srv *)rrp2->rdata)->ttl, 
+				((struct srv *)rrp2->rdata)->priority, 
+				((struct srv *)rrp2->rdata)->weight, 
+				((struct srv *)rrp2->rdata)->port, 
+				convert_name(((struct srv *)rrp2->rdata)->target,((struct srv *)rrp2->rdata)->targetlen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_TLSA) {
-		if ((sdtlsa = (struct domain_tlsa *)find_substruct(sdomain, INTERNAL_TYPE_TLSA)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no tlsa in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdtlsa->tlsa_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN TLSA %d %d %d (%s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_TLSA],
-				sdtlsa->tlsa[i].usage,
-				sdtlsa->tlsa[i].selector,
-				sdtlsa->tlsa[i].matchtype,
-				bin2hex(sdtlsa->tlsa[i].data, sdtlsa->tlsa[i].datalen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct tlsa *)rrp2->rdata)->ttl, 
+				((struct tlsa *)rrp2->rdata)->usage, 
+				((struct tlsa *)rrp2->rdata)->selector, 
+				((struct tlsa *)rrp2->rdata)->matchtype, 
+				bin2hex(((struct tlsa *)rrp2->rdata)->data, ((struct tlsa *)rrp2->rdata)->datalen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_SSHFP) {
-		if ((sdsshfp = (struct domain_sshfp *)find_substruct(sdomain, INTERNAL_TYPE_SSHFP)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no sshfp in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdsshfp->sshfp_count; i++) {
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN SSHFP %d %d (%s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_SSHFP],
-				sdsshfp->sshfp[i].algorithm,
-				sdsshfp->sshfp[i].fptype,
-				bin2hex(sdsshfp->sshfp[i].fingerprint, sdsshfp->sshfp[i].fplen));
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct sshfp *)rrp2->rdata)->ttl, 
+				((struct sshfp *)rrp2->rdata)->algorithm, 
+				((struct sshfp *)rrp2->rdata)->fptype, 
+				bin2hex(((struct sshfp *)rrp2->rdata)->fingerprint, ((struct sshfp *)rrp2->rdata)->fplen));
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_A) {
-		if ((sda = (struct domain_a *)find_substruct(sdomain, INTERNAL_TYPE_A)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no a RR in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sda->a_count; i++) {
-			inet_ntop(AF_INET, &sda->a[i], buf, sizeof(buf));
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			inet_ntop(AF_INET, &((struct a *)rrp2->rdata)->a, buf, sizeof(buf));
 			fprintf(of, "%s %d IN A %s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_A],
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct a *)rrp2->rdata)->ttl,
 				buf);
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_AAAA) {
-		if ((sdaaaa = (struct domain_aaaa *)find_substruct(sdomain, INTERNAL_TYPE_AAAA)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no a RR in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sdaaaa->aaaa_count; i++) {
-			inet_ntop(AF_INET6, &sdaaaa->aaaa[i], buf, sizeof(buf));
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			inet_ntop(AF_INET6, &((struct aaaa *)rrp2->rdata)->aaaa , buf, sizeof(buf));
 			fprintf(of, "%s %d IN AAAA %s\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_AAAA],
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct aaaa *)rrp2->rdata)->ttl,
 				buf);
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_DNSKEY) {
-#if DEBUG
-		printf(" has dnskey\n");
-#endif
-		if ((sddk = (struct domain_dnskey *)find_substruct(sdomain, INTERNAL_TYPE_DNSKEY)) == NULL) {
-			dolog(LOG_INFO, "no dnskeys in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no a RR in zone!\n");
 			return -1;
 		}
-		for (i = 0; i < sddk->dnskey_count; i++) {
-			len = mybase64_encode(sddk->dnskey[i].public_key, sddk->dnskey[i].publickey_len, buf, sizeof(buf));
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			len = mybase64_encode(((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len, buf, sizeof(buf));
 			buf[len] = '\0';
 			fprintf(of, "%s %d IN DNSKEY %d %d %d (%s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				sdomain->ttl[INTERNAL_TYPE_DNSKEY],
-				sddk->dnskey[i].flags,
-				sddk->dnskey[i].protocol,
-				sddk->dnskey[i].algorithm,
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct dnskey *)rrp2->rdata)->ttl, 
+				((struct dnskey *)rrp2->rdata)->flags, 
+				((struct dnskey *)rrp2->rdata)->protocol,
+				((struct dnskey *)rrp2->rdata)->algorithm,
 				buf);
 		}
 	}
-	if (sdomain->flags & DOMAIN_HAVE_NSEC3PARAM) {
-#if DEBUG
-		printf("has nsec3param\n");
-#endif
-		if ((sdn3param = (struct domain_nsec3param *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
-			dolog(LOG_INFO, "no nsec3param in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no NSEC3PARAM RR in zone!\n");
 			return -1;
 		}
 		
 		fprintf(of, "%s 0 IN NSEC3PARAM %d %d %d (%s)\n",
-			convert_name(sdomain->zone, sdomain->zonelen),
-			sdn3param->nsec3param.algorithm,
-			sdn3param->nsec3param.flags,
-			sdn3param->nsec3param.iterations,
-			(sdn3param->nsec3param.saltlen == 0) ? "-" : bin2hex(sdn3param->nsec3param.salt, sdn3param->nsec3param.saltlen));
+			convert_name(rbt->zone, rbt->zonelen),
+			((struct nsec3param *)rrp->rdata)->algorithm,	
+			((struct nsec3param *)rrp->rdata)->flags,	
+			((struct nsec3param *)rrp->rdata)->iterations,	
+			(((struct nsec3param *)rrp->rdata)->saltlen == 0) ? "-" : bin2hex(((struct nsec3param *)rrp->rdata)->salt, ((struct nsec3param *)rrp->rdata)->saltlen));
 	}
-	if (sdomain->flags & DOMAIN_HAVE_NSEC3) {
-#if DEBUG
-		printf("has nsec3\n");
-#endif
-		if ((sdn3 = (struct domain_nsec3 *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3)) == NULL) {
-			dolog(LOG_INFO, "no nsec3 in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no NSEC3PARAM RR in zone!\n");
 			return -1;
 		}
 		
 		fprintf(of, "%s %d IN NSEC3 %d %d %d %s %s %s\n",
-			convert_name(sdomain->zone, sdomain->zonelen),
-			sdomain->ttl[INTERNAL_TYPE_NSEC3],
-			sdn3->nsec3.algorithm,
-			sdn3->nsec3.flags,
-			sdn3->nsec3.iterations,
-			(sdn3->nsec3.saltlen == 0) ? "-" : bin2hex(sdn3->nsec3.salt, sdn3->nsec3.saltlen),
-			base32hex_encode(sdn3->nsec3.next, sdn3->nsec3.nextlen),
-			bitmap2human(sdn3->nsec3.bitmap, sdn3->nsec3.bitmap_len));
+			convert_name(rbt->zone, rbt->zonelen),
+			((struct nsec3 *)rrp->rdata)->ttl,
+			((struct nsec3 *)rrp->rdata)->algorithm,
+			((struct nsec3 *)rrp->rdata)->flags,
+			((struct nsec3 *)rrp->rdata)->iterations,
+			(((struct nsec3 *)rrp->rdata)->saltlen == 0) ? "-" : bin2hex(((struct nsec3 *)rrp->rdata)->salt, ((struct nsec3 *)rrp->rdata)->saltlen),
+			base32hex_encode(((struct nsec3 *)rrp->rdata)->next, ((struct nsec3 *)rrp->rdata)->nextlen),
+			bitmap2human(((struct nsec3 *)rrp->rdata)->bitmap, ((struct nsec3 *)rrp->rdata)->bitmap_len));
 
 	}
-	if (sdomain->flags & DOMAIN_HAVE_RRSIG) {
-#if DEBUG
-		printf(" has rrsig\n");
-#endif
-		
-		if ((sdrr = (struct domain_rrsig *)find_substruct(sdomain, INTERNAL_TYPE_RRSIG)) == NULL) {
-			dolog(LOG_INFO, "no rrsigs in zone!\n");
+	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no a RR in zone!\n");
 			return -1;
 		}
-
-		if ((sdomain->flags & DOMAIN_HAVE_DNSKEY) && sdrr->rrsig_dnskey_count > 0) {
-			for (i = 0; i < sdrr->rrsig_dnskey_count; i++) {
-				rss = (struct rrsig *)&sdrr->rrsig_dnskey[i];
-				len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-				buf[len] = '\0';
-
-				fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-					convert_name(sdomain->zone, sdomain->zonelen),
-					sdomain->ttl[INTERNAL_TYPE_DNSKEY],
-					get_dns_type(rss->type_covered, 0), 
-					rss->algorithm, rss->labels,
-					rss->original_ttl, 
-					timethuman(rss->signature_expiration),
-					timethuman(rss->signature_inception), 
-					rss->key_tag,
-					convert_name(rss->signers_name, rss->signame_len),
-					buf);	
-			}
-		}
-		if (sdomain->flags & DOMAIN_HAVE_SOA) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_SOA];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			len = mybase64_encode(((struct rrsig *)rrp2->rdata)->signature, ((struct rrsig *)rrp2->rdata)->signature_len, buf, sizeof(buf));
 			buf[len] = '\0';
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl,
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_DS) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_DS];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-
-
-		if (sdomain->flags & DOMAIN_HAVE_TLSA) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_TLSA];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-
-		if (sdomain->flags & DOMAIN_HAVE_SSHFP) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_SSHFP];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_SRV) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_SRV];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN rrsig (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-
-		if (sdomain->flags & DOMAIN_HAVE_NAPTR) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NAPTR];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-
-		if (sdomain->flags & DOMAIN_HAVE_TXT) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_TXT];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_AAAA) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_AAAA];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_NSEC3) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NSEC3];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone,sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-
-		if (sdomain->flags & DOMAIN_HAVE_NSEC3PARAM) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NSEC3PARAM];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s 0 IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				0, /* original ttl */
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_CNAME) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_CNAME];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_PTR) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_PTR];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-
-
-		if (sdomain->flags & DOMAIN_HAVE_NS) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_NS];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_MX) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_MX];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen),
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
-				buf);	
-		}
-
-		if (sdomain->flags & DOMAIN_HAVE_A) {
-			rss = (struct rrsig *)&sdrr->rrsig[INTERNAL_TYPE_A];
-			len = mybase64_encode(rss->signature, rss->signature_len, buf, sizeof(buf));
-			buf[len] = '\0';
-
-			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
-				convert_name(sdomain->zone, sdomain->zonelen), 
-				rss->original_ttl, 
-				get_dns_type(rss->type_covered, 0), 
-				rss->algorithm, rss->labels,
-				rss->original_ttl, 
-				timethuman(rss->signature_expiration),
-				timethuman(rss->signature_inception), 
-				rss->key_tag,
-				convert_name(rss->signers_name, rss->signame_len),
+				convert_name(rbt->zone, rbt->zonelen),
+				((struct rrsig *)rrp2->rdata)->ttl,
+				get_dns_type(((struct rrsig *)rrp2->rdata)->type_covered, 0), 
+				((struct rrsig *)rrp2->rdata)->algorithm,
+				((struct rrsig *)rrp2->rdata)->labels,
+				((struct rrsig *)rrp2->rdata)->original_ttl,
+				timethuman(((struct rrsig *)rrp2->rdata)->signature_expiration),
+				timethuman(((struct rrsig *)rrp2->rdata)->signature_inception), 
+				((struct rrsig *)rrp2->rdata)->key_tag,
+				convert_name(((struct rrsig *)rrp2->rdata)->signers_name, ((struct rrsig *)rrp2->rdata)->signame_len),
 				buf);	
 		}
 	}
 
 	return 0;
 }
+
 
 int	
 bindfile(int argc, char *argv[])
@@ -8855,161 +8403,105 @@ BN_GENCB_free(BN_GENCB *cb)
 int
 count_db(ddDB *db)
 {
-	struct domain *sdomain;
+	struct rbtree *rbt;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 	struct node *n, *nx;
 	int count = 0;
 	int rs;
 	
 	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
 		rs = n->datalen;
-		if ((sdomain = calloc(1, rs)) == NULL) {
+		if ((rbt = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			exit(1);
 		}
 
 
-		memcpy((char *)sdomain, (char *)n->data, n->datalen);
+		memcpy((char *)rbt, (char *)n->data, n->datalen);
 
-		if (sdomain->flags & DOMAIN_HAVE_DNSKEY) {
-			struct domain_dnskey *sdr = NULL;
-			if ((sdr = (struct domain_dnskey *)find_substruct(sdomain, INTERNAL_TYPE_DNSKEY)) == NULL) {
-				dolog(LOG_INFO, "no dnskeys in zone!\n");
-				return -1;
-			}
-		}
-		if (sdomain->flags & DOMAIN_HAVE_A) {
-			struct domain_a *sdr = NULL;
-			if ((sdr = (struct domain_a *)find_substruct(sdomain, INTERNAL_TYPE_A)) == NULL) {
-				dolog(LOG_INFO, "no as in zone!\n");
-				return -1;
-			}
 
-			count += sdr->a_count;
-		}
-		if (sdomain->flags & DOMAIN_HAVE_MX) {
-			struct domain_mx *sdr = NULL;
-			if ((sdr = (struct domain_mx *)find_substruct(sdomain, INTERNAL_TYPE_MX)) == NULL) {
-				dolog(LOG_INFO, "no mxs in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-
-			count += sdr->mx_count;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_NS) {
-			struct domain_ns *sdr = NULL;
-			if ((sdr = (struct domain_ns *)find_substruct(sdomain, INTERNAL_TYPE_NS)) == NULL) {
-				dolog(LOG_INFO, "no nss in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-
-			count += sdr->ns_count;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_SOA) {
-			struct domain_soa *sdr = NULL;
-			if ((sdr = (struct domain_soa *)find_substruct(sdomain, INTERNAL_TYPE_SOA)) == NULL) {
-				dolog(LOG_INFO, "no soas in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-
-			count++;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_TXT) {
-			struct domain_txt *sdr = NULL;
-			if ((sdr = (struct domain_txt *)find_substruct(sdomain, INTERNAL_TYPE_TXT)) == NULL) {
-				dolog(LOG_INFO, "no txts in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-
-			count++;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_AAAA) {
-			struct domain_aaaa *sdr = NULL;
-			if ((sdr = (struct domain_aaaa *)find_substruct(sdomain, INTERNAL_TYPE_AAAA)) == NULL) {
-				dolog(LOG_INFO, "no aaaas in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-
-			count += sdr->aaaa_count;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_NSEC3) { 
-			struct domain_nsec3 *sdr = NULL;
-			if ((sdr = (struct domain_nsec3 *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3)) == NULL) {
-				dolog(LOG_INFO, "no nsec3s in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-
-			count++;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_NSEC3PARAM) {
-			struct domain_nsec3param *sdr = NULL;
-			if ((sdr = (struct domain_nsec3param *)find_substruct(sdomain, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
-				dolog(LOG_INFO, "no nsec3params in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-			count++;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_CNAME) {
-			struct domain_cname *sdr = NULL;
-			if ((sdr = (struct domain_cname *)find_substruct(sdomain, INTERNAL_TYPE_CNAME)) == NULL) {
-				dolog(LOG_INFO, "no cnames in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-			count++;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_PTR) {
-			struct domain_ptr *sdr = NULL;
-			if ((sdr = (struct domain_ptr *)find_substruct(sdomain, INTERNAL_TYPE_PTR)) == NULL) {
-				dolog(LOG_INFO, "no ptrs in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-	
-			count++;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_NAPTR) {
-			struct domain_naptr *sdr = NULL;
-			if ((sdr = (struct domain_naptr *)find_substruct(sdomain, INTERNAL_TYPE_NAPTR)) == NULL) {
-				dolog(LOG_INFO, "no naptrs in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-
-			count += sdr->naptr_count;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_SRV) {
-			struct domain_srv *sdr = NULL;
-			if ((sdr = (struct domain_srv *)find_substruct(sdomain, INTERNAL_TYPE_SRV)) == NULL) {
-				dolog(LOG_INFO, "no srvs in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-			count += sdr->srv_count;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_SSHFP) {
-			struct domain_sshfp *sdr = NULL;
-			if ((sdr = (struct domain_sshfp *)find_substruct(sdomain, INTERNAL_TYPE_SSHFP)) == NULL) {
-				dolog(LOG_INFO, "no sshfps in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-			count += sdr->sshfp_count;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_TLSA) {
-			struct domain_tlsa *sdr = NULL;
-			if ((sdr = (struct domain_tlsa *)find_substruct(sdomain, INTERNAL_TYPE_TLSA)) == NULL) {
-				dolog(LOG_INFO, "no tlsas in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-		
-			count += sdr->tlsa_count;
 		}
-		if (sdomain->flags & DOMAIN_HAVE_DS) {
-			struct domain_ds *sdr = NULL;
-			if ((sdr = (struct domain_ds *)find_substruct(sdomain, INTERNAL_TYPE_DS)) == NULL) {
-				dolog(LOG_INFO, "no ds in zone!\n");
-				return -1;
+		if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
 			}
-
-			count += sdr->ds_count;
 		}
-
-		free(sdomain);
+		if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
+			}
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
+			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+				count++;
+			}
+		}
+		free(rbt);
 	}
 
 	printf("Records = %d , ", count);

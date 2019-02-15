@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dnssec.c,v 1.20 2019/02/05 09:48:31 pjp Exp $
+ * $Id: dnssec.c,v 1.21 2019/02/15 15:11:34 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -44,15 +44,15 @@ int insert_nsec3(char *zonename, char *domainname, char *dname, int dnamelen);
 char * find_next_closer_nsec3(char *zonename, int zonelen, char *hashname);
 char * find_match_nsec3(char *zonename, int zonelen, char *hashname);
 char * find_match_nsec3_ent(char *zonename, int zonelen, char *hashname);
-struct domain * find_nsec(char *name, int namelen, struct domain *sd, ddDB *db);
-struct domain * find_nsec3_match_qname(char *name, int namelen, struct domain *sd, ddDB *db);
-struct domain * find_nsec3_match_closest(char *name, int namelen, struct domain *sd, ddDB *db);
-struct domain * find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, ddDB *db);
+struct rbtree * find_nsec(char *name, int namelen, struct rbtree *rbt, ddDB *db);
+struct rbtree * find_nsec3_match_qname(char *name, int namelen, struct rbtree *, ddDB *db);
+struct rbtree * find_nsec3_match_closest(char *name, int namelen, struct rbtree *, ddDB *db);
+struct rbtree * find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *, ddDB *db);
 char * convert_name(char *name, int namelen);
 int nsec_comp(const void *a, const void *b);
 int nsec3_comp(const void *a, const void *b);
 int count_dots(char *name);
-struct domain * find_closest_encloser(ddDB *db, char *name, int namelen);
+struct rbtree * find_closest_encloser(ddDB *db, char *name, int namelen);
 char * find_next_closer_name(char *, int, char *, int, int *);
 char * hash_name(char *name, int len, struct nsec3param *n3p);
 char * base32hex_encode(u_char *input, int len);
@@ -62,12 +62,16 @@ void 	mysetbit(u_char *, int);
 extern int              get_record_size(ddDB *, char *, int);
 extern char *           dns_label(char *, int *);
 extern void             dolog(int, char *, ...);
-extern int              checklabel(ddDB *, struct domain *, struct domain *, struct question *);
+extern int              checklabel(ddDB *, struct rbtree *, struct rbtree *, struct question *);
 extern struct question  *build_fake_question(char *, int, u_int16_t);
 extern int              free_question(struct question *);
-extern void *           find_substruct(struct domain *, u_int16_t);
 extern int		check_ent(char *, int);
 extern int 		memcasecmp(u_char *, u_char *, int);
+
+extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
+extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
+extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
+extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 
 SLIST_HEAD(listhead, dnssecentry) dnssechead;
 
@@ -83,7 +87,7 @@ static struct dnssecentry {
 	char zone[DNS_MAXNAME];
 	int zonelen;
 	SLIST_ENTRY(dnssecentry) dnssec_entry;
-	TAILQ_HEAD(a, nsec3entry) nsec3head;
+	TAILQ_HEAD(aa, nsec3entry) nsec3head;
 } *dn, *dnp;
 
 
@@ -199,7 +203,7 @@ find_next_closer_nsec3(char *zonename, int zonelen, char *hashname)
 	
 	if (n3 == NULL) {
 		/* returning NULL is not recommended here */
-		ns3p = TAILQ_LAST(&dnp->nsec3head, a);
+		ns3p = TAILQ_LAST(&dnp->nsec3head, aa);
 		return (ns3p->domainname);
 	}
 
@@ -207,10 +211,10 @@ find_next_closer_nsec3(char *zonename, int zonelen, char *hashname)
 	dolog(LOG_INFO, "resolved at %s\n", n3->domainname);
 #endif
 
-	if ((ns3p = TAILQ_PREV(n3, a, nsec3_entries)) != NULL) {
+	if ((ns3p = TAILQ_PREV(n3, aa, nsec3_entries)) != NULL) {
 		return (ns3p->domainname);
 	} else {
-		ns3p = TAILQ_LAST(&dnp->nsec3head, a);
+		ns3p = TAILQ_LAST(&dnp->nsec3head, aa);
 		return (ns3p->domainname);
 	}
 
@@ -241,9 +245,9 @@ find_match_nsec3_ent(char *zonename, int zonelen, char *hashname)
 	TAILQ_FOREACH(n3, &dnp->nsec3head, nsec3_entries) {
 		if (strncasecmp(hashname, n3->domainname, hashlen) < 0) {
 			if (count == 0) 
-				n3 = TAILQ_LAST(&dnp->nsec3head, a);
+				n3 = TAILQ_LAST(&dnp->nsec3head, aa);
 			else
-				n3 = TAILQ_PREV(n3,  a, nsec3_entries);
+				n3 = TAILQ_PREV(n3,  aa, nsec3_entries);
 			break;
 		} 
 		count++;
@@ -298,10 +302,9 @@ find_match_nsec3(char *zonename, int zonelen, char *hashname)
 
 /* FIND_NSEC  */
 /* finds the right nsec domainname in a zone */
-struct domain *
-find_nsec(char *name, int namelen, struct domain *sd, ddDB *db)
+struct rbtree *
+find_nsec(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
-	ddDBT key, data;
 	char *table, *tmp;
 	char *nsecname;
 	struct domainnames {
@@ -309,25 +312,30 @@ find_nsec(char *name, int namelen, struct domain *sd, ddDB *db)
 		char next[DNS_MAXNAME + 1];
 	} *dn;
 
-	struct domain *sd0;
-	struct domain_nsec *sdnsec;
+	struct rbtree *rbt0;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 	char *humanname;
-	char *backname;
 	char tmpname[DNS_MAXNAME];
 	int tmplen;
+	char *backname;
 	int backnamelen;
-	int rs, ret;
 	int i, names = 100;
 	int j;
 
 	humanname = convert_name(name, namelen);
 
-	if ((sdnsec = find_substruct(sd, INTERNAL_TYPE_NSEC)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) == NULL) {
 		free (humanname);
 		return (NULL);
 	}
-
 	
+	rrp = TAILQ_FIRST(&rrset->rr_head);
+	if (rrp == NULL) {
+		free(humanname);
+		return (NULL);
+	}
+
 	table = calloc(names, sizeof(struct domainnames));	
 	if (table == NULL) {
 		free (humanname);
@@ -335,55 +343,34 @@ find_nsec(char *name, int namelen, struct domain *sd, ddDB *db)
 	}
 
 	dn = (struct domainnames *)table;
-	strlcpy(dn->name, sd->zonename, DNS_MAXNAME + 1);
-	nsecname = convert_name(sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
+	strlcpy(dn->name, rbt->humanname, DNS_MAXNAME + 1);
+	nsecname = convert_name(((struct nsec *)rrp->rdata)->next_domain_name, ((struct nsec *)rrp->rdata)->ndn_len);
 	strlcpy(dn->next, nsecname, DNS_MAXNAME + 1);
 	
-	rs = get_record_size(db, sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
-	if (rs < 0) {
+	rbt0 = find_rrset(db, ((struct nsec *)rrp->rdata)->next_domain_name, ((struct nsec *)rrp->rdata)->ndn_len);
+	if (rbt0 == NULL) {
 		free (nsecname);
 		free (humanname);
 		free (table);
 		return (NULL);
 	}
 
-	if ((sd0 = calloc(1, rs)) == NULL) {
+	if ((rrset = find_rr(rbt0, DNS_TYPE_NSEC)) == NULL) {
 		free (nsecname);
 		free (humanname);
 		free (table);
+		free (rbt0);
 		return (NULL);
 	}
 
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-	
-	key.data = sdnsec->nsec.next_domain_name;
-	key.size = sdnsec->nsec.ndn_len;
-
-	data.data = NULL;
-	data.size = rs;
-
-	ret = db->get(db, &key, &data);	
-	if (ret != 0) {
-		free (nsecname);
-		free (humanname);
-		free (table);
-		free (sd0);
-		return (NULL);
-	}
-
-	memcpy(sd0, data.data, data.size);
-
-	if ((sdnsec = find_substruct(sd0, INTERNAL_TYPE_NSEC)) == NULL) {
-		free (nsecname);
-		free (humanname);
-		free (table);
-		free (sd0);
+	rrp = TAILQ_FIRST(&rrset->rr_head);
+	if (rrp == NULL) {
+		free(humanname);
 		return (NULL);
 	}
 
 	i = 1;
-	while (strcasecmp(nsecname, sd->zonename) != 0) {
+	while (strcasecmp(nsecname, rbt->humanname) != 0) {
 		/* grow our table */
 		if (i == names - 1) {
 			names += 100;
@@ -393,7 +380,7 @@ find_nsec(char *name, int namelen, struct domain *sd, ddDB *db)
 				free (nsecname);
 				free (humanname);
 				free (table);
-				free (sd0);
+				free (rbt0);
 				return (NULL);
 			}
 			table = tmp;
@@ -402,49 +389,27 @@ find_nsec(char *name, int namelen, struct domain *sd, ddDB *db)
 		dn = ((struct domainnames *)table) + i;
 		
 		free (nsecname);
-		strlcpy(dn->name, sd0->zonename, DNS_MAXNAME + 1);
-		nsecname = convert_name(sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
+		strlcpy(dn->name, rbt0->humanname, DNS_MAXNAME + 1);
+		nsecname = convert_name(((struct nsec *)rrp->rdata)->next_domain_name, ((struct nsec *)rrp->rdata)->ndn_len);
 		strlcpy(dn->next, nsecname, DNS_MAXNAME + 1);
 		
-		rs = get_record_size(db, sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
-		if (rs < 0) {
+		memcpy(tmpname, ((struct nsec *)rrp->rdata)->next_domain_name, ((struct nsec *)rrp->rdata)->ndn_len);
+		tmplen = ((struct nsec *)rrp->rdata)->ndn_len;
+
+		free (rbt0);
+
+		rbt0 = find_rrset(db, tmpname, tmplen);
+		if (rbt0 == NULL) {
+			free (humanname);
 			free (table);
+			free (rbt0);
 			return (NULL);
 		}
 
-		memcpy(tmpname, sdnsec->nsec.next_domain_name, sdnsec->nsec.ndn_len);
-		tmplen = sdnsec->nsec.ndn_len;
-
-		free (sd0);
-		if ((sd0 = calloc(1, rs)) == NULL) {
+		if ((rrset = find_rr(rbt0, DNS_TYPE_NSEC)) == NULL) {
 			free (humanname);
 			free (table);
-			return (NULL);
-		}
-
-		memset(&key, 0, sizeof(key));
-		memset(&data, 0, sizeof(data));
-		
-		key.data = tmpname;
-		key.size = tmplen;
-
-		data.data = NULL;
-		data.size = rs;
-
-		ret = db->get(db, &key, &data);	
-		if (ret != 0) {
-			free (humanname);
-			free (table);
-			free (sd0);
-			return (NULL);
-		}
-
-		memcpy(sd0, data.data, data.size);
-
-		if ((sdnsec = find_substruct(sd0, INTERNAL_TYPE_NSEC)) == NULL) {
-			free (humanname);
-			free (table);
-			free (sd0);
+			free (rbt0);
 			return (NULL);
 		}
 
@@ -480,43 +445,21 @@ find_nsec(char *name, int namelen, struct domain *sd, ddDB *db)
 	
 	/* free what we don't need */
 	free (humanname);
-	free (sd0);
+	free (rbt0);
 	
 	backname = dns_label(dn->name, &backnamelen);
 	free (table);
 	
-	rs = get_record_size(db, backname, backnamelen);
-	if (rs < 0) {
+
+	rbt0 = find_rrset(db, backname, backnamelen);
+	if (rbt0 == NULL) {
 		free (backname);
-		return (NULL);
-	}
-
-	if ((sd0 = calloc(1, rs)) == NULL) {
-		free (backname);
-		return (NULL);
-	}
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-	
-	key.data = backname;
-	key.size = backnamelen;
-
-	data.data = NULL;
-	data.size = rs;
-
-	ret = db->get(db, &key, &data);	
-	if (ret != 0) {
-		free (backname);
-		free (sd0);
+		free (rbt0);
 		return (NULL);
 	}
 	
-
-	memcpy(sd0, data.data, data.size);
 	free (backname);
-
-	return (sd0);
+	return (rbt0);
 }
 
 char *
@@ -676,17 +619,14 @@ find_next_closer_name(char *qname, int qlen, char *closestname, int clen, int *r
  * FIND_CLOSEST_ENCLOSER - find the closest encloser record
  */
 
-struct domain *
+struct rbtree *
 find_closest_encloser(ddDB *db, char *name, int namelen)
 {
-	struct domain *sd = NULL;
+	struct rbtree *rbt = NULL;
+	struct rrset *rrset = NULL;
 
 	int plen;
-	int ret = 0;
-	int rs;
 	
-	ddDBT key, data;
-
 	char *p;
 
 	p = name;
@@ -698,51 +638,25 @@ find_closest_encloser(ddDB *db, char *name, int namelen)
 
 
 	do {
-		rs = get_record_size(db, p, plen);
-		if (rs < 0) {
-			return NULL;
-		}
-
-		sd = calloc(rs, 1);
-		if (sd == NULL) 
-			return NULL;
-
-		memset(&key, 0, sizeof(key));
-		memset(&data, 0, sizeof(data));
-
-		key.data = (char *)p;
-		key.size = plen;
-
-		data.data = NULL;
-		data.size = rs;
-
-		ret = db->get(db, &key, &data);
-		if (ret != 0) {
+		rbt = find_rrset(db, p, plen);
+		if (rbt == NULL) {
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
-			free (sd);
 			continue;
 		}
 		
-		if (data.size != rs) {
-			dolog(LOG_INFO, "btree db is damaged, drop\n");
-			free (sd);
-			return (NULL);
-		}
-
-		memcpy((char *)sd, (char *)data.data, data.size);
-		if (sd->flags & DOMAIN_HAVE_NSEC3) {
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
-			free (sd);
+			free (rbt);
 			continue;
 		}
 
-		return (sd);
+		return (rbt);
 	} while (*p);
 
-	if (sd)
-		free (sd);
+	if (rbt)
+		free (rbt);
 
 	return NULL;
 }
@@ -938,45 +852,46 @@ base32hex_encode(u_char *input, int len)
  *
  */
 
-struct domain *
-find_nsec3_match_closest(char *name, int namelen, struct domain *sd, ddDB *db)
+struct rbtree *
+find_nsec3_match_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
-	ddDBT key, data;
-
 	char *hashname;
 	char *backname;
 	char *dname;
 	int backnamelen;
-	int rs, ret;
-	struct domain *sd0;
-	struct domain_nsec3param *n3p;
+	struct rbtree *rbt0;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
-	if ((n3p = find_substruct(sd, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL) {
+		return NULL;
+	}
+	if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
 		return NULL;
 	}
 
 	/* first off find  the next closer record */
-	sd0 = find_closest_encloser(db, name, namelen);
-	if (sd0 == NULL) {
+	rbt0 = find_closest_encloser(db, name, namelen);
+	if (rbt0 == NULL) {
 		return NULL;
 	}
 
 #if DEBUG
-	dolog(LOG_INFO, "next closer = %s\n", sd0->zonename);
+	dolog(LOG_INFO, "next closer = %s\n", rbt0->humanname);
 #endif
 
-	hashname = hash_name(sd0->zone, sd0->zonelen, &n3p->nsec3param);
+	hashname = hash_name(rbt0->zone, rbt0->zonelen, (struct nsec3param *)rrp->rdata);
 	if (hashname == NULL) {
 		dolog(LOG_INFO, "unable to get hashname\n");
-		free (sd0);
+		free (rbt0);
 		return NULL;
 	}
 
-	free (sd0);
+	free (rbt0);
 #if DEBUG
 	dolog(LOG_INFO, "hashname  = %s\n", hashname);
 #endif
-	dname = find_match_nsec3(sd->zone, sd->zonelen, hashname);
+	dname = find_match_nsec3(rbt->zone, rbt->zonelen, hashname);
 	
 	if (dname == NULL) {
 		return NULL;
@@ -989,82 +904,60 @@ find_nsec3_match_closest(char *name, int namelen, struct domain *sd, ddDB *db)
 #endif
 	backname = dns_label(dname, &backnamelen);
 	
-	rs = get_record_size(db, backname, backnamelen);
-	if (rs < 0) {
+	rbt0 = find_rrset(db, backname, backnamelen);
+	if (rbt0 == NULL) {
 		free (backname);
-		return (NULL);
-	}
-
-	if ((sd0 = calloc(1, rs)) == NULL) {
-		free (backname);
-		return (NULL);
-	}
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-	
-	key.data = backname;
-	key.size = backnamelen;
-
-	data.data = NULL;
-	data.size = rs;
-
-	ret = db->get(db, &key, &data);	
-	if (ret != 0) {
-		free (backname);
-		free (sd0);
 		return (NULL);
 	}
 	
-
-	memcpy(sd0, data.data, data.size);
 	free (backname);
 
 #ifdef DEBUG
-	dolog(LOG_INFO, "returning %s\n", sd0->zonename);
+	dolog(LOG_INFO, "returning %s\n", rbt0->humanname);
 #endif
-	return (sd0);
+	return (rbt0);
 }
 
 /*
  * FIND_NSEC3_WILDCARD_CLOSEST - finds the right nsec3 domainname in a zone 
  * 
  */
-struct domain *
-find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, ddDB *db)
+struct rbtree *
+find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
-	ddDBT key, data;
-
 	char *hashname;
 	char *backname;
 	char *dname;
 	char wildcard[DNS_MAXNAME + 1];
 	int backnamelen;
-	int rs, ret;
-	struct domain *sd0;
-	struct domain_nsec3param *n3p;
+	struct rbtree *rbt0 = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
-	if ((n3p = find_substruct(sd, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL) {
+		return NULL;
+	}
+	if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
 		return NULL;
 	}
 
 	/* first off find  the next closer record */
-	sd0 = find_closest_encloser(db, name, namelen);
-	if (sd0 == NULL) {
+	rbt0 = find_closest_encloser(db, name, namelen);
+	if (rbt0 == NULL) {
 		return NULL;
 	}
 
 #if DEBUG
-	dolog(LOG_INFO, "next closer = %s\n", sd0->zonename);
+	dolog(LOG_INFO, "next closer = %s\n", rbt0->humanname);
 #endif
 
-	snprintf(wildcard, sizeof(wildcard), "*.%s", sd0->zonename);
+	snprintf(wildcard, sizeof(wildcard), "*.%s", rbt0->humanname);
 	backname = dns_label(wildcard, &backnamelen);
 
-	hashname = hash_name(backname, backnamelen, &n3p->nsec3param);
+	hashname = hash_name(backname, backnamelen, (struct nsec3param *)rrp->rdata);
 	if (hashname == NULL) {
 		dolog(LOG_INFO, "unable to get hashname\n");
-		free (sd0);
+		free (rbt0);
 		return NULL;
 	}
 
@@ -1072,94 +965,73 @@ find_nsec3_wildcard_closest(char *name, int namelen, struct domain *sd, ddDB *db
 	dolog(LOG_INFO, "hashname  = %s\n", hashname);
 #endif
 	
-	dname = find_next_closer_nsec3(sd->zone, sd->zonelen, hashname);
+	dname = find_next_closer_nsec3(rbt->zone, rbt->zonelen, hashname);
 	
 	/* found it, get it via db after converting it */	
 	
 	/* free what we don't need */
-	free (sd0);
+	free (rbt0);
 	
 #ifdef DEBUG
 	dolog(LOG_INFO, "converting %s\n", dname);
 #endif
 	backname = dns_label(dname, &backnamelen);
 	
-	rs = get_record_size(db, backname, backnamelen);
-	if (rs < 0) {
+	rbt0 = find_rrset(db, backname, backnamelen);
+	if (rbt0 == NULL) {
 		free (backname);
-		return (NULL);
-	}
-
-	if ((sd0 = calloc(1, rs)) == NULL) {
-		free (backname);
-		return (NULL);
-	}
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-	
-	key.data = backname;
-	key.size = backnamelen;
-
-	data.data = NULL;
-	data.size = rs;
-
-	ret = db->get(db, &key, &data);	
-	if (ret != 0) {
-		free (backname);
-		free (sd0);
 		return (NULL);
 	}
 	
 
-	memcpy(sd0, data.data, data.size);
 	free (backname);
 
 #ifdef DEBUG
-	dolog(LOG_INFO, "returning %s\n", sd0->zonename);
+	dolog(LOG_INFO, "returning %s\n", rbt0->humanname);
 #endif
-	return (sd0);
+	return (rbt0);
 }
 
 /*
  * FIND_NSEC3_COVER_NEXT_CLOSER - finds the right nsec3 domainname in a zone 
  * 
  */
-struct domain *
-find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, ddDB *db)
+struct rbtree *
+find_nsec3_cover_next_closer(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
-	ddDBT key, data;
-
 	char *hashname;
 	char *backname;
 	char *dname;
 	int backnamelen;
-	int rs, ret;
-	struct domain *sd0;
-	struct domain_nsec3param *n3p;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 	char *ncn;
 	int ncnlen;
+	struct rbtree *rbt0;
 
-	if ((n3p = find_substruct(sd, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL) {
+		return NULL;
+	}
+	if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
 		return NULL;
 	}
 
 	/* first off find  the next closer record */
-	sd0 = find_closest_encloser(db, name, namelen);
-	if (sd0 == NULL) {
+	rbt0 = find_closest_encloser(db, name, namelen);
+	if (rbt0 == NULL) {
 		return NULL;
 	}
 
-	ncn = find_next_closer_name(name, namelen, sd0->zone, sd0->zonelen, &ncnlen);
+	ncn = find_next_closer_name(name, namelen, rbt0->zone, rbt0->zonelen, &ncnlen);
 	if (ncn == NULL) {
-		free(sd0);
+		free(rbt0);
 		return NULL;
 	}
 
-	hashname = hash_name(ncn, ncnlen, &n3p->nsec3param);
+	hashname = hash_name(ncn, ncnlen, (struct nsec3param *)rrp->rdata);
 	if (hashname == NULL) {
 		dolog(LOG_INFO, "unable to get hashname\n");
-		free (sd0);
+		free (rbt0);
 		return NULL;
 	}
 
@@ -1168,9 +1040,9 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, ddDB *d
 #endif
 	
 	/* free what we don't need */
-	free (sd0);
+	free (rbt0);
 
-	dname = find_next_closer_nsec3(sd->zone, sd->zonelen, hashname);
+	dname = find_next_closer_nsec3(rbt->zone, rbt->zonelen, hashname);
 	if (dname == NULL)
 		return NULL;
 
@@ -1181,42 +1053,20 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, ddDB *d
 
 	backname = dns_label(dname, &backnamelen);
 	
-	rs = get_record_size(db, backname, backnamelen);
-	if (rs < 0) {
+	if ((rbt0 = find_rrset(db, backname, backnamelen)) == NULL) {
 		free (backname);
-		return (NULL);
-	}
-
-	if ((sd0 = calloc(1, rs)) == NULL) {
-		free (backname);
-		return (NULL);
-	}
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-	
-	key.data = backname;
-	key.size = backnamelen;
-
-	data.data = NULL;
-	data.size = rs;
-
-	ret = db->get(db, &key, &data);	
-	if (ret != 0) {
-		free (backname);
-		free (sd0);
+		free (rbt0);
 		return (NULL);
 	}
 	
 
-	memcpy(sd0, data.data, data.size);
 	free (backname);
 
 #ifdef DEBUG
-	dolog(LOG_INFO, "returning %s\n", sd0->zonename);
+	dolog(LOG_INFO, "returning %s\n", rbt0->humanname);
 #endif
 
-	return (sd0);
+	return (rbt0);
 }
 
 /*
@@ -1224,24 +1074,25 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct domain *sd, ddDB *d
  *
  */
 
-struct domain *
-find_nsec3_match_qname(char *name, int namelen, struct domain *sd, ddDB *db)
+struct rbtree *
+find_nsec3_match_qname(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
-	ddDBT key, data;
-
 	char *hashname;
 	char *backname;
 	char *dname;
 	int backnamelen;
-	int rs, ret;
-	struct domain *sd0;
-	struct domain_nsec3param *n3p;
+	struct rbtree *rbt0;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
 
-	if ((n3p = find_substruct(sd, INTERNAL_TYPE_NSEC3PARAM)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL) {
+		return NULL;
+	}
+	if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
 		return NULL;
 	}
 
-	hashname = hash_name(name, namelen,  &n3p->nsec3param);
+	hashname = hash_name(name, namelen,  (struct nsec3param *)rrp->rdata);
 	if (hashname == NULL) {
 		dolog(LOG_INFO, "unable to get hashname\n");
 		return NULL;
@@ -1252,9 +1103,9 @@ find_nsec3_match_qname(char *name, int namelen, struct domain *sd, ddDB *db)
 #endif
 
 	if (check_ent(name, namelen)) 
-		dname = find_match_nsec3_ent(sd->zone, sd->zonelen, hashname);	
+		dname = find_match_nsec3_ent(rbt->zone, rbt->zonelen, hashname);	
 	else
-		dname = find_match_nsec3(sd->zone, sd->zonelen, hashname);
+		dname = find_match_nsec3(rbt->zone, rbt->zonelen, hashname);
 	
 	if (dname == NULL)
 		return NULL;
@@ -1267,40 +1118,19 @@ find_nsec3_match_qname(char *name, int namelen, struct domain *sd, ddDB *db)
 
 	backname = dns_label(dname, &backnamelen);
 	
-	rs = get_record_size(db, backname, backnamelen);
-	if (rs < 0) {
+	rbt0 = find_rrset(db, backname, backnamelen);
+	if (rbt0 == NULL) {
 		free (backname);
-		return (NULL);
-	}
-
-	if ((sd0 = calloc(1, rs)) == NULL) {
-		free (backname);
-		return (NULL);
-	}
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-	
-	key.data = backname;
-	key.size = backnamelen;
-
-	data.data = NULL;
-	data.size = rs;
-
-	ret = db->get(db, &key, &data);	
-	if (ret != 0) {
-		free (backname);
-		free (sd0);
+		free (rbt0);
 		return (NULL);
 	}
 	
 
-	memcpy(sd0, data.data, data.size);
 	free (backname);
 
 #ifdef DEBUG
-	dolog(LOG_INFO, "returning %s\n", sd0->zonename);
+	dolog(LOG_INFO, "returning %s\n", rbt0->humanname);
 #endif
 
-	return (sd0);
+	return (rbt0);
 }
