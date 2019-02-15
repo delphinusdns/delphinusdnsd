@@ -3,7 +3,7 @@ Please see http://delphinusdns.org for updates/news.
 
 For 1.4.0 release
 - a github mirrored copy
-- fix the DNSSEC code so that a KSK key rollover is allowed
+- fix the DNSSEC code so that a KSK key rollover is allowed	[DONE]
 - TSIG support would still be nice
 - CAA RR support
 - More ciphers for signing (GOST, ECDSA, Elliptic Curves)

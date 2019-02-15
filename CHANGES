@@ -1,6 +1,8 @@
 Changes in RELEASE_1_4 from RELEASE_1_3
 
-- ...
+- dddctl can now count records in configtest
+- dddctl can axfr zones, and query other dns data
+- the database has been replaced with the 3G DB (3rd generation internal db)
 
 Changes in RELEASE_1_3 from RELEASE_1_2
 - created a "zinclude" config, which will only allow zone files to be 
