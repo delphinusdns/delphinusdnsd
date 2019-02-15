@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.19 2019/02/15 15:11:34 pjp Exp $
+ * $Id: additional.c,v 1.20 2019/02/15 18:47:43 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -410,9 +410,10 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int tmplen, rroffset;
+	int rrsig_count = 0;
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) == NULL)
-		goto out;
+		return 0;
 
 	rroffset = offset;
 
@@ -432,10 +433,14 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 		return 0;
 	}
 
+	rrsig_count = 0;
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 		if (inttype != ((struct rrsig *)rrp->rdata)->type_covered)
 			continue;
 
+		if (rrsig_count++ != count)
+			continue;
+			
 		answer = (struct answer *)&reply[offset];
 		answer->type = htons(DNS_TYPE_RRSIG);
 		answer->class = htons(DNS_CLASS_IN);
@@ -463,11 +468,14 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 
 		memcpy(&reply[offset], ((struct rrsig *)rrp->rdata)->signature, ((struct rrsig *)rrp->rdata)->signature_len);
 		offset += ((struct rrsig *)rrp->rdata)->signature_len;
+
+		break;
 	}
 
+	if (rrp == NULL)
+		return 0;
 
 	answer->rdlength = htons((offset - rroffset) + 18);
-out:
 	return (offset);
 
 }
