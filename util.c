@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.18 2019/02/15 19:46:58 pjp Exp $
+ * $Id: util.c,v 1.19 2019/02/15 20:30:11 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -65,6 +65,7 @@ extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 extern int display_rr(struct rrset *rrset);
 
+
 /* internals */
 struct typetable {
 	char *type;
@@ -92,7 +93,7 @@ struct typetable {
 	{ NULL, 0}
 };
 
-struct rrtab myrrtab[] =  { 
+static struct rrtab myrrtab[] =  { 
  { "a",         DNS_TYPE_A, 		DNS_TYPE_A } ,
  { "aaaa",      DNS_TYPE_AAAA,		DNS_TYPE_AAAA },
  { "cname",     DNS_TYPE_CNAME, 	DNS_TYPE_CNAME },
@@ -114,8 +115,6 @@ struct rrtab myrrtab[] =  {
  { "tlsa", 	DNS_TYPE_TLSA,		DNS_TYPE_TLSA },
  { "txt",       DNS_TYPE_TXT,		DNS_TYPE_TXT },
 };
-
-
 
 /*
  * LABEL_COUNT - count the labels and return that number

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.50 2019/02/15 19:48:29 pjp Exp $
+ * $Id: dddctl.c,v 1.51 2019/02/15 20:30:11 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -173,7 +173,6 @@ struct _mycmdtab {
 	{ "restart", restart },
 	{ NULL, NULL }
 };
-
 
 #define KEYTYPE_NONE	0
 #define KEYTYPE_KSK 	1
@@ -6878,7 +6877,7 @@ dig(int argc, char *argv[])
 		if (format & ZONE_FORMAT)
 			answers--;
 
-		fprintf(f, ";; XFR size %d records (segments %d, bytes %d)\n", 
+		fprintf(f, ";; XFR size %d records (messages %d, bytes %d)\n", 
 			answers, segment, bytes_received);
 	} else {
 		fprintf(f, ";; MSG SIZE  rcvd: %d\n", bytes_received);
@@ -8424,84 +8423,9 @@ count_db(ddDB *db)
 		memcpy((char *)rbt, (char *)n->data, n->datalen);
 
 
-		if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
+		TAILQ_FOREACH(rrset, &rbt->rrset_head, entries) {
 			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
-			}
-		}
-		if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
-			TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-				count++;
+					count++;
 			}
 		}
 		free(rbt);
