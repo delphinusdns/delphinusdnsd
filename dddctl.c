@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.48 2019/02/15 15:11:34 pjp Exp $
+ * $Id: dddctl.c,v 1.49 2019/02/15 17:15:14 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -282,6 +282,9 @@ extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t);
 extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t);
+
+extern int                      memcasecmp(u_char *, u_char *, int);
+
 
 extern int dnssec;
 
@@ -1004,7 +1007,7 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 	
 	struct node *n, *nx;
 	struct question *q;
-	struct rbtree *rbt;
+	struct rbtree *rbt0, *rbt;
 	
 	char replystring[512];
 	char *dnsname;
@@ -1025,11 +1028,11 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 		return -1;
 	}
 
-	if ((rbt = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
+	if ((rbt0 = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
 		return -1;
 	}
 
-	if (print_rbt(of, rbt) < 0) {
+	if (print_rbt(of, rbt0) < 0) {
 		fprintf(stderr, "print_rbt error\n");
 		return -1;
 	}
@@ -1047,7 +1050,8 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 
 		memcpy((char *)rbt, (char *)n->data, n->datalen);
 
-		if (strcmp(rbt->humanname, zonename) == 0) {
+		if (rbt->zonelen == rbt0->zonelen && 
+			memcasecmp(rbt->zone, rbt0->zone, rbt->zonelen) == 0) {
 			free(rbt);
 			continue;
 		}
@@ -6460,7 +6464,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		}
 		fprintf(of, "  %s,cname,%d,%s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct ds *)rrp->rdata)->ttl, 
+				((struct cname *)rrp->rdata)->ttl, 
 				convert_name(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen));
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
@@ -7816,7 +7820,7 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 	
 	struct node *n, *nx;
 	struct question *q;
-	struct rbtree *rbt = NULL;
+	struct rbtree *rbt = NULL, *rbt0 = NULL;
 	
 	
 	char replystring[512];
@@ -7850,24 +7854,25 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 	j = 0;
 	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
 		rs = n->datalen;
-		if ((rbt = calloc(1, rs)) == NULL) {
+		if ((rbt0 = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			exit(1);
 		}
 
-		memcpy((char *)rbt, (char *)n->data, n->datalen);
+		memcpy((char *)rbt0, (char *)n->data, n->datalen);
 
-		if (strcmp(convert_name(rbt->zone, rbt->zonelen), zonename) == 0) {
-			free(rbt);
+		if (rbt->zonelen == rbt0->zonelen && 
+			memcasecmp(rbt->zone, rbt0->zone, rbt->zonelen) == 0) {
+			free(rbt0);
 			continue;
 		}
 
-		if (print_rbt_bind(of, rbt) < 0) {
+		if (print_rbt_bind(of, rbt0) < 0) {
 			fprintf(stderr, "print_rbt_bind error\n");
 			return -1;
 		}
 
-		free(rbt);
+		free(rbt0);
 
 		j++;
 	} 
