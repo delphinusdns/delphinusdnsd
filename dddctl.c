@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.49 2019/02/15 17:15:14 pjp Exp $
+ * $Id: dddctl.c,v 1.50 2019/02/15 19:48:29 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -6912,8 +6912,6 @@ connect_server(char *nameserver, int port, u_int32_t format)
 	while (setsockopt(so, SOL_SOCKET, SO_RCVBUF, &window, sizeof(window)) != -1)
 		window <<= 1;
 
-	printf("receive window set to %d bytes\n", window >> 1);
-	
 
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
