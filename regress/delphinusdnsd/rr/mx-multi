@@ -1,0 +1,15 @@
+version "9";
+options "cool stuff" {
+	bind 127.0.0.1;
+	port 4053;
+	log;
+}
+
+
+zone "centroid.eu" {
+  centroid.eu,soa,3600,uranus.centroid.eu.,pjp.solarscale.de.,2014051701,3600,1800,7200,3600
+  proteus.centroid.eu,a,3600,127.0.0.1
+  amoebe.centroid.eu,a,3600,127.0.0.1
+  centroid.eu.,mx,3600,10,proteus.centroid.eu.
+  centroid.eu.,mx,3600,20,amoebe.centroid.eu.
+}

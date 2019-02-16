@@ -14,7 +14,7 @@ fi
 (delphinusdnsd  -dvvv -l -f `pwd`/$i -s `pwd`/control.sock > output  2>&1 ) &
 
 sleep 3
-dddctl stop -s `pwd`/control.sock
+dddctl stop -s `pwd`/control.sock  >/dev/null 2>&1
 sleep 3
 
 
