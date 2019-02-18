@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.19 2019/02/15 20:30:11 pjp Exp $
+ * $Id: util.c,v 1.20 2019/02/18 14:59:55 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -64,6 +64,7 @@ extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 extern int display_rr(struct rrset *rrset);
+extern int 	check_ent(char *, int);
 
 
 /* internals */
@@ -245,6 +246,11 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 
 	*returnval = 0;
 	if ((rbt = find_rrset(db, p, plen)) == NULL) {
+		if (check_ent(p, plen) == 1) {
+			*lzerrno = ERR_NODATA;
+			*returnval = -1;
+			return NULL;
+		}
 nsec3:
 		/*
 		 * We have a condition where a record does not exist but we

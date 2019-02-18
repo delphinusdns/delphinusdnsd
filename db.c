@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.6 2019/02/15 15:11:34 pjp Exp $
+ * $Id: db.c,v 1.7 2019/02/18 14:59:55 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -40,6 +40,8 @@ struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 int display_rr(struct rrset *rrset);
 int rotate_rr(struct rrset *rrset);
+
+extern void      dolog(int, char *, ...);
 
 extern char * convert_name(char *, int);
 
@@ -126,6 +128,7 @@ dddbget(ddDB *db, ddDBT *key, ddDBT *data)
 {
 	struct node find, *res;
 	
+	memset(&find, 0, sizeof(struct node));
 	strlcpy(find.domainname, key->data, sizeof(find.domainname));
 	find.len = key->size;
 
@@ -230,6 +233,9 @@ find_rrset(ddDB *db, char *name, int len)
 	static struct rbtree *rb;
 	ddDBT key, data;
 
+	if (name == NULL || len == 0)
+		return NULL;
+
 	memset(&key, 0, sizeof(key));
 	memset(&data, 0, sizeof(data));
 
@@ -242,6 +248,7 @@ find_rrset(ddDB *db, char *name, int len)
 
 	if ((rb = calloc(1, sizeof(struct rbtree))) == NULL)
 		return NULL;
+
 
 	memcpy((char *)rb, (char *)data.data, sizeof(struct rbtree));
 

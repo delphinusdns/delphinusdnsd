@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.52 2019/02/18 11:16:49 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.53 2019/02/18 14:59:55 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -1393,6 +1393,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 
 	ssize_t n, datalen;
 	
+
 	replybuf = calloc(1, 65536);
 	if (replybuf == NULL) {
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
@@ -1794,83 +1795,78 @@ axfrentry:
 						goto udpout;
 						break;
 					case ERR_NXDOMAIN:
-						/* check if our question is for an ENT */
-						if (check_ent(question->hdr->name, question->hdr->namelen) == 1) {
-							if (dnssec) {
-								goto udpnoerror;
-							} else {
-								snprintf(replystring, DNS_MAXNAME, "NODATA");
-								build_reply(&sreply, so, buf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_nodata(&sreply, NULL);
-								goto udpout;
-								break;
-							}	
-						} else {
-							goto udpnxdomain;
-						}
-					case ERR_NOERROR:
-							/*
-							 * this is hackish not sure if this should be here
-							 */
-
-udpnoerror:
-
-							snprintf(replystring, DNS_MAXNAME, "NOERROR");
-
-							/*
-							 * lookup an authoritative soa
-							 */
-
-							if (rbt0) {
-								free (rbt0);
-								rbt0 = NULL;
-							}
-						
-							rbt0 = get_soa(cfg->db, question);
-							if (rbt0 != NULL) {
-
-									build_reply(&sreply, so, buf, len, question, from, \
-										fromlen, rbt0, NULL, aregion, istcp, 0, 
-										NULL, replybuf);
-
-									slen = reply_noerror(&sreply, cfg->db);
-							} 
-							goto udpout;
-					}
-				}
-
-				switch (type0) {
-				case 0:
-udpnxdomain:
-						if (check_ent(question->hdr->name, question->hdr->namelen) == 1) {
-							if (dnssec) {
-								goto udpnoerror;
-							} else {
-								snprintf(replystring, DNS_MAXNAME, "NODATA");
-								build_reply(&sreply, so, buf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_nodata(&sreply, NULL);
-								goto udpout;
-							}	
-						}
-
 						/*
 						 * lookup_zone could not find an RR for the
 						 * question at all -> nxdomain
 						 */
 						snprintf(replystring, DNS_MAXNAME, "NXDOMAIN");
 
-						/* 
-						 * lookup an authoritative soa 
-						 */
+					       /*
+					 	* lookup an authoritative soa 
+					 	*/
 					
 						if (rbt0 != NULL) {
-								build_reply(&sreply, so, buf, len, question, from, \
-								fromlen, rbt0, NULL, aregion, istcp, \
-								0, NULL, replybuf);
+							build_reply(&sreply, so, buf, len, question, from, \
+							fromlen, rbt0, NULL, aregion, istcp, \
+							0, NULL, replybuf);
 
-								slen = reply_nxdomain(&sreply, cfg->db);
+							slen = reply_nxdomain(&sreply, cfg->db);
 						}
 						goto udpout;
+						break;
+
+					case ERR_NODATA:
+						if (rbt1) {
+							free(rbt1);
+							rbt1 = NULL;
+						}
+
+						rbt1 = get_soa(cfg->db, question);
+						if (rbt1 != NULL) {
+							snprintf(replystring, DNS_MAXNAME, "NODATA");
+							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, NULL, replybuf);
+							slen = reply_nodata(&sreply, cfg->db);
+						} else {
+							snprintf(replystring, DNS_MAXNAME, "DROP");
+						}
+						goto udpout;
+						break;
+
+					case ERR_NOERROR:
+						/*
+						 * this is hackish not sure if this should be here
+						 */
+
+						snprintf(replystring, DNS_MAXNAME, "NOERROR");
+
+						/*
+						 * lookup an authoritative soa
+						 */
+
+						if (rbt0) {
+							free (rbt0);
+							rbt0 = NULL;
+						}
+						
+						rbt0 = get_soa(cfg->db, question);
+						if (rbt0 != NULL) {
+							build_reply(&sreply, so, buf, len, question, from, \
+								fromlen, rbt0, NULL, aregion, istcp, 0, 
+								NULL, replybuf);
+
+							slen = reply_noerror(&sreply, cfg->db);
+						} 
+
+						goto udpout;
+					}
+				}
+
+				switch (type0) {
+				case 0:
+					/* XXX type0==0 replies were before
+					 * handled with nxdomain 
+					 */
+					break;
 				case DNS_TYPE_CNAME:
 					csd = find_rr(rbt0, DNS_TYPE_SOA);
 					if (csd == NULL)
@@ -2623,27 +2619,45 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						slen = reply_refused(&sreply, NULL);
 						goto tcpout;
 						break;
-					case ERR_NXDOMAIN:
-						/* check if our question is for an ENT */
-						if (check_ent(question->hdr->name, question->hdr->namelen) == 1) {
-							if (dnssec) {
-								goto tcpnoerror;
-							} else {
-								snprintf(replystring, DNS_MAXNAME, "NODATA");
-								build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_nodata(&sreply, NULL);
+					case ERR_NODATA:
+								if (rbt0) {
+									free(rbt0);
+									rbt0 = NULL;
+								}
+
+								rbt0 = get_soa(cfg->db, question);
+								if (rbt0 != NULL) {
+									snprintf(replystring, DNS_MAXNAME, "NODATA");
+									build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
+									slen = reply_nodata(&sreply, cfg->db);
+								} else {
+									snprintf(replystring, DNS_MAXNAME, "DROP");
+								}
+
 								goto tcpout;
 								break;
-							}	
-						} else {
-							goto tcpnxdomain;
-						}
+
+					case ERR_NXDOMAIN:
+							snprintf(replystring, DNS_MAXNAME, "NXDOMAIN");
+
+						/* 
+					   * lookup an authoritative soa 
+					 	 */
+						if (rbt0 != NULL) {
+			
+							build_reply(	&sreply, so, pbuf, len, question, 
+											from, fromlen, rbt0, NULL, 
+											aregion, istcp, 0, NULL,
+											replybuf);
+
+							slen = reply_nxdomain(&sreply, cfg->db);
+					 	}
+						goto tcpout;
 					case ERR_NOERROR:
 						/*
  						 * this is hackish not sure if this should be here
 						 */
 
-tcpnoerror:
 						snprintf(replystring, DNS_MAXNAME, "NOERROR");
 
 						/*
@@ -2672,39 +2686,10 @@ tcpnoerror:
 
 				switch (type0) {
 				case 0:
-					/* check for ents */
-					if (check_ent(question->hdr->name, question->hdr->namelen) == 1) {
-						if (dnssec) {
-							goto tcpnoerror;
-						} else {
-							snprintf(replystring, DNS_MAXNAME, "NODATA");
-							build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
-							slen = reply_nodata(&sreply, NULL);
-							goto tcpout;
-						}	
-					}
-
-
-					/*
-					 * lookup_zone could not find an RR for the
-					 * question at all -> nxdomain
+					/* XXX type0==0 replies were before
+					 * handled with nxdomain 
 					 */
-tcpnxdomain:
-					snprintf(replystring, DNS_MAXNAME, "NXDOMAIN");
-
-					/* 
-					 * lookup an authoritative soa 
-					 */
-					if (rbt0 != NULL) {
-			
-							build_reply(	&sreply, so, pbuf, len, question, 
-											from, fromlen, rbt0, NULL, 
-											aregion, istcp, 0, NULL,
-											replybuf);
-
-							slen = reply_nxdomain(&sreply, cfg->db);
-					}
-					goto tcpout;
+						break;
 				case DNS_TYPE_CNAME:
 					csd = find_rr(rbt0, DNS_TYPE_SOA);
 					if (csd == NULL)

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.67 2019/02/15 19:46:58 pjp Exp $
+ * $Id: reply.c,v 1.68 2019/02/18 14:59:55 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -4419,7 +4419,6 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 		
 	int rruniq = 0;
 
-
 	if (istcp) {
 		replysize = 65535;
 	}
@@ -6007,73 +6006,5 @@ reply_badvers(struct sreply *sreply, ddDB *db)
 int
 reply_nodata(struct sreply *sreply, ddDB *db)
 {
-	char *reply = sreply->replybuf;
-	struct dns_header *odh;
-	u_int16_t outlen;
-
-	int so = sreply->so;
-	char *buf = sreply->buf;
-	int len = sreply->len;
-	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
-	int istcp = sreply->istcp;
-	int replysize = 512;
-	int retlen = -1;
-
-	if (istcp) {
-		replysize = 65535;
-	}
-
-	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
-	
-	odh = (struct dns_header *)&reply[0];
-	outlen = sizeof(struct dns_header);
-
-	if (len > replysize) {
-		return (retlen);
-
-	}
-
-	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-
-	outlen += (q->hdr->namelen + 4);
-
-	SET_DNS_REPLY(odh);
-	SET_DNS_AUTHORITATIVE(odh);
-	SET_DNS_RCODE_NOERR(odh);
-	
-	HTONS(odh->query);
-
-	odh->question = htons(1);
-	odh->answer = 0;
-	odh->nsrr = 0;
-	odh->additional = 0;
-
-	if (istcp) {
-		char *tmpbuf;
-		u_int16_t *plen;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-		}
-	}
-
-	return (retlen);
+	return (reply_noerror(sreply, db));
 }

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dnssec.c,v 1.21 2019/02/15 15:11:34 pjp Exp $
+ * $Id: dnssec.c,v 1.22 2019/02/18 14:59:55 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -222,6 +222,7 @@ find_next_closer_nsec3(char *zonename, int zonelen, char *hashname)
 	return (NULL);
 }
 
+#if 0
 char * 
 find_match_nsec3_ent(char *zonename, int zonelen, char *hashname)
 {
@@ -263,6 +264,7 @@ find_match_nsec3_ent(char *zonename, int zonelen, char *hashname)
 
 	return (n3->domainname);
 }
+#endif
 
 char * 
 find_match_nsec3(char *zonename, int zonelen, char *hashname)
@@ -431,8 +433,7 @@ find_nsec(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 		dn = ((struct domainnames *)table) + j;
 		
 #if DEBUG
-		if (debug)
-			printf("%s\n", dn->name);
+		printf("%s\n", dn->name);
 #endif
 
 		if (strcmp(dn->next, ".") == 0)
@@ -1081,9 +1082,10 @@ find_nsec3_match_qname(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 	char *backname;
 	char *dname;
 	int backnamelen;
-	struct rbtree *rbt0;
+	struct rbtree *rbt0 = NULL;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL) {
 		return NULL;
@@ -1102,13 +1104,17 @@ find_nsec3_match_qname(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 	dolog(LOG_INFO, "hashname  = %s\n", hashname);
 #endif
 
+#if 0
 	if (check_ent(name, namelen)) 
 		dname = find_match_nsec3_ent(rbt->zone, rbt->zonelen, hashname);	
 	else
-		dname = find_match_nsec3(rbt->zone, rbt->zonelen, hashname);
+#endif
+
+	dname = find_match_nsec3(rbt->zone, rbt->zonelen, hashname);
 	
-	if (dname == NULL)
+	if (dname == NULL) {
 		return NULL;
+	}
 	
 	/* found it, get it via db after converting it */	
 	
@@ -1117,11 +1123,13 @@ find_nsec3_match_qname(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 #endif
 
 	backname = dns_label(dname, &backnamelen);
-	
+	if (backname == NULL) {
+		return NULL;
+	}
+
 	rbt0 = find_rrset(db, backname, backnamelen);
 	if (rbt0 == NULL) {
 		free (backname);
-		free (rbt0);
 		return (NULL);
 	}
 	
