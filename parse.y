@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.60 2019/02/15 19:46:58 pjp Exp $
+ * $Id: parse.y,v 1.61 2019/02/18 23:51:34 pjp Exp $
  */
 
 %{
@@ -2549,8 +2549,8 @@ fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerp
 	struct rbtree *rbt;
 	int converted_namelen;
 	char *converted_name;
-	char *p, *ep, save;
 	int len, i;
+	int ret;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2581,14 +2581,8 @@ fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerp
 		return -1;
 	}
 
-	p = fingerprint;
-	for (i = 0; i < len; i++) {
-		save = p[2];
-		p[2] = '\0';
-		sshfp->fingerprint[i] = strtol(p, &ep, 16);
-		p[2] = save;
-		p += 2;
-	}
+	memset(sshfp->fingerprint, 0, sizeof(sshfp->fingerprint));
+	ret = hex2bin(fingerprint, strlen(fingerprint), sshfp->fingerprint);
 
 	sshfp->ttl = myttl;
 

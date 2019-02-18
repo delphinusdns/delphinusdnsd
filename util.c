@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.20 2019/02/18 14:59:55 pjp Exp $
+ * $Id: util.c,v 1.21 2019/02/18 23:51:34 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -109,7 +109,7 @@ static struct rrtab myrrtab[] =  {
  { "nsec3", 	DNS_TYPE_NSEC3,		DNS_TYPE_NSEC3 },
  { "nsec3param", DNS_TYPE_NSEC3PARAM,	DNS_TYPE_NSEC3PARAM },
  { "ptr",       DNS_TYPE_PTR,		DNS_TYPE_PTR },
- { "rrsig", 	DNS_TYPE_RRSIG, 	-1 },
+ { "rrsig", 	DNS_TYPE_RRSIG, 	DNS_TYPE_RRSIG },
  { "soa",       DNS_TYPE_SOA, 		DNS_TYPE_SOA },
  { "srv",       DNS_TYPE_SRV, 		DNS_TYPE_SRV },
  { "sshfp", 	DNS_TYPE_SSHFP,		DNS_TYPE_SSHFP },
