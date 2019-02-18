@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.53 2019/02/18 14:59:55 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.54 2019/02/18 15:04:21 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -1862,11 +1862,6 @@ axfrentry:
 				}
 
 				switch (type0) {
-				case 0:
-					/* XXX type0==0 replies were before
-					 * handled with nxdomain 
-					 */
-					break;
 				case DNS_TYPE_CNAME:
 					csd = find_rr(rbt0, DNS_TYPE_SOA);
 					if (csd == NULL)
@@ -2685,11 +2680,6 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				}
 
 				switch (type0) {
-				case 0:
-					/* XXX type0==0 replies were before
-					 * handled with nxdomain 
-					 */
-						break;
 				case DNS_TYPE_CNAME:
 					csd = find_rr(rbt0, DNS_TYPE_SOA);
 					if (csd == NULL)
