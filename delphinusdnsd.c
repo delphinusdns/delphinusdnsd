@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.51 2019/02/18 11:14:14 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.52 2019/02/18 11:16:49 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -2597,6 +2597,15 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					break;
 				}
 
+				if (ntohs(question->hdr->qclass) == DNS_CLASS_CH &&
+					ntohs(question->hdr->qtype) == DNS_TYPE_TXT &&
+					strcasecmp(question->converted_name, "version.bind.") == 0) {
+						snprintf(replystring, DNS_MAXNAME, "VERSION");
+						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+						slen = reply_version(&sreply, NULL);
+						goto tcpout;
+				}
+
 				rbt0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring);
 				if (type0 < 0) {
 	
@@ -2609,14 +2618,6 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						goto tcpout;
 
 					case ERR_REFUSED:
-						if (ntohs(question->hdr->qclass) == DNS_CLASS_CH &&
-							ntohs(question->hdr->qtype) == DNS_TYPE_TXT &&
-								strcasecmp(question->converted_name, "version.bind.") == 0) {
-								snprintf(replystring, DNS_MAXNAME, "VERSION");
-								build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-								slen = reply_version(&sreply, NULL);
-								goto tcpout;
-						}
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_refused(&sreply, NULL);
