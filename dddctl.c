@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.53 2019/02/19 11:49:54 pjp Exp $
+ * $Id: dddctl.c,v 1.54 2019/02/19 11:58:59 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -6696,10 +6696,8 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\t-z ZSK\t\tuse provided ZSK zone-signing keyname\n");	
 		return 0;
 	} else if (argc == 2 && strcmp(argv[1], "query") == 0) {
-		fprintf(stderr, "usage: dddctl query [-46BDITZ] [-@ server] [-P port] [-p file] name command\n");
+		fprintf(stderr, "usage: dddctl query [-BDITZ] [-@ server] [-P port] [-p file] [-Q server] name command\n");
 		fprintf(stderr, "\t-@ server\t\tUse server ip.\n");
-		fprintf(stderr, "\t-4\t\tUse IPv4 only.\n");
-		fprintf(stderr, "\t-6\t\tUse IPv6 only.\n");
 		fprintf(stderr, "\t-B\t\tOutput as a BIND file.\n");
 		fprintf(stderr, "\t-D\t\tUse DNSSEC (DO bit) lookup.\n");
 		fprintf(stderr, "\t-I\t\tIndent output.\n");
@@ -6707,6 +6705,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\t-Z\t\tOutput as a zonefile.\n");
 		fprintf(stderr, "\t-P port\t\tUse specified port.\n");
 		fprintf(stderr, "\t-p file\t\tOutput to file.\n");
+		fprintf(stderr, "\t-Q server\t\tSynonymous with -@\n");
 		
 		return 0;
 	} else if (argc == 2) {
@@ -6715,7 +6714,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "usage: command [arg ...]\n");
 		fprintf(stderr, "\tbindfile zonename zonefile\n");
 		fprintf(stderr, "\tconfigtest [-c] [configfile]\n");
-		fprintf(stderr, "\tquery [-46BDITZ] [-@ server] [-P port] [-p file] name command\n");
+		fprintf(stderr, "\tquery [-BDITZ] [-@ server] [-P port] [-p file] [-Q server] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
@@ -6739,22 +6738,16 @@ dig(int argc, char *argv[])
 	char *outputfile = NULL;
 	char *domainname = NULL;
 	char *nameserver = "127.0.0.1";
-	int use_v4 = 0, use_v6 = 0;
 	u_int32_t format = 0;
 	u_int16_t port = 53;
 	int ch, so, ms;
 	int type = DNS_TYPE_A;
 
-	while ((ch = getopt(argc, argv, "@:46BDIP:TZp:")) != -1) {
+	while ((ch = getopt(argc, argv, "@:BDIP:TZp:Q:")) != -1) {
 		switch (ch) {
 		case '@':
+		case 'Q':
 			nameserver = optarg;
-			break;
-		case '4':
-			use_v4 = 1;
-			break;
-		case '6':
-			use_v6 = 1;
 			break;
 		case 'B':
 			format |= BIND_FORMAT;
