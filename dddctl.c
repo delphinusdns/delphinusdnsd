@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.54 2019/02/19 11:58:59 pjp Exp $
+ * $Id: dddctl.c,v 1.55 2019/02/19 14:20:25 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -216,7 +216,9 @@ int insert_filter(char *, char *);
 int insert_whitelist(char *, char *);
 int insert_notifyslave(char *, char *);
 
-int *ptr = NULL;
+int illdestination;
+int *ptr = &illdestination;
+
 int notify = 0;
 int whitelist = 0;
 int bcount = 0;
