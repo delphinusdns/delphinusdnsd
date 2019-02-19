@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.21 2019/02/18 23:51:34 pjp Exp $
+ * $Id: util.c,v 1.22 2019/02/19 00:15:13 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -234,24 +234,23 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 
 	struct rbtree *rbt = NULL;
 	struct rrset *rrset = NULL;
-	int plen, onemore = 0;
-	int error;
+	struct rr *rrp = NULL;
+	int plen, error;
 
 	char *p;
 	
 	p = question->hdr->name;
 	plen = question->hdr->namelen;
-	onemore = 0;
-
 
 	*returnval = 0;
-	if ((rbt = find_rrset(db, p, plen)) == NULL) {
+	if ((rbt = find_rrset(db, p, plen)) == NULL ||
+		(rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
 		if (check_ent(p, plen) == 1) {
 			*lzerrno = ERR_NODATA;
 			*returnval = -1;
 			return NULL;
 		}
-nsec3:
+
 		/*
 		 * We have a condition where a record does not exist but we
 		 * move toward the apex of the record, and there may be 
@@ -279,8 +278,6 @@ nsec3:
 	snprintf(replystring, DNS_MAXNAME, "%s", rbt->humanname);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
-		struct rr *rrp;
-
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) != NULL) {
 			if (((struct ns *)(rrp->rdata))->ns_type > 0) {
 				*returnval = DNS_TYPE_NS;
@@ -288,10 +285,7 @@ nsec3:
 				return (rbt);
 			}
 		}
-	} else if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
-		goto nsec3;
 	} 
-
 
 	*returnval = check_qtype(rbt, ntohs(question->hdr->qtype), 0, &error);
 	if (*returnval == 0) {
