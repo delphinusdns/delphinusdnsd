@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.51 2019/02/15 20:30:11 pjp Exp $
+ * $Id: dddctl.c,v 1.52 2019/02/19 11:24:50 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -6106,6 +6106,8 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 	if (rrp2 == NULL)
 		return -1;
 
+	memset(&n3p, 0, sizeof(n3p));
+
 	n3p.algorithm = 1;	/* still in conformance with above */
 	n3p.flags = 0;
 	n3p.iterations = ((struct nsec3param *)rrp2->rdata)->iterations;
@@ -6176,7 +6178,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		printf("%s %s\n", buf, bitmap);
 #endif
 
-		n1 = malloc(sizeof(struct mynsec3));
+		n1 = calloc(1, sizeof(struct mynsec3));
 		if (n1 == NULL) {
 			dolog(LOG_INFO, "out of memory");
 			return -1;
@@ -6236,7 +6238,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			
 			bitmap[0] = '\0';
 
-			n1 = malloc(sizeof(struct mynsec3));
+			n1 = calloc(1, sizeof(struct mynsec3));
 			if (n1 == NULL) {
 				dolog(LOG_INFO, "out of memory");
 				return -1;
@@ -6275,6 +6277,15 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		if (np == NULL)
 			np = TAILQ_FIRST(&head);
 
+		/*
+		 * Below can happen for example when 2+ ENT's exist in the
+		 * same zonefile ie. _465._tcp.mail.tld, _25._tcp.mail.tld..
+		 * where they get sorted beside each other and thus have the
+		 * same hash, just skip those.  Funny thing is that it did
+		 * not get found when struct domain's were still used.. odd.
+		 */
+		if (strcmp(n2->hashname, np->hashname) == 0)
+			continue;
 #if 0
 		printf("%s next: %s %s\n", n2->hashname, np->hashname, n2->bitmap);
 #endif
