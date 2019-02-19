@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.9 2019/02/19 07:31:31 pjp Exp $
+ * $Id: db.c,v 1.10 2019/02/19 11:49:54 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -44,6 +44,9 @@ int rotate_rr(struct rrset *rrset);
 extern void      dolog(int, char *, ...);
 
 extern char * convert_name(char *, int);
+int domaincmp(struct node *e1, struct node *e2);
+
+
 
 int
 domaincmp(struct node *e1, struct node *e2)
@@ -56,12 +59,6 @@ domaincmp(struct node *e1, struct node *e2)
         	return (memcmp(e1->domainname, e2->domainname, e1->len));
 	}
 }
-
-
-RB_HEAD(domaintree, node) rbhead = RB_INITIALIZER(&rbhead);
-RB_PROTOTYPE(domaintree, node, rbentry, domaincmp)
-RB_GENERATE(domaintree, node, rbentry, domaincmp)
-
 
 
 ddDB *
@@ -79,6 +76,8 @@ dddbopen(void)
 	db->get = dddbget;
 	db->close = dddbclose;
 	db->offset = 0;
+
+	RB_INIT(&db->head);
 		
 	return (db);
 }
@@ -92,7 +91,7 @@ dddbput(ddDB *db, ddDBT *key, ddDBT *data)
 	strlcpy(find.domainname, key->data, sizeof(find.domainname));
 	find.len = key->size;
 
-	res = RB_FIND(domaintree, &rbhead, &find);
+	res = RB_FIND(domaintree, &db->head, &find);
 	if (res == NULL) {
 		/* does not exist, create it */
 		
@@ -112,7 +111,7 @@ dddbput(ddDB *db, ddDBT *key, ddDBT *data)
 		n->datalen = data->size;
 		memcpy(map, data->data, data->size);
 
-		RB_INSERT(domaintree, &rbhead, n);
+		RB_INSERT(domaintree, &db->head, n);
 	} else {
 		if (res->datalen != data->size)
 			return -1;
@@ -132,7 +131,7 @@ dddbget(ddDB *db, ddDBT *key, ddDBT *data)
 	strlcpy(find.domainname, key->data, sizeof(find.domainname));
 	find.len = key->size;
 
-	res = RB_FIND(domaintree, &rbhead, &find);
+	res = RB_FIND(domaintree, &db->head, &find);
 	if (res == NULL) {
 		return -1;
 	}

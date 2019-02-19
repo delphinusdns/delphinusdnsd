@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.14 2019/02/15 19:46:58 pjp Exp $
+ * $Id: ddd-db.h,v 1.15 2019/02/19 11:49:54 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -280,6 +280,19 @@ typedef struct {
 	char *data;
 } ddDBT;
 
+struct node {
+        RB_ENTRY(node) rbentry;		/* the node entry */
+	char domainname[DNS_MAXNAME + 1]; /* domain name key name */
+        int len;			/* length of domain name */
+	char *data;			/* data it points to */
+	size_t datalen;			/* the length of the data */
+};
+
+
+extern int domaincmp(struct node *e1, struct node *e2);
+
+RB_HEAD(domaintree, node);
+RB_GENERATE_STATIC(domaintree, node, rbentry, domaincmp)
 typedef struct __dddb {
 	int (*put)(struct __dddb *, ddDBT *, ddDBT *);
 	int (*get)(struct __dddb *, ddDBT *, ddDBT *);
@@ -288,6 +301,7 @@ typedef struct __dddb {
 	size_t offset;
 	size_t size;
 	char *nodes;
+	struct domaintree head;
 } ddDB; 
 
 
@@ -311,14 +325,6 @@ struct rbtree {
 	char humanname[DNS_MAXNAME + 1];
 
 	TAILQ_HEAD(, rrset) rrset_head;
-};
-
-struct node {
-        RB_ENTRY(node) rbentry;		/* the node entry */
-	char domainname[DNS_MAXNAME + 1]; /* domain name key name */
-        int len;			/* length of domain name */
-	char *data;			/* data it points to */
-	size_t datalen;			/* the length of the data */
 };
 
 struct rrtab {

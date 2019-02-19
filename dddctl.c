@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.52 2019/02/19 11:24:50 pjp Exp $
+ * $Id: dddctl.c,v 1.53 2019/02/19 11:49:54 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -286,11 +286,6 @@ extern int                      memcasecmp(u_char *, u_char *, int);
 
 
 extern int dnssec;
-
-extern int domaincmp(struct node *e1, struct node *e2);
-RB_HEAD(domaintree, node) rbhead;
-RB_GENERATE_STATIC(domaintree, node, rbentry, domaincmp)
-
 
 static struct raxfr_logic {
 	int rrtype;
@@ -1040,7 +1035,7 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 	memset(&data, 0, sizeof(data));
 
 	j = 0;
-	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 		rs = n->datalen;
 		if ((rbt = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
@@ -1422,7 +1417,7 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 
 	j = 0;
 
-	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 		rs = n->datalen;
 		if ((rbt = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
@@ -6117,7 +6112,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 
 	j = 0;
 
-	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 		rs = n->datalen;
 		if ((rbt = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
@@ -6210,7 +6205,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 
 	/* check ENT's which we'll create */
 
-	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 		rs = n->datalen;
 		if ((rbt = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
@@ -7860,7 +7855,7 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 	memset(&data, 0, sizeof(data));
 
 	j = 0;
-	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 		rs = n->datalen;
 		if ((rbt0 = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
@@ -8423,7 +8418,7 @@ count_db(ddDB *db)
 	int count = 0;
 	int rs;
 	
-	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 		rs = n->datalen;
 		if ((rbt = calloc(1, rs)) == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: ent.c,v 1.8 2019/02/15 15:11:34 pjp Exp $
+ * $Id: ent.c,v 1.9 2019/02/19 11:49:54 pjp Exp $
  */
 
 /*
@@ -59,10 +59,6 @@ static struct ententry {
 extern int domaincmp(struct node *e1, struct node *e2);
 
 
-RB_HEAD(domaintree, node) rbhead;
-RB_PROTOTYPE_STATIC(domaintree, node, rbentry, domaincmp)
-RB_GENERATE_STATIC(domaintree, node, rbentry, domaincmp)
-
 /*
  * INIT_ENTLIST - initialize the ent singly linked list
  */
@@ -75,7 +71,7 @@ init_entlist(ddDB *db)
 
 	SLIST_INIT(&enthead);
 
-	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 		rbt = (struct rbtree *)n->data;
 		ent2 = malloc(sizeof(struct ententry));
 		if (ent2 == NULL) {

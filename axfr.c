@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.20 2019/02/15 15:11:34 pjp Exp $
+ * $Id: axfr.c,v 1.21 2019/02/19 11:49:54 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -69,6 +69,7 @@ extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern int rotate_rr(struct rrset *rrset);
 
+extern int domaincmp(struct node *e1, struct node *e2);
 
 int notify = 0;				/* do not notify when set to 0 */
 
@@ -111,10 +112,6 @@ static struct notifyentry {
 
 extern int domaincmp(struct node *e1, struct node *e2);
 static int 	check_notifyreply(struct dns_header *, struct question *, struct sockaddr_storage *, int, struct notifyentry *, int);
-RB_HEAD(domaintree, node) rbhead;
-RB_PROTOTYPE_STATIC(domaintree, node, rbentry, domaincmp)
-RB_GENERATE_STATIC(domaintree, node, rbentry, domaincmp)
-
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list
@@ -905,7 +902,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		outlen = build_soa(db, (reply + 2), outlen, soa, question);
 		rrcount = 1;
 		
-		RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+		RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 			rs = n->datalen;
 			if ((rbt = calloc(1, sizeof(struct rbtree))) == NULL) {
 				dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
@@ -1294,7 +1291,7 @@ gather_notifydomains(ddDB *db)
 	memset(&key, 0, sizeof(key));	
 	memset(&data, 0, sizeof(data));
 	
-	RB_FOREACH_SAFE(n, domaintree, &rbhead, nx) {
+	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 		rbt = (struct rbtree *)n->data;
 
 		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
