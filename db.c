@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.7 2019/02/18 14:59:55 pjp Exp $
+ * $Id: db.c,v 1.8 2019/02/19 07:17:37 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -221,7 +221,7 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata)
 	myrr->rdata = rdata;
 	myrr->changed = time(NULL);
 
-	TAILQ_INSERT_HEAD(&rrset->rr_head, myrr, entries);
+	TAILQ_INSERT_TAIL(&rrset->rr_head, myrr, entries);
 
 	return (rbt);
 }
