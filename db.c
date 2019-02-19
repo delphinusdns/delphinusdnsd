@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.8 2019/02/19 07:17:37 pjp Exp $
+ * $Id: db.c,v 1.9 2019/02/19 07:31:31 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -156,7 +156,6 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata)
 	struct rrset *rrset = NULL;
 	struct rr *myrr = NULL;
 	ddDBT key, data;
-	int nc = 1;
 	char *humanname = NULL;
 
 
@@ -173,7 +172,6 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata)
 		humanname = convert_name(name, len);
 		strlcpy(rbt->humanname, humanname, sizeof(rbt->humanname));
 		TAILQ_INIT(&rbt->rrset_head);
-		nc = 1;
 	}
 	
 	rrset = find_rr(rbt, type);
@@ -182,8 +180,7 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata)
 		if (! rrset){
 			perror("calloc");
 
-			if (nc)
-				free(rbt);
+			free(rbt);
 			return NULL;
 		}
 
@@ -194,22 +191,22 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata)
 	}
 
 
-	if (nc) {
-		/* save this new rbtree (it changed) */
+	/* save this new rbtree (it changed) */
 
-		memset(&key, 0, sizeof(key));
-		memset(&data, 0, sizeof(data));
+	memset(&key, 0, sizeof(key));
+	memset(&data, 0, sizeof(data));
 
-		key.data = (char *)name;
-		key.size = len;
+	key.data = (char *)name;
+	key.size = len;
 
-		data.data = (void*)rbt;
-		data.size = sizeof(struct rbtree);
+	data.data = (void*)rbt;
+	data.size = sizeof(struct rbtree);
 
-		if (db->put(db, &key, &data) != 0) {
-			return NULL;
-		}
+	if (db->put(db, &key, &data) != 0) {
+		return NULL;
 	}
+
+	/* this sets up the RR */
 
 	myrr = (struct rr *)calloc(1, sizeof(struct rr));
 	if (! myrr) {
