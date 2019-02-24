@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.69 2019/02/24 07:14:02 pjp Exp $
+ * $Id: reply.c,v 1.70 2019/02/24 08:01:23 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -393,7 +393,7 @@ reply_nsec3param(struct sreply *sreply, ddDB *db)
 	a_count = 0;
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp != NULL)
+	if (rrp == NULL)
 		return -1;
 
 	saltlen = ((struct nsec3param *)rrp->rdata)->saltlen;
