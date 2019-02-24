@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.15 2019/02/19 11:49:54 pjp Exp $
+ * $Id: ddd-db.h,v 1.16 2019/02/24 07:14:02 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -47,6 +47,7 @@
 #define IMSG_PARSEREPLY_MESSAGE 5	/* return message from pledge parser */
 #define IMSG_SHUTDOWN_MESSAGE 6		/* shut the server down */
 #define IMSG_RELOAD_MESSAGE 7		/* reload/restart the server */
+#define IMSG_PARSEAUTH_MESSAGE	8	/* parse message with auth required */
 
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2

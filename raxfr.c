@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.10 2019/02/15 15:11:34 pjp Exp $
+ * $Id: raxfr.c,v 1.11 2019/02/24 07:14:02 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -54,7 +54,6 @@ u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t);
 int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t);
 
-static char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
 
 extern int                     memcasecmp(u_char *, u_char *, int);
 extern char * dns_label(char *, int *);
@@ -65,6 +64,7 @@ extern char *bitmap2human(char *, int);
 extern char *convert_name(char *, int);
 extern char *base32hex_encode(u_char *, int);
 extern u_int64_t timethuman(time_t);
+extern char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
 
 /* The following alias helps with bounds checking all input, needed! */
 
@@ -77,58 +77,6 @@ extern u_int64_t timethuman(time_t);
 } while (0)
 
 
-static char *
-expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *elen, int max)
-{
-	u_short tlen;
-	u_char *save = NULL;
-	u_int16_t *offset;
-
-	/* expand name */
-	while ((u_char)*p && p <= end) {
-		/* test for compression */
-		if ((*p & 0xc0) == 0xc0) {
-			/* do not allow recursive compress pointers */
-			if (! save) {
-				save = p + 2;
-			}
-			offset = (u_int16_t *)p;
-			/* do not allow forwards jumping */
-			if ((p - estart) <= (ntohs(*offset) & (~0xc000))) {
-				return NULL;
-			}
-
-			p = (estart + (ntohs(*offset) & (~0xc000)));
-		} else {
-			if (*elen + 1 >= max) {
-				return NULL;
-			}
-			expand[(*elen)] = *p;
-			(*elen)++;
-			tlen = *p;
-			p++;
-			memcpy(&expand[*elen], p, tlen);
-			p += tlen;
-			if (*elen + tlen >= max) {
-				return NULL;
-			}
-			*elen += tlen;
-		}
-	}
-
-	if (p > end) {
-		return NULL;
-	}
-
-	if (save == NULL) {
-		p++;
-		(*elen)++;
-		return (p);
-	} else {
-		(*elen)++;
-		return (save);
-	}
-}
 
 int
 raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soacount, u_int16_t *rdlen, u_int32_t format)

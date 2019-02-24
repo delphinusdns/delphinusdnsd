@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.54 2019/02/18 15:04:21 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.55 2019/02/24 07:14:02 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -48,13 +48,15 @@ extern int     	find_axfr(struct sockaddr_storage *, int);
 extern int 	find_filter(struct sockaddr_storage *, int);
 extern u_int8_t find_region(struct sockaddr_storage *, int);
 extern int 	find_whitelist(struct sockaddr_storage *, int);
+extern int      find_tsig(struct sockaddr_storage *, int);
 extern char *	get_dns_type(int, int);
 extern void 	init_dnssec(void);
 extern void 	init_region(void);
 extern int	init_entlist(ddDB *);
 extern void 	init_filter(void);
-extern void 	init_notifyslave(void);
 extern void 	init_whitelist(void);
+extern void 	init_tsig(void);
+extern void 	init_notifyslave(void);
 extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
 extern int 	memcasecmp(u_char *, u_char *, int);
 extern void 	receivelog(char *, int);
@@ -65,6 +67,7 @@ extern int 	reply_badvers(struct sreply *, ddDB *);
 extern int	reply_nodata(struct sreply *, ddDB *);
 extern int 	reply_cname(struct sreply *, ddDB *);
 extern int 	reply_fmterror(struct sreply *, ddDB *);
+extern int 	reply_notauth(struct sreply *, ddDB *);
 extern int 	reply_notimpl(struct sreply *, ddDB *);
 extern int 	reply_nxdomain(struct sreply *, ddDB *);
 extern int 	reply_noerror(struct sreply *, ddDB *);
@@ -90,7 +93,7 @@ extern char 	*rrlimit_setup(int);
 extern char 	*dns_label(char *, int *);
 extern void 	slave_shutdown(void);
 extern int 	get_record_size(ddDB *, char *, int);
-extern struct question		*build_question(char *, int, int);
+extern struct question		*build_question(char *, int, int, int);
 extern int			free_question(struct question *);
 extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
@@ -171,6 +174,7 @@ extern int axfrport;
 extern int ratelimit;
 extern int ratelimit_packets_per_second;
 extern int whitelist;
+extern int tsig;
 extern int dnssec;
 
 static int reload = 0;
@@ -432,6 +436,7 @@ main(int argc, char *argv[], char *environ[])
 	init_whitelist();
 	init_notifyslave();
 	init_dnssec();
+	init_tsig();
 
 	if (parse_file(db, conffile) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
@@ -1344,11 +1349,13 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	int filter = 0;
 	int rcheck = 0;
 	int blacklist = 1;
+	int require_tsig = 0;
 	int sp; 
 	int lfd;
 	int idata;
 
 	u_int32_t received_ttl;
+	u_int32_t imsg_type;
 	u_char *ttlptr;
 
 	u_int8_t aregion;			/* region where the address comes from */
@@ -1606,6 +1613,12 @@ axfrentry:
 					if (whitelist) {
 						blacklist = find_whitelist((struct sockaddr_storage *)sin6, AF_INET6);
 					}
+					
+					require_tsig = 0;
+					if (tsig) {
+						require_tsig = find_tsig((struct sockaddr_storage *)sin6, AF_INET6);
+					}
+
 				} else if (from->sa_family == AF_INET) {
 					is_ipv6 = 0;
 					
@@ -1624,6 +1637,11 @@ axfrentry:
 						blacklist = find_whitelist((struct sockaddr_storage *)sin, AF_INET);
 					}
 
+					require_tsig = 0;
+					if (tsig) {
+						require_tsig = find_tsig((struct sockaddr_storage *)sin, AF_INET);
+					}
+
 				} else {
 					dolog(LOG_INFO, "packet received on descriptor %u interface \"%s\" had weird address family (%u), drop\n", so, cfg->ident[i], from->sa_family);
 					goto drop;
@@ -1635,7 +1653,7 @@ axfrentry:
 					goto drop;
 				}
 
-				if (filter) {
+				if (filter && require_tsig == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 					slen = reply_refused(&sreply, NULL);
@@ -1659,8 +1677,12 @@ axfrentry:
 				}
 					
 				/* pjp - branch to pledge parser here */
-
-				if (imsg_compose(pibuf, IMSG_PARSE_MESSAGE, 
+				if (require_tsig)
+					imsg_type = IMSG_PARSEAUTH_MESSAGE;
+				else
+					imsg_type = IMSG_PARSE_MESSAGE;
+				
+				if (imsg_compose(pibuf, imsg_type, 
 					0, 0, -1, buf, len) < 0) {
 					dolog(LOG_INFO, "imsg_compose %s\n", strerror(errno));
 				}
@@ -1734,8 +1756,17 @@ axfrentry:
 										dolog(LOG_INFO, "on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
 										imsg_free(&imsg);
 										goto drop;
+									case PARSE_RETURN_NOTAUTH:
+										/* we didn't see a tsig header */
+										if (pq.tsigerrorcode == 1) {
+											build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+											slen = reply_refused(&sreply, NULL);
+											dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, received_ttl, aregion);
+											imsg_free(&imsg);
+											goto drop;
+										}
 									}
-								}	
+								}
 
 								question = convert_question(&pq);
 								if (question == NULL) {
@@ -1743,6 +1774,7 @@ axfrentry:
 									imsg_free(&imsg);
 									goto drop;
 								}
+
 											
 									
 								break;
@@ -1756,12 +1788,19 @@ axfrentry:
 
 				/* goto drop beyond this point should goto out instead */
 
+				if (require_tsig && question->tsigerrorcode != 0)  {
+					dolog(LOG_INFO, "on descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsigerrorcode, address);
+					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
+					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+					reply_notauth(&sreply, NULL);
+					goto udpout;
+				}
 				/* hack around whether we're edns version 0 */
 				if (question->ednsversion != 0) {
 					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 					slen = reply_badvers(&sreply, NULL);
 
-					dolog(LOG_INFO, "on descriptor %u interface \"%s\" edns version is %u from %s, replying badvers\n", so, cfg->ident[i], question->ednsversion, address);
+					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" edns version is %u from %s, replying badvers\n", so, cfg->ident[i], question->ednsversion, address);
 
 					snprintf(replystring, DNS_MAXNAME, "BADVERS");
 					goto udpout;
@@ -1960,7 +1999,7 @@ axfrentry:
 			
 		udpout:
 				if (lflag) {
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d) for \"%s\" type=%s class=%u, %s%sanswering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, received_ttl, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, " : ""), (question->dnssecok ? "dnssecok, " : "") , replystring, len, slen);
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d) for \"%s\" type=%s class=%u, %s%s%sanswering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, received_ttl, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, " : ""), (question->dnssecok ? "dnssecok, " : ""), (question->tsigverified ? "tsig, " : "") , replystring, len, slen);
 
 				}
 
@@ -2230,6 +2269,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	int lzerrno;
 	int filter = 0;
 	int blacklist = 1;
+	int require_tsig = 0;
 	int axfr_acl = 0;
 	int sp; 
 	int lfd;
@@ -2270,6 +2310,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	struct parsequestion pq;
 
 	ssize_t n, datalen;
+	u_int32_t imsg_type;
 
 	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]) < 0) {
 		dolog(LOG_INFO, "socketpair() failed\n");
@@ -2384,6 +2425,11 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						blacklist = find_whitelist((struct sockaddr_storage *)sin6, AF_INET6);
 					}
 					axfr_acl = find_axfr((struct sockaddr_storage *)sin6, AF_INET6);
+
+					require_tsig = 0;
+					if (tsig) {
+						require_tsig = find_tsig((struct sockaddr_storage *)sin6, AF_INET6);
+					}
 				} else if (from->sa_family == AF_INET) {
 					is_ipv6 = 0;
 					
@@ -2396,6 +2442,11 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						blacklist = find_whitelist((struct sockaddr_storage *)sin, AF_INET);
 					}
 					axfr_acl = find_axfr((struct sockaddr_storage *)sin, AF_INET);
+					
+					require_tsig = 0;
+					if (tsig) {
+						require_tsig = find_tsig((struct sockaddr_storage *)sin, AF_INET);
+					}
 				} else {
 					dolog(LOG_INFO, "TCP packet received on descriptor %u interface \"%s\" had weird address family (%u), drop\n", so, cfg->ident[i], from->sa_family);
 					close(so);
@@ -2403,7 +2454,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				}
 
 
-				if (filter) {
+				if (filter && require_tsig == 0) {
 					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, filter policy\n", so, cfg->ident[i], address);
 					close(so);
 					continue;
@@ -2474,8 +2525,13 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				}
 
 				/* pjp send to parseloop */
+				if (require_tsig)
+					imsg_type = IMSG_PARSEAUTH_MESSAGE;
+				else
+					imsg_type = IMSG_PARSE_MESSAGE;
+				
 
-				if (imsg_compose(pibuf, IMSG_PARSE_MESSAGE, 
+				if (imsg_compose(pibuf, imsg_type, 
 					0, 0, -1, pbuf, len) < 0) {
 					dolog(LOG_INFO, "imsg_compose %s\n", strerror(errno));
 				}
@@ -2548,6 +2604,14 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
 								imsg_free(&imsg);
 								goto drop;
+							case PARSE_RETURN_NOTAUTH:
+								if (pq.tsigerrorcode == 1) {
+									build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+									slen = reply_refused(&sreply, NULL);
+									dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, aregion);
+									imsg_free(&imsg);
+									goto drop;
+								}
 							}
 						}	
 
@@ -2568,6 +2632,15 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				/* pjp end of parseloop branch */
 				/* goto drop beyond this point should goto out instead */
 				fakequestion = NULL;
+
+				if (require_tsig && question->tsigerrorcode != 0)  {
+					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsigerrorcode, address);
+					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
+					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+					reply_notauth(&sreply, NULL);
+					goto tcpout;
+				}
+				/* hack around whether we're edns version 0 */
 
 				/*
 				 * we check now for AXFR's in the query and deny if not found
@@ -2792,7 +2865,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 			
 		tcpout:
 				if (lflag)
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s answering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", replystring, len, slen);
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsigverified ? "tsig, " : ""), replystring, len, slen);
 
 
 				if (fakequestion != NULL) {
@@ -2844,6 +2917,7 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	char *packet;
 	fd_set rset;
 	int sel;
+	int require_tsig = 0;
 	int fd = mybuf->fd;
 	ssize_t n, datalen;
 
@@ -2889,8 +2963,12 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 				}
 
 				datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+				require_tsig = 0;
 
 				switch (imsg.hdr.type) {
+				case IMSG_PARSEAUTH_MESSAGE:
+					require_tsig = 1;
+					/* FALLTHROUGH */
 				case IMSG_PARSE_MESSAGE:
 					memset(&pq, 0, sizeof(struct parsequestion));
 
@@ -2934,7 +3012,7 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 						break;
 					}
 
-					if ((question = build_question(packet, datalen, ntohs(dh->additional))) == NULL) {
+					if ((question = build_question(packet, datalen, ntohs(dh->additional), require_tsig)) == NULL) {
 						/* XXX reply nak here */
 						pq.rc = PARSE_RETURN_MALFORMED;
 						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
@@ -2953,6 +3031,18 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 					pq.dnssecok = question->dnssecok;
 					pq.badvers = question->badvers;
 					pq.rc = PARSE_RETURN_ACK;
+					pq.tsigverified = question->tsigverified;
+					pq.tsigerrorcode = question->tsigerrorcode;
+					if (pq.tsigerrorcode)
+						pq.rc = PARSE_RETURN_NOTAUTH;
+					memcpy(&pq.tsigmac, question->tsigmac, sizeof(pq.tsigmac));
+					pq.tsigmaclen = question->tsigmaclen;
+					memcpy(&pq.tsigkey, question->tsigkey, sizeof(pq.tsigkey));
+					pq.tsigkeylen = question->tsigkeylen;	
+					memcpy(&pq.tsigalg, question->tsigalg, sizeof(pq.tsigalg));
+					pq.tsigalglen = question->tsigalglen;
+					pq.tsig_timefudge = question->tsig_timefudge;
+					pq.tsigorigid = question->tsigorigid;
 
 					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&pq, sizeof(struct parsequestion));
 					msgbuf_write(&mybuf->w);
@@ -3020,6 +3110,19 @@ convert_question(struct parsequestion *pq)
 	q->rd = pq->rd;
 	q->dnssecok = pq->dnssecok;
 	q->badvers = pq->badvers;
+	q->tsigverified = pq->tsigverified;
+	q->tsigerrorcode = pq->tsigerrorcode;
+
+	memcpy(&q->tsigmac, pq->tsigmac, sizeof(q->tsigmac));
+	memcpy(&q->tsigalg, pq->tsigalg, sizeof(q->tsigalg));
+	memcpy(&q->tsigkey, pq->tsigkey, sizeof(q->tsigkey));
+
+	q->tsigmaclen = pq->tsigmaclen;
+	q->tsigalglen = pq->tsigalglen;
+	q->tsigkeylen = pq->tsigkeylen;
+
+	q->tsig_timefudge = pq->tsig_timefudge;
+	q->tsigorigid = pq->tsigorigid;
 
 	return (q);
 }

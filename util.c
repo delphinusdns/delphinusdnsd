@@ -27,13 +27,16 @@
  */
 
 /* 
- * $Id: util.c,v 1.22 2019/02/19 00:15:13 pjp Exp $
+ * $Id: util.c,v 1.23 2019/02/24 07:14:02 pjp Exp $
  */
 
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h" 
 #include "ddd-config.h"
+
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
 
 /* prototypes */
 
@@ -48,14 +51,17 @@ struct question		*build_fake_question(char *, int, u_int16_t);
 
 char 			*get_dns_type(int, int);
 int 			memcasecmp(u_char *, u_char *, int);
-struct question		*build_question(char *, int, int);
+struct question		*build_question(char *, int, int, int);
 int			free_question(struct question *);
 struct rrtab 	*rrlookup(char *);
+char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
+void log_diff(char *sha256, char *mac, int len);
 
 /* externs */
 
 extern int debug;
 extern int *ptr;
+extern int tsig;
 
 extern void 	dolog(int, char *, ...);
 
@@ -65,6 +71,7 @@ extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 extern int display_rr(struct rrset *rrset);
 extern int 	check_ent(char *, int);
+extern int     find_tsig_key(char *, int, char *, int);
 
 
 /* internals */
@@ -608,9 +615,10 @@ memcasecmp(u_char *b1, u_char *b2, int len)
  */
 
 struct question *
-build_question(char *buf, int len, int additional) 
+build_question(char *buf, int len, int additional, int require_tsig) 
 {
-	u_int i;
+	char pseudo_packet[4096];		/* for tsig */
+	u_int rollback, i;
 	u_int namelen = 0;
 	u_int16_t *qtype, *qclass;
 	u_int32_t ttl;
@@ -618,6 +626,7 @@ build_question(char *buf, int len, int additional)
 
 	char *p, *end_name = NULL;
 
+	struct dns_tsigrr *tsigrr = NULL;
 	struct dns_optrr *opt = NULL;
 	struct question *q = NULL;
 	struct dns_header *hdr = (struct dns_header *)buf;
@@ -756,26 +765,33 @@ build_question(char *buf, int len, int additional)
 		*p++ = '.';
 
 	*p = '\0';
+	i += (2 * sizeof(u_int16_t)) + 1;	/* trailing NUL and type,class*/
 
 	/* check for edns0 opt rr */
 	do {
 		/* if we don't have an additional section, break */
-		if (additional != 1)
+		if (additional < 1) 
 			break;
 
-		i += (2 * sizeof(u_int16_t)) + 1;
+		rollback = i;
 
 		/* check that the minimum optrr fits */
 		/* 10 */
-		if (i + sizeof(struct dns_optrr) > len)
+		if (i + sizeof(struct dns_optrr) > len) {
+			i = rollback;
 			break;
+		}
 
 		opt = (struct dns_optrr *)&buf[i];
-		if (opt->name[0] != 0)
+		if (opt->name[0] != 0) {
+			i = rollback;
 			break;
+		}
 
-		if (ntohs(opt->type) != DNS_TYPE_OPT)
+		if (ntohs(opt->type) != DNS_TYPE_OPT) {
+			i = rollback;
 			break;
+		}
 
 		/* RFC 3225 */
 		ttl = ntohl(opt->ttl);
@@ -788,7 +804,250 @@ build_question(char *buf, int len, int additional)
 
 		if (ttl & DNSSEC_OK)
 			q->dnssecok = 1;
+
+		i += 11 + ntohs(opt->rdlen);
+		// i += sizeof(struct dns_optrr);
+		additional--;
 	} while (0);
+	/* check for TSIG rr */
+	do {
+		u_int16_t *val16, *tsigerror, *tsigotherlen;
+		u_int16_t fudge;
+		u_int32_t *val32;
+		int elen, tsignamelen;
+		char *pb;
+		char expand[DNS_MAXNAME + 1];
+		char tsigkey[512];
+		u_char sha256[32];
+		u_int shasize = sizeof(sha256);
+		time_t now, tsigtime;
+		int pseudolen1, pseudolen2, ppoffset = 0;
+		int pseudolen3 , pseudolen4;
+
+		/* if we don't have an additional section, break */
+		if (additional < 1) {
+			break;
+		}
+
+		if (require_tsig == 0) {
+			break;
+		}
+
+		memset(q->tsigkey, 0, sizeof(q->tsigkey));
+		memset(q->tsigalg, 0, sizeof(q->tsigalg));
+		memset(q->tsigmac, 0, sizeof(q->tsigmac));
+		q->tsigkeylen = q->tsigalglen = q->tsigmaclen = 0;
+
+		/* the key name is parsed here */
+		rollback = i;
+		elen = 0;
+		memset(&expand, 0, sizeof(expand));
+		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
+		if (pb == NULL) {
+			free_question(q);
+			return NULL;
+		}
+		i = (pb - buf);
+		pseudolen1 = i;
+
+		memcpy(q->tsigkey, expand, elen);
+		q->tsigkeylen = elen;
+
+
+		if (i + 10 > len) {	/* type + class + ttl + rdlen == 10 */
+			i = rollback;
+			break;
+		}
+
+		/* type */
+		val16 = (u_int16_t *)&buf[i];
+		if (ntohs(*val16) != DNS_TYPE_TSIG) {
+			i = rollback;
+			break;
+		}
+		i += 2;
+		pseudolen2 = i;
+
+		/* we don't have any tsig keys configured, no auth done */
+		if (tsig == 0) {
+			i = rollback;
+			break;
+		}
+
+		q->tsigerrorcode = DNS_BADKEY;
+
+		if (require_tsig)
+			require_tsig = 0;
+
+
+		/* class */
+		val16 = (u_int16_t *)&buf[i];
+		if (ntohs(*val16) != DNS_CLASS_ANY) {
+			i = rollback;
+			break;
+		}
+		i += 2;
+	
+		/* ttl */
+		val32 = (u_int32_t *)&buf[i];	
+		if (ntohl(*val32) != 0) {
+			i = rollback;
+			break;
+		}
+		i += 4;	
+			
+		/* rdlen */
+		val16 = (u_int16_t *)&buf[i];
+		if (ntohs(*val16) != (len - (i + 2))) {
+			i = rollback;
+			break;
+		}
+		i += 2;
+		pseudolen3 = i;
+
+		/* the algorithm name is parsed here */
+		elen = 0;
+		memset(&expand, 0, sizeof(expand));
+		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
+		if (pb == NULL) {
+			free_question(q);
+			return NULL;
+		}
+		i = (pb - buf);
+		pseudolen4 = i;
+
+		memcpy(q->tsigalg, expand, elen);
+		q->tsigalglen = elen;
+			
+		/* now check for MAC type, since it's given once again */
+		if (elen == 11) {
+			if (expand[0] != 9 ||
+				memcasecmp(&expand[1], "hmac-sha1", 9) != 0) {
+				break;
+			}
+		} else if (elen == 13) {
+			if (expand[0] != 11 ||
+				memcasecmp(&expand[1], "hmac-sha256", 11) != 0) {
+				break;
+			}
+		} else if (elen == 26) {
+			if (expand[0] != 8 ||
+				memcasecmp(&expand[1], "hmac-md5", 8) != 0) {
+				break;
+			}
+		} else
+			break;
+
+		/* 
+		 * this is a delayed (moved down) check of the key, we don't
+		 * know if this is a TSIG packet until we've chekced the TSIG
+		 * type, that's why it's delayed...
+		 */
+
+		if ((tsignamelen = find_tsig_key(q->tsigkey, q->tsigkeylen, (char *)&tsigkey, sizeof(tsigkey))) < 0) {
+			/* we don't have the name configured, let it pass */
+			i = rollback;
+			break;
+		}
+		
+		if (i + sizeof(struct dns_tsigrr) > len) {
+			i = rollback;
+			break;
+		}
+
+		tsigrr = (struct dns_tsigrr *)&buf[i];
+
+		fudge = ntohs(tsigrr->timefudge & 0xffff);
+		tsigtime = ntohl((tsigrr->timefudge >> 16));
+
+		q->tsig_timefudge = tsigrr->timefudge;
+		
+		now = time(NULL);
+		/* outside our fudge window */
+		if (tsigtime < (now - fudge) || tsigtime > (now + fudge)) {
+			q->tsigerrorcode = DNS_BADTIME;
+			break;
+		}
+
+		i += (8 + 2);		/* timefudge + macsize */
+
+		if (ntohs(tsigrr->macsize) != 32) {
+			q->tsigerrorcode = DNS_BADSIG; 
+			break; 
+		}
+
+		i += ntohs(tsigrr->macsize);
+	
+
+		/* now get the MAC from packet with length rollback */
+		NTOHS(hdr->additional);
+		hdr->additional--;
+		HTONS(hdr->additional);
+
+		/* origid */
+		val16 = (u_int16_t *)&buf[i];
+		i += 2;
+		if (hdr->id != *val16)
+			hdr->id = *val16;
+		q->tsigorigid = *val16;
+
+		/* error */
+		tsigerror = (u_int16_t *)&buf[i];
+		i += 2;
+
+		/* other len */
+		tsigotherlen = (u_int16_t *)&buf[i];
+		i += 2;
+
+		memcpy(pseudo_packet, buf, pseudolen1);
+		ppoffset = pseudolen1;
+		memcpy((char *)&pseudo_packet[ppoffset], &buf[pseudolen2], 6); 
+		ppoffset += 6;
+
+		memcpy((char *)&pseudo_packet[ppoffset], &buf[pseudolen3], pseudolen4 - pseudolen3);
+		ppoffset += (pseudolen4 - pseudolen3);
+
+		memcpy((char *)&pseudo_packet[ppoffset], (char *)&tsigrr->timefudge, 8); 
+		ppoffset += 8;
+
+		val16 = (u_int16_t *)&pseudo_packet[ppoffset];
+		*val16 = *tsigerror;
+		ppoffset += 2;
+
+		val16 = (u_int16_t *)&pseudo_packet[ppoffset];
+		*val16 = *tsigotherlen;
+		ppoffset += 2;
+
+		memcpy(&pseudo_packet[ppoffset], &buf[i], len - i);
+		ppoffset += (len - i);
+
+		HMAC(EVP_sha256(), tsigkey, tsignamelen, (unsigned char *)pseudo_packet, 
+			ppoffset, (unsigned char *)&sha256, &shasize);
+
+
+
+		if (memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
+#if DEBUG
+			dolog(LOG_INFO, "HMAC did not verify\n");
+#endif
+			q->tsigerrorcode = DNS_BADSIG;
+			break;
+		}
+
+		/* copy the mac for error coding */
+		memcpy(q->tsigmac, tsigrr->mac, sizeof(q->tsigmac));
+		q->tsigmaclen = 32;
+		
+		/* we're now authenticated */
+		q->tsigerrorcode = 0;
+		q->tsigverified = 1;
+		
+	} while (0);
+
+	if (require_tsig) {
+		if (q->tsigerrorcode == 0)
+			q->tsigerrorcode = 1;	/* 1 for now */
+	}
 
 	/* fill our name into the dns header struct */
 		
@@ -854,3 +1113,90 @@ rrlookup(char *keyword)
 	
 	return (p);
 }	
+
+/*
+ * parse a domain name through a compression scheme and stay inside the bounds
+ * returns NULL on error and pointer to the next object;
+ */
+
+char *
+expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *elen, int max)
+{
+	u_short tlen;
+	u_char *save = NULL;
+	u_int16_t *offset;
+
+	/* expand name */
+	while ((u_char)*p && p <= end) {
+		/* test for compression */
+		if ((*p & 0xc0) == 0xc0) {
+			/* do not allow recursive compress pointers */
+			if (! save) {
+				save = p + 2;
+			}
+			offset = (u_int16_t *)p;
+			/* do not allow forwards jumping */
+			if ((p - estart) <= (ntohs(*offset) & (~0xc000))) {
+				return NULL;
+			}
+
+			p = (estart + (ntohs(*offset) & (~0xc000)));
+		} else {
+			if (*elen + 1 >= max) {
+				return NULL;
+			}
+			expand[(*elen)] = *p;
+			(*elen)++;
+			tlen = *p;
+			p++;
+			memcpy(&expand[*elen], p, tlen);
+			p += tlen;
+			if (*elen + tlen >= max) {
+				return NULL;
+			}
+			*elen += tlen;
+		}
+	}
+
+	if (p > end) {
+		return NULL;
+	}
+
+	if (save == NULL) {
+		p++;
+		(*elen)++;
+		return (p);
+	} else {
+		(*elen)++;
+		return (save);
+	}
+}
+
+void
+log_diff(char *sha256, char *mac, int len)
+{
+	char buf[512];
+	char tbuf[16];
+	int i;
+
+	memset(&buf, 0, sizeof(buf));
+	for (i = 0; i < 32; i++) {
+		snprintf(tbuf, sizeof(tbuf), "%02x", sha256[i] & 0xff);	
+		strlcat(buf, tbuf, sizeof(buf));
+	}
+
+	strlcat(buf, "\n", sizeof(buf));
+
+	dolog(LOG_INFO, "our HMAC = %s\n", buf);
+
+	memset(&buf, 0, sizeof(buf));
+	for (i = 0; i < 32; i++) {
+		snprintf(tbuf, sizeof(tbuf), "%02x", mac[i] & 0xff);	
+		strlcat(buf, tbuf, sizeof(buf));
+	}
+
+	strlcat(buf, "\n", sizeof(buf));
+
+	dolog(LOG_INFO, "given HMAC = %s\n", buf);
+
+}

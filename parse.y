@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.61 2019/02/18 23:51:34 pjp Exp $
+ * $Id: parse.y,v 1.62 2019/02/24 07:14:02 pjp Exp $
  */
 
 %{
@@ -44,6 +44,8 @@ extern int 	insert_axfr(char *, char *);
 extern int 	insert_notifyslave(char *, char *);
 extern int 	insert_filter(char *, char *);
 extern int 	insert_whitelist(char *, char *);
+extern int	insert_tsig(char *, char *);
+extern int	insert_tsig_key(char *, int, char *, int);
 extern void 	slave_shutdown(void);
 extern int 	mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int 	mybase64_decode(char const *, u_char *, size_t);
@@ -55,6 +57,7 @@ extern int display_rr(struct rrset *rrset);
 
 
 extern int whitelist;
+extern int tsig;
 extern int notify;
 extern int errno;
 extern int debug;
@@ -196,7 +199,8 @@ static int	pull_remote_zone(struct rzone *);
 %token VERSION OBRACE EBRACE REGION RZONE AXFRFOR 
 %token DOT COLON TEXT WOF INCLUDE ZONE COMMA CRLF 
 %token ERROR AXFRPORT LOGGING OPTIONS FILTER NOTIFY
-%token WHITELIST ZINCLUDE MASTER MASTERPORT
+%token WHITELIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
+%token TSIG
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -220,6 +224,7 @@ cmd_list:
 cmd	:  	
 	version 
 	| rzone
+	| tsigauth
 	| axfrport
 	| include
 	| zinclude
@@ -228,6 +233,7 @@ cmd	:
 	| axfr CRLF
 	| notify CRLF
 	| whitelist CRLF
+	| tsig CRLF
 	| filter CRLF
 	| logging
 	| comment CRLF
@@ -346,6 +352,27 @@ quotedfilename:
 	}
 	;
 
+
+tsigauth:
+	TSIGAUTH STRING QUOTEDSTRING SEMICOLON CRLF {
+		char key[512];
+		char *keyname;
+		int keylen, keynamelen;
+	
+		if ((keylen = mybase64_decode($3, key, sizeof(key))) < 0) {
+			dolog(LOG_ERR, "can't decode tsig base64\n");
+			return -1;
+		}
+
+		keyname = dns_label($2, &keynamelen);
+
+		insert_tsig_key(key, keylen, keyname, keynamelen);
+
+		free($2);
+		free($3);
+		free(keyname);
+	}
+	;
 
 rzone:
 	RZONE rzonelabel rzonecontent {
@@ -1088,6 +1115,60 @@ loggingstatement:
 	}
 	| comment CRLF
 	;
+/* tsig "these hosts" { .. } */
+
+tsig:
+	TSIG tsiglabel tsigcontent
+	{
+		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
+                        dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
+                        return (-1);
+                }
+	}
+	;
+
+tsiglabel:
+	QUOTEDSTRING
+	;
+
+tsigcontent:
+			OBRACE tsigstatements EBRACE 
+			| OBRACE CRLF tsigstatements EBRACE 
+			;
+
+tsigstatements 	:  		
+				tsigstatements tsigstatement 
+				| tsigstatement 
+				;
+
+tsigstatement	:	ipcidr SEMICOLON CRLF
+			{
+					char prefixlength[INET_ADDRSTRLEN];
+					char *dst;
+					
+
+					if (file->descend == DESCEND_YES) {
+							if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
+								return (-1);
+							}
+
+							if (insert_tsig(dst, prefixlength) < 0) {
+								dolog(LOG_ERR, "insert_tsig, line %d\n", file->lineno);
+								return (-1);
+							}
+			
+							if (debug)
+								printf("tsig inserted %s address\n", $1);
+			
+							tsig = 1;
+
+							free (dst);
+					}
+
+					free ($1);
+			}
+			| comment CRLF
+			;	
 
 /* whitelist "these hosts" { .. } */
 
@@ -1386,6 +1467,8 @@ struct tab cmdtab[] = {
 	{ "options", OPTIONS, 0 },
 	{ "region", REGION, STATE_IP },
 	{ "rzone", RZONE, 0 },
+	{ "tsig", TSIG, 0 },
+	{ "tsig-auth", TSIGAUTH, 0 }, 
 	{ "wildcard-only-for", WOF, STATE_IP },
 	{ "version", VERSION, 0 },
 	{ "zinclude", ZINCLUDE, 0 },

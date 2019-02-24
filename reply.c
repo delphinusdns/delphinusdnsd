@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.68 2019/02/18 14:59:55 pjp Exp $
+ * $Id: reply.c,v 1.69 2019/02/24 07:14:02 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -44,6 +44,7 @@ extern int 		additional_aaaa(char *, int, struct rbtree *, char *, int, int, int
 extern int 		additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_opt(struct question *, char *, int, int);
+extern int 		additional_tsig(struct question *, char *, int, int, int);
 extern int 		additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int);
 extern int 		additional_nsec(char *, int, int, struct rbtree *, char *, int, int);
 extern struct question 	*build_fake_question(char *, int, u_int16_t);
@@ -90,6 +91,7 @@ int 		reply_cname(struct sreply *, ddDB *);
 int 		reply_any(struct sreply *, ddDB *);
 int 		reply_refused(struct sreply *, ddDB *);
 int 		reply_fmterror(struct sreply *, ddDB *);
+int 		reply_notauth(struct sreply *, ddDB *);
 struct rbtree * find_nsec(char *name, int namelen, struct rbtree *, ddDB *db);
 int 		nsec_comp(const void *a, const void *b);
 char * 		convert_name(char *name, int namelen);
@@ -259,6 +261,14 @@ out:
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
+	}
+
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
 	}
 
 	if (istcp) {
@@ -462,6 +472,15 @@ out:
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
+
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
 
 	if (istcp) {
 		char *tmpbuf;
@@ -679,6 +698,14 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
 	if (istcp) {
 		char *tmpbuf;
 		u_int16_t *plen;
@@ -866,6 +893,14 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
 	if (istcp) {
 		char *tmpbuf;
 		u_int16_t *plen;
@@ -1049,6 +1084,14 @@ out:
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
+	}
+
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
 	}
 
 	if (istcp) {
@@ -1254,6 +1297,14 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
 	if (istcp) {
 		char *tmpbuf;
 		u_int16_t *plen;
@@ -1396,6 +1447,14 @@ out:
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen);
+	}
+
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
 	}
 
 	if (istcp) {
@@ -1562,6 +1621,15 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
+
 	if (istcp) {
 		char *tmpbuf;
 		u_int16_t *plen;
@@ -1712,7 +1780,7 @@ reply_mx(struct sreply *sreply, ddDB *db)
 		mx_count++;
 	} 
 
-	odh->answer = htonl(mx_count);
+	odh->answer = htons(mx_count);
 
 	/* RRSIG reply_mx*/
 
@@ -1747,6 +1815,14 @@ out:
 		HTONS(odh->additional);
 
 		outlen = additional_opt(q, reply, replysize, outlen);
+	}
+
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
 	}
 
 	if (istcp) {
@@ -1938,6 +2014,14 @@ out:
 		HTONS(odh->additional);
 
 		outlen = additional_opt(q, reply, replysize, outlen);
+	}
+
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
 	}
 
 	if (istcp) {
@@ -2248,6 +2332,14 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
 	if (istcp) {
 		char *tmpbuf;
 
@@ -2429,6 +2521,14 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 	
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
 	if (istcp) {
 		char *tmpbuf;
 		u_int16_t *plen;
@@ -2680,6 +2780,14 @@ out:
 	}
 
 	
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
 	if (istcp) {
 		char *tmpbuf;
 		u_int16_t *plen;
@@ -2842,6 +2950,14 @@ out:
 		HTONS(odh->additional);
 
 		outlen = additional_opt(q, reply, replysize, outlen);
+	}
+
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
 	}
 
 
@@ -3157,6 +3273,14 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
 	if (istcp) {
 		char *tmpbuf;
 
@@ -3335,6 +3459,14 @@ out:
 		HTONS(odh->additional);
 
 		outlen = additional_opt(q, reply, replysize, outlen);
+	}
+
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
 	}
 
 	if (istcp) {
@@ -3552,6 +3684,14 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
 	if (istcp) {
 		char *tmpbuf;
 
@@ -3736,6 +3876,14 @@ out:
 		HTONS(odh->additional);
 
 		outlen = additional_opt(q, reply, replysize, outlen);
+	}
+
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
 	}
 
 	if (istcp) {
@@ -4205,6 +4353,14 @@ out:
 	}
 
 
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
 	if (istcp) {
 		char *tmpbuf;
 		u_int16_t *plen;
@@ -4293,6 +4449,93 @@ reply_refused(struct sreply *sreply, ddDB *db)
 		free(tmpbuf);
 	} else {
 		if ((retlen = sendto(so, reply, sizeof(struct dns_header), 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		}
+	}
+
+	return (retlen);
+}
+
+/* 
+ * REPLY_NOTAUTH() - replies a DNS question (*q) on socket (so)
+ *
+ */
+
+int
+reply_notauth(struct sreply *sreply, ddDB *db)
+{
+	char *reply = sreply->replybuf;
+	struct dns_header *odh;
+	u_int16_t outlen = 0;
+	u_int16_t tmplen;
+
+	int so = sreply->so;
+	int len = sreply->len;
+	char *buf = sreply->buf;
+	struct sockaddr *sa = sreply->sa;
+	int salen = sreply->salen;
+	int istcp = sreply->istcp;
+	int replysize = 512;
+	int retlen = -1;
+
+	struct question *q = sreply->q;
+
+	if (istcp) {
+		replysize = 65535;
+	}
+
+	memset(reply, 0, replysize);
+
+	odh = (struct dns_header *)&reply[0];
+
+
+	if (len > replysize) {
+		return (retlen);
+	}
+
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+
+	/* copy question to reply */
+	if (istcp)
+		memcpy(&reply[0], &buf[2], sizeof(struct dns_header) + q->hdr->namelen + 4);
+	else
+		memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+		
+
+	outlen += (sizeof(struct dns_header) + q->hdr->namelen + 4); 
+
+
+	SET_DNS_REPLY(odh);
+	SET_DNS_RCODE_NOTAUTH(odh);
+
+	HTONS(odh->query);		
+
+	odh->additional = htons(1);
+	
+	tmplen = additional_tsig(q, reply, replysize, outlen, 0);
+	
+	if (tmplen != 0)
+		outlen = tmplen;
+
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
+
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
 			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
@@ -4671,6 +4914,14 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 	
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
 	if (istcp) {
 		char *tmpbuf;
 		u_int16_t *plen;
@@ -4804,6 +5055,14 @@ reply_any(struct sreply *sreply, ddDB *db)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 			
+	if (q->tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
 	if (istcp) {
 		char *tmpbuf;
 		u_int16_t *plen;

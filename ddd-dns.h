@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.6 2017/11/28 15:02:41 pjp Exp $
+ * $Id: ddd-dns.h,v 1.7 2019/02/24 07:14:02 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -84,6 +84,18 @@ struct dns_optrr {
 	char rdata[0];				/* attribute, value pairs */
 }__attribute__((packed));
 
+/*
+ * TSIG RR, based on dns_rr 
+ * RFC 2845  and RFC 4635 (for SHA-256)
+ */
+
+struct dns_tsigrr {
+	u_int64_t timefudge;			/* time (48 bits) and fudge */
+	u_int16_t macsize;			/* MAC size == 32 */
+	char mac[32];				/* SHA-256 MAC */
+	/* empty unless error == badtime */
+} __attribute__((packed));
+
 /* RFC 1035 - page 28 */
 struct dns_question_hdr {
 	char *name;
@@ -91,8 +103,6 @@ struct dns_question_hdr {
 	u_int16_t qtype;
 	u_int16_t qclass;
 };
-
-
 
 /* 
  * flags RFC 1035, page 26
@@ -106,16 +116,20 @@ struct dns_question_hdr {
 #define DNS_TRUNC	0x200	/* Truncated (TC) */
 #define DNS_RECURSE	0x100	/* if set Recursion Desired (RD) */
 #define DNS_RECAVAIL	0x80	/* if set Recursion Available (RA) */
-#define DNS_BADTIME	0x12	/* RCODE (18) BADTIME RFC 2845 p. 3 */
-#define DNS_BADKEY	0x11	/* RCODE (17) BADKEY RFC 2845 p. 3 */
-#define DNS_BADSIG	0x10	/* RCODE (16) BADSIG RFC 2845 p. 3 */
 #define DNS_BADVERS	0x10	/* RCODE (16) BADVERS RFC 2671 p. 6 */
+#define DNS_NOTAUTH	0x9	/* RCODE - Not Authenticated RFC 2845 */
 #define	DNS_REFUSED	0x5	/* RCODE - Refused */
 #define DNS_NOTIMPL	0x4	/* RCODE - Not Implemented */
 #define DNS_NAMEERR	0x3	/* RCODE - Name Error, NXDOMAIN */
 #define DNS_SERVFAIL	0x2	/* RCODE - Server Failure */
 #define DNS_FORMATERR	0x1	/* RCODE - Format Error */
 #define DNS_NOERR	0x0	/* RCODE - No error */
+
+/* When DNS_NOTAUTH, add a TSIG header with the following error codes */
+
+#define DNS_BADTIME	0x12	/* RCODE (18) BADTIME RFC 2845 p. 3 */
+#define DNS_BADKEY	0x11	/* RCODE (17) BADKEY RFC 2845 p. 3 */
+#define DNS_BADSIG	0x10	/* RCODE (16) BADSIG RFC 2845 p. 3 */
 
 /*
  * macros to set flags (must be converted to network byte order after)
@@ -136,6 +150,7 @@ struct dns_question_hdr {
 #define SET_DNS_RCODE_SERVFAIL(x)	((x)->query |= (DNS_SERVFAIL))
 #define SET_DNS_RCODE_FORMATERR(x)	((x)->query |= (DNS_FORMATERR))
 #define SET_DNS_RCODE_NOERR(x)		((x)->query |= (DNS_NOERR))
+#define SET_DNS_RCODE_NOTAUTH(x)	((x)->query |= (DNS_NOTAUTH))
 
 #define UNSET_DNS_NOTIFY(x)		((x)->query &= ~(DNS_NOTIFY))
 #define UNSET_DNS_STATUS_REQ(x)		((x)->query &= ~(DNS_SREQ))
@@ -150,6 +165,7 @@ struct dns_question_hdr {
 #define UNSET_DNS_RCODE_SERVFAIL(x)	((x)->query &= ~(DNS_SERVFAIL))
 #define UNSET_DNS_RCODE_FORMATERR(x)	((x)->query &= ~(DNS_FORMATERR))
 #define UNSET_DNS_RCODE_NOERR(x)	((x)->query &= ~(DNS_NOERR))
+#define UNSET_DNS_RCODE_NOTAUTH(x)	((x)->query &= ~(DNS_NOTAUTH))
 
 /* DNSSEC/EDNS0 options RFC 3225 */
 
@@ -228,6 +244,16 @@ struct question {
 	int rd;
 	int dnssecok;
 	int badvers;
+	int tsigverified;
+	int tsigerrorcode;
+	char tsigalg[DNS_MAXNAME];
+	int tsigalglen;
+	char tsigkey[DNS_MAXNAME];
+	int tsigkeylen;
+	char tsigmac[32];
+	int tsigmaclen;
+	u_int64_t tsig_timefudge;
+	u_int16_t tsigorigid;
 };
 
 struct parsequestion {
@@ -241,12 +267,24 @@ struct parsequestion {
 	int rd;
 	int dnssecok;
 	int badvers;
+	int tsigverified;
+	int tsigerrorcode;			/* see above ie. DNS_BADTIME */
+	char tsigalg[DNS_MAXNAME];
+	int tsigalglen;
+	char tsigkey[DNS_MAXNAME];
+	int tsigkeylen;
+	char tsigmac[32];
+	int tsigmaclen;
+	u_int64_t tsig_timefudge;
+	u_int16_t tsigorigid;
+
 	int rc;		/* return code */
 #define PARSE_RETURN_ACK	0
 #define PARSE_RETURN_NAK	1
 #define PARSE_RETURN_MALFORMED	2
 #define PARSE_RETURN_NOQUESTION 3
 #define PARSE_RETURN_NOTAQUESTION 4
+#define PARSE_RETURN_NOTAUTH	5
 };
 	
 	

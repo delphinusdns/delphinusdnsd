@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.55 2019/02/19 14:20:25 pjp Exp $
+ * $Id: dddctl.c,v 1.56 2019/02/24 07:14:02 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -215,12 +215,17 @@ int insert_region(char *, char *);
 int insert_filter(char *, char *);
 int insert_whitelist(char *, char *);
 int insert_notifyslave(char *, char *);
+int insert_tsig(char *, char *);
+int  find_tsig_key(char *, int, char *, int);
+int  insert_tsig_key(char *, int, char *);
+
 
 int illdestination;
 int *ptr = &illdestination;
 
 int notify = 0;
 int whitelist = 0;
+int tsig = 0;
 int bcount = 0;
 char *bind_list[255];
 char *interface_list[255];
@@ -823,6 +828,18 @@ insert_filter(char *address, char *prefixlen)
 
 int
 insert_whitelist(char *address, char *prefixlen)
+{
+	return 0;
+}
+
+int
+insert_tsig(char *address, char *prefixlen)
+{
+	return 0;
+}
+
+int
+insert_tsig_key(char *key, int keylen, char *authkey)
 {
 	return 0;
 }
@@ -8435,4 +8452,10 @@ count_db(ddDB *db)
 	printf("Records = %d , ", count);
 
 	return count;
+}
+
+int
+find_tsig_key(char *keyname, int keynamelen, char *key, int keylen)
+{
+	return -1;
 }
