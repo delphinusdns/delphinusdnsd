@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.56 2019/02/24 10:27:15 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.57 2019/02/24 11:11:19 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -1898,6 +1898,8 @@ axfrentry:
 								NULL, replybuf);
 
 							slen = reply_noerror(&sreply, cfg->db);
+
+							goto udpout;
 						} 
 
 						snprintf(replystring, DNS_MAXNAME, "DROP");
@@ -2754,6 +2756,8 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 												0, NULL, replybuf);
 
 								slen = reply_noerror(&sreply, cfg->db);
+			
+								goto tcpout;
 						}
 
 						snprintf(replystring, DNS_MAXNAME, "DROP");
