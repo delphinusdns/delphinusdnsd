@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.7 2019/02/24 07:14:02 pjp Exp $
+ * $Id: ddd-dns.h,v 1.8 2019/02/24 14:53:02 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -236,14 +236,8 @@ struct dns_question_hdr {
 #define DNS_TLSA_SIZE_SHA256	32	/* RFC 6698 */
 #define DNS_TLSA_SIZE_SHA512	64	/* RFC 6698 */
 
-struct question {
-	struct dns_question_hdr *hdr;
-	char *converted_name;
-	u_int16_t edns0len;
-	u_int8_t ednsversion;
-	int rd;
-	int dnssecok;
-	int badvers;
+struct tsig {
+	int have_tsig;
 	int tsigverified;
 	int tsigerrorcode;
 	char tsigalg[DNS_MAXNAME];
@@ -254,6 +248,17 @@ struct question {
 	int tsigmaclen;
 	u_int64_t tsig_timefudge;
 	u_int16_t tsigorigid;
+};
+
+struct question {
+	struct dns_question_hdr *hdr;
+	char *converted_name;
+	u_int16_t edns0len;
+	u_int8_t ednsversion;
+	int rd;
+	int dnssecok;
+	int badvers;
+	struct tsig tsig;
 };
 
 struct parsequestion {
@@ -267,17 +272,7 @@ struct parsequestion {
 	int rd;
 	int dnssecok;
 	int badvers;
-	int tsigverified;
-	int tsigerrorcode;			/* see above ie. DNS_BADTIME */
-	char tsigalg[DNS_MAXNAME];
-	int tsigalglen;
-	char tsigkey[DNS_MAXNAME];
-	int tsigkeylen;
-	char tsigmac[32];
-	int tsigmaclen;
-	u_int64_t tsig_timefudge;
-	u_int16_t tsigorigid;
-
+	struct tsig tsig;
 	int rc;		/* return code */
 #define PARSE_RETURN_ACK	0
 #define PARSE_RETURN_NAK	1

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.57 2019/02/24 11:11:19 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.58 2019/02/24 14:53:02 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -93,7 +93,7 @@ extern char 	*rrlimit_setup(int);
 extern char 	*dns_label(char *, int *);
 extern void 	slave_shutdown(void);
 extern int 	get_record_size(ddDB *, char *, int);
-extern struct question		*build_question(char *, int, int, int);
+extern struct question		*build_question(char *, int, int);
 extern int			free_question(struct question *);
 extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
@@ -1611,6 +1611,7 @@ axfrentry:
 					}
 
 					aregion = find_region((struct sockaddr_storage *)sin6, AF_INET6);
+					filter = 0;
 					filter = find_filter((struct sockaddr_storage *)sin6, AF_INET6);
 					if (whitelist) {
 						blacklist = find_whitelist((struct sockaddr_storage *)sin6, AF_INET6);
@@ -1634,6 +1635,7 @@ axfrentry:
 					}
 
 					aregion = find_region((struct sockaddr_storage *)sin, AF_INET);
+					filter = 0;
 					filter = find_filter((struct sockaddr_storage *)sin, AF_INET);
 					if (whitelist) {
 						blacklist = find_whitelist((struct sockaddr_storage *)sin, AF_INET);
@@ -1679,10 +1681,7 @@ axfrentry:
 				}
 					
 				/* pjp - branch to pledge parser here */
-				if (require_tsig)
-					imsg_type = IMSG_PARSEAUTH_MESSAGE;
-				else
-					imsg_type = IMSG_PARSE_MESSAGE;
+				imsg_type = IMSG_PARSE_MESSAGE;
 				
 				if (imsg_compose(pibuf, imsg_type, 
 					0, 0, -1, buf, len) < 0) {
@@ -1760,7 +1759,7 @@ axfrentry:
 										goto drop;
 									case PARSE_RETURN_NOTAUTH:
 										/* we didn't see a tsig header */
-										if (pq.tsigerrorcode == 1) {
+										if (filter && pq.tsig.have_tsig == 0) {
 											build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 											slen = reply_refused(&sreply, NULL);
 											dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, received_ttl, aregion);
@@ -1790,8 +1789,8 @@ axfrentry:
 
 				/* goto drop beyond this point should goto out instead */
 
-				if (require_tsig && question->tsigerrorcode != 0)  {
-					dolog(LOG_INFO, "on descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsigerrorcode, address);
+				if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0)  {
+					dolog(LOG_INFO, "on descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsig.tsigerrorcode, address);
 					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
 					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 					reply_notauth(&sreply, NULL);
@@ -2007,7 +2006,7 @@ axfrentry:
 			
 		udpout:
 				if (lflag) {
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d) for \"%s\" type=%s class=%u, %s%s%sanswering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, received_ttl, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, " : ""), (question->dnssecok ? "dnssecok, " : ""), (question->tsigverified ? "tsig, " : "") , replystring, len, slen);
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d) for \"%s\" type=%s class=%u, %s%s%sanswering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, received_ttl, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, " : ""), (question->dnssecok ? "dnssecok, " : ""), (question->tsig.tsigverified ? "tsig, " : "") , replystring, len, slen);
 
 				}
 
@@ -2533,9 +2532,11 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				}
 
 				/* pjp send to parseloop */
+#if 0
 				if (require_tsig)
 					imsg_type = IMSG_PARSEAUTH_MESSAGE;
 				else
+#endif
 					imsg_type = IMSG_PARSE_MESSAGE;
 				
 
@@ -2613,7 +2614,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 								imsg_free(&imsg);
 								goto drop;
 							case PARSE_RETURN_NOTAUTH:
-								if (pq.tsigerrorcode == 1) {
+								if (filter && pq.tsig.have_tsig == 0) {
 									build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 									slen = reply_refused(&sreply, NULL);
 									dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, aregion);
@@ -2641,8 +2642,8 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				/* goto drop beyond this point should goto out instead */
 				fakequestion = NULL;
 
-				if (require_tsig && question->tsigerrorcode != 0)  {
-					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsigerrorcode, address);
+				if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0)  {
+					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsig.tsigerrorcode, address);
 					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
 					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 					reply_notauth(&sreply, NULL);
@@ -2879,7 +2880,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 			
 		tcpout:
 				if (lflag)
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsigverified ? "tsig, " : ""), replystring, len, slen);
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), replystring, len, slen);
 
 
 				if (fakequestion != NULL) {
@@ -2980,9 +2981,6 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 				require_tsig = 0;
 
 				switch (imsg.hdr.type) {
-				case IMSG_PARSEAUTH_MESSAGE:
-					require_tsig = 1;
-					/* FALLTHROUGH */
 				case IMSG_PARSE_MESSAGE:
 					memset(&pq, 0, sizeof(struct parsequestion));
 
@@ -3026,7 +3024,7 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 						break;
 					}
 
-					if ((question = build_question(packet, datalen, ntohs(dh->additional), require_tsig)) == NULL) {
+					if ((question = build_question(packet, datalen, ntohs(dh->additional))) == NULL) {
 						/* XXX reply nak here */
 						pq.rc = PARSE_RETURN_MALFORMED;
 						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
@@ -3045,18 +3043,19 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 					pq.dnssecok = question->dnssecok;
 					pq.badvers = question->badvers;
 					pq.rc = PARSE_RETURN_ACK;
-					pq.tsigverified = question->tsigverified;
-					pq.tsigerrorcode = question->tsigerrorcode;
-					if (pq.tsigerrorcode)
+					pq.tsig.have_tsig = question->tsig.have_tsig;
+					pq.tsig.tsigverified = question->tsig.tsigverified;
+					pq.tsig.tsigerrorcode = question->tsig.tsigerrorcode;
+					if (pq.tsig.have_tsig == 0 || pq.tsig.tsigerrorcode)
 						pq.rc = PARSE_RETURN_NOTAUTH;
-					memcpy(&pq.tsigmac, question->tsigmac, sizeof(pq.tsigmac));
-					pq.tsigmaclen = question->tsigmaclen;
-					memcpy(&pq.tsigkey, question->tsigkey, sizeof(pq.tsigkey));
-					pq.tsigkeylen = question->tsigkeylen;	
-					memcpy(&pq.tsigalg, question->tsigalg, sizeof(pq.tsigalg));
-					pq.tsigalglen = question->tsigalglen;
-					pq.tsig_timefudge = question->tsig_timefudge;
-					pq.tsigorigid = question->tsigorigid;
+					memcpy(&pq.tsig.tsigmac, question->tsig.tsigmac, sizeof(pq.tsig.tsigmac));
+					pq.tsig.tsigmaclen = question->tsig.tsigmaclen;
+					memcpy(&pq.tsig.tsigkey, question->tsig.tsigkey, sizeof(pq.tsig.tsigkey));
+					pq.tsig.tsigkeylen = question->tsig.tsigkeylen;	
+					memcpy(&pq.tsig.tsigalg, question->tsig.tsigalg, sizeof(pq.tsig.tsigalg));
+					pq.tsig.tsigalglen = question->tsig.tsigalglen;
+					pq.tsig.tsig_timefudge = question->tsig.tsig_timefudge;
+					pq.tsig.tsigorigid = question->tsig.tsigorigid;
 
 					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&pq, sizeof(struct parsequestion));
 					msgbuf_write(&mybuf->w);
@@ -3124,19 +3123,20 @@ convert_question(struct parsequestion *pq)
 	q->rd = pq->rd;
 	q->dnssecok = pq->dnssecok;
 	q->badvers = pq->badvers;
-	q->tsigverified = pq->tsigverified;
-	q->tsigerrorcode = pq->tsigerrorcode;
+	q->tsig.have_tsig = pq->tsig.have_tsig;
+	q->tsig.tsigverified = pq->tsig.tsigverified;
+	q->tsig.tsigerrorcode = pq->tsig.tsigerrorcode;
 
-	memcpy(&q->tsigmac, pq->tsigmac, sizeof(q->tsigmac));
-	memcpy(&q->tsigalg, pq->tsigalg, sizeof(q->tsigalg));
-	memcpy(&q->tsigkey, pq->tsigkey, sizeof(q->tsigkey));
+	memcpy(&q->tsig.tsigmac, pq->tsig.tsigmac, sizeof(q->tsig.tsigmac));
+	memcpy(&q->tsig.tsigalg, pq->tsig.tsigalg, sizeof(q->tsig.tsigalg));
+	memcpy(&q->tsig.tsigkey, pq->tsig.tsigkey, sizeof(q->tsig.tsigkey));
 
-	q->tsigmaclen = pq->tsigmaclen;
-	q->tsigalglen = pq->tsigalglen;
-	q->tsigkeylen = pq->tsigkeylen;
+	q->tsig.tsigmaclen = pq->tsig.tsigmaclen;
+	q->tsig.tsigalglen = pq->tsig.tsigalglen;
+	q->tsig.tsigkeylen = pq->tsig.tsigkeylen;
 
-	q->tsig_timefudge = pq->tsig_timefudge;
-	q->tsigorigid = pq->tsigorigid;
+	q->tsig.tsig_timefudge = pq->tsig.tsig_timefudge;
+	q->tsig.tsigorigid = pq->tsig.tsigorigid;
 
 	return (q);
 }

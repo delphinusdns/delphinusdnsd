@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.24 2019/02/24 10:27:15 pjp Exp $
+ * $Id: util.c,v 1.25 2019/02/24 14:53:03 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -51,7 +51,7 @@ struct question		*build_fake_question(char *, int, u_int16_t);
 
 char 			*get_dns_type(int, int);
 int 			memcasecmp(u_char *, u_char *, int);
-struct question		*build_question(char *, int, int, int);
+struct question		*build_question(char *, int, int);
 int			free_question(struct question *);
 struct rrtab 	*rrlookup(char *);
 char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
@@ -625,7 +625,7 @@ memcasecmp(u_char *b1, u_char *b2, int len)
  */
 
 struct question *
-build_question(char *buf, int len, int additional, int require_tsig) 
+build_question(char *buf, int len, int additional)
 {
 	char pseudo_packet[4096];		/* for tsig */
 	u_int rollback, i;
@@ -834,19 +834,18 @@ build_question(char *buf, int len, int additional, int require_tsig)
 		int pseudolen1, pseudolen2, ppoffset = 0;
 		int pseudolen3 , pseudolen4;
 
+		q->tsig.have_tsig = 0;
+		q->tsig.tsigerrorcode = 1;
+
 		/* if we don't have an additional section, break */
 		if (additional < 1) {
 			break;
 		}
 
-		if (require_tsig == 0) {
-			break;
-		}
-
-		memset(q->tsigkey, 0, sizeof(q->tsigkey));
-		memset(q->tsigalg, 0, sizeof(q->tsigalg));
-		memset(q->tsigmac, 0, sizeof(q->tsigmac));
-		q->tsigkeylen = q->tsigalglen = q->tsigmaclen = 0;
+		memset(q->tsig.tsigkey, 0, sizeof(q->tsig.tsigkey));
+		memset(q->tsig.tsigalg, 0, sizeof(q->tsig.tsigalg));
+		memset(q->tsig.tsigmac, 0, sizeof(q->tsig.tsigmac));
+		q->tsig.tsigkeylen = q->tsig.tsigalglen = q->tsig.tsigmaclen = 0;
 
 		/* the key name is parsed here */
 		rollback = i;
@@ -860,8 +859,8 @@ build_question(char *buf, int len, int additional, int require_tsig)
 		i = (pb - buf);
 		pseudolen1 = i;
 
-		memcpy(q->tsigkey, expand, elen);
-		q->tsigkeylen = elen;
+		memcpy(q->tsig.tsigkey, expand, elen);
+		q->tsig.tsigkeylen = elen;
 
 
 		if (i + 10 > len) {	/* type + class + ttl + rdlen == 10 */
@@ -878,17 +877,15 @@ build_question(char *buf, int len, int additional, int require_tsig)
 		i += 2;
 		pseudolen2 = i;
 
+		q->tsig.have_tsig = 1;
+
 		/* we don't have any tsig keys configured, no auth done */
 		if (tsig == 0) {
 			i = rollback;
 			break;
 		}
 
-		q->tsigerrorcode = DNS_BADKEY;
-
-		if (require_tsig)
-			require_tsig = 0;
-
+		q->tsig.tsigerrorcode = DNS_BADKEY;
 
 		/* class */
 		val16 = (u_int16_t *)&buf[i];
@@ -926,8 +923,8 @@ build_question(char *buf, int len, int additional, int require_tsig)
 		i = (pb - buf);
 		pseudolen4 = i;
 
-		memcpy(q->tsigalg, expand, elen);
-		q->tsigalglen = elen;
+		memcpy(q->tsig.tsigalg, expand, elen);
+		q->tsig.tsigalglen = elen;
 			
 		/* now check for MAC type, since it's given once again */
 		if (elen == 11) {
@@ -945,8 +942,9 @@ build_question(char *buf, int len, int additional, int require_tsig)
 				memcasecmp(&expand[1], "hmac-md5", 8) != 0) {
 				break;
 			}
-		} else
+		} else {
 			break;
+		}
 
 		/* 
 		 * this is a delayed (moved down) check of the key, we don't
@@ -954,7 +952,7 @@ build_question(char *buf, int len, int additional, int require_tsig)
 		 * type, that's why it's delayed...
 		 */
 
-		if ((tsignamelen = find_tsig_key(q->tsigkey, q->tsigkeylen, (char *)&tsigkey, sizeof(tsigkey))) < 0) {
+		if ((tsignamelen = find_tsig_key(q->tsig.tsigkey, q->tsig.tsigkeylen, (char *)&tsigkey, sizeof(tsigkey))) < 0) {
 			/* we don't have the name configured, let it pass */
 			i = rollback;
 			break;
@@ -970,19 +968,19 @@ build_question(char *buf, int len, int additional, int require_tsig)
 		fudge = ntohs(tsigrr->timefudge & 0xffff);
 		tsigtime = ntohl((tsigrr->timefudge >> 16));
 
-		q->tsig_timefudge = tsigrr->timefudge;
+		q->tsig.tsig_timefudge = tsigrr->timefudge;
 		
 		now = time(NULL);
 		/* outside our fudge window */
 		if (tsigtime < (now - fudge) || tsigtime > (now + fudge)) {
-			q->tsigerrorcode = DNS_BADTIME;
+			q->tsig.tsigerrorcode = DNS_BADTIME;
 			break;
 		}
 
 		i += (8 + 2);		/* timefudge + macsize */
 
 		if (ntohs(tsigrr->macsize) != 32) {
-			q->tsigerrorcode = DNS_BADSIG; 
+			q->tsig.tsigerrorcode = DNS_BADSIG; 
 			break; 
 		}
 
@@ -999,7 +997,7 @@ build_question(char *buf, int len, int additional, int require_tsig)
 		i += 2;
 		if (hdr->id != *val16)
 			hdr->id = *val16;
-		q->tsigorigid = *val16;
+		q->tsig.tsigorigid = *val16;
 
 		/* error */
 		tsigerror = (u_int16_t *)&buf[i];
@@ -1040,24 +1038,19 @@ build_question(char *buf, int len, int additional, int require_tsig)
 #if DEBUG
 			dolog(LOG_INFO, "HMAC did not verify\n");
 #endif
-			q->tsigerrorcode = DNS_BADSIG;
+			q->tsig.tsigerrorcode = DNS_BADSIG;
 			break;
 		}
 
 		/* copy the mac for error coding */
-		memcpy(q->tsigmac, tsigrr->mac, sizeof(q->tsigmac));
-		q->tsigmaclen = 32;
+		memcpy(q->tsig.tsigmac, tsigrr->mac, sizeof(q->tsig.tsigmac));
+		q->tsig.tsigmaclen = 32;
 		
 		/* we're now authenticated */
-		q->tsigerrorcode = 0;
-		q->tsigverified = 1;
+		q->tsig.tsigerrorcode = 0;
+		q->tsig.tsigverified = 1;
 		
 	} while (0);
-
-	if (require_tsig) {
-		if (q->tsigerrorcode == 0)
-			q->tsigerrorcode = 1;	/* 1 for now */
-	}
 
 	/* fill our name into the dns header struct */
 		

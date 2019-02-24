@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.70 2019/02/24 08:01:23 pjp Exp $
+ * $Id: reply.c,v 1.71 2019/02/24 14:53:02 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -263,7 +263,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -473,7 +473,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -698,7 +698,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -893,7 +893,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -1086,7 +1086,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -1297,7 +1297,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -1449,7 +1449,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -1621,7 +1621,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -1817,7 +1817,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -2016,7 +2016,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -2332,7 +2332,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -2521,7 +2521,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 	
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -2780,7 +2780,7 @@ out:
 	}
 
 	
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -2952,7 +2952,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -3273,7 +3273,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -3461,7 +3461,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -3684,7 +3684,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -3878,7 +3878,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -4353,7 +4353,7 @@ out:
 	}
 
 
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -4422,7 +4422,11 @@ reply_refused(struct sreply *sreply, ddDB *db)
 		return (retlen);
 	}
 
-	memcpy((char *)&odh->id, buf, sizeof(u_int16_t));
+	if (istcp)
+		memcpy((char *)&odh->id, &buf[2], sizeof(u_int16_t));
+	else
+		memcpy((char *)&odh->id, buf, sizeof(u_int16_t));
+
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	SET_DNS_REPLY(odh);
@@ -4914,7 +4918,7 @@ out:
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 	
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
@@ -5055,7 +5059,7 @@ reply_any(struct sreply *sreply, ddDB *db)
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 			
-	if (q->tsigverified == 1) {
+	if (q->tsig.tsigverified == 1) {
 		outlen = additional_tsig(q, reply, replysize, outlen, 0);
 
 		NTOHS(odh->additional);	
