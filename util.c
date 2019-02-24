@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.23 2019/02/24 07:14:02 pjp Exp $
+ * $Id: util.c,v 1.24 2019/02/24 10:27:15 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -255,8 +255,16 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 		if (check_ent(p, plen) == 1) {
 			*lzerrno = ERR_NODATA;
 			*returnval = -1;
+
+			/* stop leakage */
+			if (rrset != NULL)
+				free(rbt);
+
 			return NULL;
 		}
+
+		if (rrset != NULL)
+			free(rbt);
 
 		/*
 		 * We have a condition where a record does not exist but we
@@ -268,18 +276,20 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
 
-			free(rbt);
+			/* rbt was NULL */
 			if ((rbt = find_rrset(db, p, plen)) != NULL) {
 				if (find_rr(rbt, DNS_TYPE_SOA) != NULL) {
 					*lzerrno = ERR_NXDOMAIN;
 					*returnval = -1;
 					return (rbt);
 				}
+	
+				free(rbt);
 			}
 		}
 		*lzerrno = ERR_REFUSED;
 		*returnval = -1;
-		return (rbt);
+		return (NULL);
 	}
 	
 	snprintf(replystring, DNS_MAXNAME, "%s", rbt->humanname);

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.55 2019/02/24 07:14:02 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.56 2019/02/24 10:27:15 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -1304,9 +1304,11 @@ get_soa(ddDB *db, struct question *question)
 
 		rbt = find_rrset(db, p, plen);
 		if (rbt == NULL) {
+			if (*p == '\0')
+				return (NULL);
+
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
-			free (rbt);
 			continue;
 		}
 		
@@ -1866,7 +1868,9 @@ axfrentry:
 							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, NULL, replybuf);
 							slen = reply_nodata(&sreply, cfg->db);
 						} else {
-							snprintf(replystring, DNS_MAXNAME, "DROP");
+							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, NULL, replybuf);
+							slen = reply_refused(&sreply, cfg->db);
+							snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						}
 						goto udpout;
 						break;
@@ -1895,6 +1899,8 @@ axfrentry:
 
 							slen = reply_noerror(&sreply, cfg->db);
 						} 
+
+						snprintf(replystring, DNS_MAXNAME, "DROP");
 
 						goto udpout;
 					}
@@ -2699,7 +2705,9 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 									build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
 									slen = reply_nodata(&sreply, cfg->db);
 								} else {
-									snprintf(replystring, DNS_MAXNAME, "DROP");
+									snprintf(replystring, DNS_MAXNAME, "REFUSED");
+									build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
+									slen = reply_refused(&sreply, cfg->db);
 								}
 
 								goto tcpout;
@@ -2747,6 +2755,8 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 
 								slen = reply_noerror(&sreply, cfg->db);
 						}
+
+						snprintf(replystring, DNS_MAXNAME, "DROP");
 						goto tcpout;
 
 					}
