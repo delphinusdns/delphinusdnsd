@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.22 2019/02/24 14:53:02 pjp Exp $
+ * $Id: additional.c,v 1.23 2019/02/26 07:45:56 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -442,7 +442,11 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 
 	/* rdlen */
 	sval = (u_int16_t *)&reply[offset];
-	*sval = htons(2 + 8 + question->tsig.tsigalglen + question->tsig.tsigmaclen + 2 + 2 + 2);
+	if (question->tsig.tsigerrorcode == DNS_BADTIME) {
+		*sval = htons(2 + 8 + question->tsig.tsigalglen + question->tsig.tsigmaclen + 2 + 2 + 2 + 6);
+	} else {
+		*sval = htons(2 + 8 + question->tsig.tsigalglen + question->tsig.tsigmaclen + 2 + 2 + 2);
+	}
 	offset += 2;
 
 	memcpy(&reply[offset], question->tsig.tsigalg, question->tsig.tsigalglen);
@@ -451,10 +455,14 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	memcpy(&pseudo_packet[ppoffset], question->tsig.tsigalg, question->tsig.tsigalglen);
 	ppoffset += question->tsig.tsigalglen;
 
-	now = time(NULL);
 
 	answer = (struct dns_tsigrr *)&reply[offset];
-	answer->timefudge = htobe64((u_int64_t)(now << 16) | (300 & 0xffff));
+	if (request == 0) {
+		answer->timefudge = question->tsig.tsig_timefudge;
+	} else {
+		now = time(NULL);
+		answer->timefudge = htobe64((now << 16) | (300 & 0xffff));
+	}
 	answer->macsize = htons(question->tsig.tsigmaclen);
 	offset += (8 + 2);
 
@@ -469,12 +477,32 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	*sval = htons(question->tsig.tsigerrorcode);
 	offset += 2;
 		
-	sval = (u_int16_t *)&reply[offset];
-	*sval = htons(0);
-	offset += 2;
+	if (question->tsig.tsigerrorcode == DNS_BADTIME) {
+		now = time(NULL);
+
+		sval = (u_int16_t *)&reply[offset];
+		*sval = htons(6);
+		offset += 2;
+
+		sval = (u_int16_t *)&reply[offset];
+		*sval = 0;
+		offset += 2;
+		
+		lval = (u_int32_t *)&reply[offset];
+		*lval = htonl(now & 0xffffffff);
+		offset += 4;
+
+	} else {
+		sval = (u_int16_t *)&reply[offset];
+		*sval = htons(0);
+		offset += 2;
+	}
 
 	ppanswer = (struct dns_tsigrr *)&pseudo_packet[ppoffset];
-	ppanswer->timefudge = htobe64((u_int64_t)(now << 16) | (300 & 0xffff));
+	if (request == 0) 
+		ppanswer->timefudge = question->tsig.tsig_timefudge;
+	else
+		ppanswer->timefudge = htobe64((now << 16) | (300 & 0xffff));
 	ppoffset += 8;
 
 
@@ -484,10 +512,23 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	ppoffset += 2;
 		
 	/* other len */
-	sval = (u_int16_t *)&pseudo_packet[ppoffset];
-	*sval = htons(0);
-	ppoffset += 2;
+	if (question->tsig.tsigerrorcode == DNS_BADTIME) {
+		sval = (u_int16_t *)&pseudo_packet[ppoffset];
+		*sval = htons(6);
+		ppoffset += 2;
 
+		sval = (u_int16_t *)&pseudo_packet[ppoffset];
+		*sval = 0;
+		ppoffset += 2;
+		
+		lval = (u_int32_t *)&pseudo_packet[ppoffset];
+		*lval = htonl(now & 0xffffffff);
+		ppoffset += 4;
+	} else {
+		sval = (u_int16_t *)&pseudo_packet[ppoffset];
+		*sval = htons(0);
+		ppoffset += 2;
+	}
 
 	if (question->tsig.tsigerrorcode == DNS_BADTIME) {
 		HMAC(EVP_sha256(), tsigkey, tsignamelen, 
@@ -499,6 +540,8 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 		HMAC(EVP_sha256(), tsigkey, tsignamelen, 
 			(unsigned char *)pseudo_packet, ppoffset, 
 			(unsigned char *)&answer->mac[0], (u_int *)&macsize);
+
+		memcpy(question->tsig.tsigmac, &answer->mac[0], macsize);
 	}
 
 	free(pseudo_packet);

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.25 2019/02/24 14:53:03 pjp Exp $
+ * $Id: util.c,v 1.26 2019/02/26 07:45:56 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -47,11 +47,11 @@ void slave_shutdown(void);
 int get_record_size(ddDB *, char *, int);
 struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
 u_int16_t check_qtype(struct rbtree *, u_int16_t, int, int *);
-struct question		*build_fake_question(char *, int, u_int16_t);
+struct question		*build_fake_question(char *, int, u_int16_t, char *, int);
 
 char 			*get_dns_type(int, int);
 int 			memcasecmp(u_char *, u_char *, int);
-struct question		*build_question(char *, int, int);
+struct question		*build_question(char *, int, int, char *);
 int			free_question(struct question *);
 struct rrtab 	*rrlookup(char *);
 char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
@@ -520,7 +520,7 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
  */
 
 struct question *
-build_fake_question(char *name, int namelen, u_int16_t type)
+build_fake_question(char *name, int namelen, u_int16_t type, char *tsigkey, int tsigkeylen)
 {
 	struct question *q;
 
@@ -553,7 +553,34 @@ build_fake_question(char *name, int namelen, u_int16_t type)
 	q->hdr->qtype = type;
 	q->hdr->qclass = htons(DNS_CLASS_IN);
 
+	if (tsig) {
+		char *alg;
+		int alglen;
+
+		if (tsigkeylen > sizeof(q->tsig.tsigkey)) {
+			free(q->hdr->name);
+			free(q->hdr);
+			free(q);
+			return NULL;
+		}
+
+		memcpy(&q->tsig.tsigkey, tsigkey, tsigkeylen);
+		q->tsig.tsigkeylen = tsigkeylen;
+	
+		alg = dns_label("hmac-sha256.", &alglen);
+		
+		if (alg != NULL) {
+			memcpy (&q->tsig.tsigalg, alg, alglen);
+			q->tsig.tsigalglen = alglen;
+
+			free(alg);
+
+			q->tsig.tsigmaclen = 32;
+		}
+	}
+
 	return (q);
+
 }
 
 /*
@@ -625,7 +652,7 @@ memcasecmp(u_char *b1, u_char *b2, int len)
  */
 
 struct question *
-build_question(char *buf, int len, int additional)
+build_question(char *buf, int len, int additional, char *mac)
 {
 	char pseudo_packet[4096];		/* for tsig */
 	u_int rollback, i;
@@ -970,13 +997,6 @@ build_question(char *buf, int len, int additional)
 
 		q->tsig.tsig_timefudge = tsigrr->timefudge;
 		
-		now = time(NULL);
-		/* outside our fudge window */
-		if (tsigtime < (now - fudge) || tsigtime > (now + fudge)) {
-			q->tsig.tsigerrorcode = DNS_BADTIME;
-			break;
-		}
-
 		i += (8 + 2);		/* timefudge + macsize */
 
 		if (ntohs(tsigrr->macsize) != 32) {
@@ -1007,8 +1027,20 @@ build_question(char *buf, int len, int additional)
 		tsigotherlen = (u_int16_t *)&buf[i];
 		i += 2;
 
-		memcpy(pseudo_packet, buf, pseudolen1);
-		ppoffset = pseudolen1;
+		ppoffset = 0;
+
+		/* check if we have a request mac, this means it's an answer */
+		if (mac) {
+			val16 = (u_int16_t *)&pseudo_packet[ppoffset];
+			*val16 = htons(32);	 /* XXX magic number */
+			ppoffset += 2;
+
+			memcpy(&pseudo_packet[ppoffset], mac, 32);
+			ppoffset += 32;
+		}
+
+		memcpy(&pseudo_packet[ppoffset], buf, pseudolen1);
+		ppoffset += pseudolen1;
 		memcpy((char *)&pseudo_packet[ppoffset], &buf[pseudolen2], 6); 
 		ppoffset += 6;
 
@@ -1029,12 +1061,17 @@ build_question(char *buf, int len, int additional)
 		memcpy(&pseudo_packet[ppoffset], &buf[i], len - i);
 		ppoffset += (len - i);
 
+
 		HMAC(EVP_sha256(), tsigkey, tsignamelen, (unsigned char *)pseudo_packet, 
 			ppoffset, (unsigned char *)&sha256, &shasize);
 
 
 
+#if __OpenBSD__
+		if (timingsafe_memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
+#else
 		if (memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
+#endif
 #if DEBUG
 			dolog(LOG_INFO, "HMAC did not verify\n");
 #endif
@@ -1045,6 +1082,19 @@ build_question(char *buf, int len, int additional)
 		/* copy the mac for error coding */
 		memcpy(q->tsig.tsigmac, tsigrr->mac, sizeof(q->tsig.tsigmac));
 		q->tsig.tsigmaclen = 32;
+
+		/* 
+		 * here we have a delayed fudge check, we want to ensure
+		 * that the signature checked out before we give out a 
+		 * BADTIME message, otherwise it is BADKEY or BADSIG
+		 */
+		
+		now = time(NULL);
+		/* outside our fudge window */
+		if (tsigtime < (now - fudge) || tsigtime > (now + fudge)) {
+			q->tsig.tsigerrorcode = DNS_BADTIME;
+			break;
+		}
 		
 		/* we're now authenticated */
 		q->tsig.tsigerrorcode = 0;

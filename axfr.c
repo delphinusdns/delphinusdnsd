@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.21 2019/02/19 11:49:54 pjp Exp $
+ * $Id: axfr.c,v 1.22 2019/02/26 07:45:56 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -45,7 +45,7 @@ void	gather_notifydomains(ddDB *);
 void	init_axfr(void);
 void	init_notifyslave(void);
 int	insert_axfr(char *, char *);
-int	insert_notifyslave(char *, char *);
+int	insert_notifyslave(char *, char *, char *);
 void	notifypacket(int, void *, void *, int);
 void	notifyslaves(int *);
 void	reap(int);
@@ -58,8 +58,8 @@ extern void		reply_nxdomain(struct sreply *, ddDB *);
 extern struct rbtree *	get_soa(ddDB *, struct question *);
 extern int		compress_label(u_char *, int, int);
 extern u_int16_t	create_anyreply(struct sreply *, char *, int, int, int);
-extern struct question	*build_fake_question(char *, int, u_int16_t);
-extern struct question	*build_question(char *, int, int);
+extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
+extern struct question	*build_question(char *, int, int, char *);
 extern int		free_question(struct question *);
 extern void		dolog(int, char *, ...);
 extern void 		build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, struct recurses *);
@@ -70,13 +70,16 @@ extern int display_rr(struct rrset *rrset);
 extern int rotate_rr(struct rrset *rrset);
 
 extern int domaincmp(struct node *e1, struct node *e2);
+extern char * dns_label(char *, int *);
+extern int additional_tsig(struct question *, char *, int, int, int);
 
 int notify = 0;				/* do not notify when set to 0 */
 
 extern int debug, verbose;
 extern time_t time_changed;
+extern int tsig;
 
-SLIST_HEAD(listhead, axfrentry) axfrhead;
+SLIST_HEAD(, axfrentry) axfrhead;
 
 static struct axfrentry {
 	char name[INET6_ADDRSTRLEN];
@@ -87,7 +90,7 @@ static struct axfrentry {
 	SLIST_ENTRY(axfrentry) axfr_entry;
 } *an2, *anp;
 
-SLIST_HEAD(notifyslavelisthead, notifyslaveentry) notifyslavehead;
+SLIST_HEAD(, notifyslaveentry) notifyslavehead;
 
 static struct notifyslaveentry {
 	char name[INET6_ADDRSTRLEN];
@@ -95,6 +98,9 @@ static struct notifyslaveentry {
 	struct sockaddr_storage hostmask;
 	struct sockaddr_storage netmask;
 	u_int8_t prefixlen;
+	char *tsigname;
+	int tsignamelen;
+	char tsigrequestmac[32];
 	SLIST_ENTRY(notifyslaveentry) notifyslave_entry;
 } *nfslnp2, *nfslnp;
 
@@ -112,6 +118,7 @@ static struct notifyentry {
 
 extern int domaincmp(struct node *e1, struct node *e2);
 static int 	check_notifyreply(struct dns_header *, struct question *, struct sockaddr_storage *, int, struct notifyentry *, int);
+
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list
@@ -262,12 +269,18 @@ init_notifyslave(void)
  */
 
 int
-insert_notifyslave(char *address, char *prefixlen)
+insert_notifyslave(char *address, char *prefixlen, char *tsigkey)
 {
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
-	int pnum;
+	int pnum, tsignamelen; 
 	int ret;
+
+	tsignamelen = strlen(tsigkey);
+	if (strcmp(tsigkey, "NOKEY") == 0) {
+		tsigkey = NULL;
+		tsignamelen = 0;
+	}
 
 	pnum = atoi(prefixlen);
 	nfslnp2 = calloc(1, sizeof(struct notifyslaveentry));      /* Insert after. */
@@ -301,6 +314,17 @@ insert_notifyslave(char *address, char *prefixlen)
 
 	}
 
+	if (tsignamelen != 0) {
+		nfslnp2->tsigname = dns_label(tsigkey, &tsignamelen);
+		if (nfslnp2->tsigname == NULL) {
+			return -1;
+		}
+		nfslnp2->tsignamelen = tsignamelen;
+	} else {
+		nfslnp2->tsigname = NULL;
+		nfslnp2->tsignamelen = 0;
+	}
+
 	SLIST_INSERT_HEAD(&notifyslavehead, nfslnp2, notifyslave_entry);
 
 	return (0);
@@ -329,6 +353,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 	socklen_t fromlen;
 	char buf[512];
 	char *packet;
+	char requestmac[32];
 	
 	time_t now;
 	pid_t pid;
@@ -610,7 +635,21 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 					continue;
 				}
 
-				question = build_question(buf, len, ntohs(dh->additional));
+				/* get our request mac */
+				SLIST_FOREACH(nfslnp, &notifyslavehead, notifyslave_entry) {
+					struct sockaddr_in *sin2 = (struct sockaddr_in *)&nfslnp->hostmask;
+
+					if (memcmp((char *)&sin->sin_addr.s_addr, (char *)&sin2->sin_addr.s_addr, sizeof(struct in_addr)) == 0) {
+						memcpy(requestmac, nfslnp->tsigrequestmac, 32);
+						break;
+					}
+				}
+
+				if (nfslnp == NULL)
+					question = build_question(buf, len, ntohs(dh->additional), NULL);
+				else
+					question = build_question(buf, len, ntohs(dh->additional), requestmac);
+
 				if (question == NULL) {
 					dolog(LOG_INFO, "build_question failed on notify reply, drop\n");
 					continue;
@@ -672,14 +711,28 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 					continue;
 				}
 
-				question = build_question(buf, len, ntohs(dh->additional));
+				sin6 = (struct sockaddr_in6 *)&from;
+				inet_ntop(AF_INET6, (void*)&sin6->sin6_addr, (char*)&address, sizeof(address));
+
+				/* get our request mac */
+				SLIST_FOREACH(nfslnp, &notifyslavehead, notifyslave_entry) {
+					struct sockaddr_in6 *sin2 = (struct sockaddr_in6 *)&nfslnp->hostmask;
+
+					if (memcmp((char *)&sin6->sin6_addr, (char *)&sin2->sin6_addr, sizeof(struct in6_addr)) == 0) {
+						memcpy(requestmac, nfslnp->tsigrequestmac, 32);
+						break;
+					}
+				}
+
+				if (nfslnp == NULL)
+					question = build_question(buf, len, ntohs(dh->additional), NULL);
+				else
+					question = build_question(buf, len, ntohs(dh->additional), requestmac);
 				if (question == NULL) {
 					dolog(LOG_INFO, "build_question failed on notify reply, drop\n");
 					continue;
 				}
 
-				sin6 = (struct sockaddr_in6 *)&from;
-				inet_ntop(AF_INET6, (void*)&sin6->sin6_addr, (char*)&address, sizeof(address));
 
 #ifdef __linux
 				SLIST_FOREACH(notnp, &notifyhead, notify_entry) {
@@ -805,7 +858,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			goto drop;	
 		}
 
-		if ((question = build_question((p + 2), dnslen, 0)) == NULL) {
+		if ((question = build_question((p + 2), dnslen, 0, NULL)) == NULL) {
 			dolog(LOG_INFO, "AXFR malformed question, drop\n");
 			goto drop;
 		}
@@ -917,7 +970,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			memcpy((char*)saverbt,(char*)n->data, sizeof(struct rbtree));
 
 			if (checklabel(db, rbt, soa, question)) {
-				fq = build_fake_question(rbt->zone, rbt->zonelen, 0);
+				fq = build_fake_question(rbt->zone, rbt->zonelen, 0, NULL, 0);
 				build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, rbt, NULL, 0xff, 1, 0, NULL);
 				outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0);
 				free_question(fq);
@@ -928,7 +981,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 						((struct ns *)rrp->rdata)->ns_type & NS_TYPE_DELEGATE) {
 						TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 							fq = build_fake_question(((struct ns *)rrp->rdata)->nsserver,
-								((struct ns *)rrp->rdata)->nslen, 0);
+								((struct ns *)rrp->rdata)->nslen, 0, NULL, 0);
 							rbt2 = find_rrset(db, fq->hdr->name, fq->hdr->namelen);
 							if (rbt2 == NULL) {
 								free_question(fq);
@@ -1389,6 +1442,7 @@ notifypacket(int so, void *vnse, void *vnotnp, int packetcount)
 	char *questionname;
 	u_int16_t *classtype;
 	struct dns_header *dnh;
+	struct question *fq = NULL;
 	int outlen = 0, slen, ret;
 
 	memset(&packet, 0, sizeof(packet));
@@ -1413,6 +1467,21 @@ notifypacket(int so, void *vnse, void *vnotnp, int packetcount)
 	classtype[1] = htons(DNS_CLASS_IN);
 
 	outlen += (2 * sizeof(u_int16_t));
+
+	/* work out the tsig stuff */
+	if (nse->tsignamelen != 0) {
+		if ((fq = build_fake_question(notnp->domain, notnp->domainlen, 0, nse->tsigname, nse->tsignamelen)) == NULL) {
+			return;
+		}
+	
+		outlen = additional_tsig(fq, packet, sizeof(packet), outlen, 1);
+
+		dnh->additional = htons(1);
+
+		memcpy(nse->tsigrequestmac, fq->tsig.tsigmac, 32);
+
+		free_question(fq);
+	}
 		
 	if (nse->family == AF_INET) {
 		slen = sizeof(struct sockaddr_in);
@@ -1478,6 +1547,11 @@ check_notifyreply(struct dns_header *dh, struct question *question, struct socka
 #else
 			SLIST_FOREACH_SAFE(nfslnp, &notifyslavehead, notifyslave_entry, nfslnp2) {
 #endif
+				if (tsig && nfslnp->tsignamelen != 0 && question->tsig.tsigverified != 1) {
+					dolog(LOG_ERR, "tsig'ed notify answer was not validated, errorcode = %02x\n", question->tsig.tsigerrorcode);
+					continue;
+				}
+
 				if (nfslnp->family != af)
 					continue;
 

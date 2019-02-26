@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.58 2019/02/24 14:53:02 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.59 2019/02/26 07:45:56 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -39,7 +39,7 @@
 
 extern void 	add_rrlimit(int, u_int16_t *, int, char *);
 extern void 	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *);
-extern struct question	*build_fake_question(char *, int, u_int16_t);
+extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
 extern int 	check_ent(char *, int);
 extern int 	check_rrlimit(int, u_int16_t *, int, char *);
 extern void 	collects_init(void);
@@ -93,7 +93,7 @@ extern char 	*rrlimit_setup(int);
 extern char 	*dns_label(char *, int *);
 extern void 	slave_shutdown(void);
 extern int 	get_record_size(ddDB *, char *, int);
-extern struct question		*build_question(char *, int, int);
+extern struct question		*build_question(char *, int, int, char *);
 extern int			free_question(struct question *);
 extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
@@ -1917,7 +1917,7 @@ axfrentry:
 					if (rr_csd == NULL)
 						break;
 					
-					fakequestion = build_fake_question(((struct cname *)rr_csd)->cname, ((struct cname *)rr_csd)->cnamelen, question->hdr->qtype);
+					fakequestion = build_fake_question(((struct cname *)rr_csd)->cname, ((struct cname *)rr_csd)->cnamelen, question->hdr->qtype, NULL, 0);
 					if (fakequestion == NULL) {	
 						dolog(LOG_INFO, "fakequestion failed\n");
 						break;
@@ -2777,7 +2777,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					if (rr_csd == NULL)
 						break;
 					
-					fakequestion = build_fake_question(((struct cname *)rr_csd)->cname, ((struct cname *)rr_csd)->cnamelen, question->hdr->qtype);
+					fakequestion = build_fake_question(((struct cname *)rr_csd)->cname, ((struct cname *)rr_csd)->cnamelen, question->hdr->qtype, NULL, 0);
 					if (fakequestion == NULL) {	
 						dolog(LOG_INFO, "fakequestion failed\n");
 						break;
@@ -3024,7 +3024,7 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 						break;
 					}
 
-					if ((question = build_question(packet, datalen, ntohs(dh->additional))) == NULL) {
+					if ((question = build_question(packet, datalen, ntohs(dh->additional), NULL)) == NULL) {
 						/* XXX reply nak here */
 						pq.rc = PARSE_RETURN_MALFORMED;
 						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));

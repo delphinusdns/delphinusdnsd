@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dnssec.c,v 1.22 2019/02/18 14:59:55 pjp Exp $
+ * $Id: dnssec.c,v 1.23 2019/02/26 07:45:56 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -63,7 +63,6 @@ extern int              get_record_size(ddDB *, char *, int);
 extern char *           dns_label(char *, int *);
 extern void             dolog(int, char *, ...);
 extern int              checklabel(ddDB *, struct rbtree *, struct rbtree *, struct question *);
-extern struct question  *build_fake_question(char *, int, u_int16_t);
 extern int              free_question(struct question *);
 extern int		check_ent(char *, int);
 extern int 		memcasecmp(u_char *, u_char *, int);

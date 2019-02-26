@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.62 2019/02/24 07:14:02 pjp Exp $
+ * $Id: parse.y,v 1.63 2019/02/26 07:45:56 pjp Exp $
  */
 
 %{
@@ -41,7 +41,7 @@ extern int 	insert_apex(char *, char *, int);
 extern int 	insert_nsec3(char *, char *, char *, int);
 extern int 	insert_region(char *, char *, u_int8_t);
 extern int 	insert_axfr(char *, char *);
-extern int 	insert_notifyslave(char *, char *);
+extern int 	insert_notifyslave(char *, char *, char *);
 extern int 	insert_filter(char *, char *);
 extern int 	insert_whitelist(char *, char *);
 extern int	insert_tsig(char *, char *);
@@ -1305,7 +1305,7 @@ notifystatements 	:
 				| notifystatement 
 				;
 
-notifystatement	:	ipcidr SEMICOLON CRLF
+notifystatement	:	ipcidr STRING SEMICOLON CRLF
 			{
 					char prefixlength[INET_ADDRSTRLEN];
 					char *dst;
@@ -1316,7 +1316,7 @@ notifystatement	:	ipcidr SEMICOLON CRLF
 								return (-1);
 							}
 
-							if (insert_notifyslave(dst, prefixlength) < 0) {
+							if (insert_notifyslave(dst, prefixlength, $2) < 0) {
 								dolog(LOG_ERR, "insert_notifyslave, line %d\n", file->lineno);
 								return (-1);
 							}
@@ -1327,6 +1327,7 @@ notifystatement	:	ipcidr SEMICOLON CRLF
 					}
 
 					free ($1);
+					free ($2);
 			}
 			| comment CRLF
 			;	
@@ -1473,7 +1474,7 @@ struct tab cmdtab[] = {
 	{ "version", VERSION, 0 },
 	{ "zinclude", ZINCLUDE, 0 },
 	{ "zone", ZONE, 0 },
-	{ "notify", NOTIFY, STATE_IP },
+	{ "notify", NOTIFY, 0 },
 	{ NULL, 0, 0}};
 
 

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.56 2019/02/24 07:14:02 pjp Exp $
+ * $Id: dddctl.c,v 1.57 2019/02/26 07:45:56 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -252,7 +252,7 @@ extern char * convert_name(char *name, int namelen);
 extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int      mybase64_decode(char const *, u_char *, size_t);
 extern struct rbtree *         lookup_zone(ddDB *, struct question *, int *, int *, char *);
-extern struct question         *build_fake_question(char *, int, u_int16_t);
+extern struct question         *build_fake_question(char *, int, u_int16_t, char *, int);
 extern char * dns_label(char *, int *);
 extern int label_count(char *);
 extern char *get_dns_type(int, int);
@@ -260,7 +260,7 @@ extern char * hash_name(char *, int, struct nsec3param *);
 extern char * base32hex_encode(u_char *input, int len);
 extern int  	init_entlist(ddDB *);
 extern int	check_ent(char *, int);
-extern struct question          *build_question(char *, int, int);
+extern struct question          *build_question(char *, int, int, char *);
 extern int                      free_question(struct question *);
 struct rrtab    *rrlookup(char *);
 
@@ -1036,7 +1036,7 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 	if (dnsname == NULL)
 		return -1;
 
-	q = build_fake_question(dnsname, labellen, DNS_TYPE_SOA);
+	q = build_fake_question(dnsname, labellen, DNS_TYPE_SOA, NULL, 0);
 	if (q == NULL) {
 		return -1;
 	}
@@ -5186,7 +5186,7 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 		return -1;
 	}
 
-	qp = build_fake_question(dnsname, labellen, DNS_TYPE_SOA);
+	qp = build_fake_question(dnsname, labellen, DNS_TYPE_SOA, NULL, 0);
 	if (qp == NULL) {
 		dolog(LOG_INFO, "qp == NULL\n");
 		return -1;
@@ -6090,7 +6090,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 	if (dnsname == NULL)
 		return -1;
 
-	q = build_fake_question(dnsname, labellen, DNS_TYPE_NSEC3PARAM);
+	q = build_fake_question(dnsname, labellen, DNS_TYPE_NSEC3PARAM, NULL, 0);
 	if (q == NULL) {
 		return -1;
 	}
@@ -7061,7 +7061,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		segmentcount = ntohs(rwh->dh.answer);
 		answers += segmentcount;
 
-		q = build_question((char *)&wh->dh, len, wh->dh.additional);
+		q = build_question((char *)&wh->dh, len, wh->dh.additional, NULL);
 		if (q == NULL) {
 			fprintf(stderr, "failed to build_question\n");
 			return -1;
@@ -7324,7 +7324,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	}
 
 
-	q = build_question((char *)&wh->dh, len, wh->dh.additional);
+	q = build_question((char *)&wh->dh, len, wh->dh.additional, NULL);
 	if (q == NULL) {
 		fprintf(stderr, "failed to build_question\n");
 		return -1;
@@ -7849,7 +7849,7 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 	if (dnsname == NULL)
 		return -1;
 
-	q = build_fake_question(dnsname, labellen, DNS_TYPE_SOA);
+	q = build_fake_question(dnsname, labellen, DNS_TYPE_SOA, NULL, 0);
 	if (q == NULL) {
 		return -1;
 	}

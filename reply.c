@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.71 2019/02/24 14:53:02 pjp Exp $
+ * $Id: reply.c,v 1.72 2019/02/26 07:45:56 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -47,7 +47,7 @@ extern int 		additional_opt(struct question *, char *, int, int);
 extern int 		additional_tsig(struct question *, char *, int, int, int);
 extern int 		additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int);
 extern int 		additional_nsec(char *, int, int, struct rbtree *, char *, int, int);
-extern struct question 	*build_fake_question(char *, int, u_int16_t);
+extern struct question 	*build_fake_question(char *, int, u_int16_t, char *, int);
 extern int 		compress_label(u_char *, int, int);
 extern void 		dolog(int, char *, ...);
 extern int 		free_question(struct question *);
@@ -4965,7 +4965,7 @@ Lookup_zone(ddDB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcar
 	int mytype;
 	int lzerrno;
 
-	fakequestion = build_fake_question(name, namelen, type);
+	fakequestion = build_fake_question(name, namelen, type, NULL, 0);
 	if (fakequestion == NULL) {
 		dolog(LOG_INFO, "fakequestion(2) failed\n");
 		return (NULL);
