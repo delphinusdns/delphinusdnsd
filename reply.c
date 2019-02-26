@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.72 2019/02/26 07:45:56 pjp Exp $
+ * $Id: reply.c,v 1.73 2019/02/26 08:15:33 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -4422,11 +4422,7 @@ reply_refused(struct sreply *sreply, ddDB *db)
 		return (retlen);
 	}
 
-	if (istcp)
-		memcpy((char *)&odh->id, &buf[2], sizeof(u_int16_t));
-	else
-		memcpy((char *)&odh->id, buf, sizeof(u_int16_t));
-
+	memcpy((char *)&odh->id, buf, sizeof(u_int16_t));
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	SET_DNS_REPLY(odh);

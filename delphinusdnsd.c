@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.59 2019/02/26 07:45:56 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.60 2019/02/26 08:15:33 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -2463,6 +2463,8 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 
 				if (filter && require_tsig == 0) {
 					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, filter policy\n", so, cfg->ident[i], address);
+					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+					slen = reply_refused(&sreply, NULL);
 					close(so);
 					continue;
 				}
@@ -2615,7 +2617,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 								goto drop;
 							case PARSE_RETURN_NOTAUTH:
 								if (filter && pq.tsig.have_tsig == 0) {
-									build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+									build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 									slen = reply_refused(&sreply, NULL);
 									dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, aregion);
 									imsg_free(&imsg);
@@ -2645,7 +2647,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0)  {
 					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsig.tsigerrorcode, address);
 					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
-					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+					build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 					reply_notauth(&sreply, NULL);
 					goto tcpout;
 				}
