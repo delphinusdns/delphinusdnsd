@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 Peter J. Philipp
+ * Copyright (c) 2011-2019 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,13 +27,15 @@
  */
 
 /*
- * $Id: axfr.c,v 1.22 2019/02/26 07:45:56 pjp Exp $
+ * $Id: axfr.c,v 1.23 2019/02/27 19:11:41 pjp Exp $
  */
 
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
 
 void	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *ibuf);
 void	axfr_connection(int, char *, int, ddDB *, char *, int);
@@ -71,7 +73,8 @@ extern int rotate_rr(struct rrset *rrset);
 
 extern int domaincmp(struct node *e1, struct node *e2);
 extern char * dns_label(char *, int *);
-extern int additional_tsig(struct question *, char *, int, int, int);
+extern int additional_tsig(struct question *, char *, int, int, int, int);
+extern int find_tsig_key(char *keyname, int keynamelen, char *key, int keylen);
 
 int notify = 0;				/* do not notify when set to 0 */
 
@@ -780,6 +783,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 {
 
 	char buf[4000];
+	char tsigkey[512];
 	char *p = &buf[0];
 	char *q;
 	char *reply;
@@ -789,7 +793,9 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 	int qlen;
 	int outlen;
 	int rrcount;
+	int envelopcount;
 	int rs;
+	int tsigkeylen;
 
 	u_int16_t *tmp;
 	
@@ -858,7 +864,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			goto drop;	
 		}
 
-		if ((question = build_question((p + 2), dnslen, 0, NULL)) == NULL) {
+		if ((question = build_question((p + 2), dnslen, ntohs(dh->additional), NULL)) == NULL) {
 			dolog(LOG_INFO, "AXFR malformed question, drop\n");
 			goto drop;
 		}
@@ -877,6 +883,11 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			dolog(LOG_INFO, "AXFR question wasn't for valid types (ixfr, axfr, soa) with requested type %d, drop\n", ntohs(question->hdr->qtype));	
 			goto drop;
 
+		}
+
+		if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0) {
+			dolog(LOG_INFO, "AXFR question had TSIG errors, code %02x, drop\n", question->tsig.tsigerrorcode);
+			goto drop;
 		}
 
 		/* now we can be reasonably sure that it's an AXFR for us */
@@ -947,13 +958,34 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			continue;
 		}
 
+		/* initialize tsig */
+
+#if 0
+		if (question->tsig.tsigverified) {
+			if ((tsigkeylen = find_tsig_key(question->tsig.tsigkey, 
+				question->tsig.tsigkeylen, (char *)&tsigkey, sizeof(tsigkey))) < 0) {
+				dolog(LOG_ERR, "AXFR could not get tsigkey..odd, drop\n");
+				goto drop;
+			
+			}
+
+			tsigctx = HMAC_CTX_new();
+			if (HMAC_Init(tsigctx, (const void *)&tsigkey, tsigkeylen, EVP_sha256()) == 0) {
+				dolog(LOG_ERR, "AXFR tsig initialization error, drop\n");
+				goto drop;
+			}
+		}
+#endif
+
 		dolog(LOG_INFO, "%s request for zone \"%s\", replying...\n", 
 			(ntohs(question->hdr->qtype) == DNS_TYPE_AXFR ? "AXFR"
 				: "IXFR"), question->converted_name);
 
+
 		outlen = build_header(db, (reply + 2), (p + 2), question, 0);
 		outlen = build_soa(db, (reply + 2), outlen, soa, question);
 		rrcount = 1;
+		envelopcount = 1;
 		
 		RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 			rs = n->datalen;
@@ -1016,6 +1048,15 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				odh->answer += rrcount;
 				HTONS(odh->answer);
 
+				/* additional_tsig here */
+				if (question->tsig.have_tsig && question->tsig.tsigverified) {
+					outlen = additional_tsig(question, (reply + 2), 65000, outlen, 0, (envelopcount++ != 1));
+					odh->additional = htons(1);
+
+					tmp = (u_int16_t *)reply; 
+					*tmp = htons(outlen);
+				}
+
 				len = send(so, reply, outlen + 2, 0);
 				if (len <= 0) {
 					goto drop;
@@ -1048,6 +1089,15 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		NTOHS(odh->answer);
 		odh->answer += rrcount;
 		HTONS(odh->answer);
+
+		/* additional_tsig here */
+		if (question->tsig.have_tsig && question->tsig.tsigverified) {
+			outlen = additional_tsig(question, (reply + 2), 65000, outlen, 0, (envelopcount != 1));
+			odh->additional = htons(1);
+
+			tmp = (u_int16_t *)reply; 
+			*tmp = htons(outlen);
+		}
 
 		len = send(so, reply, outlen + 2, 0);
 		if (len <= 0) 	
@@ -1474,7 +1524,7 @@ notifypacket(int so, void *vnse, void *vnotnp, int packetcount)
 			return;
 		}
 	
-		outlen = additional_tsig(fq, packet, sizeof(packet), outlen, 1);
+		outlen = additional_tsig(fq, packet, sizeof(packet), outlen, 1, 0);
 
 		dnh->additional = htons(1);
 

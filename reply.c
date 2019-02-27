@@ -27,12 +27,15 @@
  */
 
 /* 
- * $Id: reply.c,v 1.73 2019/02/26 08:15:33 pjp Exp $
+ * $Id: reply.c,v 1.74 2019/02/27 19:11:41 pjp Exp $
  */
 
 #include "ddd-include.h"
 #include "ddd-dns.h"
 #include "ddd-db.h"
+
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
 
 
 /* prototypes */
@@ -44,7 +47,7 @@ extern int 		additional_aaaa(char *, int, struct rbtree *, char *, int, int, int
 extern int 		additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_opt(struct question *, char *, int, int);
-extern int 		additional_tsig(struct question *, char *, int, int, int);
+extern int 		additional_tsig(struct question *, char *, int, int, int, int);
 extern int 		additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int);
 extern int 		additional_nsec(char *, int, int, struct rbtree *, char *, int, int);
 extern struct question 	*build_fake_question(char *, int, u_int16_t, char *, int);
@@ -148,7 +151,7 @@ reply_a(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -264,7 +267,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -276,7 +279,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -347,7 +350,7 @@ reply_nsec3param(struct sreply *sreply, ddDB *db)
 	u_int16_t rollback;
 	int saltlen;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -393,7 +396,7 @@ reply_nsec3param(struct sreply *sreply, ddDB *db)
 	a_count = 0;
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == NULL)
+	if (rrp == 0)
 		return -1;
 
 	saltlen = ((struct nsec3param *)rrp->rdata)->saltlen;
@@ -474,7 +477,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -487,7 +490,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -553,7 +556,7 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 	u_int8_t *somelen;
 	int bitmaplen, saltlen, nextlen;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -604,7 +607,7 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 	a_count = 0;
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == NULL)
+	if (rrp == 0)
 		return -1;
 
 	saltlen = ((struct nsec3 *)rrp->rdata)->saltlen;
@@ -699,7 +702,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -711,7 +714,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -771,7 +774,7 @@ reply_nsec(struct sreply *sreply, ddDB *db)
 	u_int16_t rollback;
 	int ndnlen, bitmaplen;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -816,7 +819,7 @@ reply_nsec(struct sreply *sreply, ddDB *db)
 	a_count = 0;
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == NULL)
+	if (rrp == 0)
 		return -1;
 	
 	ndnlen = ((struct nsec *)rrp->rdata)->ndn_len;
@@ -894,7 +897,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -906,7 +909,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -969,7 +972,7 @@ reply_ds(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -1087,7 +1090,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -1099,7 +1102,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -1165,7 +1168,7 @@ reply_dnskey(struct sreply *sreply, ddDB *db)
 	int rrsig_count = 0;
 	u_int16_t rollback;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -1257,7 +1260,7 @@ reply_dnskey(struct sreply *sreply, ddDB *db)
 		int tmplen = 0;
 		int origlen = outlen;
 	
-		if ((rrset2 = find_rr(rbt, DNS_TYPE_RRSIG)) == NULL)
+		if ((rrset2 = find_rr(rbt, DNS_TYPE_RRSIG)) == 0)
 			goto out;
 
 
@@ -1298,7 +1301,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -1310,7 +1313,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -1372,7 +1375,7 @@ reply_rrsig(struct sreply *sreply, ddDB *db)
 	int tmplen = 0;
 	u_int16_t rollback;
 
-	if ((find_rr(rbt, DNS_TYPE_RRSIG)) == NULL)
+	if ((find_rr(rbt, DNS_TYPE_RRSIG)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -1450,7 +1453,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -1462,7 +1465,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -1523,7 +1526,7 @@ reply_aaaa(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -1622,7 +1625,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -1635,7 +1638,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -1701,7 +1704,7 @@ reply_mx(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	
-	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) == 0)
 		return -1;
 
 
@@ -1818,7 +1821,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -1829,7 +1832,7 @@ out:
 		char *tmpbuf;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -1892,7 +1895,7 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	u_int16_t rollback;
 	int ns_type;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -2017,7 +2020,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -2028,7 +2031,7 @@ out:
 		char *tmpbuf;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -2096,7 +2099,7 @@ reply_cname(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -2137,7 +2140,7 @@ reply_cname(struct sreply *sreply, ddDB *db)
 	odh->additional = 0;
 	
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == NULL)
+	if (rrp == 0)
 		return -1;
 
 	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
@@ -2200,7 +2203,7 @@ reply_cname(struct sreply *sreply, ddDB *db)
 		HTONS(odh->answer);
 	}
 	
-	if (ntohs(q->hdr->qtype) == DNS_TYPE_A && rbt1 != NULL) {
+	if (ntohs(q->hdr->qtype) == DNS_TYPE_A && rbt1 != 0) {
 		tmplen = additional_a(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, rbt1, reply, replysize, outlen, &addcount);
 
 		if (tmplen > 0)
@@ -2230,7 +2233,7 @@ reply_cname(struct sreply *sreply, ddDB *db)
 			odh->answer++;
 			HTONS(odh->answer);
 		}
-	} else if (ntohs(q->hdr->qtype) == DNS_TYPE_AAAA && rbt1 != NULL) {
+	} else if (ntohs(q->hdr->qtype) == DNS_TYPE_AAAA && rbt1 != 0) {
 		tmplen = additional_aaaa(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, rbt1, reply, replysize, outlen, &addcount);
 
 		if (tmplen > 0)
@@ -2260,7 +2263,7 @@ reply_cname(struct sreply *sreply, ddDB *db)
 			odh->answer++;
 			HTONS(odh->answer);
 		}
-	} else if (ntohs(q->hdr->qtype) == DNS_TYPE_MX && rbt1 != NULL) {
+	} else if (ntohs(q->hdr->qtype) == DNS_TYPE_MX && rbt1 != 0) {
 		tmplen = additional_mx(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, rbt1, reply, replysize, outlen, &addcount);
 
 		if (tmplen > 0)
@@ -2290,7 +2293,7 @@ reply_cname(struct sreply *sreply, ddDB *db)
 			odh->answer++;
 			HTONS(odh->answer);
 		}
-	} else if (ntohs(q->hdr->qtype) == DNS_TYPE_PTR && rbt1 != NULL) {
+	} else if (ntohs(q->hdr->qtype) == DNS_TYPE_PTR && rbt1 != 0) {
 		tmplen = additional_ptr(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, rbt1, reply, replysize, outlen, &addcount);
 
 		if (tmplen > 0)
@@ -2333,7 +2336,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -2344,7 +2347,7 @@ out:
 		char *tmpbuf;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -2406,7 +2409,7 @@ reply_ptr(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -2425,7 +2428,7 @@ reply_ptr(struct sreply *sreply, ddDB *db)
 	}
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == NULL)
+	if (rrp == 0)
 		return -1;
 
 	/* copy question to reply */
@@ -2522,7 +2525,7 @@ out:
 	}
 	
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -2534,7 +2537,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -2598,7 +2601,7 @@ reply_soa(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -2640,7 +2643,7 @@ reply_soa(struct sreply *sreply, ddDB *db)
 	odh->additional = 0;
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == NULL)
+	if (rrp == 0)
 		return -1;
 
 	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
@@ -2781,7 +2784,7 @@ out:
 
 	
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -2793,7 +2796,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -2853,7 +2856,7 @@ reply_txt(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -2873,7 +2876,7 @@ reply_txt(struct sreply *sreply, ddDB *db)
 	}
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == NULL)
+	if (rrp == 0)
 		return -1;
 
 	/* copy question to reply */
@@ -2953,7 +2956,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -2966,7 +2969,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -3095,7 +3098,7 @@ reply_version(struct sreply *sreply, ddDB *db)
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -3160,7 +3163,7 @@ reply_tlsa(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -3274,7 +3277,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -3285,7 +3288,7 @@ out:
 		char *tmpbuf;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -3349,7 +3352,7 @@ reply_sshfp(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -3462,7 +3465,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -3473,7 +3476,7 @@ out:
 		char *tmpbuf;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -3540,7 +3543,7 @@ reply_naptr(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -3685,7 +3688,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -3696,7 +3699,7 @@ out:
 		char *tmpbuf;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -3763,7 +3766,7 @@ reply_srv(struct sreply *sreply, ddDB *db)
 	int tmplen;
 	u_int16_t rollback;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -3879,7 +3882,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -3890,7 +3893,7 @@ out:
 		char *tmpbuf;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -3961,7 +3964,7 @@ reply_notimpl(struct sreply  *sreply, ddDB *db)
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -4051,7 +4054,7 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 	 * no SOA, use the old code
 	 */
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == 0) {
 
 		memcpy(reply, buf, len);
 		memset((char *)&odh->query, 0, sizeof(u_int16_t));
@@ -4069,7 +4072,7 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 			u_int16_t *plen;
 
 			tmpbuf = malloc(len + 2);
-			if (tmpbuf == NULL) {
+			if (tmpbuf == 0) {
 				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 			}
 			plen = (u_int16_t *)tmpbuf;
@@ -4091,7 +4094,7 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 	}
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == NULL)
+	if (rrp == 0)
 		return -1;
 
 	/* copy question to reply */
@@ -4245,7 +4248,7 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 		origlen = outlen;
 		if (find_rr(rbt, DNS_TYPE_NSEC3PARAM)) {
 			rbt0 = find_nsec3_cover_next_closer(q->hdr->name, q->hdr->namelen, rbt, db);
-			if (rbt0 == NULL)
+			if (rbt0 == 0)
 				goto out;
 
 			memcpy(&uniq[rruniq].name, rbt0->zone, rbt0->zonelen);
@@ -4273,7 +4276,7 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 			origlen = outlen;
 
 			rbt0 = find_nsec3_match_closest(q->hdr->name, q->hdr->namelen, rbt, db);
-			if (rbt0 == NULL)
+			if (rbt0 == 0)
 				goto out;
 
 			memcpy(&uniq[rruniq].name, rbt0->zone, rbt0->zonelen);
@@ -4309,7 +4312,7 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 			origlen = outlen;
 
 			rbt0 = find_nsec3_wildcard_closest(q->hdr->name, q->hdr->namelen, rbt, db);
-			if (rbt0 == NULL)
+			if (rbt0 == 0)
 				goto out;
 
 			memcpy(&uniq[rruniq].name, rbt0->zone, rbt0->zonelen);
@@ -4354,7 +4357,7 @@ out:
 
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -4366,7 +4369,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -4435,7 +4438,7 @@ reply_refused(struct sreply *sreply, ddDB *db)
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -4512,7 +4515,7 @@ reply_notauth(struct sreply *sreply, ddDB *db)
 
 	odh->additional = htons(1);
 	
-	tmplen = additional_tsig(q, reply, replysize, outlen, 0);
+	tmplen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 	
 	if (tmplen != 0)
 		outlen = tmplen;
@@ -4522,7 +4525,7 @@ reply_notauth(struct sreply *sreply, ddDB *db)
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -4591,7 +4594,7 @@ reply_fmterror(struct sreply *sreply, ddDB *db)
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -4682,7 +4685,7 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 	 * no SOA, use the old code
 	 */
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == 0) {
 		memcpy(reply, buf, len);
 		memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
@@ -4699,7 +4702,7 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 			u_int16_t *plen;
 
 			tmpbuf = malloc(len + 2);
-			if (tmpbuf == NULL) {
+			if (tmpbuf == 0) {
 				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 			}
 			plen = (u_int16_t *)tmpbuf;
@@ -4721,7 +4724,7 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 	}
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == NULL)
+	if (rrp == 0)
 		return -1;
 	
 	/* copy question to reply */
@@ -4877,7 +4880,7 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 			free(rbt0);
 		} else if (find_rr(rbt, DNS_TYPE_NSEC3PARAM)) {
 			rbt0 = find_nsec3_match_qname(q->hdr->name, q->hdr->namelen, rbt, db);
-			if (rbt0 == NULL)
+			if (rbt0 == 0)
 				goto out;
 
 			memcpy(&uniq[rruniq].name, rbt0->zone, rbt0->zonelen);
@@ -4915,7 +4918,7 @@ out:
 	}
 	
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -4927,7 +4930,7 @@ out:
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -4962,16 +4965,16 @@ Lookup_zone(ddDB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcar
 	int lzerrno;
 
 	fakequestion = build_fake_question(name, namelen, type, NULL, 0);
-	if (fakequestion == NULL) {
+	if (fakequestion == 0) {
 		dolog(LOG_INFO, "fakequestion(2) failed\n");
-		return (NULL);
+		return (0);
 	}
 
 	rbt = lookup_zone(db, fakequestion, &mytype, &lzerrno, (char *)&fakereplystring);
 
-	if (rbt == NULL) {
+	if (rbt == 0) {
 		free_question(fakequestion);
-		return (NULL);
+		return (0);
 	}
 
 	free_question(fakequestion);
@@ -5056,7 +5059,7 @@ reply_any(struct sreply *sreply, ddDB *db)
 	}
 			
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -5068,7 +5071,7 @@ reply_any(struct sreply *sreply, ddDB *db)
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;
@@ -5132,13 +5135,13 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	char *name, *p;
 	int i;
 
-	if (soa && (rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
+	if (soa && (rrset = find_rr(rbt, DNS_TYPE_SOA)) != 0) {
 		NTOHS(odh->answer);
 		odh->answer++;
 		HTONS(odh->answer);
 
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL)
+		if (rrp == 0)
 			return -1;
 
 		if ((offset + q->hdr->namelen) > rlen) {
@@ -5251,7 +5254,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		answer->rdlength = htons(&reply[offset] - answer->rdata);
 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) != 0) {
 		int dnskey_count = 0;
 
 		rrsig_count = 0;
@@ -5275,7 +5278,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		HTONS(odh->answer);
 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != 0) {
 		dnskey_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 			if (offset + q->hdr->namelen > rlen)
@@ -5332,7 +5335,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		odh->answer += dnskey_count;
 		HTONS(odh->answer);
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != 0) {
 		ds_count = 0;
 
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
@@ -5388,9 +5391,9 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		} 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != 0) {
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL)
+		if (rrp == 0)
 			return -1;
 
 		if (offset + q->hdr->namelen > rlen)
@@ -5466,9 +5469,9 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		HTONS(odh->answer);
 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != 0) {
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL)
+		if (rrp == 0)
 			return -1;
 
 		if (offset + q->hdr->namelen > rlen)
@@ -5529,9 +5532,9 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		HTONS(odh->answer);
 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) != 0) {
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL)
+		if (rrp == 0)
 			return -1;
 
 		if (offset + q->hdr->namelen > rlen)
@@ -5576,7 +5579,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		HTONS(odh->answer);
 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != 0) {
 		ns_count = 0;
 
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
@@ -5625,10 +5628,10 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		HTONS(odh->answer);
 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != 0) {
 
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL)
+		if (rrp == 0)
 			return -1;
 
 		NTOHS(odh->answer);
@@ -5680,7 +5683,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		answer->rdlength = htons(&reply[offset] - answer->rdata);
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != 0) {
 
 		mx_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
@@ -5733,9 +5736,9 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		HTONS(odh->answer);
 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != 0) {
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL)
+		if (rrp == 0)
 			return -1;
 
 		NTOHS(odh->answer);
@@ -5772,7 +5775,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		answer->rdlength = htons(((struct txt *)rrp->rdata)->txtlen + 1);
 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != 0) {
 
 		tlsa_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
@@ -5833,7 +5836,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		HTONS(odh->answer);
 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != 0) {
 
 		sshfp_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
@@ -5887,7 +5890,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		HTONS(odh->answer);
 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != 0) {
 		naptr_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 			if ((offset + q->hdr->namelen) > rlen) {
@@ -5975,7 +5978,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		HTONS(odh->answer);
 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != 0) {
 		srv_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 			if ((offset + q->hdr->namelen) > rlen) {
@@ -6038,9 +6041,9 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 	}
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != 0) {
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL)
+		if (rrp == 0)
 			return -1;
 
 		NTOHS(odh->answer);
@@ -6092,7 +6095,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		answer->rdlength = htons(&reply[offset] - answer->rdata);
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_A)) != 0) {
 		a_count = 0;
 
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
@@ -6127,7 +6130,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		odh->answer += a_count;
 		HTONS(odh->answer);
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != 0) {
 		aaaa_count = 0;
 
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
@@ -6234,7 +6237,7 @@ reply_badvers(struct sreply *sreply, ddDB *db)
 		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == NULL) {
+		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
 		plen = (u_int16_t *)tmpbuf;

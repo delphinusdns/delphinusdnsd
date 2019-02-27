@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.26 2019/02/26 07:45:56 pjp Exp $
+ * $Id: util.c,v 1.27 2019/02/27 19:11:41 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -803,6 +803,58 @@ build_question(char *buf, int len, int additional, char *mac)
 
 	*p = '\0';
 	i += (2 * sizeof(u_int16_t)) + 1;	/* trailing NUL and type,class*/
+
+	/* in IXFR an additional SOA entry is tacked on, we want to skip this */
+	do {
+		u_int16_t *val16;
+		u_int32_t *val32;
+		char *pb = NULL;
+		char expand[DNS_MAXNAME + 1];
+		int elen;
+
+		rollback = i;
+
+		elen = 0;
+		memset(&expand, 0, sizeof(expand));
+		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
+		if (pb == NULL) {
+			i = rollback;
+			break;
+		}
+		i = (pb - buf);
+
+		if (i + 10 > len) {	/* type + class + ttl + rdlen == 10 */
+			i = rollback;
+			break;
+		}
+
+		/* type */
+		val16 = (u_int16_t *)&buf[i];
+		if (ntohs(*val16) != DNS_TYPE_SOA) {
+			i = rollback;
+			break;
+		}
+		i += 2;
+		/* class */
+		val16 = (u_int16_t *)&buf[i];
+		if (ntohs(*val16) != DNS_CLASS_IN) {
+			i = rollback;
+			break;
+		}
+		i += 2;
+		/* ttl */
+		val32 = (u_int32_t *)&buf[i];
+		i += 4;
+		val16 = (u_int16_t *)&buf[i];
+		i += 2;
+
+		if (i + ntohs(*val16) > len) {	/* rdlen of SOA */
+			i = rollback;
+			break;
+		}
+
+		i += ntohs(*val16);	
+	} while (0);
 
 	/* check for edns0 opt rr */
 	do {
