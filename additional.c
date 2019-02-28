@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.24 2019/02/27 19:11:41 pjp Exp $
+ * $Id: additional.c,v 1.25 2019/02/28 08:54:29 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -45,7 +45,7 @@ int additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int);
 int additional_nsec(char *, int, int, struct rbtree *, char *, int, int);
 int additional_nsec3(char *, int, int, struct rbtree *, char *, int, int);
-int additional_tsig(struct question *, char *, int, int, int, int);
+int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *);
 
 extern int 		compress_label(u_char *, int, int);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
@@ -357,7 +357,7 @@ out:
  */
 
 int 
-additional_tsig(struct question *question, char *reply, int replylen, int offset, int request, int axfrmode) 
+additional_tsig(struct question *question, char *reply, int replylen, int offset, int request, int envelope, HMAC_CTX *tsigctx) 
 {
 	struct dns_tsigrr *answer, *ppanswer, *timers;
 	u_int16_t *sval;
@@ -365,12 +365,13 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	u_int32_t *lval;
 	int tsignamelen;
 	int ppoffset = 0;
-	int ttlen = 0;
+	int ttlen = 0, rollback;
 	char *pseudo_packet = NULL;
 	char *tsig_timers = NULL;
 	struct dns_header *odh;
 	char tsigkey[512];
 	time_t now;
+	static int priordigest = 1;
 
 	pseudo_packet = malloc(replylen);
 	if (pseudo_packet == NULL) {
@@ -378,19 +379,24 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	}
 
 	now = time(NULL);
+	rollback = offset;
 
-	if (axfrmode) {
+	if (envelope > 1 || envelope < -1) {
 		tsig_timers = malloc(replylen);
 		if (tsig_timers == NULL)
 			goto out;
 
 		ttlen = 0;
-		sval = (u_int16_t *)&tsig_timers[ttlen];
-		*sval = htons(question->tsig.tsigmaclen);
-		ttlen += 2;
+		if (priordigest) {
+			sval = (u_int16_t *)&tsig_timers[ttlen];
+			*sval = htons(question->tsig.tsigmaclen);
+			ttlen += 2;
 
-		memcpy(&tsig_timers[ttlen], question->tsig.tsigmac, question->tsig.tsigmaclen);
-		ttlen += question->tsig.tsigmaclen;
+			memcpy(&tsig_timers[ttlen], question->tsig.tsigmac, question->tsig.tsigmaclen);
+			ttlen += question->tsig.tsigmaclen;
+
+			priordigest = 0;
+		}
 
 		question->tsig.tsigerrorcode = 0; 	/* to be sure */
 	} else {
@@ -417,7 +423,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	memcpy(&pseudo_packet[ppoffset], &reply[0], offset);
 	ppoffset += offset;
 
-	if (axfrmode) {
+	if (envelope > 1 || envelope < -1) {
 		memcpy(&tsig_timers[ttlen], reply, offset);
 		ttlen += offset;
 	}
@@ -482,10 +488,11 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 
 
 	answer = (struct dns_tsigrr *)&reply[offset];
-	if (axfrmode) {
+	if (envelope > 1 || envelope < -1) {
 		answer->timefudge = htobe64(((u_int64_t)now << 16) | (300 & 0xffff));
+		//answer->timefudge = question->tsig.tsig_timefudge;
 	} else {
-		if (request == 0) {
+		if (request == 0 || envelope == 1) {
 			answer->timefudge = question->tsig.tsig_timefudge;
 		} else {
 			answer->timefudge = htobe64((now << 16) | (300 & 0xffff));
@@ -526,7 +533,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	}
 
 	ppanswer = (struct dns_tsigrr *)&pseudo_packet[ppoffset];
-	if (request == 0) 
+	if (request == 0 || envelope == 1) 
 		ppanswer->timefudge = question->tsig.tsig_timefudge;
 	else
 		ppanswer->timefudge = htobe64(((u_int64_t)now << 16) | (300 & 0xffff));
@@ -558,16 +565,23 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	}
 
 
-	if (axfrmode) {
-		timers = (struct dns_tsigrr *)&tsig_timers[ttlen];
-		timers->timefudge = htobe64(((u_int64_t)now << 16) | (300 & 0xffff));
-		ttlen += 8;
-	
-		HMAC(EVP_sha256(), tsigkey, tsignamelen, 
-			(unsigned char *)tsig_timers, ttlen, 
-			(unsigned char *)&answer->mac[0], (u_int *)&macsize);
+	if (envelope > 1 || envelope < -1) {
+		if (envelope % 89 == 0 || envelope == -2)  {
+			timers = (struct dns_tsigrr *)&tsig_timers[ttlen];
+			timers->timefudge = htobe64(((u_int64_t)now << 16) | (300 & 0xffff));
+			//timers->timefudge = question->tsig.tsig_timefudge;
+			ttlen += 8;
+		}
+		
+		HMAC_Update(tsigctx, (const unsigned char *)tsig_timers, ttlen);
 
-		memcpy(question->tsig.tsigmac, &answer->mac[0], macsize);
+		if (envelope % 89 == 0 || envelope == -2) {
+			macsize = 32;
+			HMAC_Final(tsigctx, (unsigned char *)&answer->mac[0], (u_int *)&macsize);
+			memcpy(question->tsig.tsigmac, &answer->mac[0], macsize);
+			priordigest = 1;
+		} else
+			offset = rollback;
 
 		free(tsig_timers);
 	} else {

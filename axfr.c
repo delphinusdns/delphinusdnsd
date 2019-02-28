@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.23 2019/02/27 19:11:41 pjp Exp $
+ * $Id: axfr.c,v 1.24 2019/02/28 08:54:29 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -73,7 +73,7 @@ extern int rotate_rr(struct rrset *rrset);
 
 extern int domaincmp(struct node *e1, struct node *e2);
 extern char * dns_label(char *, int *);
-extern int additional_tsig(struct question *, char *, int, int, int, int);
+extern int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *);
 extern int find_tsig_key(char *keyname, int keynamelen, char *key, int keylen);
 
 int notify = 0;				/* do not notify when set to 0 */
@@ -389,6 +389,12 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 		now = time(NULL);
 		if (difftime(now, time_changed) <= 1800) {
 			gather_notifydomains(db);
+#if 0
+	for (int x = 1; x;) {
+		dolog(LOG_INFO, "in debug loop\n");
+		sleep(1);
+	}
+#endif
 			notifyfd[0] = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 			notifyfd[1] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 
@@ -415,6 +421,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 			notifyslaves((int *)&notifyfd);
 		}
 	}
+
 
 	for (;;) {
 
@@ -808,6 +815,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 	struct rr *rrp = NULL;
 
 	ddDBT key, data;
+	HMAC_CTX *tsigctx = NULL;
 
 	if (packetlen > sizeof(buf)) {
 		dolog(LOG_ERR, "buffer size of buf is smaller than given packet, drop\n");
@@ -960,7 +968,6 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 		/* initialize tsig */
 
-#if 0
 		if (question->tsig.tsigverified) {
 			if ((tsigkeylen = find_tsig_key(question->tsig.tsigkey, 
 				question->tsig.tsigkeylen, (char *)&tsigkey, sizeof(tsigkey))) < 0) {
@@ -975,7 +982,6 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				goto drop;
 			}
 		}
-#endif
 
 		dolog(LOG_INFO, "%s request for zone \"%s\", replying...\n", 
 			(ntohs(question->hdr->qtype) == DNS_TYPE_AXFR ? "AXFR"
@@ -1048,10 +1054,21 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				odh->answer += rrcount;
 				HTONS(odh->answer);
 
-				/* additional_tsig here */
 				if (question->tsig.have_tsig && question->tsig.tsigverified) {
-					outlen = additional_tsig(question, (reply + 2), 65000, outlen, 0, (envelopcount++ != 1));
-					odh->additional = htons(1);
+					int tmplen = outlen;
+
+					outlen = additional_tsig(question, (reply + 2), 65000, outlen, 0, envelopcount, tsigctx);
+					if (tmplen != outlen) {
+						odh->additional = htons(1);
+
+						HMAC_CTX_reset(tsigctx);
+						if (HMAC_Init(tsigctx, (const void *)&tsigkey, tsigkeylen, EVP_sha256()) == 0) {
+							dolog(LOG_ERR, "AXFR tsig initialization error, drop\n");
+							goto drop;
+						}
+					}
+
+					envelopcount++;
 
 					tmp = (u_int16_t *)reply; 
 					*tmp = htons(outlen);
@@ -1090,13 +1107,19 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		odh->answer += rrcount;
 		HTONS(odh->answer);
 
-		/* additional_tsig here */
 		if (question->tsig.have_tsig && question->tsig.tsigverified) {
-			outlen = additional_tsig(question, (reply + 2), 65000, outlen, 0, (envelopcount != 1));
+			if (envelopcount == 1)
+				envelopcount = -1;
+			else
+				envelopcount = -2;
+
+			outlen = additional_tsig(question, (reply + 2), 65000, outlen, 0, envelopcount, tsigctx);
 			odh->additional = htons(1);
 
 			tmp = (u_int16_t *)reply; 
 			*tmp = htons(outlen);
+
+			HMAC_CTX_free(tsigctx);
 		}
 
 		len = send(so, reply, outlen + 2, 0);
@@ -1524,7 +1547,7 @@ notifypacket(int so, void *vnse, void *vnotnp, int packetcount)
 			return;
 		}
 	
-		outlen = additional_tsig(fq, packet, sizeof(packet), outlen, 1, 0);
+		outlen = additional_tsig(fq, packet, sizeof(packet), outlen, 1, 0, NULL);
 
 		dnh->additional = htons(1);
 

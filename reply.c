@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.74 2019/02/27 19:11:41 pjp Exp $
+ * $Id: reply.c,v 1.75 2019/02/28 08:54:29 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -47,7 +47,7 @@ extern int 		additional_aaaa(char *, int, struct rbtree *, char *, int, int, int
 extern int 		additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_opt(struct question *, char *, int, int);
-extern int 		additional_tsig(struct question *, char *, int, int, int, int);
+extern int 		additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *);
 extern int 		additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int);
 extern int 		additional_nsec(char *, int, int, struct rbtree *, char *, int, int);
 extern struct question 	*build_fake_question(char *, int, u_int16_t, char *, int);
@@ -267,7 +267,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -477,7 +477,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -702,7 +702,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -897,7 +897,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -1090,7 +1090,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -1301,7 +1301,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -1453,7 +1453,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -1625,7 +1625,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -1821,7 +1821,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -2020,7 +2020,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -2336,7 +2336,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -2525,7 +2525,7 @@ out:
 	}
 	
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -2784,7 +2784,7 @@ out:
 
 	
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -2956,7 +2956,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -3277,7 +3277,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -3465,7 +3465,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -3688,7 +3688,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -3882,7 +3882,7 @@ out:
 	}
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -4357,7 +4357,7 @@ out:
 
 
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -4515,7 +4515,7 @@ reply_notauth(struct sreply *sreply, ddDB *db)
 
 	odh->additional = htons(1);
 	
-	tmplen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+	tmplen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 	
 	if (tmplen != 0)
 		outlen = tmplen;
@@ -4918,7 +4918,7 @@ out:
 	}
 	
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
@@ -5059,7 +5059,7 @@ reply_any(struct sreply *sreply, ddDB *db)
 	}
 			
 	if (q->tsig.tsigverified == 1) {
-		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0);
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 
 		NTOHS(odh->additional);	
 		odh->additional++;
