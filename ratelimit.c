@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2014-2018 Peter J. Philipp
+ * Copyright (c) 2014-2019 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: ratelimit.c,v 1.5 2018/10/19 08:24:48 pjp Exp $
+ * $Id: ratelimit.c,v 1.6 2019/02/28 05:03:34 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -43,7 +43,7 @@ char 			*rrlimit_setup(int);
 struct rrlimit {
 	u_int8_t pointer;
 	time_t times[256];
-};
+} __attribute__((packed));
 
 int ratelimit = 0;
 int ratelimit_packets_per_second = 6;
