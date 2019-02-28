@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.24 2019/02/28 08:54:29 pjp Exp $
+ * $Id: axfr.c,v 1.25 2019/02/28 08:57:43 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -389,12 +389,6 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 		now = time(NULL);
 		if (difftime(now, time_changed) <= 1800) {
 			gather_notifydomains(db);
-#if 0
-	for (int x = 1; x;) {
-		dolog(LOG_INFO, "in debug loop\n");
-		sleep(1);
-	}
-#endif
 			notifyfd[0] = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 			notifyfd[1] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 
