@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.27 2019/02/27 19:11:41 pjp Exp $
+ * $Id: util.c,v 1.28 2019/02/28 09:41:00 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -659,6 +659,7 @@ build_question(char *buf, int len, int additional, char *mac)
 	u_int namelen = 0;
 	u_int16_t *qtype, *qclass;
 	u_int32_t ttl;
+	u_int64_t timefudge;
 	int num_label;
 
 	char *p, *end_name = NULL;
@@ -1043,9 +1044,10 @@ build_question(char *buf, int len, int additional, char *mac)
 		}
 
 		tsigrr = (struct dns_tsigrr *)&buf[i];
-
-		fudge = ntohs(tsigrr->timefudge & 0xffff);
-		tsigtime = ntohl((tsigrr->timefudge >> 16));
+		/* XXX */
+		timefudge = betoh64(tsigrr->timefudge);
+		fudge = (u_int16_t)(timefudge & 0xffff);
+		tsigtime = (u_int64_t)(timefudge >> 16);
 
 		q->tsig.tsig_timefudge = tsigrr->timefudge;
 		
