@@ -4,6 +4,8 @@ Changes in RELEASE_1_4 from RELEASE_1_3
 - dddctl can axfr zones, and query other dns data
 - the database has been replaced with the 3G DB (3rd generation internal db)
 - fixed logic leading up to DNSSEC NODATA ENT replies
+- FreeLogic from Russia, offered an unalignment fix affecting rrlimit
+- TSIG AXFR's and other TSIG support is now workin
 
 Changes in RELEASE_1_3 from RELEASE_1_2
 - created a "zinclude" config, which will only allow zone files to be 
