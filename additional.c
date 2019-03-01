@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.25 2019/02/28 08:54:29 pjp Exp $
+ * $Id: additional.c,v 1.26 2019/03/01 05:36:50 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -367,7 +367,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	int ppoffset = 0;
 	int ttlen = 0, rollback;
 	char *pseudo_packet = NULL;
-	char *tsig_timers = NULL;
+	char tsig_timers[512];
 	struct dns_header *odh;
 	char tsigkey[512];
 	time_t now;
@@ -382,10 +382,6 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	rollback = offset;
 
 	if (envelope > 1 || envelope < -1) {
-		tsig_timers = malloc(replylen);
-		if (tsig_timers == NULL)
-			goto out;
-
 		ttlen = 0;
 		if (priordigest) {
 			sval = (u_int16_t *)&tsig_timers[ttlen];
@@ -394,6 +390,8 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 
 			memcpy(&tsig_timers[ttlen], question->tsig.tsigmac, question->tsig.tsigmaclen);
 			ttlen += question->tsig.tsigmaclen;
+
+			HMAC_Update(tsigctx, tsig_timers, ttlen);
 
 			priordigest = 0;
 		}
@@ -424,8 +422,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	ppoffset += offset;
 
 	if (envelope > 1 || envelope < -1) {
-		memcpy(&tsig_timers[ttlen], reply, offset);
-		ttlen += offset;
+		HMAC_Update(tsigctx, reply, offset);
 	}
 
 	if ((tsignamelen = find_tsig_key(question->tsig.tsigkey, 
@@ -567,13 +564,13 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 
 	if (envelope > 1 || envelope < -1) {
 		if (envelope % 89 == 0 || envelope == -2)  {
+			ttlen = 0;
 			timers = (struct dns_tsigrr *)&tsig_timers[ttlen];
 			timers->timefudge = htobe64(((u_int64_t)now << 16) | (300 & 0xffff));
-			//timers->timefudge = question->tsig.tsig_timefudge;
 			ttlen += 8;
+			HMAC_Update(tsigctx, (const unsigned char *)tsig_timers, ttlen);
 		}
 		
-		HMAC_Update(tsigctx, (const unsigned char *)tsig_timers, ttlen);
 
 		if (envelope % 89 == 0 || envelope == -2) {
 			macsize = 32;
@@ -583,7 +580,6 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 		} else
 			offset = rollback;
 
-		free(tsig_timers);
 	} else {
 
 		if (question->tsig.tsigerrorcode == DNS_BADTIME) {
