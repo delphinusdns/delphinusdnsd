@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.28 2019/02/28 09:41:00 pjp Exp $
+ * $Id: util.c,v 1.29 2019/03/01 09:01:06 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -1115,6 +1115,13 @@ build_question(char *buf, int len, int additional, char *mac)
 		memcpy(&pseudo_packet[ppoffset], &buf[i], len - i);
 		ppoffset += (len - i);
 
+		/* check for BADTIME before the HMAC memcmp as per RFC 2845 */
+		now = time(NULL);
+		/* outside our fudge window */
+		if (tsigtime < (now - fudge) || tsigtime > (now + fudge)) {
+			q->tsig.tsigerrorcode = DNS_BADTIME;
+			break;
+		}
 
 		HMAC(EVP_sha256(), tsigkey, tsignamelen, (unsigned char *)pseudo_packet, 
 			ppoffset, (unsigned char *)&sha256, &shasize);
@@ -1136,19 +1143,6 @@ build_question(char *buf, int len, int additional, char *mac)
 		/* copy the mac for error coding */
 		memcpy(q->tsig.tsigmac, tsigrr->mac, sizeof(q->tsig.tsigmac));
 		q->tsig.tsigmaclen = 32;
-
-		/* 
-		 * here we have a delayed fudge check, we want to ensure
-		 * that the signature checked out before we give out a 
-		 * BADTIME message, otherwise it is BADKEY or BADSIG
-		 */
-		
-		now = time(NULL);
-		/* outside our fudge window */
-		if (tsigtime < (now - fudge) || tsigtime > (now + fudge)) {
-			q->tsig.tsigerrorcode = DNS_BADTIME;
-			break;
-		}
 		
 		/* we're now authenticated */
 		q->tsig.tsigerrorcode = 0;
