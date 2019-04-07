@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.10 2019/02/19 11:49:54 pjp Exp $
+ * $Id: db.c,v 1.11 2019/04/07 15:18:27 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -40,6 +40,7 @@ struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 int display_rr(struct rrset *rrset);
 int rotate_rr(struct rrset *rrset);
+void flag_rr(struct rbtree *rbt);
 
 extern void      dolog(int, char *, ...);
 
@@ -170,6 +171,7 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata)
 		rbt->zonelen = len;
 		humanname = convert_name(name, len);
 		strlcpy(rbt->humanname, humanname, sizeof(rbt->humanname));
+		rbt->dnssec = 0;		 /* by default not dnssec'ed */
 		TAILQ_INIT(&rbt->rrset_head);
 	}
 	
@@ -303,6 +305,12 @@ find_rr(struct rbtree *rbt, u_int16_t rrtype)
 	}
 	
 	return (rp);
+}
+
+void 
+flag_rr(struct rbtree *rbt)
+{
+	rbt->dnssec = 1;
 }
 
 int

@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.63 2019/02/26 07:45:56 pjp Exp $
+ * $Id: parse.y,v 1.64 2019/04/07 15:18:27 pjp Exp $
  */
 
 %{
@@ -54,6 +54,7 @@ extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 extern int display_rr(struct rrset *rrset);
+extern void flag_rr(struct rbtree *);
 
 
 extern int whitelist;
@@ -2117,6 +2118,7 @@ int
 fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t algorithm, u_int8_t labels, u_int32_t original_ttl, u_int64_t sig_expiration, u_int64_t sig_inception, u_int16_t keytag, char *signers_name, char *signature)
 {
 	ddDB *db = mydb;
+	ddDBT key, data;
 	struct rbtree *rbt;
 	struct rrsig *rrsig;
 	int converted_namelen, signers_namelen;
@@ -2200,7 +2202,23 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
 	}
-	
+
+	/* flag this rrset as being a DNSSEC rrset */
+
+	flag_rr(rbt);
+
+        memset(&key, 0, sizeof(key));
+        memset(&data, 0, sizeof(data));
+
+        key.data = (char *)converted_name;
+        key.size = converted_namelen;
+
+        data.data = (void*)rbt;
+        data.size = sizeof(struct rbtree);
+
+        if (db->put(db, &key, &data) != 0) {
+                return NULL;
+        }
 	
 	if (signers_name2)
 		free(signers_name2);

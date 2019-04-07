@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.16 2019/02/24 07:14:02 pjp Exp $
+ * $Id: ddd-db.h,v 1.17 2019/04/07 15:18:27 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -324,6 +324,7 @@ struct rbtree {
 	char zone[DNS_MAXNAME];
 	int zonelen;
 	char humanname[DNS_MAXNAME + 1];
+	int dnssec;
 
 	TAILQ_HEAD(, rrset) rrset_head;
 };
