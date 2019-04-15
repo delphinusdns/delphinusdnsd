@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.64 2019/04/07 15:18:27 pjp Exp $
+ * $Id: parse.y,v 1.65 2019/04/15 09:31:39 pjp Exp $
  */
 
 %{
@@ -2217,7 +2217,7 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
         data.size = sizeof(struct rbtree);
 
         if (db->put(db, &key, &data) != 0) {
-                return NULL;
+                return -1;
         }
 	
 	if (signers_name2)
