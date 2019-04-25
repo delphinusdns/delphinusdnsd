@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.57 2019/02/26 07:45:56 pjp Exp $
+ * $Id: dddctl.c,v 1.58 2019/04/25 05:54:09 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -6924,10 +6924,12 @@ connect_server(char *nameserver, int port, u_int32_t format)
 		return -1;
 	}
 
+#ifndef __linux__
 	/* biggen the window */
 
 	while (setsockopt(so, SOL_SOCKET, SO_RCVBUF, &window, sizeof(window)) != -1)
 		window <<= 1;
+#endif
 
 
 	memset(&sin, 0, sizeof(sin));
@@ -7503,7 +7505,9 @@ command_socket(char *sockpath)
 		close(so);
 		return -1;
 	}
+#ifndef __linux__
 	sun.sun_len = SUN_LEN(&sun);
+#endif
 
 	if (connect(so, (struct sockaddr *)&sun, sizeof(sun)) < 0) {
 		close(so);

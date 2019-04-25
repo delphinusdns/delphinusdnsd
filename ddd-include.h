@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-include.h,v 1.9 2019/01/29 16:32:54 pjp Exp $
+ * $Id: ddd-include.h,v 1.10 2019/04/25 05:54:09 pjp Exp $
  */
 
 #ifndef _INCLUDES_H
@@ -75,12 +75,15 @@
 
 #ifdef __linux__
 #include <grp.h>
+#define __USE_BSD 1
+#include <endian.h>
 #include <bsd/stdlib.h>
 #include <bsd/string.h>
 #include <bsd/unistd.h>
 #include <bsd/sys/queue.h>
 #define __unused 
 #include <bsd/sys/tree.h>
+#include <bsd/sys/endian.h>
 #include "imsg.h"
 #else
 #include <sys/queue.h>

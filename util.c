@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.29 2019/03/01 09:01:06 pjp Exp $
+ * $Id: util.c,v 1.30 2019/04/25 05:54:09 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -1045,7 +1045,11 @@ build_question(char *buf, int len, int additional, char *mac)
 
 		tsigrr = (struct dns_tsigrr *)&buf[i];
 		/* XXX */
+#ifdef __linux__
+		timefudge = be64toh(tsigrr->timefudge);
+#else
 		timefudge = betoh64(tsigrr->timefudge);
+#endif
 		fudge = (u_int16_t)(timefudge & 0xffff);
 		tsigtime = (u_int64_t)(timefudge >> 16);
 

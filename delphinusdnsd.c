@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.60 2019/02/26 08:15:33 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.61 2019/04/25 05:54:09 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -3166,7 +3166,9 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 		slave_shutdown();
 		exit(1);
 	}
+#ifndef __linux__
 	sun.sun_len = SUN_LEN(&sun);
+#endif
 
 	/* only root, 0100 == nonexecute */
 	if (umask(0177) < 0) {

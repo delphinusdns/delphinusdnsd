@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.25 2019/02/28 08:57:43 pjp Exp $
+ * $Id: axfr.c,v 1.26 2019/04/25 05:54:09 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -971,7 +971,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			}
 
 			tsigctx = HMAC_CTX_new();
-			if (HMAC_Init(tsigctx, (const void *)&tsigkey, tsigkeylen, EVP_sha256()) == 0) {
+			if (HMAC_Init_ex(tsigctx, (const void *)&tsigkey, tsigkeylen, EVP_sha256(), NULL) == 0) {
 				dolog(LOG_ERR, "AXFR tsig initialization error, drop\n");
 				goto drop;
 			}
@@ -1056,7 +1056,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 						odh->additional = htons(1);
 
 						HMAC_CTX_reset(tsigctx);
-						if (HMAC_Init(tsigctx, (const void *)&tsigkey, tsigkeylen, EVP_sha256()) == 0) {
+						if (HMAC_Init_ex(tsigctx, (const void *)&tsigkey, tsigkeylen, EVP_sha256(), NULL) == 0) {
 							dolog(LOG_ERR, "AXFR tsig initialization error, drop\n");
 							goto drop;
 						}

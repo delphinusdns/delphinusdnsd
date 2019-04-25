@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.65 2019/04/15 09:31:39 pjp Exp $
+ * $Id: parse.y,v 1.66 2019/04/25 05:54:09 pjp Exp $
  */
 
 %{
@@ -433,8 +433,10 @@ rzonestatement:
 
 		rz->masterport = $2 & 0xffff;
 
+#ifndef __linux__
 		if (debug)
 			printf("at rzone %x, set masterport to %d\n", (unsigned int)rz, rz->masterport);
+#endif
 	}
 	|
 	MASTER ipcidr SEMICOLON CRLF
@@ -454,9 +456,11 @@ rzonestatement:
 
 		rz->master = p;
 
+#ifndef __linux__
 		if (debug)
 			printf("at rzone %x, added master server at %s\n", (unsigned int)rz,
 				p);
+#endif
 
 		free($2);
 	}
@@ -479,17 +483,23 @@ rzonestatement:
 
 		if (strcmp($1, "zonename") == 0) {
 			rz->zonename = p;
+#ifndef __linux__
 			if (debug)
 				printf("at rzone %x, added zonename of %s\n", (unsigned int)rz, p);
+#endif
 		} else if (strcmp($1, "filename") == 0) {
 			rz->filename = p;
+#ifndef __linux__
 			if (debug)
 				printf("at rzone %x, added filename of %s\n", (unsigned int)rz, p);
+#endif
 
 		} else if (strcmp($1, "tsigkey") == 0) {
 			rz->tsigkey = p;
+#ifndef __linux__
 			if (debug)
 				printf("at rzone %x, added tsigkey of %s\n", (unsigned int)rz, p);
+#endif
 		}
 
 		free($1);
@@ -3434,8 +3444,10 @@ add_rzone(void)
 	lrz->filename = NULL;
 
 	SLIST_INSERT_HEAD(&rzones, lrz, rzone_entry);
+#ifndef __linux__
 	if (debug)
 		printf("added rzone at 0x%x\n", (unsigned int)lrz);
+#endif
 	
 	return (lrz);
 }

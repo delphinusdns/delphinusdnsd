@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.11 2019/04/07 15:18:27 pjp Exp $
+ * $Id: db.c,v 1.12 2019/04/25 05:54:09 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -260,7 +260,11 @@ add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata)
 	struct rrset *rp0, *rp;
 	struct rr *rt;
 
+#ifdef __linux__
+	TAILQ_FOREACH(rp, &rbt->rrset_head, entries) {
+#else
 	TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
+#endif
 		if (rrtype == rp->rrtype)
 			break;
 	}
@@ -299,7 +303,11 @@ find_rr(struct rbtree *rbt, u_int16_t rrtype)
 {
 	struct rrset *rp, *rp0;
 
+#ifdef __linux__
+	TAILQ_FOREACH(rp, &rbt->rrset_head, entries) {
+#else
 	TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
+#endif
 		if (rrtype == rp->rrtype)
 			break;
 	}
@@ -318,7 +326,11 @@ display_rr(struct rrset *rrset)
 {
 	struct rr *rrp, *rrp0;
 
+#ifdef __linux__
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+#else
 	TAILQ_FOREACH_SAFE(rrp, &rrset->rr_head, entries, rrp0) {
+#endif
 		printf("%lld:%u:%s\n", rrp->changed, rrp->ttl, (char *)rrp->rdata);
 	}
 
