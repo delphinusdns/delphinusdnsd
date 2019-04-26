@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.58 2019/04/25 05:54:09 pjp Exp $
+ * $Id: dddctl.c,v 1.59 2019/04/26 06:31:20 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -40,6 +40,9 @@
 #include <openssl/rsa.h>
 #include <openssl/err.h>
 #include <openssl/sha.h>
+
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
 
 
 int debug = 0;
@@ -140,7 +143,7 @@ void	debug_bindump(const char *, int);
 int	command_socket(char *);
 int 	connect_server(char *, int, u_int32_t);
 int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *, u_int16_t);
-int	lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t);
+int	lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *);
 int	count_db(ddDB *);
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -6757,12 +6760,13 @@ dig(int argc, char *argv[])
 	char *outputfile = NULL;
 	char *domainname = NULL;
 	char *nameserver = "127.0.0.1";
+	char *yopt, *tsigpass = NULL, *tsigkey = NULL;
 	u_int32_t format = 0;
 	u_int16_t port = 53;
 	int ch, so, ms;
 	int type = DNS_TYPE_A;
 
-	while ((ch = getopt(argc, argv, "@:BDIP:TZp:Q:")) != -1) {
+	while ((ch = getopt(argc, argv, "@:BDIP:TZp:Q:y:")) != -1) {
 		switch (ch) {
 		case '@':
 		case 'Q':
@@ -6788,6 +6792,21 @@ dig(int argc, char *argv[])
 			break;
 		case 'p':
 			outputfile = optarg;
+			break;
+		case 'y':
+			yopt = strdup(optarg);
+			if (yopt == NULL) {
+				perror("strdup");
+				exit(1);
+			}
+			tsigkey = yopt;
+			tsigpass = strchr(yopt, ':');
+			if (tsigpass == NULL) {
+				fprintf(stderr, "must provide keyname:password for option -y\n");
+				exit(1);
+			}
+			*tsigpass = '\0';
+			tsigpass++;
 			break;
 		default:
 			usage(argc, argv);
@@ -6863,7 +6882,7 @@ dig(int argc, char *argv[])
 	}
 
 	if (type == DNS_TYPE_AXFR) {
-		if (lookup_axfr(f, so, domainname, &mysoa, format) < 0) {
+		if (lookup_axfr(f, so, domainname, &mysoa, format, tsigkey, tsigpass) < 0) {
 			exit(1);
 		}
 				
@@ -6948,9 +6967,11 @@ connect_server(char *nameserver, int port, u_int32_t format)
 
 
 int
-lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format)
+lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass)
 {
 	char query[512];
+	char pseudo_packet[512];
+	char shabuf[32];
 	char *reply;
 	struct question *q;
 	struct whole_header {
@@ -6959,16 +6980,21 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	} *wh, *rwh;
 	struct raxfr_logic *sr;
 	
-	u_char *p, *name;
+	u_char *p, *name, *keyname;
 
 	u_char *end, *estart;
 	int len, totallen, zonelen, rrlen, rrtype;
+	int ppoffset = 0;
 	int soacount = 0;
 	int elen = 0;
 	int segmentcount = 0;
 	int count = 0;
+	u_int32_t *ttl;
 	u_int16_t *class, *type, rdlen, *plen;
 	u_int16_t tcplen;
+	
+	time_t now;
+	HMAC_CTX *ctx;
 	
 	if (!(format & TCP_FORMAT))
 		return -1;
@@ -6982,7 +7008,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	wh->dh.question = htons(1);
 	wh->dh.answer = 0;
 	wh->dh.nsrr = 0;
-	wh->dh.additional = htons(1);;
+	wh->dh.additional = htons(0);
+
 
 	SET_DNS_QUERY(&wh->dh);
 	SET_DNS_RECURSION(&wh->dh);
@@ -7009,6 +7036,160 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	class = (u_int16_t *)&query[totallen];
 	*class = htons(DNS_CLASS_IN);
 	totallen += sizeof(u_int16_t);
+
+	/* we have a key, attach a TSIG payload */
+	if (tsigkey) {
+
+		if ((len = mybase64_decode(tsigpass, (u_char *)&pseudo_packet, sizeof(pseudo_packet))) < 0) {
+			fprintf(stderr, "bad base64 password\n");
+			return -1;
+		}
+		
+		ctx = HMAC_CTX_new();
+		HMAC_Init(ctx, pseudo_packet, len, EVP_sha256());
+		HMAC_Update(ctx, &query[2], totallen - 2);
+
+		keyname = dns_label(tsigkey, &len);
+		if (keyname == NULL) {
+			return -1;
+		}
+
+		/* name of key */
+		memcpy(&pseudo_packet, keyname, len);
+		ppoffset += len;	
+
+		/* class */
+		type = (u_int16_t *) &pseudo_packet[ppoffset];
+		*type = htons(DNS_CLASS_ANY);
+		ppoffset += 2;
+
+		/* TTL */
+		ttl = (u_int32_t *) &pseudo_packet[ppoffset];
+		*ttl = htonl(0);
+		ppoffset += 4;
+			
+		keyname = dns_label("hmac-sha256", &len);
+		if (keyname == NULL) {
+			return -1;
+		}
+		
+		/* alg name */	
+		memcpy(&pseudo_packet[ppoffset], keyname, len);
+		ppoffset += len;
+
+		/* time 1 and 2 */
+		now = time(NULL);
+		type = (u_int16_t *)&pseudo_packet[ppoffset];	
+		*type = htons((now >> 32) & 0xffff);
+		ppoffset += 2;
+
+		ttl = (u_int32_t *)&pseudo_packet[ppoffset];
+		*ttl = htonl((now & 0xffffffff));
+		ppoffset += 4;
+		
+		/* fudge */
+		type = (u_int16_t *)&pseudo_packet[ppoffset];	
+		*type = htons(300);
+		ppoffset += 2;
+	
+		/* error */
+
+		type = (u_int16_t *)&pseudo_packet[ppoffset];	
+		*type = htons(0);
+		ppoffset += 2;
+
+		/* other len */
+		
+		type = (u_int16_t *)&pseudo_packet[ppoffset];	
+		*type = htons(0);
+		ppoffset += 2;
+
+		HMAC_Update(ctx, pseudo_packet, ppoffset);
+		HMAC_Final(ctx, shabuf, &len);
+
+		if (len != 32) {
+			fprintf(stderr, "not expected len != 32\n");
+			return -1;
+		}
+
+		HMAC_cleanup(ctx);
+
+		keyname = dns_label(tsigkey, &len);
+		if (keyname == NULL) {
+			return -1;
+		}
+
+		memcpy(&query[totallen], keyname, len);
+		totallen += len;
+		
+		type = (u_int16_t *)&query[totallen];
+		*type = htons(DNS_TYPE_TSIG);
+		totallen += 2;
+
+		class = (u_int16_t *)&query[totallen];
+		*class = htons(DNS_CLASS_ANY);
+		totallen += 2;
+
+		ttl = (u_int32_t *)&query[totallen];
+		*ttl = htonl(0);
+		totallen += 4;
+
+		keyname = dns_label("hmac-sha256", &len);
+		if (keyname == NULL) {
+			return -1;
+		}
+
+		/* rdlen */
+		type = (u_int16_t *)&query[totallen];
+		*type = htons(len + 2 + 4 + 2 + 2 + 32 + 2 + 2 + 2);
+		totallen += 2;
+
+		/* algorithm name */
+		memcpy(&query[totallen], keyname, len);
+		totallen += len;
+
+		/* time 1 */
+		type = (u_int16_t *)&query[totallen];	
+		*type = htons((now >> 32) & 0xffff);
+		totallen += 2;
+
+		/* time 2 */
+		ttl = (u_int32_t *)&query[totallen];
+		*ttl = htonl((now & 0xffffffff));
+		totallen += 4;
+
+		/* fudge */
+		type = (u_int16_t *)&query[totallen];	
+		*type = htons(300);
+		totallen += 2;
+	
+		/* hmac size */
+		type = (u_int16_t *)&query[totallen];	
+		*type = htons(sizeof(shabuf));
+		totallen += 2;
+
+		/* hmac */
+		memcpy(&query[totallen], shabuf, sizeof(shabuf));
+		totallen += sizeof(shabuf);
+
+		/* original id */
+		type = (u_int16_t *)&query[totallen];	
+		*type = wh->dh.id;
+		totallen += 2;
+
+		/* error */
+		type = (u_int16_t *)&query[totallen];	
+		*type = 0;
+		totallen += 2;
+		
+		/* other len */
+		type = (u_int16_t *)&query[totallen];	
+		*type = 0;
+		totallen += 2;
+
+		wh->dh.additional = htons(1);
+	}
+	
 
 	wh->len = htons(totallen - 2);
 
@@ -7063,7 +7244,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		segmentcount = ntohs(rwh->dh.answer);
 		answers += segmentcount;
 
-		q = build_question((char *)&wh->dh, len, wh->dh.additional, NULL);
+		q = build_question((char *)&wh->dh, len, wh->dh.additional, (tsigkey == NULL) ? NULL : shabuf);
 		if (q == NULL) {
 			fprintf(stderr, "failed to build_question\n");
 			return -1;
@@ -7074,7 +7255,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			return -1;
 		}
 
-		if (q->hdr->qclass != *class || q->hdr->qtype != *type) {
+		if (q->hdr->qclass != htons(DNS_CLASS_IN) || q->hdr->qtype != htons(DNS_TYPE_AXFR)) {
 			fprintf(stderr, "wrong class or type\n");
 			return -1;
 		}
