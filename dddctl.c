@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.60 2019/04/26 07:49:46 pjp Exp $
+ * $Id: dddctl.c,v 1.61 2019/04/26 08:00:18 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -7112,7 +7112,11 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			return -1;
 		}
 
+#ifdef __linux__
+		HMAC_CTX_free(ctx);
+#else
 		HMAC_cleanup(ctx);
+#endif
 
 		keyname = dns_label(tsigkey, &len);
 		if (keyname == NULL) {
