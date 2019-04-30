@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.76 2019/04/07 15:18:27 pjp Exp $
+ * $Id: reply.c,v 1.77 2019/04/30 10:21:00 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -2914,11 +2914,10 @@ reply_txt(struct sreply *sreply, ddDB *db)
 
 	p = (char *)&answer->rdata;
 
-	*p = ((struct txt *)rrp->rdata)->txtlen;
-	memcpy((p + 1), ((struct txt *)rrp->rdata)->txt, ((struct txt *)rrp->rdata)->txtlen);
-	outlen += (((struct txt *)rrp->rdata)->txtlen + 1);
+	memcpy(p, ((struct txt *)rrp->rdata)->txt, ((struct txt *)rrp->rdata)->txtlen);
+	outlen += (((struct txt *)rrp->rdata)->txtlen);
 
-	answer->rdlength = htons(((struct txt *)rrp->rdata)->txtlen + 1);
+	answer->rdlength = htons(((struct txt *)rrp->rdata)->txtlen);
 
 	/* Add RRSIG reply_txt */
 	if (dnssec && q->dnssecok && rbt->dnssec) {
@@ -5764,15 +5763,14 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		offset += 10;		/* up to rdata length */
 
-		if (offset + ((struct txt *)rrp->rdata)->txtlen + 1 > rlen)
+		if (offset + ((struct txt *)rrp->rdata)->txtlen > rlen)
 			goto truncate;
 
 		p = (char *)&answer->rdata;
-		*p = ((struct txt *)rrp->rdata)->txtlen;
-		memcpy((p + 1), ((struct txt *)rrp->rdata)->txt, ((struct txt *)rrp->rdata)->txtlen);
-		offset += (((struct txt *)rrp->rdata)->txtlen + 1);
+		memcpy(p, ((struct txt *)rrp->rdata)->txt, ((struct txt *)rrp->rdata)->txtlen);
+		offset += (((struct txt *)rrp->rdata)->txtlen);
 
-		answer->rdlength = htons(((struct txt *)rrp->rdata)->txtlen + 1);
+		answer->rdlength = htons(((struct txt *)rrp->rdata)->txtlen);
 
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != 0) {

@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.11 2019/02/24 07:14:02 pjp Exp $
+ * $Id: raxfr.c,v 1.12 2019/04/30 10:21:00 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -642,21 +642,23 @@ raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 	int i;
 	u_char *q = p;
 
-	BOUNDS_CHECK((p + 1), q, rdlen, end);
-	len = *p;
-	p++;
+	BOUNDS_CHECK(p, q, rdlen, end);
+	len = rdlen;
 
 	if (f != NULL) 
 		fprintf(f, "\"");
 
-	for (i = 0; i < len; i++) {
-		BOUNDS_CHECK((p + 1), q, rdlen, end);
+	for (i = 0; i < rdlen; i++) {
+		if (i % 256 == 0)
+			continue;
+
 		if (f != NULL) 
-			fprintf(f, "%c", *p);	
-		p++;
+			fprintf(f, "%c", p[i]);	
 	}
 	if (f != NULL)
 		fprintf(f, "\"\n");
+
+	p += i;
 	
 	
 	return (p - estart);

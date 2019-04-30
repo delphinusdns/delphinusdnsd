@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.66 2019/04/25 05:54:09 pjp Exp $
+ * $Id: parse.y,v 1.67 2019/04/30 10:21:00 pjp Exp $
  */
 
 %{
@@ -2544,15 +2544,39 @@ fill_txt(char *name, char *type, int myttl, char *msg)
 	struct txt *txt;
 	int converted_namelen;
 	char *converted_name;
-	int len, i;
+	int len, i, j, tmplen, origlen;
+	u_char *tmp;
+	int messages = 1;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
 	}
 
-	if ((len = strlen(msg)) > 255) {
-		dolog(LOG_ERR, "TXT record too long line %d\n", file->lineno);
-		return (-1);
+	origlen = tmplen = len = strlen(msg);
+	while (tmplen > 255) {
+		messages++;
+		tmplen -= 255;
+	}
+
+	len += messages;
+
+	if (len > 1024) {
+		dolog(LOG_ERR, "fill_txt: more than 1024 characters in TXT RR\n");
+		return -1;
+	}
+
+	tmp = malloc(len);
+	if (tmp == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+		
+	for (i = 0, j = 0, tmplen = origlen; tmplen > 0; tmplen -= 255) {
+		tmp[i] = ((tmplen >= 255) ? 255 : tmplen);
+		i++;
+		memcpy(&tmp[i], &msg[j], (tmplen >= 255) ? 255 : tmplen);
+		i += 255;
+		j += 255;
 	}
 
 	converted_name = check_rr(name, type, DNS_TYPE_TXT, &converted_namelen);
@@ -2565,7 +2589,7 @@ fill_txt(char *name, char *type, int myttl, char *msg)
 		return -1;
 	}
 
-	memcpy(&txt->txt, msg, len);
+	memcpy(&txt->txt, tmp, len);
 	txt->txtlen = len;
 	txt->ttl = myttl;
 
@@ -2579,6 +2603,7 @@ fill_txt(char *name, char *type, int myttl, char *msg)
 		free (converted_name);
 	
 	free (rbt);
+	free (tmp);
 
 
 	return (0);

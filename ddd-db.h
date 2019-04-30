@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.17 2019/04/07 15:18:27 pjp Exp $
+ * $Id: ddd-db.h,v 1.18 2019/04/30 10:21:00 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -219,7 +219,7 @@ struct ptr {
 } __attribute__((packed));
 
 struct txt {
-        char txt[DNS_MAXNAME];                  /* TXT string */
+        char txt[1024];                  	/* TXT string */
         int txtlen;                             /* len of TXT */
 	u_int32_t ttl;
 } __attribute__((packed));

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.61 2019/04/26 08:00:18 pjp Exp $
+ * $Id: dddctl.c,v 1.62 2019/04/30 10:21:00 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -1895,10 +1895,8 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	p += 2;
 	pack32(p, htonl(((struct txt *)rrp->rdata)->ttl));
 	p += 4;
-	pack16(p, htons(((struct txt *)rrp->rdata)->txtlen + 1));
+	pack16(p, htons(((struct txt *)rrp->rdata)->txtlen));
 	p += 2;
-	pack8(p, ((struct txt *)rrp->rdata)->txtlen);
-	p++;
 	pack(p, ((struct txt *)rrp->rdata)->txt, ((struct txt *)rrp->rdata)->txtlen);
 	p += ((struct txt *)rrp->rdata)->txtlen;
 
@@ -6530,6 +6528,9 @@ print_rbt(FILE *of, struct rbtree *rbt)
 				((struct txt *)rrp->rdata)->ttl);
 
 		for (i = 0; i < ((struct txt *)rrp->rdata)->txtlen; i++) {
+			if (i % 256 == 0)
+				continue;
+
 			fprintf(of, "%c", ((struct txt *)rrp->rdata)->txt[i]);
 		}
 		fprintf(of, "\"\n");
@@ -8204,6 +8205,9 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 				((struct txt *)rrp->rdata)->ttl);
 				
 		for (i = 0; i < ((struct txt *)rrp->rdata)->txtlen; i++) {
+			if (i % 256 == 0)
+				continue;
+
 			fprintf(of, "%c", ((struct txt *)rrp->rdata)->txt[i]);
 		}
 		fprintf(of, "\"\n");
