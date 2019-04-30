@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.77 2019/04/30 10:21:00 pjp Exp $
+ * $Id: reply.c,v 1.78 2019/04/30 10:57:59 pjp Exp $
  */
 
 #include "ddd-include.h"
@@ -2918,6 +2918,18 @@ reply_txt(struct sreply *sreply, ddDB *db)
 	outlen += (((struct txt *)rrp->rdata)->txtlen);
 
 	answer->rdlength = htons(((struct txt *)rrp->rdata)->txtlen);
+
+	/* check if we can even fit */
+	if (outlen > replysize) {
+		NTOHS(odh->query);
+		SET_DNS_TRUNCATION(odh);
+		HTONS(odh->query);
+		odh->answer = 0;
+		odh->nsrr = 0; 
+		odh->additional = 0;
+		outlen = rollback;
+		goto out;
+	}
 
 	/* Add RRSIG reply_txt */
 	if (dnssec && q->dnssecok && rbt->dnssec) {
