@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.28 2019/06/06 15:08:00 pjp Exp $
+ * $Id: axfr.c,v 1.29 2019/06/06 15:11:18 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -57,6 +57,7 @@
 #define __unused
 #include <bsd/sys/tree.h>
 #include <bsd/sys/endian.h>
+#include "imsg.h"
 #else /* not linux */
 #include <sys/queue.h>
 #include <sys/tree.h>
