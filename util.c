@@ -27,19 +27,57 @@
  */
 
 /* 
- * $Id: util.c,v 1.30 2019/04/25 05:54:09 pjp Exp $
+ * $Id: util.c,v 1.31 2019/06/06 14:56:08 pjp Exp $
  */
 
-#include "ddd-include.h"
-#include "ddd-dns.h"
-#include "ddd-db.h" 
-#include "ddd-config.h"
+#include <sys/types.h>
+#include <sys/socket.h>
+
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <string.h>
+#include <errno.h>
+#include <syslog.h>
+#include <unistd.h>
+#include <ctype.h>
+
+#ifdef __linux__
+#include <grp.h>
+#define __USE_BSD 1
+#include <endian.h>
+#include <bsd/stdlib.h>
+#include <bsd/string.h>
+#include <bsd/unistd.h>
+#include <bsd/sys/queue.h>
+#define __unused
+#include <bsd/sys/tree.h>
+#include <bsd/sys/endian.h>
+#include "imsg.h"
+#else /* not linux */
+#include <sys/queue.h>
+#include <sys/tree.h>
+#ifdef __FreeBSD__
+#include "imsg.h"
+#else
+#include <imsg.h>
+#endif /* __FreeBSD__ */
+#endif /* __linux__ */
+
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
-/* prototypes */
+#include "ddd-dns.h"
+#include "ddd-db.h" 
+#include "ddd-config.h"
 
+/* prototypes */
 
 int label_count(char *);
 char * dns_label(char *, int *);

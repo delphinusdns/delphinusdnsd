@@ -27,16 +27,43 @@
  */
 
 /* 
- * $Id: log.c,v 1.5 2018/10/19 08:24:48 pjp Exp $
+ * $Id: log.c,v 1.6 2019/06/06 14:56:08 pjp Exp $
  */
 
 
-#include "ddd-include.h"
-#include "ddd-dns.h"
-#include "ddd-db.h"
+#include <sys/types.h>
+#include <sys/socket.h>
+
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <syslog.h>
+
+#ifdef __linux__
+#include <grp.h>
+#define __USE_BSD 1
+#include <endian.h>
+#include <bsd/stdlib.h>
+#include <bsd/string.h>
+#include <bsd/sys/queue.h>
+#define __unused
+#include <bsd/sys/tree.h>
+#include <bsd/sys/endian.h>
+#else /* not linux */
+#include <sys/queue.h>
+#include <sys/tree.h>
+#endif /* __linux__ */
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
+
+#include "ddd-dns.h"
+#include "ddd-db.h"
 
 extern struct logging logging;
 extern int debug;

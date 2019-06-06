@@ -27,10 +27,47 @@
  */
 
 /*
- * $Id: dnssec.c,v 1.23 2019/02/26 07:45:56 pjp Exp $
+ * $Id: dnssec.c,v 1.24 2019/06/06 14:56:08 pjp Exp $
  */
 
-#include "ddd-include.h"
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <sys/wait.h>
+
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <syslog.h>
+#include <errno.h>
+#include <signal.h>
+#include <ctype.h>
+
+#ifdef __linux__
+#include <grp.h>
+#define __USE_BSD 1
+#include <endian.h>
+#include <bsd/stdlib.h>
+#include <bsd/string.h>
+#include <bsd/sys/queue.h>
+#define __unused
+#include <bsd/sys/tree.h>
+#include <bsd/sys/endian.h>
+#else /* not linux */
+#include <sys/queue.h>
+#include <sys/tree.h>
+#ifdef __FreeBSD__
+#include "imsg.h"
+#else
+#include <imsg.h>
+#endif /* __FreeBSD__ */
+#endif /* __linux__ */
+
 #include "ddd-dns.h"
 #include "ddd-db.h"
 

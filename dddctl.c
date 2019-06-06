@@ -27,13 +27,60 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.62 2019/04/30 10:21:00 pjp Exp $
+ * $Id: dddctl.c,v 1.63 2019/06/06 14:56:08 pjp Exp $
  */
 
-#include "ddd-include.h"
-#include "ddd-dns.h"
-#include "ddd-db.h"
-#include "ddd-config.h"
+#include <sys/param.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/stat.h>
+#include <sys/uio.h>
+#include <sys/wait.h>
+#include <sys/un.h>
+
+#include <net/if.h>
+
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <syslog.h>
+#include <ctype.h>
+#include <pwd.h>
+#include <ifaddrs.h>
+#include <dirent.h>
+#include <signal.h>
+#include <time.h>
+
+#ifdef __linux__
+#include <grp.h>
+#define __USE_BSD 1
+#include <endian.h>
+#include <bsd/stdlib.h>
+#include <bsd/string.h>
+#include <bsd/unistd.h>
+#include <bsd/sys/queue.h>
+#define __unused
+#include <bsd/sys/tree.h>
+#include <bsd/sys/endian.h>
+#include "imsg.h"
+#else /* not linux */
+#include <sys/queue.h>
+#include <sys/tree.h>
+#ifdef __FreeBSD__
+#include "imsg.h"
+#else
+#include <imsg.h>
+#endif /* __FreeBSD__ */
+#endif /* __linux__ */
 
 #include <openssl/bn.h>
 #include <openssl/obj_mac.h>
@@ -44,6 +91,9 @@
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 
+#include "ddd-dns.h"
+#include "ddd-db.h"
+#include "ddd-config.h"
 
 int debug = 0;
 int verbose = 0;
