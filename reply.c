@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.79 2019/06/06 14:56:08 pjp Exp $
+ * $Id: reply.c,v 1.80 2019/06/06 15:08:00 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -58,6 +58,9 @@
 #include <sys/tree.h>
 #endif /* __linux__ */
 
+#ifndef NTOHS
+#include "endian.h"
+#endif
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>

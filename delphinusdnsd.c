@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.62 2019/06/06 14:56:08 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.63 2019/06/06 15:08:00 pjp Exp $
  */
 
 
@@ -84,6 +84,10 @@
 #include <imsg.h>
 #endif /* __FreeBSD__ */
 #endif /* __linux__ */
+
+#ifndef NTOHS
+#include "endian.h"
+#endif
 
 #include "ddd-dns.h"
 #include "ddd-db.h" 

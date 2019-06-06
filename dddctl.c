@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.63 2019/06/06 14:56:08 pjp Exp $
+ * $Id: dddctl.c,v 1.64 2019/06/06 15:08:00 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -81,6 +81,10 @@
 #include <imsg.h>
 #endif /* __FreeBSD__ */
 #endif /* __linux__ */
+
+#ifndef NTOHS
+#include "endian.h"
+#endif
 
 #include <openssl/bn.h>
 #include <openssl/obj_mac.h>

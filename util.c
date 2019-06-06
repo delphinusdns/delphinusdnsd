@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.31 2019/06/06 14:56:08 pjp Exp $
+ * $Id: util.c,v 1.32 2019/06/06 15:08:00 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -69,6 +69,9 @@
 #endif /* __FreeBSD__ */
 #endif /* __linux__ */
 
+#ifndef NTOHS
+#include "endian.h"
+#endif
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
