@@ -8,7 +8,7 @@ For 1.4.0 release
 - CAA RR support
 - More ciphers for signing (GOST, ECDSA, Elliptic Curves)
 - Slave AXFR mode (with TSIG)
-- Redo TCP support
+- Redo TCP support						[DONE]
 
 For 1.3.0 release
 - fix the DNSSEC code so that a key rollover is allowed	 [PARTIALLY DONE]
