@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.64 2019/06/07 18:58:54 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.65 2019/06/07 19:08:41 pjp Exp $
  */
 
 
@@ -2492,7 +2492,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 #endif
 			
 				if ((tcpnp->last_used + 3) < time(NULL)) {
-					dolog(LOG_INFO, "tcp timeout\n");
+					dolog(LOG_INFO, "tcp timeout on interface \"%s\" for address %s\n", cfg->ident[tcpnp->intidx], tcpnp->address);
 					TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
 					close(tcpnp->so);
 					free(tcpnp->address);
@@ -3058,7 +3058,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 		TAILQ_FOREACH(tcpnp, &tcphead, tcpentries) {
 #endif
 			if ((tcpnp->last_used + 3) < time(NULL)) {
-					dolog(LOG_INFO, "tcp timeout\n");
+					dolog(LOG_INFO, "tcp timeout on interface \"%s\" for address %s\n", cfg->ident[tcpnp->intidx], tcpnp->address);
 					TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
 					close(tcpnp->so);
 					free(tcpnp->address);
