@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.32 2019/06/06 15:08:00 pjp Exp $
+ * $Id: util.c,v 1.33 2019/06/07 04:25:50 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -63,6 +63,7 @@
 #include <sys/queue.h>
 #include <sys/tree.h>
 #ifdef __FreeBSD__
+#include <sys/endian.h>
 #include "imsg.h"
 #else
 #include <imsg.h>
@@ -1086,7 +1087,7 @@ build_question(char *buf, int len, int additional, char *mac)
 
 		tsigrr = (struct dns_tsigrr *)&buf[i];
 		/* XXX */
-#ifdef __linux__
+#if defined __linux__ || defined __FreeBSD__
 		timefudge = be64toh(tsigrr->timefudge);
 #else
 		timefudge = betoh64(tsigrr->timefudge);

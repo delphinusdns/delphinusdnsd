@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.27 2019/06/06 14:56:08 pjp Exp $
+ * $Id: additional.c,v 1.28 2019/06/07 04:25:50 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -54,6 +54,9 @@
 #else /* not linux */
 #include <sys/queue.h>
 #include <sys/tree.h>
+#ifdef __FreeBSD__
+#include <sys/endian.h>
+#endif /* __FreeBSD__ */
 #endif /* __linux__ */
 
 

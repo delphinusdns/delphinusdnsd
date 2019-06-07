@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.64 2019/06/06 15:08:00 pjp Exp $
+ * $Id: dddctl.c,v 1.65 2019/06/07 04:25:50 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -7167,7 +7167,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			return -1;
 		}
 
-#ifdef __linux__
+#if defined __linux__ || defined __FreeBSD__
 		HMAC_CTX_free(ctx);
 #else
 		HMAC_cleanup(ctx);
