@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.63 2019/06/06 15:08:00 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.64 2019/06/07 18:58:54 pjp Exp $
  */
 
 
@@ -222,7 +222,19 @@ static struct reply_logic {
 	{ DNS_TYPE_RRSIG, DNS_TYPE_RRSIG, BUILD_OTHER, reply_rrsig },
 	{ 0, 0, 0, NULL }
 };
-	
+
+TAILQ_HEAD(, tcpentry) tcphead;
+
+struct tcpentry {
+	int intidx;
+	int bytes_read;
+	int bytes_expected;
+	int so;
+	time_t last_used;
+	char buf[65537];	
+	char *address;
+	TAILQ_ENTRY(tcpentry) tcpentries;
+} *tcpn1, *tcpn2, *tcpnp;
 
 /* global variables */
 
@@ -495,6 +507,7 @@ main(int argc, char *argv[], char *environ[])
 	init_notifyslave();
 	init_dnssec();
 	init_tsig();
+	TAILQ_INIT(&tcphead);
 
 	if (parse_file(db, conffile) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
@@ -2324,7 +2337,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 {
 	fd_set rset;
 	int sel;
-	int len, slen, length;
+	int len, slen, length = 0;
 	int is_ipv6;
 	int i;
 	int istcp = 1;
@@ -2338,12 +2351,13 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	int axfr_acl = 0;
 	int sp; 
 	int lfd;
+	int conncnt = 0;
+	int tcpflags;
 	pid_t pid;
 
 	u_int8_t aregion;			/* region where the address comes from */
 
 	char *pbuf;
-	char buf[4096];
 	char *replybuf = NULL;
 	char address[INET6_ADDRSTRLEN];
 	char replystring[DNS_MAXNAME + 1];
@@ -2452,8 +2466,15 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	
 			FD_SET(cfg->tcp[i], &rset);
 		}
+
+		TAILQ_FOREACH(tcpnp, &tcphead, tcpentries) {
+			if (maxso < tcpnp->so)
+				maxso = tcpnp->so;
+
+			FD_SET(tcpnp->so, &rset);
+		}
 	
-		tv.tv_sec = 10;
+		tv.tv_sec = 3;
 		tv.tv_usec = 0;
 
 		sel = select(maxso + 1, &rset, NULL, NULL, &tv);
@@ -2464,6 +2485,22 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 		}
 
 		if (sel == 0) {
+#ifndef __linux__
+			TAILQ_FOREACH_SAFE(tcpnp, &tcphead, tcpentries, tcpn1) {
+#else
+			TAILQ_FOREACH(tcpnp, &tcphead, tcpentries) {
+#endif
+			
+				if ((tcpnp->last_used + 3) < time(NULL)) {
+					dolog(LOG_INFO, "tcp timeout\n");
+					TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
+					close(tcpnp->so);
+					free(tcpnp->address);
+					free(tcpnp);
+					if (conncnt)
+						conncnt--;
+				}
+			}
 			continue;
 		}
 			
@@ -2533,73 +2570,89 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					continue;
 				}
 
-				/*
-				 * We wrap a 3 second alarm, 3000 ms is a long
-				 * time on the Internet so this is ok...
-				 */
-				tv.tv_sec = 3;
-				tv.tv_usec = 0;
-				if (setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
-					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+				if (conncnt >= 64) {
+					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, too many TCP connections", so
+						, cfg->ident[i], address);
 					close(so);
 					continue;
 				}
 
-				len = recv(so, buf, 2, MSG_WAITALL | MSG_PEEK);
-				if (len < 0) {
-					if (errno == EWOULDBLOCK) {
-						dolog(LOG_INFO, "TCP socket timed out on descriptor %d interface \"%s\" from %s\n", so, cfg->ident[i], address);
-					}
+				if ((tcpflags = fcntl(so, F_GETFL, 0)) < 0) {
+					dolog(LOG_INFO, "tcp fcntl can't query fcntl flags\n");
 					close(so);
+					continue;
+				}
+				
+				tcpflags |= O_NONBLOCK;
+				if (fcntl(so, F_SETFL, &tcpflags, sizeof(tcpflags)) < 0) {
+					dolog(LOG_INFO, "tcp fcntl can't set nonblocking\n");
+					close(so);
+					continue;
+				}
+				
+				tcpn1 = malloc(sizeof(struct tcpentry));
+				if (tcpn1 == NULL) {
+					dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+					close(so);
+					continue;
+				}
+				tcpn1->bytes_read = 0;
+				tcpn1->bytes_expected = 0;
+				tcpn1->so = so;
+				tcpn1->last_used = time(NULL);
+				tcpn1->intidx = i;
+				tcpn1->address = strdup(address);
+				
+				TAILQ_INSERT_TAIL(&tcphead, tcpn1, tcpentries);
+				conncnt++;
+
+			} /* FD_ISSET */
+		}
+
+#ifndef __linux__
+		TAILQ_FOREACH_SAFE(tcpnp, &tcphead, tcpentries, tcpn1) {
+#else
+		TAILQ_FOREACH(tcpnp, &tcphead, tcpentries) {
+#endif
+			if (FD_ISSET(tcpnp->so, &rset)) {
+
+				if (tcpnp->bytes_read < 2)
+					len = recv(tcpnp->so, &tcpnp->buf[tcpnp->bytes_read], 2, 0);
+				else
+					len = recv(tcpnp->so, &tcpnp->buf[tcpnp->bytes_read], tcpnp->bytes_expected, 0);
+
+				if (len <= 0) {
+					if (errno == EWOULDBLOCK) {
+						continue;
+					}
+					TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
+					close(tcpnp->so);
+					free(tcpnp->address);
+					free(tcpnp);
 					continue;
 				} /* if len */
-
-				if (len != 2) {
-					close(so);
+	
+				tcpnp->bytes_read += len;
+				if (tcpnp->bytes_read >= 2) {
+						tcpnp->bytes_expected = ntohs(*((u_int16_t *)&tcpnp->buf[0]));
+				} else {
 					continue;
 				}
 
-				length = ntohs(*((u_int16_t *)&buf[0]));
-				if ((length + 2) > sizeof(buf)) {
-					close(so);
+				if ((tcpnp->bytes_read - 2) != tcpnp->bytes_expected) 
 					continue;
-				}
 
-				len = recv(so, buf, (length + 2), MSG_WAITALL);
-				if (len < 0) {
-					if (errno == EWOULDBLOCK) {
-						dolog(LOG_INFO, "TCP socket timed out on descriptor %d interface \"%s\" from %s\n", so, cfg->ident[i], address);
-					}
-					close(so);
-					continue;
-				} /* if len */
-
-				if (len == 0) {
-					close(so);
-					continue;
-				}
-
-				if (len >= 2) {	
-					length = ntohs(*((u_int16_t *)&buf[0]));
-				}
-
-				len = length;
-				pbuf = &buf[2];
+				len = tcpnp->bytes_read - 2;
+				pbuf = &tcpnp->buf[2];
+				so = tcpnp->so;
 
 				if (len > DNS_MAXUDP || len < sizeof(struct dns_header)){
-					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
+					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+
 					goto drop;
 				}
 
-				/* pjp send to parseloop */
-#if 0
-				if (require_tsig)
-					imsg_type = IMSG_PARSEAUTH_MESSAGE;
-				else
-#endif
-					imsg_type = IMSG_PARSE_MESSAGE;
-				
-
+				imsg_type = IMSG_PARSE_MESSAGE;
 				if (imsg_compose(pibuf, imsg_type, 
 					0, 0, -1, pbuf, len) < 0) {
 					dolog(LOG_INFO, "imsg_compose %s\n", strerror(errno));
@@ -2654,30 +2707,30 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						if (pq.rc != PARSE_RETURN_ACK) {
 							switch (pq.rc) {
 							case PARSE_RETURN_MALFORMED:
-								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
+								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 								imsg_free(&imsg);
 								goto drop;
 							case PARSE_RETURN_NOQUESTION:
-								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
+								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 								/* format error */
 								build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 								slen = reply_fmterror(&sreply, NULL);
-								dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
+								dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 								imsg_free(&imsg);
 								goto drop;
 							case PARSE_RETURN_NOTAQUESTION:
-								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
+								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 								imsg_free(&imsg);
 								goto drop;
 							case PARSE_RETURN_NAK:
-								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
+								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 								imsg_free(&imsg);
 								goto drop;
 							case PARSE_RETURN_NOTAUTH:
 								if (filter && pq.tsig.have_tsig == 0) {
 									build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 									slen = reply_refused(&sreply, NULL);
-									dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, aregion);
+									dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion);
 									imsg_free(&imsg);
 									goto drop;
 								}
@@ -2686,7 +2739,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 
 						question = convert_question(&pq);
 						if (question == NULL) {
-							dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[i], address);
+							dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 							imsg_free(&imsg);
 							goto drop;
 						}
@@ -2703,7 +2756,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				fakequestion = NULL;
 
 				if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0)  {
-					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsig.tsigerrorcode, address);
+					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[tcpnp->intidx], question->tsig.tsigerrorcode, tcpnp->address);
 					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
 					build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 					reply_notauth(&sreply, NULL);
@@ -2720,7 +2773,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				case DNS_TYPE_AXFR:
 				case DNS_TYPE_IXFR:
 					if (! axfr_acl) {
-						dolog(LOG_INFO, "AXFR connection from %s on interface \"%s\" was not in our axfr acl, drop\n", address, cfg->ident[i]);
+						dolog(LOG_INFO, "AXFR connection from %s on interface \"%s\" was not in our axfr acl, drop\n", tcpnp->address, cfg->ident[tcpnp->intidx]);
 							
 						snprintf(replystring, DNS_MAXNAME, "DROP");
 						goto tcpout;
@@ -2879,9 +2932,12 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					/* FALLTHROUGH */
 				case DNS_TYPE_AXFR:
 					dolog(LOG_INFO, "composed AXFR message to axfr process\n");
-					imsg_compose(ibuf[MY_IMSG_AXFR], IMSG_XFR_MESSAGE, 0, 0, so, buf, len + 2);
+					imsg_compose(ibuf[MY_IMSG_AXFR], IMSG_XFR_MESSAGE, 0, 0, tcpnp->so, tcpnp->buf, tcpnp->bytes_read);
 					msgbuf_write(&ibuf[MY_IMSG_AXFR]->w);
-					close(so);
+					TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
+					close(tcpnp->so);
+					free(tcpnp->address);
+					free(tcpnp);
 					continue;
 					break;
 
@@ -2940,7 +2996,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 			
 		tcpout:
 				if (lflag)
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), replystring, len, slen);
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (%d/%d)\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), replystring, len, slen);
 
 
 				if (fakequestion != NULL) {
@@ -2958,24 +3014,59 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					rbt1 = NULL;
 				}
 
-				close(so);
+				/*
+				 * we are restarting this connection, so that the remote
+				 * end can ask again, with tcp if they want, so reset
+				 * everything
+				 */
+
+				memset(pbuf, 0, length);
+				tcpnp->bytes_read = 0;
+				tcpnp->bytes_expected = 0;
+				tcpnp->last_used = time(NULL);
 			}	/* END ISSET */
-		} /* for (i = 0;;)... */
+			continue;
 	drop:
 		
-		if (rbt0) {	
-			free(rbt0);
-			rbt0 = NULL;
+			if (rbt0) {	
+				free(rbt0);
+				rbt0 = NULL;
+			}
+
+			if (rbt1) {
+				free(rbt1);
+				rbt1 = NULL;
+			}
+
+			TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
+			close(tcpnp->so);
+			free(tcpnp->address);
+			free(tcpnp);
+			if (conncnt)
+				conncnt--;
+
+			continue;
+		} /* TAILQ_FOREACH */
+
+		/*
+		 * kick off the idlers 
+		 */
+
+#ifndef __linux__
+		TAILQ_FOREACH_SAFE(tcpnp, &tcphead, tcpentries, tcpn1) {
+#else
+		TAILQ_FOREACH(tcpnp, &tcphead, tcpentries) {
+#endif
+			if ((tcpnp->last_used + 3) < time(NULL)) {
+					dolog(LOG_INFO, "tcp timeout\n");
+					TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
+					close(tcpnp->so);
+					free(tcpnp->address);
+					free(tcpnp);
+					if (conncnt)
+						conncnt--;
+			}
 		}
-
-		if (rbt1) {
-			free(rbt1);
-			rbt1 = NULL;
-		}
-
-		close(so);
-
-		continue;
 	}  /* for (;;) */
 
 	/* NOTREACHED */
