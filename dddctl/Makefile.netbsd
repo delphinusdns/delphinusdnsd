@@ -5,8 +5,8 @@ PROG=dddctl
 SRCS=dddctl.c parse.y base64.c dnssec.c util.c ent.c db.c raxfr.c
 
 CFLAGS= -g 
-CFLAGS+= -I${.CURDIR}/..
-LDFLAGS= -g -L/usr/pkg/lib -R/usr/pkg/lib
+CFLAGS+= -I${.CURDIR}/..  -I/usr/pkg/libressl/include
+LDFLAGS= -g -L/usr/pkg/lib -L/usr/pkg/libressl/lib  -R/usr/pkg/lib
 LDADD= -lcrypto -lssl 
 
 OBJDIR=.

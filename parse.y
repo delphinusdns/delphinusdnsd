@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.68 2019/06/06 14:56:08 pjp Exp $
+ * $Id: parse.y,v 1.69 2019/06/12 14:58:48 pjp Exp $
  */
 
 %{
@@ -471,7 +471,7 @@ rzonestatement:
 
 		rz->masterport = $2 & 0xffff;
 
-#ifndef __linux__
+#ifdef __OpenBSD__
 		if (debug)
 			printf("at rzone %x, set masterport to %d\n", (unsigned int)rz, rz->masterport);
 #endif
@@ -494,7 +494,7 @@ rzonestatement:
 
 		rz->master = p;
 
-#ifndef __linux__
+#ifdef __OpenBSD__
 		if (debug)
 			printf("at rzone %x, added master server at %s\n", (unsigned int)rz,
 				p);
@@ -521,20 +521,20 @@ rzonestatement:
 
 		if (strcmp($1, "zonename") == 0) {
 			rz->zonename = p;
-#ifndef __linux__
+#ifdef __OpenBSD__
 			if (debug)
 				printf("at rzone %x, added zonename of %s\n", (unsigned int)rz, p);
 #endif
 		} else if (strcmp($1, "filename") == 0) {
 			rz->filename = p;
-#ifndef __linux__
+#ifdef __OpenBSD__
 			if (debug)
 				printf("at rzone %x, added filename of %s\n", (unsigned int)rz, p);
 #endif
 
 		} else if (strcmp($1, "tsigkey") == 0) {
 			rz->tsigkey = p;
-#ifndef __linux__
+#ifdef __OpenBSD__
 			if (debug)
 				printf("at rzone %x, added tsigkey of %s\n", (unsigned int)rz, p);
 #endif
@@ -3507,7 +3507,7 @@ add_rzone(void)
 	lrz->filename = NULL;
 
 	SLIST_INSERT_HEAD(&rzones, lrz, rzone_entry);
-#ifndef __linux__
+#ifdef __OpenBSD__
 	if (debug)
 		printf("added rzone at 0x%x\n", (unsigned int)lrz);
 #endif

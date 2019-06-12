@@ -1,4 +1,4 @@
-$Id: README,v 1.31 2018/10/19 08:16:29 pjp Exp $
+$Id: README,v 1.32 2019/06/12 14:58:48 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -118,10 +118,14 @@ $ make install
 3.4 NetBSD
 ----------
 
-The tests for this were done on NetBSD 7.1.2
+The tests for this were done on NetBSD 8.1
 
 ## create paths needed
 $ mkdir -p /usr/local/sbin /usr/local/man/man/man5 /usr/local/man/man/man8 /usr/local/man/man/html5/ /usr/local/man/man/html8
+## install libressl from pkgsrc
+$ cd /usr/pkgsrc/security/libressl && make install
+## add libressl to ld.so search path
+$ export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/pkg/libressl/lib
 ## configure the platform
 $ ./configure
 ## add a privsep user with a chroot directory (as root)
@@ -147,7 +151,7 @@ Operating System  | makes and compiles | responds to queries |
 ------------------+--------------------+---------------------+
 FreeBSD 11.2      |        yes         |       yes           |
 ------------------+--------------------+---------------------+
-NetBSD 7.1        |        yes         |       yes           |
+NetBSD 8.1        |        yes         |       yes           |
 ------------------+--------------------+---------------------+
 OpenBSD 6.4       |        yes         |       yes           |
 ------------------+--------------------+---------------------+

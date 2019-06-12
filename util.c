@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.33 2019/06/07 04:25:50 pjp Exp $
+ * $Id: util.c,v 1.34 2019/06/12 14:58:48 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1087,7 +1087,7 @@ build_question(char *buf, int len, int additional, char *mac)
 
 		tsigrr = (struct dns_tsigrr *)&buf[i];
 		/* XXX */
-#if defined __linux__ || defined __FreeBSD__
+#ifndef __OpenBSD__
 		timefudge = be64toh(tsigrr->timefudge);
 #else
 		timefudge = betoh64(tsigrr->timefudge);

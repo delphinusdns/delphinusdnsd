@@ -36,6 +36,10 @@ openbsd() {
 
 netbsd() {
 	echo configuring for NetBSD
+	if [ ! -d /usr/pkg/libressl ]; then
+		echo must install libressl in pkgsrc.  1>&2
+		exit 1
+	fi
 	cp Makefile.netbsd Makefile
 	cp delphinusdnsd/Makefile.netbsd delphinusdnsd/Makefile
 	cp dddctl/Makefile.netbsd dddctl/Makefile
