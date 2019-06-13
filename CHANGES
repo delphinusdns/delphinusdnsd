@@ -7,6 +7,7 @@ Changes in RELEASE_1_4 from RELEASE_1_3
 - FreeLogic from Russia, offered an unalignment fix affecting rrlimit
 - TSIG AXFR's and other TSIG support is now workin
 - increased TXT's size from 255 to 1024 (for DKIM)
+- TCP now doesn't block upon connect, it will close connections at 64 limit
 
 Changes in RELEASE_1_3 from RELEASE_1_2
 - created a "zinclude" config, which will only allow zone files to be 
