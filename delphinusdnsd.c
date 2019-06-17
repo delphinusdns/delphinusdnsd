@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.65 2019/06/07 19:08:41 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.66 2019/06/17 08:10:55 pjp Exp $
  */
 
 
@@ -2351,7 +2351,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	int axfr_acl = 0;
 	int sp; 
 	int lfd;
-	int conncnt = 0;
+	uint conncnt = 0;
 	int tcpflags;
 	pid_t pid;
 
@@ -2497,7 +2497,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					close(tcpnp->so);
 					free(tcpnp->address);
 					free(tcpnp);
-					if (conncnt)
+					if (conncnt > 0)
 						conncnt--;
 				}
 			}
@@ -2629,6 +2629,8 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					close(tcpnp->so);
 					free(tcpnp->address);
 					free(tcpnp);
+					if (conncnt > 0)
+						conncnt--;
 					continue;
 				} /* if len */
 	
@@ -2938,6 +2940,8 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					close(tcpnp->so);
 					free(tcpnp->address);
 					free(tcpnp);
+					if (conncnt > 0)
+						conncnt--;
 					continue;
 					break;
 
@@ -3042,7 +3046,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 			close(tcpnp->so);
 			free(tcpnp->address);
 			free(tcpnp);
-			if (conncnt)
+			if (conncnt > 0)
 				conncnt--;
 
 			continue;
@@ -3063,7 +3067,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					close(tcpnp->so);
 					free(tcpnp->address);
 					free(tcpnp);
-					if (conncnt)
+					if (conncnt > 0)
 						conncnt--;
 			}
 		}
