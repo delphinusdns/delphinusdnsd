@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.30 2019/06/26 12:38:35 pjp Exp $
+ * $Id: axfr.c,v 1.31 2019/06/26 12:45:23 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -390,7 +390,11 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 			 * go through every zone, removing those with all
 			 * IP's notified...
 		 	 */
+#if __linux__
+			SLIST_FOREACH(notnp, &notifyhead, notify_entry) {
+#else
 			SLIST_FOREACH_SAFE(notnp, &notifyhead, notify_entry, notn2) {
+#endif
 				count = 0;
 				SLIST_FOREACH(md, &notnp->mzone->dest, entries) {
 					if (md->notified == 0)
