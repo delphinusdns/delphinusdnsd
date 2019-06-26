@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.29 2019/06/06 15:11:18 pjp Exp $
+ * $Id: axfr.c,v 1.30 2019/06/26 12:38:35 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -88,9 +88,9 @@ void	gather_notifydomains(ddDB *);
 void	init_axfr(void);
 void	init_notifyslave(void);
 int	insert_axfr(char *, char *);
-int	insert_notifyslave(char *, char *, char *);
+int	insert_notifyslave(char *, char *);
 void	notifypacket(int, void *, void *, int);
-void	notifyslaves(int *);
+void    notifyslaves(int *);
 void	reap(int);
 
 extern int 		get_record_size(ddDB *, char *, int);
@@ -134,22 +134,6 @@ static struct axfrentry {
 	SLIST_ENTRY(axfrentry) axfr_entry;
 } *an2, *anp;
 
-SLIST_HEAD(, notifyslaveentry) notifyslavehead;
-
-static struct notifyslaveentry {
-	char name[INET6_ADDRSTRLEN];
-	int family;
-	struct sockaddr_storage hostmask;
-	struct sockaddr_storage netmask;
-	u_int8_t prefixlen;
-	char *tsigname;
-	int tsignamelen;
-	char tsigrequestmac[32];
-	SLIST_ENTRY(notifyslaveentry) notifyslave_entry;
-} *nfslnp2, *nfslnp;
-
-
-
 SLIST_HEAD(notifylisthead, notifyentry) notifyhead;
 
 static struct notifyentry {
@@ -157,12 +141,16 @@ static struct notifyentry {
 	int domainlen;
 	u_int16_t *ids;
 	u_int16_t *attempts;
+	int usetsig;
+	int numadd;
+	struct mzone *mzone;
 	SLIST_ENTRY(notifyentry) notify_entry;
 } *notn2, *notnp;
 
 extern int domaincmp(struct node *e1, struct node *e2);
 static int 	check_notifyreply(struct dns_header *, struct question *, struct sockaddr_storage *, int, struct notifyentry *, int);
 
+SLIST_HEAD(mzones ,mzone)  mzones;
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list
@@ -297,83 +285,6 @@ find_axfr(struct sockaddr_storage *sst, int family)
 	return (0);
 }
 
-/*
- * INIT_NOTIFYSLAVE - initialize the axfr singly linked list
- */
-
-void
-init_notifyslave(void)
-{
-	SLIST_INIT(&notifyslavehead);
-	return;
-}
-
-/*
- * INSERT_NOTIFYSLAVE - insert an address and prefixlen into the notifyslave slist
- */
-
-int
-insert_notifyslave(char *address, char *prefixlen, char *tsigkey)
-{
-	struct sockaddr_in *sin;
-	struct sockaddr_in6 *sin6;
-	int pnum, tsignamelen; 
-	int ret;
-
-	tsignamelen = strlen(tsigkey);
-	if (strcmp(tsigkey, "NOKEY") == 0) {
-		tsigkey = NULL;
-		tsignamelen = 0;
-	}
-
-	pnum = atoi(prefixlen);
-	nfslnp2 = calloc(1, sizeof(struct notifyslaveentry));      /* Insert after. */
-	if (nfslnp2 == NULL)
-		return (-1);
-
-
-	if (strchr(address, ':') != NULL) {
-		nfslnp2->family = AF_INET6;
-		sin6 = (struct sockaddr_in6 *)&nfslnp2->hostmask;
-		if ((ret = inet_pton(AF_INET6, address, &sin6->sin6_addr.s6_addr)) != 1)
-			return (-1);
-		sin6->sin6_family = AF_INET6;
-		sin6->sin6_port = htons(53);
-		sin6 = (struct sockaddr_in6 *)&nfslnp2->netmask;
-		sin6->sin6_family = AF_INET6;
-		if (getmask6(pnum, sin6) < 0) 
-			return(-1);
-		nfslnp2->prefixlen = pnum;
-	} else {
-
-		nfslnp2->family = AF_INET;
-		sin = (struct sockaddr_in *)&nfslnp2->hostmask;
-		sin->sin_family = AF_INET;
-		sin->sin_addr.s_addr = inet_addr(address);
-		sin->sin_port = htons(53);
-		sin = (struct sockaddr_in *)&nfslnp2->netmask;
-		sin->sin_family = AF_INET;
-		sin->sin_addr.s_addr = getmask(pnum);
-		nfslnp2->prefixlen = pnum;
-
-	}
-
-	if (tsignamelen != 0) {
-		nfslnp2->tsigname = dns_label(tsigkey, &tsignamelen);
-		if (nfslnp2->tsigname == NULL) {
-			return -1;
-		}
-		nfslnp2->tsignamelen = tsignamelen;
-	} else {
-		nfslnp2->tsigname = NULL;
-		nfslnp2->tsignamelen = 0;
-	}
-
-	SLIST_INSERT_HEAD(&notifyslavehead, nfslnp2, notifyslave_entry);
-
-	return (0);
-}
-
 void 
 axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 {
@@ -386,9 +297,10 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 	struct dns_header *dh;
 	struct question *question;
 	struct imsg	imsg;
+	struct mzone_dest *md;
 
 	int i, so, len;
-	int n;
+	int n, count;
 	int sel, maxso = 0;
 	int is_ipv6, axfr_acl;
 	int notifyfd[2];
@@ -396,8 +308,8 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 
 	socklen_t fromlen;
 	char buf[512];
+	char buf0[512];
 	char *packet;
-	char requestmac[32];
 	
 	time_t now;
 	pid_t pid;
@@ -474,6 +386,40 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 			maxso = ibuf->fd;
 		
 		if (notify) {
+			/*
+			 * go through every zone, removing those with all
+			 * IP's notified...
+		 	 */
+			SLIST_FOREACH_SAFE(notnp, &notifyhead, notify_entry, notn2) {
+				count = 0;
+				SLIST_FOREACH(md, &notnp->mzone->dest, entries) {
+					if (md->notified == 0)
+						count++;
+				}
+
+				if (count == notnp->numadd) {
+#if DEBUG
+					dolog(LOG_INFO, "removed domain \"%s\"\n", notnp->mzone->humanname);
+#endif
+					SLIST_REMOVE(&notifyhead, notnp, notifyentry, notify_entry);
+				}
+				
+			}
+
+			if (SLIST_EMPTY(&notifyhead)) {
+				dolog(LOG_INFO, "notifys have been completed, closing notify descriptors!\n");
+				if (notifyfd[0] > -1)
+					close(notifyfd[0]);
+
+				if (notifyfd[1] > -1)
+					close(notifyfd[1]);
+
+				notifyfd[0] = -1;	
+				notifyfd[1] = -1;	
+		
+				notify = 0;
+			}
+
 			if (notifyfd[0] > -1) {
 				FD_SET(notifyfd[0], &rset);
 				if (maxso < notifyfd[0])
@@ -494,8 +440,10 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 	
 		if (sel == 0) {
 			if (notify) {
-				if (notifyfd[0] > -1 || notifyfd[1] > -1)
-					notifyslaves((int *)&notifyfd);	
+				if (notifyfd[0] > -1 || notifyfd[1] > -1) {
+					notifyslaves((int *)&notifyfd);
+				}
+
 			}
 		
 			continue;
@@ -680,28 +628,50 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 					continue;
 				}
 
-				/* get our request mac */
-				SLIST_FOREACH(nfslnp, &notifyslavehead, notifyslave_entry) {
-					struct sockaddr_in *sin2 = (struct sockaddr_in *)&nfslnp->hostmask;
-
-					if (memcmp((char *)&sin->sin_addr.s_addr, (char *)&sin2->sin_addr.s_addr, sizeof(struct in_addr)) == 0) {
-						memcpy(requestmac, nfslnp->tsigrequestmac, 32);
-						break;
-					}
-				}
-
-				if (nfslnp == NULL)
-					question = build_question(buf, len, ntohs(dh->additional), NULL);
-				else
-					question = build_question(buf, len, ntohs(dh->additional), requestmac);
-
+				/* save buf */
+				memcpy(&buf0, buf, len);
+				question = build_question(buf0, len, ntohs(dh->additional), NULL);
 				if (question == NULL) {
 					dolog(LOG_INFO, "build_question failed on notify reply, drop\n");
 					continue;
 				}
+		
+				/* now walk our notnp list and check the tsig */
+				SLIST_FOREACH(notnp, &notifyhead, notify_entry) {
+					if (memcmp(question->hdr->name, notnp->domain, notnp->domainlen) == 0) {
+						break;
+					}
+				}
+
+				if (notnp == NULL) {
+					dolog(LOG_INFO, "returned name not in list of notify domains\n");
+					continue;
+				}
+
 
 				sin = (struct sockaddr_in *)&from;
 				inet_ntop(AF_INET, (void*)&sin->sin_addr, (char*)&address, sizeof(address));
+
+				if (notnp->usetsig) {
+					free_question(question);
+
+					SLIST_FOREACH(md, &notnp->mzone->dest, entries) {
+						if (sin->sin_addr.s_addr == (((struct sockaddr_in *)md)->sin_addr.s_addr))
+							break;
+					}
+
+					if (md == NULL) {
+						dolog(LOG_INFO, "returned packet not from a source we notified, \"%s\"\n", address);
+						continue;
+					}
+
+					question = build_question(buf, len, ntohs(dh->additional), md->requestmac);
+					if (question == NULL) {
+						dolog(LOG_INFO, "build_question + tsig  failed on notify reply, drop\n");
+						continue;
+					}
+				}
+
 
 #ifdef __linux__
 				SLIST_FOREACH(notnp, &notifyhead, notify_entry) {
@@ -718,7 +688,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 			
 				free_question(question);
 
-				if (SLIST_EMPTY(&notifyslavehead)) {
+				if (SLIST_EMPTY(&notifyhead)) {
 					dolog(LOG_INFO, "notifys have been completed, closing notify descriptors!\n");
 					if (notifyfd[0] > -1)
 						close(notifyfd[0]);
@@ -759,23 +729,42 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 				sin6 = (struct sockaddr_in6 *)&from;
 				inet_ntop(AF_INET6, (void*)&sin6->sin6_addr, (char*)&address, sizeof(address));
 
-				/* get our request mac */
-				SLIST_FOREACH(nfslnp, &notifyslavehead, notifyslave_entry) {
-					struct sockaddr_in6 *sin2 = (struct sockaddr_in6 *)&nfslnp->hostmask;
+				question = build_question(buf, len, ntohs(dh->additional), NULL);
+				if (question == NULL) {
+					dolog(LOG_INFO, "build_question failed on notify reply, drop\n");
+					continue;
+				}
 
-					if (memcmp((char *)&sin6->sin6_addr, (char *)&sin2->sin6_addr, sizeof(struct in6_addr)) == 0) {
-						memcpy(requestmac, nfslnp->tsigrequestmac, 32);
+				/* now walk our notnp list and check the tsig */
+				SLIST_FOREACH(notnp, &notifyhead, notify_entry) {
+					if (memcmp(question->hdr->name, notnp->domain, notnp->domainlen) == 0) {
 						break;
 					}
 				}
 
-				if (nfslnp == NULL)
-					question = build_question(buf, len, ntohs(dh->additional), NULL);
-				else
-					question = build_question(buf, len, ntohs(dh->additional), requestmac);
-				if (question == NULL) {
-					dolog(LOG_INFO, "build_question failed on notify reply, drop\n");
+				if (notnp == NULL) {
+					dolog(LOG_INFO, "returned name not in list of notify domains\n");
 					continue;
+				}
+
+
+				if (notnp->usetsig) {
+					free_question(question);
+					SLIST_FOREACH(md, &notnp->mzone->dest, entries) {
+						if (memcmp((void *)&sin6->sin6_addr, (void*)&((struct sockaddr_in6 *)md)->sin6_addr, sizeof(struct in6_addr)) == 0)
+							break;
+					}
+
+					if (md == NULL) {
+						dolog(LOG_INFO, "returned packet not from a source we notified, \"%s\"\n", address);
+						continue;
+					}
+
+					question = build_question(buf, len, ntohs(dh->additional), md->requestmac);
+					if (question == NULL) {
+						dolog(LOG_INFO, "build_question + tsig  failed on notify reply, drop\n");
+						continue;
+					}
 				}
 
 
@@ -794,7 +783,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 			
 				free_question(question);
 
-				if (SLIST_EMPTY(&notifyslavehead)) {
+				if (SLIST_EMPTY(&notifyhead)) {
 					dolog(LOG_INFO, "notifys have been completed, closing notify descriptors!\n");
 					if (notifyfd[0] > -1)
 						close(notifyfd[0]);
@@ -1437,6 +1426,9 @@ gather_notifydomains(ddDB *db)
 	struct rbtree *rbt;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+	struct mzone *mz;
+	struct mzone_dest *md;
+	int i;
 
 	SLIST_INIT(&notifyhead);
 	
@@ -1477,6 +1469,32 @@ gather_notifydomains(ddDB *db)
 			memcpy(notn2->domain, rbt->zone, rbt->zonelen);
 			notn2->domainlen = rbt->zonelen;
 
+
+			SLIST_FOREACH(mz, &mzones, mzone_entry) {
+				if (notn2->domainlen == mz->zonenamelen &&
+					memcmp(notn2->domain, mz->zonename, notn2->domainlen) == 0) {
+					break;
+				}
+			}
+
+			if (mz == NULL) {
+				dolog(LOG_INFO, "skipping zone \"%s\" due to no mzone entry for it!\n", rbt->humanname);
+				free(notn2->attempts);
+				free(notn2);
+				continue;
+			}
+
+			notn2->mzone = mz;
+
+			i = 0;
+			/* initialize notifications to 1 */
+			SLIST_FOREACH(md, &mz->dest, entries) {
+				md->notified = 1;
+				i++;	
+			}
+
+			notn2->numadd = i;
+
 			soatime = (time_t)((struct soa *)rrp->rdata)->serial;
 			snprintf(buf, sizeof(buf), "%u", ((struct soa *)rrp->rdata)->serial);
 
@@ -1490,6 +1508,7 @@ gather_notifydomains(ddDB *db)
 #if 0
 				dolog(LOG_INFO, "SOA serial for zone \"%s\" did not make sense (%s), not notifying\n", rbt->humanname, buf);
 #endif
+				free(notn2->attempts);
 				free(notn2);
 			}
 		}
@@ -1501,57 +1520,95 @@ gather_notifydomains(ddDB *db)
 	return;
 }
 
-void 
+void
 notifyslaves(int *notifyfd)
 {
+	struct mzone_dest *md;
 	int so;
-	int i;
+	int i, remove;
 
 	i = 0;
-	SLIST_FOREACH(nfslnp, &notifyslavehead, notifyslave_entry) {
-		if (nfslnp->family == AF_INET6) {	
-			so = notifyfd[1];
-		} else {
-			so = notifyfd[0];
-		}
-#if 0
-		dolog(LOG_INFO, "notifying %s...\n", nfslnp->name);
-#endif
 
 #ifdef __linux__
-		SLIST_FOREACH(notnp, &notifyhead, notify_entry) {
+	SLIST_FOREACH(notnp, &notifyhead, notify_entry) {
 #else
-		SLIST_FOREACH_SAFE(notnp, &notifyhead, notify_entry, notn2) {
+	SLIST_FOREACH_SAFE(notnp, &notifyhead, notify_entry, notn2) {
 #endif
+		remove = 0;
+		SLIST_FOREACH(md, &notnp->mzone->dest, entries) {
+			if (md->notifydest.ss_family == AF_INET) 
+				so = notifyfd[0];
+			else
+				so = notifyfd[1];
+
 			notnp->ids[i] = arc4random() & 0xffff;
 			notnp->attempts[i]++;
 			if (notnp->attempts[i] > 10) {
 				dolog(LOG_INFO, "notify entry removed due to timeout\n");
-				SLIST_REMOVE(&notifyhead, notnp, notifyentry, notify_entry);
+				remove = 1;
+				break;
 			} 
 
-			notifypacket(so, nfslnp, notnp, i);
+			if (md->notified == 1)
+				notifypacket(so, notnp, md, i);
+
+			i++;
 		}
 
-		i++;
+		if (remove) {
+			dolog(LOG_INFO, "removed domain \"%s\"\n", notnp->mzone->humanname);
+			SLIST_REMOVE(&notifyhead, notnp, notifyentry, notify_entry);
+		}
 	}
 
 	return;
 }
 
 void
-notifypacket(int so, void *vnse, void *vnotnp, int packetcount)
+notifypacket(int so, void *vnotnp, void *vmd, int packetcount)
 {
-	struct notifyslaveentry *nse = (struct notifyslaveentry *)vnse;
 	struct notifyentry *notnp = (struct notifyentry *)vnotnp;
+	struct mzone *mz = (struct mzone *)notnp->mzone;
+	struct mzone_dest *md = (struct mzone_dest *)vmd;
 	struct sockaddr_in bsin, *sin;
 	struct sockaddr_in6 bsin6, *sin6;
+	struct sockaddr_storage savesin, newsin;
 	char packet[512];
 	char *questionname;
 	u_int16_t *classtype;
 	struct dns_header *dnh;
 	struct question *fq = NULL;
 	int outlen = 0, slen, ret;
+	int sinlen;
+
+	
+	memcpy(&newsin, (char *)&mz->notifybind, sizeof(struct sockaddr_storage));
+	sinlen = sizeof(struct sockaddr_storage);
+	if (getsockname(so, (struct sockaddr *)&savesin, &sinlen) < 0) {
+		dolog(LOG_INFO, "getsockname error\n");
+		return;
+	}
+
+	if (mz->notifybind.ss_family == AF_INET) {
+		struct sockaddr_in *tmpsin = (struct sockaddr_in *)&newsin;
+
+
+		tmpsin->sin_port = ((struct sockaddr_in *)&savesin)->sin_port;
+
+		if (bind(so, (struct sockaddr *)tmpsin, sizeof(struct sockaddr_in)) < 0) {
+			dolog(LOG_INFO, "can't bind to bind address found in mzone for zone \"%s\"", mz->humanname);
+			return;
+		}
+	} else if (mz->notifybind.ss_family == AF_INET6) {
+		struct sockaddr_in6 *tmpsin = (struct sockaddr_in6 *)&newsin;
+
+		tmpsin->sin6_port = ((struct sockaddr_in6 *)&savesin)->sin6_port;
+
+		if (bind(so, (struct sockaddr *)tmpsin, sizeof(struct sockaddr_in6)) < 0) {
+			dolog(LOG_INFO, "can't bind to v6 bind address found in mzone for zone \"%s\"", mz->humanname);
+			return;
+		}
+	}
 
 	memset(&packet, 0, sizeof(packet));
 	dnh = (struct dns_header *)&packet[0];
@@ -1577,8 +1634,17 @@ notifypacket(int so, void *vnse, void *vnotnp, int packetcount)
 	outlen += (2 * sizeof(u_int16_t));
 
 	/* work out the tsig stuff */
-	if (nse->tsignamelen != 0) {
-		if ((fq = build_fake_question(notnp->domain, notnp->domainlen, 0, nse->tsigname, nse->tsignamelen)) == NULL) {
+	if (md->tsigkey != NULL) {
+		char *tsigname;
+		int tsignamelen;
+
+		tsigname = dns_label(md->tsigkey, &tsignamelen);
+		if (tsigname == NULL) {
+			dolog(LOG_INFO, "dns_label()");
+			return;
+		}
+	
+		if ((fq = build_fake_question(notnp->domain, notnp->domainlen, 0, tsigname, tsignamelen)) == NULL) {
 			return;
 		}
 	
@@ -1586,33 +1652,58 @@ notifypacket(int so, void *vnse, void *vnotnp, int packetcount)
 
 		dnh->additional = htons(1);
 
-		memcpy(nse->tsigrequestmac, fq->tsig.tsigmac, 32);
-
-		free_question(fq);
-	}
+		memcpy(&md->requestmac, fq->tsig.tsigmac, 32);
+		notnp->usetsig = 1;
 		
-	if (nse->family == AF_INET) {
+		free(tsigname);
+		free_question(fq);
+	} else {
+		notnp->usetsig = 0;
+	}
+
+	if (savesin.ss_family == AF_INET) {
+		struct sockaddr_in *tmpsin = (struct sockaddr_in *)&md->notifydest;
+
 		slen = sizeof(struct sockaddr_in);
-		sin = (struct sockaddr_in *)&nse->hostmask;
+		sin = (struct sockaddr_in *)&md->notifydest;
 		memset(&bsin, 0, sizeof(bsin));
 		bsin.sin_family = AF_INET;
 		bsin.sin_port = htons(53);
-		bsin.sin_addr.s_addr = sin->sin_addr.s_addr;
+		bsin.sin_addr.s_addr = tmpsin->sin_addr.s_addr;
 
 		ret = sendto(so, packet, outlen, 0, (struct sockaddr *)&bsin, slen);
 	} else {
+		struct sockaddr_in6 *tmpsin = (struct sockaddr_in6 *)&md->notifydest;
+
 		slen = sizeof(struct sockaddr_in6);
-		sin6 = (struct sockaddr_in6 *)&nse->hostmask;
+		sin6 = (struct sockaddr_in6 *)&md->notifydest;
 		memset(&bsin6, 0, sizeof(bsin6));
 		bsin6.sin6_family = AF_INET6;
 		bsin6.sin6_port = htons(53);
-		memcpy(&bsin6.sin6_addr, &sin6->sin6_addr, 16);
+		memcpy(&bsin6.sin6_addr, &tmpsin->sin6_addr, 16);
 
 		ret = sendto(so, packet, outlen, 0, (struct sockaddr *)sin6, slen);
 	}
 
 	if (ret < 0) {
 		dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+	}
+
+	/* as soon as the sendto is done we want to bind back to 0.0.0.0 */
+	if (mz->notifybind.ss_family == AF_INET) {
+		struct sockaddr_in *tmpsin = (struct sockaddr_in *)&savesin;
+
+		if (bind(so, (struct sockaddr *)tmpsin, sizeof(struct sockaddr_in)) < 0) {
+			dolog(LOG_INFO, "can't unbind from bind address found in mzone for zone \"%s\"", mz->humanname);
+			return;
+		}
+	} else if (mz->notifybind.ss_family == AF_INET6) {
+		struct sockaddr_in6 *tmpsin = (struct sockaddr_in6 *)&savesin;
+
+		if (bind(so, (struct sockaddr *)tmpsin, sizeof(struct sockaddr_in6)) < 0) {
+			dolog(LOG_INFO, "can't unbind from bind address found in mzone for zone \"%s\"", mz->humanname);
+			return;
+		}
 	}
 	
 	return;
@@ -1621,6 +1712,7 @@ notifypacket(int so, void *vnse, void *vnotnp, int packetcount)
 int 
 check_notifyreply(struct dns_header *dh, struct question *question, struct sockaddr_storage *ss, int af, struct notifyentry *notnp, int count)
 {
+	struct mzone_dest *md, *md2;
 	struct sockaddr_in6 *sin6, *sin62 = NULL;
 	struct sockaddr_in *sin, *sin2 = NULL;
 	char address[INET6_ADDRSTRLEN];
@@ -1650,31 +1742,33 @@ check_notifyreply(struct dns_header *dh, struct question *question, struct socka
 		ntohs(question->hdr->qclass) == DNS_CLASS_IN &&
 		question->hdr->namelen == notnp->domainlen && 
 		memcmp(question->hdr->name, notnp->domain, notnp->domainlen) == 0) {
-#ifdef __linux__
-			SLIST_FOREACH(nfslnp, &notifyslavehead, notifyslave_entry) {
+
+		if (tsig && question->tsig.tsigverified != 1) {
+			dolog(LOG_ERR, "tsig'ed notify answer was not validated from \"%s\", errorcode = 0x%02x\n", address, question->tsig.tsigerrorcode);
+			return -1;
+		}
+
+#if __linux__
+		SLIST_FOREACH(md, &notnp->mzone->dest, entries) {
 #else
-			SLIST_FOREACH_SAFE(nfslnp, &notifyslavehead, notifyslave_entry, nfslnp2) {
+		SLIST_FOREACH_SAFE(md, &notnp->mzone->dest, entries, md2) {
 #endif
-				if (tsig && nfslnp->tsignamelen != 0 && question->tsig.tsigverified != 1) {
-					dolog(LOG_ERR, "tsig'ed notify answer was not validated, errorcode = %02x\n", question->tsig.tsigerrorcode);
-					continue;
+
+			if (md->notifydest.ss_family != af)
+				continue;
+
+			if (af == AF_INET6)  {
+				sin62 = (struct sockaddr_in6 *)&md->notifydest;
+				if (memcmp(&sin6->sin6_addr, &sin62->sin6_addr, 16) == 0 && md->notified == 1) {
+					dolog(LOG_INFO, "notify success! removing address \"%s\" for zone \"%s\" from notify contact list\n", address, question->converted_name);
+					md->notified = 0;
 				}
-
-				if (nfslnp->family != af)
-					continue;
-
-				if (af == AF_INET6)  {
-					sin62 = (struct sockaddr_in6 *)&nfslnp->hostmask;
-					if (memcmp(&sin6->sin6_addr, &sin62->sin6_addr, 16) == 0) {
-						dolog(LOG_INFO, "notify success! removing address \"%s\" from notify contact list\n", address);
-						SLIST_REMOVE(&notifyslavehead, nfslnp, notifyslaveentry, notifyslave_entry);
-					}
-				} else {
-					sin2 = (struct sockaddr_in *)&nfslnp->hostmask;
-					if (sin->sin_addr.s_addr == sin2->sin_addr.s_addr) {
-						dolog(LOG_INFO, "notify success! removing address \"%s\" from notify contact list\n", address);
-						SLIST_REMOVE(&notifyslavehead, nfslnp, notifyslaveentry, notifyslave_entry);
-					}
+			} else {
+				sin2 = (struct sockaddr_in *)&md->notifydest;
+				if (sin->sin_addr.s_addr == sin2->sin_addr.s_addr && md->notified == 1) {
+					dolog(LOG_INFO, "notify success! removing address \"%s\" for zone \"%s\" from notify contact list\n", address, question->converted_name);
+					md->notified = 0;
+				}
 			} /* if af==AF_INET6 */
 		} /* SLIST_FOREACH */
 	} 

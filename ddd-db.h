@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.18 2019/04/30 10:21:00 pjp Exp $
+ * $Id: ddd-db.h,v 1.19 2019/06/26 12:38:35 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -375,5 +375,23 @@ ddDB * opendatabase(ddDB *);
 #define ZONE_FORMAT		0x4
 #define DNSSEC_FORMAT	0x8
 #define TCP_FORMAT		0x10
+
+/* mzone */
+struct mzone_dest {
+	struct sockaddr_storage notifydest;
+	SLIST_ENTRY(mzone_dest) entries;
+	int	notified;
+	char	requestmac[32];
+	char 	*tsigkey;
+};
+	
+struct mzone {
+	SLIST_ENTRY(mzone)	mzone_entry;
+	char 			*zonename;
+	int			zonenamelen;
+	char			*humanname;
+	struct sockaddr_storage	notifybind;
+	SLIST_HEAD(,mzone_dest)	dest;
+} *mz, *mz0;
 
 #endif /* _DB_H */

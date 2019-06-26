@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.69 2019/06/12 14:58:48 pjp Exp $
+ * $Id: parse.y,v 1.70 2019/06/26 12:38:35 pjp Exp $
  */
 
 %{
@@ -79,7 +79,7 @@ extern int 	insert_apex(char *, char *, int);
 extern int 	insert_nsec3(char *, char *, char *, int);
 extern int 	insert_region(char *, char *, u_int8_t);
 extern int 	insert_axfr(char *, char *);
-extern int 	insert_notifyslave(char *, char *, char *);
+extern int 	insert_notifyslave(char *, char *);
 extern int 	insert_filter(char *, char *);
 extern int 	insert_whitelist(char *, char *);
 extern int	insert_tsig(char *, char *);
@@ -141,6 +141,8 @@ struct rzone {
 	char			*tsigkey;
 	char 			*filename;
 } *rz, *rz0;
+
+SLIST_HEAD(mzones ,mzone)	mzones = SLIST_HEAD_INITIALIZER(mzones);
 
 #define STATE_IP 1
 #define STATE_ZONE 2
@@ -229,6 +231,7 @@ int             popfile(void);
 static int 	temp_inet_net_pton_ipv6(const char *, void *, size_t);
 int 		yyparse(void);
 static struct rzone * add_rzone(void);
+static struct mzone * add_mzone(void);
 static int	pull_remote_zone(struct rzone *);
 
 
@@ -237,9 +240,9 @@ static int	pull_remote_zone(struct rzone *);
 
 %token VERSION OBRACE EBRACE REGION RZONE AXFRFOR 
 %token DOT COLON TEXT WOF INCLUDE ZONE COMMA CRLF 
-%token ERROR AXFRPORT LOGGING OPTIONS FILTER NOTIFY
+%token ERROR AXFRPORT LOGGING OPTIONS FILTER MZONE
 %token WHITELIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
-%token TSIG
+%token TSIG NOTIFYDEST NOTIFYBIND
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -263,6 +266,7 @@ cmd_list:
 cmd	:  	
 	version 
 	| rzone
+	| mzone
 	| tsigauth
 	| axfrport
 	| include
@@ -270,7 +274,6 @@ cmd	:
 	| zone
 	| region CRLF
 	| axfr CRLF
-	| notify CRLF
 	| whitelist CRLF
 	| tsig CRLF
 	| filter CRLF
@@ -412,6 +415,143 @@ tsigauth:
 		free(keyname);
 	}
 	;
+mzone:
+	MZONE mzonelabel mzonecontent {
+		mz = add_mzone();
+		if (mz == NULL) {
+			dolog(LOG_INFO, "add_mzone failed\n");
+			return (-1);
+		}
+		SLIST_INIT(&mz->dest);
+	}
+	;
+
+mzonelabel:
+	QUOTEDSTRING
+	;
+
+mzonecontent:
+	OBRACE mzonestatements EBRACE CRLF
+	| OBRACE CRLF mzonestatements EBRACE CRLF
+	;
+
+mzonestatements 	:  		
+				mzonestatements mzonestatement 
+				| mzonestatement 
+				;
+
+mzonestatement:
+	
+	STRING QUOTEDSTRING SEMICOLON CRLF
+	{
+		mz = SLIST_FIRST(&mzones);
+		if (mz == NULL) {
+			mz = add_mzone();
+			SLIST_INIT(&mz->dest);
+		}
+
+		if (strcmp($1, "zonename") == 0) {
+			mz->humanname = strdup($2);
+			if (mz->humanname == NULL) {
+				perror("strdup");
+				return -1;
+			}
+
+			mz->zonename = dns_label(mz->humanname, &mz->zonenamelen);
+			if (mz->zonename == NULL) {
+				fprintf(stderr, "could not convert zone to dns_label\n");
+				return -1;
+			}
+		}
+		
+		free($1);
+		free($2);
+	}
+	|
+	NOTIFYDEST ipcidr STRING SEMICOLON CRLF
+	{
+		struct sockaddr_in *sin;
+		struct sockaddr_in6 *sin6;
+		struct mzone_dest *md;
+
+		mz = SLIST_FIRST(&mzones);
+		if (mz == NULL) {
+			mz = add_mzone();
+			SLIST_INIT(&mz->dest);
+		}
+
+		md = calloc(sizeof(struct mzone_dest), 1);
+		if (md == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			return (-1);
+		}
+
+		sin = (struct sockaddr_in *)&md->notifydest;
+		sin6 = (struct sockaddr_in6 *)&md->notifydest;
+
+		if (strchr($2, ':')) {
+			inet_pton(AF_INET6, $2, &sin6->sin6_addr);
+			md->notifydest.ss_family = AF_INET6;
+			if (strcmp($3, "NOKEY") == 0) {
+				md->tsigkey = NULL;
+			} else {
+				md->tsigkey = strdup($3);
+				if (md->tsigkey == NULL) {
+					perror("stdup");
+					return -1;
+				}
+			}
+			
+
+			SLIST_INSERT_HEAD(&mz->dest, md, entries);
+
+			notify++;
+		} else {
+			inet_pton(AF_INET, $2, &sin->sin_addr.s_addr);
+			md->notifydest.ss_family = AF_INET;
+
+			if (strcmp($3, "NOKEY") == 0) {
+				md->tsigkey = NULL;
+			} else {
+				md->tsigkey = strdup($3);
+				if (md->tsigkey == NULL) {
+					perror("stdup");
+					return -1;
+				}
+			}
+
+			SLIST_INSERT_HEAD(&mz->dest, md, entries);
+			notify++;
+		}
+
+		
+		free($2);
+		free($3);
+	}
+	|
+	NOTIFYBIND ipcidr SEMICOLON CRLF
+	{
+		struct sockaddr_in *sin;
+		struct sockaddr_in6 *sin6;
+
+		mz = SLIST_FIRST(&mzones);
+		if (mz == NULL) {
+			mz = add_mzone();
+			SLIST_INIT(&mz->dest);
+		}
+			
+		sin = (struct sockaddr_in *)&mz->notifybind;
+		sin6 = (struct sockaddr_in6 *)&mz->notifybind;
+
+		if (strchr($2, ':')) {
+			mz->notifybind.ss_family = AF_INET6;
+			inet_pton(AF_INET6, $2, &sin6->sin6_addr);
+		} else {
+			mz->notifybind.ss_family = AF_INET;
+			inet_pton(AF_INET, $2, &sin->sin_addr.s_addr);
+		}
+		free($2);
+	}
 
 rzone:
 	RZONE rzonelabel rzonecontent {
@@ -1327,60 +1467,6 @@ filterstatement	:	ipcidr SEMICOLON CRLF
 			| comment CRLF
 			;	
 
-
-/* notify "these hosts" { .. } */
-
-notify:
-	NOTIFY notifylabel notifycontent
-	{
-		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
-                        dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
-                        return (-1);
-                }
-	}
-	;
-
-notifylabel:
-	QUOTEDSTRING
-	;
-
-notifycontent:
-			OBRACE notifystatements EBRACE 
-			| OBRACE CRLF notifystatements EBRACE 
-			;
-
-notifystatements 	:  		
-				notifystatements notifystatement 
-				| notifystatement 
-				;
-
-notifystatement	:	ipcidr STRING SEMICOLON CRLF
-			{
-					char prefixlength[INET_ADDRSTRLEN];
-					char *dst;
-					
-
-					if (file->descend == DESCEND_YES) {
-							if ((dst = get_prefixlen($1, (char *)&prefixlength, sizeof(prefixlength))) == NULL)  {
-								return (-1);
-							}
-
-							if (insert_notifyslave(dst, prefixlength, $2) < 0) {
-								dolog(LOG_ERR, "insert_notifyslave, line %d\n", file->lineno);
-								return (-1);
-							}
-				
-							notify++;
-			
-							free (dst);
-					}
-
-					free ($1);
-					free ($2);
-			}
-			| comment CRLF
-			;	
-
 /* axfr-for "these hosts" { .. } */
 
 axfr:
@@ -1514,6 +1600,9 @@ struct tab cmdtab[] = {
 	{ "logging", LOGGING, 0 },
 	{ "master", MASTER, 0 },
 	{ "masterport", MASTERPORT, 0 },
+	{ "mzone", MZONE, 0},
+	{ "notifybind", NOTIFYBIND, 0},
+	{ "notifydest", NOTIFYDEST, 0},
 	{ "options", OPTIONS, 0 },
 	{ "region", REGION, STATE_IP },
 	{ "rzone", RZONE, 0 },
@@ -1523,7 +1612,6 @@ struct tab cmdtab[] = {
 	{ "version", VERSION, 0 },
 	{ "zinclude", ZINCLUDE, 0 },
 	{ "zone", ZONE, 0 },
-	{ "notify", NOTIFY, 0 },
 	{ NULL, 0, 0}};
 
 
@@ -3523,4 +3611,26 @@ pull_remote_zone(struct rzone *lrz)
 		return -1;
 	}
 	return 0;
+}
+
+/*
+ * ADD_MZONE - add a stub (template) master zone 
+ */
+
+static struct mzone *
+add_mzone(void)
+{	
+	struct mzone *lmz;
+
+	lmz = (struct mzone *)calloc(1, sizeof(struct mzone));
+	if (lmz == NULL) {
+		perror("calloc");
+		return NULL;
+	}
+
+	lmz->zonename = NULL;
+
+	SLIST_INSERT_HEAD(&mzones, lmz, mzone_entry);
+
+	return (lmz);
 }

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.66 2019/06/17 08:10:55 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.67 2019/06/26 12:38:35 pjp Exp $
  */
 
 
@@ -504,7 +504,6 @@ main(int argc, char *argv[], char *environ[])
 	init_region();
 	init_filter();
 	init_whitelist();
-	init_notifyslave();
 	init_dnssec();
 	init_tsig();
 	TAILQ_INIT(&tcphead);
