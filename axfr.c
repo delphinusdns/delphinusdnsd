@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.31 2019/06/26 12:45:23 pjp Exp $
+ * $Id: axfr.c,v 1.32 2019/06/27 04:20:26 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1747,7 +1747,7 @@ check_notifyreply(struct dns_header *dh, struct question *question, struct socka
 		question->hdr->namelen == notnp->domainlen && 
 		memcmp(question->hdr->name, notnp->domain, notnp->domainlen) == 0) {
 
-		if (tsig && question->tsig.tsigverified != 1) {
+		if (notnp->usetsig && question->tsig.tsigverified != 1) {
 			dolog(LOG_ERR, "tsig'ed notify answer was not validated from \"%s\", errorcode = 0x%02x\n", address, question->tsig.tsigerrorcode);
 			return -1;
 		}
