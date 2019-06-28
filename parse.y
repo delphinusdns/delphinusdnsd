@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.70 2019/06/26 12:38:35 pjp Exp $
+ * $Id: parse.y,v 1.71 2019/06/28 05:45:35 pjp Exp $
  */
 
 %{
@@ -397,11 +397,22 @@ quotedfilename:
 
 tsigauth:
 	TSIGAUTH STRING QUOTEDSTRING SEMICOLON CRLF {
-		char key[512];
+		char *key;
 		char *keyname;
 		int keylen, keynamelen;
+
+
+#if __OpenBSD__
+		key = calloc_conceal(512, 1);
+#else
+		key = calloc(512, 1);
+#endif
+		if (key == NULL) {
+			dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+			return -1;
+		}
 	
-		if ((keylen = mybase64_decode($3, key, sizeof(key))) < 0) {
+		if ((keylen = mybase64_decode($3, key, 512)) < 0) {
 			dolog(LOG_ERR, "can't decode tsig base64\n");
 			return -1;
 		}
@@ -411,8 +422,14 @@ tsigauth:
 		insert_tsig_key(key, keylen, keyname, keynamelen);
 
 		free($2);
+#ifdef __OpenBSD__
+		freezero($3, strlen($3));	/* sensitive material */
+#else
 		free($3);
+#endif
+		free(key);
 		free(keyname);
+		
 	}
 	;
 mzone:
