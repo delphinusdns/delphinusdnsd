@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: tsig.c,v 1.3 2019/06/28 05:45:35 pjp Exp $
+ * $Id: tsig.c,v 1.4 2019/06/28 06:44:07 pjp Exp $
  */
 
 
@@ -254,11 +254,7 @@ init_tsig_key(void)
 int
 insert_tsig_key(char *key, int keylen, char *keyname, int keynamelen)
 {
-#if __OpenBSD__
-	tk2 = malloc_conceal(sizeof(struct tsigkeyentry));
-#else
 	tk2 = malloc(sizeof(struct tsigkeyentry));      /* Insert after. */
-#endif
 	if (tk2 == NULL)
 		return -1;
 
@@ -269,11 +265,7 @@ insert_tsig_key(char *key, int keylen, char *keyname, int keynamelen)
 	memcpy(tk2->key, key, keylen);
 	tk2->keylen = keylen;
 
-#if __OpenBSD__
-	tk2->keyname = malloc_conceal(keynamelen);
-#else
 	tk2->keyname = malloc(keynamelen);
-#endif
 	if (tk2->keyname == NULL) {
 		return -1;
 	}
