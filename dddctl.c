@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.66 2019/07/02 06:42:09 pjp Exp $
+ * $Id: dddctl.c,v 1.67 2019/07/02 07:36:08 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -254,7 +254,7 @@ struct _mycmdtab {
 #define DEFAULT_EXPIRYTIME			(60 * 86400)
 
 #define DEFAULT_TTL				3600
-#define DEFAULT_BITS				2048
+#define DEFAULT_BITS				3072
 
 /* define masks */
 
