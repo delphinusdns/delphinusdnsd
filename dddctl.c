@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.65 2019/06/07 04:25:50 pjp Exp $
+ * $Id: dddctl.c,v 1.66 2019/07/02 06:42:09 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -167,6 +167,7 @@ int	sign_naptr(ddDB *, char *, struct keysentry *, int, struct rbtree *);
 int	sign_sshfp(ddDB *, char *, struct keysentry *, int, struct rbtree *);
 int	sign_tlsa(ddDB *, char *, struct keysentry *, int, struct rbtree *);
 int	sign_ds(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int 	sign(int, char *, int, struct keysentry *, char *, int *);
 int 	create_ds(ddDB *, char *, struct keysentry *);
 u_int 	keytag(u_char *key, u_int keysize);
 void 	pack(char *, char *, int);
@@ -1622,9 +1623,6 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p;
@@ -1640,11 +1638,8 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -1763,48 +1758,10 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	debug_bindump(key, keylen);
 	
 #endif
-
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -1831,9 +1788,6 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p;
@@ -1849,11 +1803,8 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -1960,47 +1911,10 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	debug_bindump(key, keylen);
 #endif
 
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -2027,9 +1941,6 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p, *q;
@@ -2045,11 +1956,8 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -2216,47 +2124,10 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	debug_bindump(key, keylen);
 #endif
 
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -2283,9 +2154,6 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p;
@@ -2301,11 +2169,8 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -2432,47 +2297,10 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	debug_bindump(key, keylen);
 #endif
 
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -2500,9 +2328,6 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p;
@@ -2518,11 +2343,8 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -2641,47 +2463,10 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 	debug_bindump(key, keylen);
 #endif
 
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -2708,9 +2493,6 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p;
@@ -2726,11 +2508,8 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -2837,48 +2616,10 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 #if 0
 	debug_bindump(key, keylen);
 #endif
-
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -2905,9 +2646,6 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p;
@@ -2923,11 +2661,8 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -3034,48 +2769,10 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 #if 0
 	debug_bindump(key, keylen);
 #endif
-
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -3103,9 +2800,6 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p, *q;
@@ -3121,11 +2815,8 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -3311,48 +3002,10 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 #if 0
 	debug_bindump(key, keylen);
 #endif
-
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -3380,9 +3033,6 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p, *q;
@@ -3398,11 +3048,8 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -3575,48 +3222,10 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 #if 0
 	debug_bindump(key, keylen);
 #endif
-
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -3645,9 +3254,6 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p, *q;
@@ -3663,11 +3269,8 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -3838,48 +3441,10 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 #if 0
 	debug_bindump(key, keylen);
 #endif
-
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -3907,9 +3472,6 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p, *q;
@@ -3925,11 +3487,8 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -4104,47 +3663,10 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	debug_bindump(key, keylen);
 #endif
 
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -4172,9 +3694,6 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p, *q;
@@ -4190,11 +3709,8 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -4365,48 +3881,10 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 #if 0
 	debug_bindump(key, keylen);
 #endif
-
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -4434,10 +3912,6 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
-
 	char *dnsname;
 	char *p, *q;
 	char *key, *tmpkey;
@@ -4452,11 +3926,8 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -4622,48 +4093,10 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 #if 0
 	debug_bindump(key, keylen);
 #endif
-
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -4691,9 +4124,6 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p, *q;
@@ -4709,11 +4139,8 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -4880,48 +4307,10 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 #if 0
 	debug_bindump(key, keylen);
 #endif
-
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -4950,9 +4339,6 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct r
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p, *q;
@@ -4968,11 +4354,8 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct r
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -5137,48 +4520,10 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct r
 #if 0
 	debug_bindump(key, keylen);	
 #endif
-
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -5401,9 +4746,6 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 	char signature[4096];
 	char shabuf[64];
 	
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
 
 	char *dnsname;
 	char *p, *q;
@@ -5419,11 +4761,8 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 	int keyid;
 	int len;
 	int keylen, siglen;
-	int rsatype;
-	int bufsize;
 	int labels;
 
-	RSA *rsa;
 
 	char timebuf[32];
 	struct tm tm;
@@ -5599,47 +4938,10 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 			debug_bindump(key, keylen);
 		#endif
 
-			switch (algorithm) {
-			case ALGORITHM_RSASHA1_NSEC3_SHA1:
-				SHA1_Init(&sha1);
-				SHA1_Update(&sha1, key, keylen);
-				SHA1_Final((u_char *)shabuf, &sha1);
-				bufsize = 20;
-				break;
-			case ALGORITHM_RSASHA256:	
-				SHA256_Init(&sha256);
-				SHA256_Update(&sha256, key, keylen);
-				SHA256_Final((u_char *)shabuf, &sha256);
-				bufsize = 32;
-				break;
-			case ALGORITHM_RSASHA512:
-				SHA512_Init(&sha512);
-				SHA512_Update(&sha512, key, keylen);
-				SHA512_Final((u_char *)shabuf, &sha512);
-				bufsize = 64;
-				break;
-			default:
+			if (sign(algorithm, key, keylen, knp, (char *)&signature, &siglen) < 0) {
+				dolog(LOG_INFO, "signing failed\n");
 				return -1;
 			}
-				
-			rsa = get_private_key(knp);
-			if (rsa == NULL) {
-				dolog(LOG_INFO, "reading private key failed\n");
-				return -1;
-			}
-				
-			rsatype = alg_to_rsa(algorithm);
-			if (rsatype == -1) {
-				dolog(LOG_INFO, "algorithm mismatch\n");
-				return -1;
-			}
-
-			if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-				dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-				return -1;
-			}
-
-			RSA_free(rsa);
 
 			len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 			tmp[len] = '\0';
@@ -5796,47 +5098,10 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 	debug_bindump(key, keylen);
 #endif
 
-	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
-	case ALGORITHM_RSASHA256:	
-		SHA256_Init(&sha256);
-		SHA256_Update(&sha256, key, keylen);
-		SHA256_Final((u_char *)shabuf, &sha256);
-		bufsize = 32;
-		break;
-	case ALGORITHM_RSASHA512:
-		SHA512_Init(&sha512);
-		SHA512_Update(&sha512, key, keylen);
-		SHA512_Final((u_char *)shabuf, &sha512);
-		bufsize = 64;
-		break;
-	default:
+	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
-		
-	rsa = get_private_key(zsk_key);
-	if (rsa == NULL) {
-		dolog(LOG_INFO, "reading private key failed\n");
-		return -1;
-	}
-		
-	rsatype = alg_to_rsa(algorithm);
-	if (rsatype == -1) {
-		dolog(LOG_INFO, "algorithm mismatch\n");
-		return -1;
-	}
-
-	if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, &siglen, rsa) != 1) {
-		dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-		return -1;
-	}
-
-	RSA_free(rsa);
 
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
@@ -8705,4 +7970,79 @@ int
 find_tsig_key(char *keyname, int keynamelen, char *key, int keylen)
 {
 	return -1;
+}
+
+
+/*
+ * sign() - sign an RR
+ */
+
+int
+sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *signature, int *siglen)
+{
+	RSA *rsa;
+
+	SHA_CTX sha1;
+	SHA256_CTX sha256;
+	SHA512_CTX sha512;
+
+	char shabuf[64];
+	int bufsize;
+	int rsatype;
+	
+	/* digest */
+	switch (algorithm) {
+	case ALGORITHM_RSASHA1_NSEC3_SHA1:
+		SHA1_Init(&sha1);
+		SHA1_Update(&sha1, key, keylen);
+		SHA1_Final((u_char *)shabuf, &sha1);
+		bufsize = 20;
+		break;
+	case ALGORITHM_RSASHA256:	
+		SHA256_Init(&sha256);
+		SHA256_Update(&sha256, key, keylen);
+		SHA256_Final((u_char *)shabuf, &sha256);
+		bufsize = 32;
+		break;
+	case ALGORITHM_RSASHA512:
+		SHA512_Init(&sha512);
+		SHA512_Update(&sha512, key, keylen);
+		SHA512_Final((u_char *)shabuf, &sha512);
+		bufsize = 64;
+		break;
+	default:
+		dolog(LOG_INFO, "algorithm not supported\n");
+		return -1;
+	}
+
+	/* sign */
+	switch (algorithm) {
+	case ALGORITHM_RSASHA1_NSEC3_SHA1:
+	case ALGORITHM_RSASHA256:	
+	case ALGORITHM_RSASHA512:
+		rsa = get_private_key(key_entry);
+		if (rsa == NULL) {
+			dolog(LOG_INFO, "reading private key failed\n");
+			return -1;
+		}
+			
+		rsatype = alg_to_rsa(algorithm);
+		if (rsatype == -1) {
+			dolog(LOG_INFO, "algorithm mismatch\n");
+			return -1;
+		}
+
+		if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, siglen, rsa) != 1) {
+			dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
+			return -1;
+		}
+
+		RSA_free(rsa);
+		break;
+	default:
+		dolog(LOG_INFO, "algorithm not supported\n");
+		return -1;
+	}
+
+	return 0;
 }
