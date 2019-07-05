@@ -9,6 +9,8 @@ Changes in RELEASE_1_4 from RELEASE_1_3
 - increased TXT's size from 255 to 1024 (for DKIM)
 - TCP now doesn't block upon connect, it will close connections at 64 limit
 - refactored the axfr with finer grained control with the mzone keyword
+- added algorithm 13 in dddctl, for signing elliptic curves and conforming to
+  RFC 8624
 
 Changes in RELEASE_1_3 from RELEASE_1_2
 - created a "zinclude" config, which will only allow zone files to be 
