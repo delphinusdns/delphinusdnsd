@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.67 2019/07/02 07:36:08 pjp Exp $
+ * $Id: dddctl.c,v 1.68 2019/07/05 08:14:50 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -91,6 +91,8 @@
 #include <openssl/rsa.h>
 #include <openssl/err.h>
 #include <openssl/sha.h>
+#include <openssl/ec.h>
+#include <openssl/ecdsa.h>
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
@@ -123,7 +125,7 @@ static struct keysentry {
         uint8_t algorithm;
         int keyid;
 
-	/* private key */
+	/* private key RSA */
 	BIGNUM *rsan;
 	BIGNUM *rsae;
 	BIGNUM *rsad;
@@ -132,6 +134,10 @@ static struct keysentry {
 	BIGNUM *rsadmp1;
 	BIGNUM *rsadmq1;
 	BIGNUM *rsaiqmp;
+
+	/* private key Elliptic Curve */
+
+	BIGNUM *ecprivate;
 
         SLIST_ENTRY(keysentry) keys_entry;
 } *kn, *knp;
@@ -145,6 +151,9 @@ char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *,
 char *  key2zone(char *, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
 char *  get_key(struct keysentry *,uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int, int *);
 char *	create_key(char *, int, int, int, int, uint32_t *);
+char *	create_key_rsa(char *, int, int, int, int, uint32_t *);
+char *	create_key_ec(char *, int, int, int, int, uint32_t *);
+int	create_key_ec_getpid(EC_KEY *, EC_GROUP *, EC_POINT *, int, int);
 int 	dump_db(ddDB *, FILE *, char *);
 int	dump_db_bind(ddDB*, FILE *, char *);
 char * 	alg_to_name(int);
@@ -175,7 +184,8 @@ void 	pack32(char *, u_int32_t);
 void 	pack16(char *, u_int16_t);
 void 	pack8(char *, u_int8_t);
 void	free_private_key(struct keysentry *);
-RSA * 	get_private_key(struct keysentry *);
+RSA * 	get_private_key_rsa(struct keysentry *);
+EC_KEY *get_private_key_ec(struct keysentry *);
 int	store_private_key(struct keysentry *, char *, int, int);
 u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
@@ -240,9 +250,10 @@ struct _mycmdtab {
 #define SCHEME_YYYY	1
 #define SCHEME_TSTAMP	2
 
-#define ALGORITHM_RSASHA1_NSEC3_SHA1 7 		/* rfc 5155 */
-#define ALGORITHM_RSASHA256	8		/* rfc 5702 */
-#define ALGORITHM_RSASHA512	10		/* rfc 5702 */
+#define ALGORITHM_RSASHA1_NSEC3_SHA1 	7 	/* rfc 5155 */
+#define ALGORITHM_RSASHA256		8	/* rfc 5702 */
+#define ALGORITHM_RSASHA512		10	/* rfc 5702 */
+#define ALGORITHM_ECDSAP256SHA256	13	/* rfc 6605 */
 
 #define RSA_F5			0x100000001
 
@@ -696,11 +707,11 @@ signmain(int argc, char *argv[])
 		}
 		kn->keyid = key_keyid;
 
+
 		if (store_private_key(kn, kn->zone, kn->keyid, kn->algorithm) < 0) {
 			perror("store_private_key");
 			exit(1);
 		}
-
 
 		SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 		numkeys++;
@@ -763,6 +774,7 @@ signmain(int argc, char *argv[])
 		dolog(LOG_INFO, "must specify both a ksk and a zsk key! or -z -k\n");
 		exit(1);
 	}
+
 
 	/* check what keys we sign or not */
 	if (numkeys > 3) {
@@ -1148,6 +1160,272 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 char *	
 create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t *pid)
 {
+	switch (algorithm) {
+	case ALGORITHM_RSASHA1_NSEC3_SHA1:
+	case ALGORITHM_RSASHA256:
+	case ALGORITHM_RSASHA512:
+		return (create_key_rsa(zonename, ttl, flags, algorithm, bits, pid));
+		break;
+	case ALGORITHM_ECDSAP256SHA256:
+		return (create_key_ec(zonename, ttl, flags, algorithm, bits, pid));
+		break;
+	default:
+		dolog(LOG_INFO, "invalid algorithm in key\n");
+		break;
+	}
+
+	return NULL;
+}
+
+char *	
+create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t *pid)
+{
+	FILE *f;
+	EC_KEY *eckey;
+	EC_GROUP *ecgroup;
+	const BIGNUM *ecprivatekey;
+	const EC_POINT *ecpublickey;
+
+	struct stat sb;
+
+	char bin[4096];
+	char b64[4096];
+	char tmp[4096];
+	char buf[512];
+	char *retval;
+	char *p;
+
+	int binlen;
+	int len;
+
+	mode_t savemask;
+	time_t now;
+	struct tm *tm;
+
+	if (algorithm != ALGORITHM_ECDSAP256SHA256) {
+		return NULL;	
+	}
+
+	eckey = EC_KEY_new();
+	if (eckey == NULL) {
+		dolog(LOG_ERR, "EC_KEY_new(): %s\n", strerror(errno));
+		return NULL;
+	}
+
+	ecgroup = EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+	if (ecgroup == NULL) {
+		dolog(LOG_ERR, "EC_GROUP_new_by_curve_name(): %s\n", strerror(errno));
+		EC_KEY_free(eckey);
+		return NULL;
+	}
+
+	if (EC_KEY_set_group(eckey, ecgroup) != 1) {
+		dolog(LOG_ERR, "EC_KEY_set_group(): %s\n", strerror(errno));	
+		goto out;
+	}
+
+	/* XXX create EC key here */
+	if (EC_KEY_generate_key(eckey) == 0) {
+		dolog(LOG_ERR, "EC_KEY_generate_key(): %s\n", strerror(errno));	
+		goto out;
+	}
+
+	ecprivatekey = EC_KEY_get0_private_key(eckey);
+	if (ecprivatekey == NULL) {
+		dolog(LOG_INFO, "EC_KEY_get0_private_key(): %s\n", strerror(errno));
+		goto out;
+	}
+
+	ecpublickey = EC_KEY_get0_public_key(eckey);
+	if (ecpublickey == NULL) {
+		dolog(LOG_ERR, "EC_KEY_get0_public_key(): %s\n", strerror(errno));
+		goto out;
+	}
+		
+	*pid = create_key_ec_getpid(eckey, ecgroup, (EC_POINT *)ecpublickey, algorithm, flags);
+	if (*pid == -1) {
+		dolog(LOG_ERR, "create_key_ec_getpid(): %s\n", strerror(errno));
+		goto out;
+	}
+
+	/* check for collisions, XXX should be rare */
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if (knp->pid == *pid)
+			break;
+	}
+	
+	if (knp != NULL) {
+		dolog(LOG_INFO, "create_key: collision with existing pid %d\n", *pid);
+		EC_GROUP_free(ecgroup);
+		EC_KEY_free(eckey);
+		return (create_key_ec(zonename, ttl, flags, algorithm, bits, pid));
+	}
+
+	snprintf(buf, sizeof(buf), "K%s%s+%03d+%d", zonename,
+		(zonename[strlen(zonename) - 1] == '.') ? "" : ".",
+		algorithm, *pid);
+
+	retval = strdup(buf);
+	if (retval == NULL) {
+		dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+		goto out;
+	}
+		
+	snprintf(buf, sizeof(buf), "%s.private", retval);
+
+	savemask = umask(077);
+
+	errno = 0;
+	if (lstat(buf, &sb) < 0 && errno != ENOENT) {
+		perror("lstat");
+		goto out;
+	}
+	
+	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
+		dolog(LOG_INFO, "%s is not a file!\n", buf);
+		goto out;
+	}
+	
+	f = fopen(buf, "w+");
+	if (f == NULL) {
+		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
+		goto out;
+	}
+
+	fprintf(f, "Private-key-format: v1.3\n");
+	fprintf(f, "Algorithm: %d (%s)\n", algorithm, alg_to_name(algorithm));
+	/* PrivateKey */
+	binlen = BN_bn2bin(ecprivatekey, (char *)&bin);
+	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	fprintf(f, "PrivateKey: %s\n", b64);
+
+	now = time(NULL);
+	tm = gmtime(&now);
+	
+	strftime(buf, sizeof(buf), "%Y%m%d%H%M%S", tm);
+	fprintf(f, "Created: %s\n", buf);
+	fprintf(f, "Publish: %s\n", buf);
+	fprintf(f, "Activate: %s\n", buf);
+	fclose(f);
+
+	//BN_free((BIGNUM *)ecprivatekey);
+
+
+	/* now for the EC public .key */
+
+	snprintf(buf, sizeof(buf), "%s.key", retval);
+	umask(savemask);
+
+	errno = 0;
+	if (lstat(buf, &sb) < 0 && errno != ENOENT) {
+		perror("lstat");
+		goto out;
+	}
+	
+	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
+		dolog(LOG_INFO, "%s is not a file!\n", buf);
+		goto out;
+	}
+
+	f = fopen(buf, "w+");
+	if (f == NULL) {
+		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
+		snprintf(buf, sizeof(buf), "%s.private", retval);
+		unlink(buf);
+		goto out;
+	}
+	
+	fprintf(f, "; This is a %s key, keyid %u, for %s%s\n", (flags == 257) ? "key-signing" : "zone-signing", *pid, zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".");
+
+	strftime(buf, sizeof(buf), "%Y%m%d%H%M%S", tm);
+	strftime(bin, sizeof(bin), "%c", tm);
+	fprintf(f, "; Created: %s (%s)\n", buf, bin);
+	fprintf(f, "; Publish: %s (%s)\n", buf, bin);
+	fprintf(f, "; Activate: %s (%s)\n", buf, bin);
+
+	if ((binlen = EC_POINT_point2oct(ecgroup, ecpublickey, POINT_CONVERSION_UNCOMPRESSED, tmp, sizeof(tmp), NULL)) == 0) {
+		dolog(LOG_ERR, "EC_POINT_point2oct(): %s\n", strerror(errno));
+		fclose(f);
+		snprintf(buf, sizeof(buf), "%s.private", retval);
+		unlink(buf);
+		goto out;
+	}
+	
+	/*
+	 * taken from PowerDNS's opensslsigners.cc, apparently to get to the
+	 * real public key one has to take out a byte and reduce the length
+	 */
+
+	p = tmp;
+	p++;
+	binlen--;
+
+	len = mybase64_encode(p, binlen, b64, sizeof(b64));
+	fprintf(f, "%s%s %d IN DNSKEY %d 3 %d %s\n", zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".", ttl, flags, algorithm, b64);
+
+	fclose(f);
+
+	EC_GROUP_free(ecgroup);
+	EC_KEY_free(eckey);
+	
+	return (retval);
+
+out:
+	EC_GROUP_free(ecgroup);
+	EC_KEY_free(eckey);
+	
+	return NULL;
+}
+
+int
+create_key_ec_getpid(EC_KEY *eckey, EC_GROUP *ecgroup, EC_POINT *ecpublickey, int algorithm, int flags)
+{
+	int binlen;
+	char *tmp, *p, *q;
+	char bin[4096];
+
+	p = &bin[0];
+	pack16(p, htons(flags));
+	p += 2;
+	pack8(p, 3);	/* protocol always 3 */
+	p++;
+ 	pack8(p, algorithm);
+	p++;
+
+	binlen = EC_POINT_point2oct(ecgroup, ecpublickey, POINT_CONVERSION_UNCOMPRESSED, NULL, 0, NULL);
+
+	if (binlen == 0) {
+		dolog(LOG_ERR, "EC_POINT_point2oct(): %s\n", strerror(errno));
+		return -1;
+	} 
+
+	tmp = malloc(binlen);
+	if (tmp == NULL) {
+		dolog(LOG_ERR, "malloc: %s\n", strerror(errno));
+		return (-1);
+	}
+
+	if (EC_POINT_point2oct(ecgroup, ecpublickey, POINT_CONVERSION_UNCOMPRESSED, tmp, binlen, NULL) == 0) {
+		dolog(LOG_ERR, "EC_POINT_point2oct(): %s\n", strerror(errno));
+		return -1; 
+	}
+
+	q = tmp;
+	q++;
+	binlen--;
+	
+	pack(p, q, binlen);
+	p += binlen;
+
+	free(tmp);
+	binlen = (p - &bin[0]);
+
+	return (keytag(bin, binlen));
+}
+
+char *	
+create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t *pid)
+{
 	FILE *f;
         RSA *rsa;
         BIGNUM *e;
@@ -1266,7 +1544,9 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 	
 	if (knp != NULL) {
 		dolog(LOG_INFO, "create_key: collision with existing pid %d\n", *pid);
-		return (create_key(zonename, ttl, flags, algorithm, bits, pid));
+		RSA_free(rsa);
+		BN_free(e);
+		return (create_key_rsa(zonename, ttl, flags, algorithm, bits, pid));
 	}
 	
 	snprintf(buf, sizeof(buf), "K%s%s+%03d+%d", zonename,
@@ -1425,11 +1705,15 @@ alg_to_name(int algorithm)
 	switch (algorithm) {
 	case ALGORITHM_RSASHA1_NSEC3_SHA1: 
 		return ("RSASHA1_NSEC3_SHA1");
+		break;
 	case ALGORITHM_RSASHA256:
 		return ("RSASHA256");
 		break;
 	case ALGORITHM_RSASHA512:
 		return ("RSASHA512");
+		break;
+	case ALGORITHM_ECDSAP256SHA256:
+		return ("ECDSAP256SHA256");
 		break;
 	}
 
@@ -1637,7 +1921,7 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -1802,7 +2086,7 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -1955,7 +2239,7 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -2168,7 +2452,7 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -2288,8 +2572,10 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	p++;
 	pack(p, ((struct nsec3 *)rrp->rdata)->next, ((struct nsec3 *)rrp->rdata)->nextlen);
 	p += ((struct nsec3 *)rrp->rdata)->nextlen;
-	pack(p, ((struct nsec3 *)rrp->rdata)->bitmap, ((struct nsec3 *)rrp->rdata)->bitmap_len);
-	p += ((struct nsec3 *)rrp->rdata)->bitmap_len;
+	if (((struct nsec3 *)rrp->rdata)->bitmap_len) {
+		pack(p, ((struct nsec3 *)rrp->rdata)->bitmap, ((struct nsec3 *)rrp->rdata)->bitmap_len);
+		p += ((struct nsec3 *)rrp->rdata)->bitmap_len;
+	}
 	
 	keylen = (p - key);	
 
@@ -2342,7 +2628,7 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -2507,7 +2793,7 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -2660,7 +2946,7 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -2814,7 +3100,7 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -3047,7 +3333,7 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -3268,7 +3554,7 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -3486,7 +3772,7 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -3708,7 +3994,7 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -3925,7 +4211,7 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -4138,7 +4424,7 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -4353,7 +4639,7 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct r
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -4760,7 +5046,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 	int labellen;
 	int keyid;
 	int len;
-	int keylen, siglen;
+	int keylen, siglen = sizeof(signature);
 	int labels;
 
 
@@ -5098,6 +5384,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 	debug_bindump(key, keylen);
 #endif
 
+	siglen = sizeof(signature);
 	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
 		dolog(LOG_INFO, "signing failed\n");
 		return -1;
@@ -5170,20 +5457,26 @@ pack(char *buf, char *input, int len)
 void
 free_private_key(struct keysentry *kn)
 {
-	BN_clear_free(kn->rsan);
-	BN_clear_free(kn->rsae);
-	BN_clear_free(kn->rsad);
-	BN_clear_free(kn->rsap);
-	BN_clear_free(kn->rsaq);
-	BN_clear_free(kn->rsadmp1);
-	BN_clear_free(kn->rsadmq1);
-	BN_clear_free(kn->rsaiqmp);
+	if (kn->algorithm < 13) {
+		/* RSA */
+		BN_clear_free(kn->rsan);
+		BN_clear_free(kn->rsae);
+		BN_clear_free(kn->rsad);
+		BN_clear_free(kn->rsap);
+		BN_clear_free(kn->rsaq);
+		BN_clear_free(kn->rsadmp1);
+		BN_clear_free(kn->rsadmq1);
+		BN_clear_free(kn->rsaiqmp);
+	} else {
+		/* EC */
+		BN_clear_free(kn->ecprivate);
+	}
 
 	return;
 }
 
 RSA *
-get_private_key(struct keysentry *kn)
+get_private_key_rsa(struct keysentry *kn)
 {
 	RSA *rsa;
 
@@ -5222,6 +5515,73 @@ get_private_key(struct keysentry *kn)
 	}
 
 	return (rsa);
+}
+
+EC_KEY *
+get_private_key_ec(struct keysentry *kn)
+{
+	EC_KEY *eckey;
+	EC_GROUP *ecgroup;
+
+	const EC_POINT *ecpoint = NULL;
+	const BIGNUM *ecprivate;
+	BN_CTX *bn_ctx = NULL;
+
+	eckey = EC_KEY_new();
+	if (eckey == NULL) {
+		dolog(LOG_INFO, "EC creation\n");
+		return NULL;
+	}
+
+	
+	if ((ecprivate = BN_dup(kn->ecprivate)) == NULL) {
+		dolog(LOG_INFO, "BN_dup\n");
+		goto out;
+	}
+
+
+	ecgroup = EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+	if (ecgroup == NULL) {
+		dolog(LOG_ERR, "EC_GROUP_new_by_curve_name(): %s\n", strerror(errno));
+		goto out;
+	}
+
+	if (EC_KEY_set_group(eckey, ecgroup) != 1) {
+		dolog(LOG_ERR, "EC_KEY_set_group(): %s\n", strerror(errno));	
+		EC_GROUP_free(ecgroup);
+		goto out;
+	}
+
+	if (EC_KEY_set_private_key(eckey, ecprivate) != 1) {
+		dolog(LOG_INFO, "EC_KEY_set_private_key failed\n");
+		EC_GROUP_free(ecgroup);
+		goto out;
+	}
+
+	ecpoint = EC_POINT_new(ecgroup);
+	if (ecpoint == NULL) {
+		dolog(LOG_ERR, "EC_POINT_new(): %s\n", ERR_error_string(ERR_get_error(), NULL));
+		EC_GROUP_free(ecgroup);
+		goto out;
+	}
+
+	if (EC_POINT_mul(ecgroup, (EC_POINT *)ecpoint, ecprivate, NULL, NULL, bn_ctx) != 1) {
+		dolog(LOG_ERR, "EC_POINT_mul(): %s\n", ERR_error_string(ERR_get_error(), NULL));
+		EC_GROUP_free(ecgroup);
+		goto out;
+	}
+
+	if (EC_KEY_set_public_key(eckey, ecpoint) != 1) { 
+		dolog(LOG_ERR, "EC_KEY_set_public_key(): %s\n", ERR_error_string(ERR_get_error(), NULL));
+		EC_GROUP_free(ecgroup);
+		goto out;
+	}
+
+	return (eckey);	
+
+out:
+	EC_KEY_free(eckey);
+	return NULL;
 }
 
 int
@@ -5330,7 +5690,21 @@ store_private_key(struct keysentry *kn, char *zonename, int keyid, int algorithm
 				dolog(LOG_INFO, "BN_bin2bn failed\n");
 				return -1;
 			}
+		} else if ((p = strstr(buf, "PrivateKey: ")) != NULL) {
+			p += 12;
+
+			if (algorithm != ALGORITHM_ECDSAP256SHA256) {
+				dolog(LOG_INFO, "got PrivateKey in keyfile, but not on algorithm 13!\n");
+				return -1;
+			}
+
+			keylen = mybase64_decode(p, (char *)&key, sizeof(key));
+			if ((kn->ecprivate = BN_bin2bn(key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "BN_bin2bn failed\n");
+				return -1;
+			}
 		}
+	
 	} /* fgets */
 
 	fclose(f);
@@ -5440,13 +5814,13 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 	if (rrp2 == NULL)
 		return -1;
 
-	memset(&n3p, 0, sizeof(n3p));
+	memset((char *)&n3p, 0, sizeof(n3p));
 
 	n3p.algorithm = 1;	/* still in conformance with above */
 	n3p.flags = 0;
 	n3p.iterations = ((struct nsec3param *)rrp2->rdata)->iterations;
 	n3p.saltlen = ((struct nsec3param *)rrp2->rdata)->saltlen;
-	memcpy(&n3p.salt, ((struct nsec3param *)rrp2->rdata)->salt, 
+	memcpy((char *)&n3p.salt, ((struct nsec3param *)rrp2->rdata)->salt, 
 			((struct nsec3param *)rrp2->rdata)->saltlen);
 
 	j = 0;
@@ -7981,6 +8355,7 @@ int
 sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *signature, int *siglen)
 {
 	RSA *rsa;
+	EC_KEY *eckey;
 
 	SHA_CTX sha1;
 	SHA256_CTX sha256;
@@ -7989,6 +8364,12 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 	char shabuf[64];
 	int bufsize;
 	int rsatype;
+
+	ECDSA_SIG *tmpsig;
+	const BIGNUM *r = NULL, *s = NULL;
+
+	char buf[512];
+	int buflen;
 	
 	/* digest */
 	switch (algorithm) {
@@ -7998,6 +8379,8 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 		SHA1_Final((u_char *)shabuf, &sha1);
 		bufsize = 20;
 		break;
+	case ALGORITHM_ECDSAP256SHA256:
+		/* FALLTHROUGH */
 	case ALGORITHM_RSASHA256:	
 		SHA256_Init(&sha256);
 		SHA256_Update(&sha256, key, keylen);
@@ -8020,7 +8403,7 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 	case ALGORITHM_RSASHA1_NSEC3_SHA1:
 	case ALGORITHM_RSASHA256:	
 	case ALGORITHM_RSASHA512:
-		rsa = get_private_key(key_entry);
+		rsa = get_private_key_rsa(key_entry);
 		if (rsa == NULL) {
 			dolog(LOG_INFO, "reading private key failed\n");
 			return -1;
@@ -8029,6 +8412,7 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 		rsatype = alg_to_rsa(algorithm);
 		if (rsatype == -1) {
 			dolog(LOG_INFO, "algorithm mismatch\n");
+			RSA_free(rsa);
 			return -1;
 		}
 
@@ -8037,8 +8421,56 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 			return -1;
 		}
 
+		if (RSA_verify(rsatype, (u_char*)shabuf, bufsize, (u_char*)signature, *siglen, rsa) != 1) {
+			dolog(LOG_INFO, "unable to verify with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
+			return -1;
+		}
+			
 		RSA_free(rsa);
 		break;
+
+	case ALGORITHM_ECDSAP256SHA256:
+		eckey = get_private_key_ec(key_entry);
+		if (eckey == NULL) {
+			dolog(LOG_INFO, "reading EC private key failed\n");
+			return -1;
+		}
+
+			
+		if ((tmpsig = ECDSA_do_sign(shabuf, bufsize, eckey)) == NULL) {
+			dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
+			EC_KEY_free(eckey);
+			return -1;
+		}
+
+		if (ECDSA_do_verify(shabuf, bufsize, (const ECDSA_SIG *)tmpsig, eckey) != 1) {
+			dolog(LOG_INFO, "unable to verify signature with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
+			EC_KEY_free(eckey);
+			ECDSA_SIG_free(tmpsig);
+			return -1;
+		}
+
+		ECDSA_SIG_get0(tmpsig, &r, &s);
+
+		/*
+		 * taken from PowerDNS's opensslsigners.cc, apparently a
+		 * signature's r and s must be pre-padded with 0x0 if the
+		 * size of r or s is less than full 32 bytes.
+		 */
+
+		memset(signature, 0, *siglen);
+
+		buflen = BN_bn2bin(r, buf);
+		memcpy((char *)&signature[32 - buflen], buf, buflen);
+
+		buflen = BN_bn2bin(s, buf);
+		memcpy((char *)&signature[64 - buflen], buf, buflen);
+		*siglen = 64;
+
+		ECDSA_SIG_free(tmpsig);
+		EC_KEY_free(eckey);
+		break;
+
 	default:
 		dolog(LOG_INFO, "algorithm not supported\n");
 		return -1;

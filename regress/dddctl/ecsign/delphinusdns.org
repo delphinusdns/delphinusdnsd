@@ -1,0 +1,15 @@
+zone "delphinusdns.org" {
+        delphinusdns.org,soa,86400,omega.virgostar.net.,hostmaster.centroid.eu.,2018050201,3600,1200,1209600,86400
+        delphinusdns.org,ns,86400,omega.virgostar.net.
+        delphinusdns.org,ns,86400,psi.virgostar.net.
+        delphinusdns.org,mx,86400,10,mail.solarscale.de.
+        delphinusdns.org,a,86400,108.61.211.139
+        delphinusdns.org,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+        delphinusdns.org,txt,86400,"v=spf1 ip4:108.61.211.139 ip6:2001:19f0:6c00:9041:5400:ff:fe11:3332 ~all"
+
+        localhost.delphinusdns.org,a,86400,127.0.0.1
+        localhost.delphinusdns.org,aaaa,86400,::1
+
+        www.delphinusdns.org,a,86400,108.61.211.139
+        www.delphinusdns.org,aaaa,86400,2001:19f0:6c00:9041:5400:ff:fe11:3332
+}

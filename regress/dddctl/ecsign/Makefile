@@ -2,9 +2,10 @@ DELPHINUSDNSDSRC =      ${.CURDIR}/../../../delphinusdnsd
 
 .PATH:  ${DELPHINUSDNSDSRC}
 
-ZONES= solarscale.de centroid.eu delphinusdns.org
+ZONES= centroid.eu delphinusdns.org
 
 REGRESS_TARGETS=        test-sign kfiles
+#REGRESS_TARGETS=        test-sign 
 
 CLEANFILES +=           kfiles
 
@@ -23,7 +24,7 @@ test-sign: depend
 
 .for i in ${ZONES}
 	@echo "--> signing $i zone"
-	@dddctl sign -a 8 -K -Z -n $i -i $i -o ${i}.signed	
+	@dddctl sign -a 13 -K -Z -n $i -i $i -o ${i}.signed	
 	@echo "--> runnning dddctl configtest"
 	dddctl configtest ${i}.signed
 	@echo "--> converting to bind format"

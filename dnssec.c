@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dnssec.c,v 1.24 2019/06/06 14:56:08 pjp Exp $
+ * $Id: dnssec.c,v 1.25 2019/07/05 08:14:50 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -812,7 +812,7 @@ base32hex_encode(u_char *input, int len)
 	u_int64_t tb = 0;
 	int i;
 	u_char *p;
-	static char ret[33];
+	static char ret[64];
 	
 	u_char *character = "0123456789abcdefghijklmnopqrstuv=";
 

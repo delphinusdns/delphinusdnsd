@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.72 2019/06/28 06:44:07 pjp Exp $
+ * $Id: parse.y,v 1.73 2019/07/05 08:14:50 pjp Exp $
  */
 
 %{
@@ -2468,6 +2468,11 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 
 	/* XXX create/manage bitmap */
 	create_nsec_bitmap(bitmap, nsec3->bitmap, (int *)&nsec3->bitmap_len);
+
+#if 0
+	/* we had a bug and this found it */
+	printf(";nsec3->bitmap == \"%s\", nsec3->bitmap_len == %d\n", bitmap, nsec3->bitmap_len);
+#endif
 	
 	nsec3->ttl = myttl;
 
@@ -3480,6 +3485,12 @@ create_nsec_bitmap(char *rrlist, char *bitmap, int *len)
 	int argc = 0;
 	int i, j, outlen = 0;
 	struct rrtab *rr;
+
+	/* short circuit for 0 len bitmaps (ENTS) */
+	if (*rrlist == '\0') {
+		*len = 0;
+		return;
+	}
 
 	memset(&tmp, 0, sizeof(tmp));
 
