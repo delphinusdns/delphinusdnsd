@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.73 2019/07/05 08:14:50 pjp Exp $
+ * $Id: parse.y,v 1.74 2019/07/09 12:24:09 pjp Exp $
  */
 
 %{
@@ -242,7 +242,7 @@ static int	pull_remote_zone(struct rzone *);
 %token DOT COLON TEXT WOF INCLUDE ZONE COMMA CRLF 
 %token ERROR AXFRPORT LOGGING OPTIONS FILTER MZONE
 %token WHITELIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
-%token TSIG NOTIFYDEST NOTIFYBIND
+%token TSIG NOTIFYDEST NOTIFYBIND PORT
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -468,6 +468,69 @@ mzonestatement:
 		free($2);
 	}
 	|
+	NOTIFYDEST ipcidr PORT NUMBER STRING SEMICOLON CRLF
+	{
+		struct sockaddr_in *sin;
+		struct sockaddr_in6 *sin6;
+		struct mzone_dest *md;
+
+		mz = SLIST_FIRST(&mzones);
+		if (mz == NULL) {
+			mz = add_mzone();
+			SLIST_INIT(&mz->dest);
+		}
+
+		md = calloc(sizeof(struct mzone_dest), 1);
+		if (md == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			return (-1);
+		}
+
+		sin = (struct sockaddr_in *)&md->notifydest;
+		sin6 = (struct sockaddr_in6 *)&md->notifydest;
+
+		if (strchr($2, ':')) {
+			inet_pton(AF_INET6, $2, &sin6->sin6_addr);
+			md->port = $4 & 0xffff;
+			md->notifydest.ss_family = AF_INET6;
+			if (strcmp($5, "NOKEY") == 0) {
+				md->tsigkey = NULL;
+			} else {
+				md->tsigkey = strdup($5);
+				if (md->tsigkey == NULL) {
+					perror("stdup");
+					return -1;
+				}
+			}
+			
+
+			SLIST_INSERT_HEAD(&mz->dest, md, entries);
+
+			notify++;
+		} else {
+			inet_pton(AF_INET, $2, &sin->sin_addr.s_addr);
+			md->notifydest.ss_family = AF_INET;
+			md->port = $4 & 0xffff;
+
+			if (strcmp($5, "NOKEY") == 0) {
+				md->tsigkey = NULL;
+			} else {
+				md->tsigkey = strdup($5);
+				if (md->tsigkey == NULL) {
+					perror("stdup");
+					return -1;
+				}
+			}
+
+			SLIST_INSERT_HEAD(&mz->dest, md, entries);
+			notify++;
+		}
+
+		
+		free($2);
+		free($5);
+	}
+	|
 	NOTIFYDEST ipcidr STRING SEMICOLON CRLF
 	{
 		struct sockaddr_in *sin;
@@ -492,6 +555,7 @@ mzonestatement:
 		if (strchr($2, ':')) {
 			inet_pton(AF_INET6, $2, &sin6->sin6_addr);
 			md->notifydest.ss_family = AF_INET6;
+			md->port = 53;
 			if (strcmp($3, "NOKEY") == 0) {
 				md->tsigkey = NULL;
 			} else {
@@ -509,6 +573,7 @@ mzonestatement:
 		} else {
 			inet_pton(AF_INET, $2, &sin->sin_addr.s_addr);
 			md->notifydest.ss_family = AF_INET;
+			md->port = 53;
 
 			if (strcmp($3, "NOKEY") == 0) {
 				md->tsigkey = NULL;
@@ -1105,15 +1170,18 @@ optionsstatement:
 		}
 	}
 	|
+	PORT NUMBER SEMICOLON CRLF
+	{
+		port = $2 & 0xffff;
+		dolog(LOG_DEBUG, "listening on port %d\n", port);
+	}
+	|
 	STRING NUMBER SEMICOLON CRLF
 	{
 		if (file->descend == DESCEND_YES) {
 			if (strcasecmp($1, "fork") == 0) {
 				dolog(LOG_DEBUG, "forking %d times\n", $2);
 				nflag = $2;
-			} else if (strcasecmp($1, "port") == 0) {
-				port = $2 & 0xffff;
-				dolog(LOG_DEBUG, "listening on port %d\n", port);
 			} else if (strcasecmp($1, "ratelimit-pps") == 0) {
 				if ($2 > 127 || $2 < 1) {
 					dolog(LOG_ERR, "ratelimit packets per second must be between 1 and 127, or leave it off!\n");
@@ -1604,6 +1672,7 @@ struct tab cmdtab[] = {
 	{ "notifybind", NOTIFYBIND, 0},
 	{ "notifydest", NOTIFYDEST, 0},
 	{ "options", OPTIONS, 0 },
+	{ "port", PORT, 0},
 	{ "region", REGION, STATE_IP },
 	{ "rzone", RZONE, 0 },
 	{ "tsig", TSIG, 0 },

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.19 2019/06/26 12:38:35 pjp Exp $
+ * $Id: ddd-db.h,v 1.20 2019/07/09 12:24:09 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -383,6 +383,7 @@ struct mzone_dest {
 	int	notified;
 	char	requestmac[32];
 	char 	*tsigkey;
+	u_int16_t port;
 };
 	
 struct mzone {

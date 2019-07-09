@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.32 2019/06/27 04:20:26 pjp Exp $
+ * $Id: axfr.c,v 1.33 2019/07/09 12:24:09 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1672,7 +1672,7 @@ notifypacket(int so, void *vnotnp, void *vmd, int packetcount)
 		sin = (struct sockaddr_in *)&md->notifydest;
 		memset(&bsin, 0, sizeof(bsin));
 		bsin.sin_family = AF_INET;
-		bsin.sin_port = htons(53);
+		bsin.sin_port = htons(md->port);
 		bsin.sin_addr.s_addr = tmpsin->sin_addr.s_addr;
 
 		ret = sendto(so, packet, outlen, 0, (struct sockaddr *)&bsin, slen);
@@ -1683,7 +1683,7 @@ notifypacket(int so, void *vnotnp, void *vmd, int packetcount)
 		sin6 = (struct sockaddr_in6 *)&md->notifydest;
 		memset(&bsin6, 0, sizeof(bsin6));
 		bsin6.sin6_family = AF_INET6;
-		bsin6.sin6_port = htons(53);
+		bsin6.sin6_port = htons(md->port);
 		memcpy(&bsin6.sin6_addr, &tmpsin->sin6_addr, 16);
 
 		ret = sendto(so, packet, outlen, 0, (struct sockaddr *)sin6, slen);

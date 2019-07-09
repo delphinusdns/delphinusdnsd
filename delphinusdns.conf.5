@@ -45,7 +45,7 @@ Here is a sample
 .Nm
 file:
 .Bd -literal
-version "8";
+version "9";
 options "cool stuff" {
 	interface "lo0";
 	interface "em0";
@@ -70,12 +70,11 @@ axfr-for "these hosts" {
 	192.168.0.0/16;
 }
 
-notify "these hosts" {
-	192.168.34.1;
-	192.168.35.1 DNSKEY;
-	::1;
+mzone "centroid.eu" {
+	zonename "centroid.eu";
+	notifydest 192.168.34.1 NOKEY;
+	notifydest ::1 port 8053 NOKEY;
 }
-
 
 zone "centroid.eu" {
 	centroid.eu,soa,3600,uranus.centroid.eu.,pjp.solarscale.de.,2014051701,3600,1800,7200,3600
@@ -124,66 +123,12 @@ zone "centroid.eu" {
 	; glue record
 	;ns2.server.com.,a,3600,10.0.0.2
 }
-zone "ipv6.centroid.eu" {
-	ipv6.centroid.eu,soa,3600,uranus.centroid.eu.,pjp.solarscale.de.,1244725285,3600,1800,7200,3600
-	ipv6.centroid.eu,aaaa,3600,2001:a60:f074::8
-	www.ipv6.centroid.eu,aaaa,3600,2001:a60:f074::8
-}
-zone "ipv6.solarscale.de" {
-	ipv6.solarscale.de,soa,3600,proteus.solarscale.de.,pjp.solarscale.de.,1234896563,3600,1800,7200,3600
-	ipv6.solarscale.de,ns,3600,proteus.solarscale.de.
-	ipv6.solarscale.de,ns,3600,uranus.centroid.eu.
-	ipv6.solarscale.de,aaaa,3600,2001:a60:f074::8
-	www.ipv6.solarscale.de,aaaa,3600,2001:a60:f074::8
-}
-zone "reverse dns" {
-	0.4.7.0.f.0.6.a.0.1.0.0.2.ip6.arpa.,soa,3600,proteus.solarscale.de.,pjp.solarscale.de.,1234896562,3600,1800,7200,3600
-	1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.4.7.0.f.0.6.a.0.1.0.0.2.ip6.arpa.,ptr,3600,uranus.centroid.eu.
-	2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.4.7.0.f.0.6.a.0.1.0.0.2.ip6.arpa.,ptr,3600,setebos.centroid.eu.
-}
-
-zone "root hints" {
-	.,hint,3600000,A.ROOT-SERVERS.NET.
-	A.ROOT-SERVERS.NET.,a,3600000,198.41.0.4
-	A.ROOT-SERVERS.NET.,aaaa,3600000,2001:503:BA3E::2:30
-	.,hint,3600000,B.ROOT-SERVERS.NET.
-	B.ROOT-SERVERS.NET.,a,3600000,192.228.79.201
-	.,hint,3600000,C.ROOT-SERVERS.NET.
-	C.ROOT-SERVERS.NET.,a,3600000,192.33.4.12
-	.,hint,3600000,D.ROOT-SERVERS.NET.
-	D.ROOT-SERVERS.NET.,a,3600000,199.7.91.13
-	D.ROOT-SERVERS.NET.,aaaa,3600000,2001:500:2D::D
-	.,hint,3600000,E.ROOT-SERVERS.NET.
-	E.ROOT-SERVERS.NET.,a,3600000,192.203.230.10	
-	.,hint,3600000,F.ROOT-SERVERS.NET.
-	F.ROOT-SERVERS.NET.,a,3600000,192.5.5.241
-	F.ROOT-SERVERS.NET.,aaaa,3600000,2001:500:2f::f
-	.,hint,3600000,G.ROOT-SERVERS.NET.
-	G.ROOT-SERVERS.NET.,a,3600000,192.112.36.4
-	.,hint,3600000,H.ROOT-SERVERS.NET.
-	H.ROOT-SERVERS.NET.,a,3600000,128.63.2.53
-	H.ROOT-SERVERS.NET.,aaaa,3600000,2001:500:1::803f:235
-	.,hint,3600000,I.ROOT-SERVERS.NET.
-	I.ROOT-SERVERS.NET.,a,3600000,192.36.148.17
-	.,hint,3600000,J.ROOT-SERVERS.NET.
-	J.ROOT-SERVERS.NET.,a,3600000,192.58.128.30
-	J.ROOT-SERVERS.NET.,aaaa,3600000,2001:503:C27::2:30
-	.,hint,3600000,K.ROOT-SERVERS.NET.
-	K.ROOT-SERVERS.NET.,a,3600000,193.0.14.129
-	K.ROOT-SERVERS.NET.,aaaa,3600000,2001:7fd::1
-	.,hint,3600000,L.ROOT-SERVERS.NET.
-	L.ROOT-SERVERS.NET.,a,3600000,199.7.83.42
-	L.ROOT-SERVERS.NET.,aaaa,3600000,2001:500:3::42
-	.,hint,3600000,M.ROOT-SERVERS.NET.
-	M.ROOT-SERVERS.NET.,a,3600000,202.12.27.33
-	M.ROOT-SERVERS.NET.,aaaa,3600000,2001:dc3::35
-}
 .Ed
 Here is a sample 
 .Nm
 file suited for DNSSEC:
 .Bd -literal
-version "7";
+version "9";
 options "some options" {
         ratelimit-pps 12;
         bind 127.0.0.1;
@@ -192,7 +137,7 @@ options "some options" {
         port 32253;
         log;
         dnssec;
-        versionstring "delphinusdnsd 1.1.0";
+        versionstring "delphinusdnsd 1.4.0";
 }
 axfr-for "these hosts" {
         ::1/128;
@@ -202,14 +147,15 @@ axfr-for "these hosts" {
 
 axfrport "10053";
 
-notify "these hosts" {
-        10.110.99.88 DNSKEY;
-        ::1;
+mzone "centroid.eu" {
+	zonename "centroid.eu";
+	notifydest 10.1110.99.88 NOKEY;
+	notifydest ::1 port 8053 NOKEY;
 }
+ 
 
 zinclude "/etc/delphinusdns/centroid.eu.signed";
 zinclude "/etc/delphinusdns/virgostar.net.signed";
-zinclude "/etc/delphinusdns/solarscale.de.signed";
 
 .Ed
 Then the included files are output of
@@ -220,7 +166,7 @@ Syntax for
 in BNF:
 .Bd -literal
 line = ( version | axfrport | include | zinclude | zone | region | 
-	axfr | notify | whitelist | filter | recurse | logging 
+	axfr | mzone | whitelist | filter | recurse | logging 
         | comment | options )
 
 version = "version" ("number") ;
@@ -248,9 +194,12 @@ cidrlist = { [ cidr-address ] ; ... }
 
 axfr = "axfr-for" ("string") [ "{" cidrlist "}" ]
 
-notifylist = { [ cidr-address ] [ tsig-keyname ] ; ... }
+mzonelist = ( optzonename | optnotifydest | optnotifybind )
+optzonename = "zonename" ("string") ;
+optnotifydest = "notifydest" cidr-address ["port number"] "tsigkey" ;
+optnotifybind = "notifybind" cidr-address ;
 
-notify = "notify" ("string") [ "{" notifylist "}" ]
+mzone = "mzone" ("string") [ "{" mzonelist "}" ]
 
 whitelist = "whitelist" ("string") [ "{" cidrlist "}" ]
 
