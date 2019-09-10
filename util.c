@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.35 2019/09/10 07:20:44 pjp Exp $
+ * $Id: util.c,v 1.36 2019/09/10 11:15:16 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1041,7 +1041,7 @@ build_question(char *buf, int len, int additional, char *mac)
 		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
 		if (pb == NULL) {
 			free_question(q);
-			dolog(LOG_INFO, "expand_compression() failed\n");
+			dolog(LOG_INFO, "expand_compression() failed 2\n");
 			return NULL;
 		}
 		i = (pb - buf);
