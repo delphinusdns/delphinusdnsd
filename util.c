@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.34 2019/06/12 14:58:48 pjp Exp $
+ * $Id: util.c,v 1.35 2019/09/10 07:20:44 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -976,6 +976,7 @@ build_question(char *buf, int len, int additional, char *mac)
 		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
 		if (pb == NULL) {
 			free_question(q);
+			dolog(LOG_INFO, "expand_compression() failed\n");
 			return NULL;
 		}
 		i = (pb - buf);
@@ -1040,6 +1041,7 @@ build_question(char *buf, int len, int additional, char *mac)
 		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
 		if (pb == NULL) {
 			free_question(q);
+			dolog(LOG_INFO, "expand_compression() failed\n");
 			return NULL;
 		}
 		i = (pb - buf);
