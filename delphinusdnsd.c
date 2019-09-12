@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.67 2019/06/26 12:38:35 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.68 2019/09/12 07:24:54 pjp Exp $
  */
 
 
@@ -315,7 +315,7 @@ main(int argc, char *argv[], char *environ[])
 
 	
 	if (geteuid() != 0) {
-		fprintf(stderr, "must be started as root\n"); /* .. dolt */
+		fprintf(stderr, "must be started as root\n");
 		exit(1);
 	}
 
