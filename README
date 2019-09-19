@@ -1,4 +1,4 @@
-$Id: README,v 1.32 2019/06/12 14:58:48 pjp Exp $
+$Id: README,v 1.33 2019/09/19 12:25:09 pjp Exp $
 
 1. README
 2. WHY DELPHINUSDNS?
@@ -74,7 +74,7 @@ In Linux MINT you need to apt-get install build-essential.
 ## configure the platform
 $ ./configure
 ## this will install the development programs you'll need (as root)
-$ apt-get install bison cvs gcc libssl-dev libbsd-dev
+$ apt-get install make bison cvs gcc libssl-dev libbsd-dev
 ## add a privsep user with a chroot directory (option -m) (as root)
 $ useradd -m _ddd
 ## make the program
