@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.20 2019/07/09 12:24:09 pjp Exp $
+ * $Id: ddd-db.h,v 1.21 2019/09/20 09:51:43 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -36,7 +36,7 @@
 #include <sys/types.h>
 #include <limits.h>
 
-#define CONFFILE "/etc/delphinusdns.conf"
+#define CONFFILE "/etc/delphinusdns/delphinusdns.conf"
 #define DEFAULT_SOCKET 64
 
 #define IMSG_HELLO_MESSAGE  0		/* hello the master process a few */

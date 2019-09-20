@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.68 2019/07/05 08:14:50 pjp Exp $
+ * $Id: dddctl.c,v 1.69 2019/09/20 09:51:43 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -7500,7 +7500,7 @@ int
 configtest(int argc, char *argv[])
 {
 	ddDB *db;
-	char *zonefile = "/etc/delphinusdns.conf";
+	char *zonefile = CONFFILE;
 	int ch, count = 0;
 
 	
