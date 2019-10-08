@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.69 2019/09/20 09:51:43 pjp Exp $
+ * $Id: dddctl.c,v 1.70 2019/10/08 08:44:18 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -210,6 +210,7 @@ int 	connect_server(char *, int, u_int32_t);
 int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *, u_int16_t);
 int	lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *);
 int	count_db(ddDB *);
+void	update_soa_serial(ddDB *, char *, time_t);
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 
@@ -439,6 +440,7 @@ signmain(int argc, char *argv[])
 	uint32_t pid = -1, newpid;
 
 	char key_key[4096];
+	char buf[512];
        	char *key_zone;
         uint32_t key_ttl;
         uint16_t key_flags;
@@ -448,6 +450,9 @@ signmain(int argc, char *argv[])
 	
 	ddDB *db;
 
+	time_t now, serial;
+	struct tm *tm;
+
 #if __OpenBSD__
 	if (pledge("stdio rpath wpath cpath", NULL) < 0) {
 		perror("pledge");
@@ -456,7 +461,7 @@ signmain(int argc, char *argv[])
 #endif
 
 
-	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:m:n:o:S:s:t:vZz:")) != -1) {
+	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:m:n:o:S:s:t:vXx:Zz:")) != -1) {
 		switch (ch) {
 		case 'a':
 			/* algorithm */
@@ -597,6 +602,18 @@ signmain(int argc, char *argv[])
 
 			printf("%s\n", DD_CONVERT_VERSION);
 			exit(0);
+
+		case 'X':
+			/* update serial */
+			now = time(NULL);
+			tm = localtime(&now);
+			strftime(buf, sizeof(buf), "%Y%m%d01", tm);
+			serial = atoll(buf);
+			break;	
+
+		case 'x':
+			serial = atoll(optarg);
+			break;
 
 		case 'Z':
 			/* create ZSK */
@@ -833,6 +850,9 @@ signmain(int argc, char *argv[])
 		dolog(LOG_INFO, "creating entlist failed\n");
 		exit(1);
 	}
+
+	/* update any serial updates here */
+	update_soa_serial(db, zonename, serial);
 
 	/* three passes to "sign" our zones */
 	/* first pass, add dnskey records, on apex */
@@ -6394,8 +6414,9 @@ usage(int argc, char *argv[])
 	int retval = 0;
 
 	if (argc == 2 && strcmp(argv[1], "sign") == 0) {
-		fprintf(stderr, "usage: dddctl sign [-KZ] [-a algorithm] [-B bits] [-e seconds] [-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename] [-o output] [-S pid] [-s salt] [-t ttl] [-z ZSK]\n");
+		fprintf(stderr, "usage: dddctl sign [-KXZ] [-a algorithm] [-B bits] [-e seconds] [-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename] [-o output] [-S pid] [-s salt] [-t ttl] [-x serial] [-z ZSK]\n");
 		fprintf(stderr, "\t-K\t\tcreate a new KSK key.\n");
+		fprintf(stderr, "\t-X\t\tupdate the serial to YYYYMMDD01.\n");
 		fprintf(stderr, "\t-Z\t\tcreate a new ZSK key.\n");
 		fprintf(stderr, "\t-a algorithm	use algorithm (integer)\n");
 		fprintf(stderr, "\t-B bits\t\tuse number of bits (integer)\n");
@@ -6409,6 +6430,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\t-S pid\t\tsign with this pid ('KSK' or 'ZSK' if used in\n\t\t\tconjunction with [-ZK])\n");
 		fprintf(stderr, "\t-s salt\t\tsalt for NSEC3 (in hexadecimal)\n");
 		fprintf(stderr, "\t-t ttl\t\ttime-to-live for dnskey's\n");
+		fprintf(stderr, "\t-x serial\tupdate serial to argument\n");
 		fprintf(stderr, "\t-z ZSK\t\tuse provided ZSK zone-signing keyname\n");	
 		return 0;
 	} else if (argc == 2 && strcmp(argv[1], "query") == 0) {
@@ -6432,7 +6454,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\tconfigtest [-c] [configfile]\n");
 		fprintf(stderr, "\tquery [-BDITZ] [-@ server] [-P port] [-p file] [-Q server] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
-		fprintf(stderr, "\tsign [-KZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-z ZSK]\n");
+		fprintf(stderr, "\tsign [-KXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-x serial] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
 		fprintf(stderr, "\tstart [-f configfile] [-s socket]\n");
 		fprintf(stderr, "\tstop [-s socket]\n");
@@ -7778,6 +7800,7 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 #if DEBUG
 	printf("%d records\n", j);
 #endif
+
 	return (0);
 }
 
@@ -8477,4 +8500,43 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 	}
 
 	return 0;
+}
+
+void
+update_soa_serial(ddDB *db, char *zonename, time_t serial)
+{
+	char replystring[512];
+	struct question *q;
+	char *dnsname;
+	int labellen, lzerrno, retval;
+	struct rbtree *rbt0 = NULL;
+
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+
+
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL)
+		return;
+
+	q = build_fake_question(dnsname, labellen, DNS_TYPE_SOA, NULL, 0);
+	if (q == NULL) {
+		return;
+	}
+
+	if ((rbt0 = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
+		return;
+	}
+
+	if ((rrset = find_rr(rbt0, DNS_TYPE_SOA)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			return;
+		}
+
+		((struct soa *)rrp->rdata)->serial = serial;
+	}
+
+	free(rbt0);
+	free_question(q);
+
 }
