@@ -13,6 +13,8 @@ Changes in RELEASE_1_4 from RELEASE_1_3
   RFC 8624
 - change the default configfile to /etc/delphinusdns/delphinusdns.conf and
   update documentation for this
+- add -X and -x argument for setting the serial automatically overriding what
+  is in the zonefile
 
 Changes in RELEASE_1_3 from RELEASE_1_2
 - created a "zinclude" config, which will only allow zone files to be 
