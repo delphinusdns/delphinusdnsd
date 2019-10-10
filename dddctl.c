@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.71 2019/10/10 04:08:23 pjp Exp $
+ * $Id: dddctl.c,v 1.72 2019/10/10 16:47:18 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -310,6 +310,7 @@ int icount = 0;
 int vslen = 0;
 char *versionstring = NULL;
 u_int64_t expiredon, signedon;
+int additionalcount = 0;
 
 /* externs */
 
@@ -339,25 +340,26 @@ extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 
-extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
-extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t);
-extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t);
+extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
+extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
+extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *);
 
 extern int                      memcasecmp(u_char *, u_char *, int);
 
@@ -367,7 +369,7 @@ extern int dnssec;
 static struct raxfr_logic {
 	int rrtype;
 	int dnssec;
-	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 } supported[] = {
 	{ DNS_TYPE_A, 0, raxfr_a },
 	{ DNS_TYPE_NS, 0, raxfr_ns },
@@ -1328,9 +1330,6 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 	fprintf(f, "Publish: %s\n", buf);
 	fprintf(f, "Activate: %s\n", buf);
 	fclose(f);
-
-	//BN_free((BIGNUM *)ecprivatekey);
-
 
 	/* now for the EC public .key */
 
@@ -6435,16 +6434,17 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\t-z ZSK\t\tuse provided ZSK zone-signing keyname\n");	
 		return 0;
 	} else if (argc == 2 && strcmp(argv[1], "query") == 0) {
-		fprintf(stderr, "usage: dddctl query [-BDITZ] [-@ server] [-P port] [-p file] [-Q server] name command\n");
+		fprintf(stderr, "usage: dddctl query [-BDITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
 		fprintf(stderr, "\t-@ server\t\tUse server ip.\n");
-		fprintf(stderr, "\t-B\t\tOutput as a BIND file.\n");
-		fprintf(stderr, "\t-D\t\tUse DNSSEC (DO bit) lookup.\n");
-		fprintf(stderr, "\t-I\t\tIndent output.\n");
-		fprintf(stderr, "\t-T\t\tUse TCP.\n");
-		fprintf(stderr, "\t-Z\t\tOutput as a zonefile.\n");
-		fprintf(stderr, "\t-P port\t\tUse specified port.\n");
-		fprintf(stderr, "\t-p file\t\tOutput to file.\n");
+		fprintf(stderr, "\t-B\t\t\tOutput as a BIND file.\n");
+		fprintf(stderr, "\t-D\t\t\tUse DNSSEC (DO bit) lookup.\n");
+		fprintf(stderr, "\t-I\t\t\tIndent output.\n");
+		fprintf(stderr, "\t-T\t\t\tUse TCP.\n");
+		fprintf(stderr, "\t-Z\t\t\tOutput as a zonefile.\n");
+		fprintf(stderr, "\t-P port\t\t\tUse specified port.\n");
+		fprintf(stderr, "\t-p file\t\t\tOutput to file.\n");
 		fprintf(stderr, "\t-Q server\t\tSynonymous with -@\n");
+		fprintf(stderr, "\t-y keyname:password\tTSIG keyname and password\n");
 		
 		return 0;
 	} else if (argc == 2) {
@@ -6453,7 +6453,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "usage: command [arg ...]\n");
 		fprintf(stderr, "\tbindfile zonename zonefile\n");
 		fprintf(stderr, "\tconfigtest [-c] [configfile]\n");
-		fprintf(stderr, "\tquery [-BDITZ] [-@ server] [-P port] [-p file] [-Q server] name command\n");
+		fprintf(stderr, "\tquery [-BDITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-x serial] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
@@ -6630,6 +6630,9 @@ dig(int argc, char *argv[])
 	if (type == DNS_TYPE_AXFR) {
 		if (format & ZONE_FORMAT)
 			answers--;
+
+		if (additionalcount)
+			answers -= additionalcount;
 
 		fprintf(f, ";; XFR size %d records (messages %d, bytes %d)\n", 
 			answers, segment, bytes_received);
@@ -6927,6 +6930,27 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		return -1;
 	}
 
+	if (tsigkey) {
+		uint16_t maclen;
+	
+		if ((len = mybase64_decode(tsigpass, (u_char *)&pseudo_packet, sizeof(pseudo_packet))) < 0) {
+			fprintf(stderr, "bad base64 password\n");
+			return -1;
+		}
+		
+		ctx = HMAC_CTX_new();
+		HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
+		maclen = htons(32);
+		HMAC_Update(ctx, (char *)&maclen, 2);
+		HMAC_Update(ctx, shabuf, sizeof(shabuf));
+	} else
+		ctx = NULL;
+
+	q = build_question((char *)&wh->dh, wh->len, wh->dh.additional, (tsigkey == NULL) ? NULL : shabuf);
+	if (q == NULL) {
+		fprintf(stderr, "failed to build_question\n");
+		return -1;
+	}
 
 	for (;;) {
 		len = recv(so, reply, 0xffff, MSG_PEEK | MSG_WAITALL);
@@ -6963,13 +6987,13 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		}
 
 		segmentcount = ntohs(rwh->dh.answer);
+		if (tsigkey) {
+			segmentcount += ntohs(rwh->dh.additional);
+			additionalcount += ntohs(rwh->dh.additional);
+			rwh->dh.additional = 0;
+		} 
 		answers += segmentcount;
 
-		q = build_question((char *)&wh->dh, len, wh->dh.additional, (tsigkey == NULL) ? NULL : shabuf);
-		if (q == NULL) {
-			fprintf(stderr, "failed to build_question\n");
-			return -1;
-		}
 			
 		if (memcmp(q->hdr->name, name, q->hdr->namelen) != 0) {
 			fprintf(stderr, "question name not for what we asked\n");
@@ -6985,10 +7009,13 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		p += q->hdr->namelen;
 		p += sizeof(u_int16_t);	 	/* type */
 		p += sizeof(u_int16_t);		/* class */
-		
 		/* end of question */
-		
+
 		estart = (u_char *)&rwh->dh;
+
+		if (tsigkey) {
+			HMAC_Update(ctx, estart, (p - estart));
+		}
 
 		if (segment == 0 && (format & ZONE_FORMAT) && f != NULL) 
 			fprintf(f, "zone \"%s\" {\n", zonename);
@@ -6996,18 +7023,41 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		segment++;
 
 		for (count = 0; count < segmentcount; count++) {
+			char mac[32];
 			elen = 0;
 
-			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format)) < 0) {
+			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format, ctx)) < 0) {
 				fprintf(stderr, "not a SOA reply, or ERROR\n");
 				return -1;
 			}
 
-			p = (estart + rrlen);
+			if (tsigkey && (rrtype == DNS_TYPE_TSIG)) {
+				uint16_t maclen;
+
+				/* do tsig checks here */
+				if ((len = raxfr_tsig(f,p,estart,end,mysoa,rdlen,ctx, (char *)&mac)) < 0) {
+					fprintf(stderr, "error with TSIG record\n");
+					return -1;
+				}
+		
+				p = (estart + len);
+
+				if ((len = mybase64_decode(tsigpass, (u_char *)&pseudo_packet, sizeof(pseudo_packet))) < 0) {
+					fprintf(stderr, "bad base64 password\n");
+					return -1;
+				}
+
+			 	HMAC_CTX_reset(ctx);	
+				HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
+				maclen = htons(32);
+				HMAC_Update(ctx, (char *)&maclen, 2);
+				HMAC_Update(ctx, mac, 32);
+			} else
+				p = (estart + rrlen);
 
 			if (rrtype == DNS_TYPE_SOA) {
-				if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen)) < 0) {
-					fprintf(stderr, "raxxfr_soa failed\n");
+				if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen, ctx)) < 0) {
+					fprintf(stderr, "raxfr_soa failed\n");
 					return -1;
 				}
 				p = (estart + len);
@@ -7015,7 +7065,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			} else {
 				for (sr = supported; sr->rrtype != 0; sr++) {
 					if (rrtype == sr->rrtype) {
-						if ((len = (*sr->raxfr)(f, p, estart, end, mysoa, rdlen)) < 0) {
+						if ((len = (*sr->raxfr)(f, p, estart, end, mysoa, rdlen, ctx)) < 0) {
 							fprintf(stderr, "error with rrtype %d\n", sr->rrtype);
 							return -1;
 						}
@@ -7025,8 +7075,10 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 				}
 
 				if (sr->rrtype == 0) {
-					fprintf(stderr, "unsupported RRTYPE\n");
-					return -1;
+					if (rrtype != DNS_TYPE_TSIG) {
+						fprintf(stderr, "unsupported RRTYPE %d\n", rrtype);
+						return -1;
+					} 
 				} 
 			}
 
@@ -7042,10 +7094,16 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		fprintf(stderr, ";; WARN: recieved %d more bytes.\n", len);
 	}
 
+	if (tsigkey) {
+		HMAC_CTX_free(ctx);	
+	}
+
 	if (f != NULL) {
 		if ((format & ZONE_FORMAT))
 			fprintf(f, "}\n");
 	}
+
+	free_question(q);
 
 	return 0;
 
@@ -7281,7 +7339,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 skip:
 
 
-		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format)) < 0) {
+		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, NULL)) < 0) {
 			fprintf(stderr, "not a SOA reply, or ERROR\n");
 			return -1;
 		}
@@ -7289,7 +7347,7 @@ skip:
 		p = (estart + rrlen);
 
 		if (rrtype == DNS_TYPE_SOA) {
-			if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen)) < 0) {
+			if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen, NULL)) < 0) {
 				fprintf(stderr, "raxxfr_soa failed\n");
 				return -1;
 			}
@@ -7298,7 +7356,7 @@ skip:
 		} else {
 			for (sr = supported; sr->rrtype != 0; sr++) {
 				if (rrtype == sr->rrtype) {
-					if ((len = (*sr->raxfr)(f, p, estart, end, mysoa, rdlen)) < 0) {
+					if ((len = (*sr->raxfr)(f, p, estart, end, mysoa, rdlen, NULL)) < 0) {
 						fprintf(stderr, "error with rrtype %d\n", sr->rrtype);
 						return -1;
 					}

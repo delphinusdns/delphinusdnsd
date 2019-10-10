@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.13 2019/06/06 14:56:08 pjp Exp $
+ * $Id: raxfr.c,v 1.14 2019/10/10 16:47:19 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -57,30 +57,33 @@
 #include <sys/tree.h>
 #endif /* __linux__ */
 
+#include <openssl/bn.h>
+#include <openssl/hmac.h>
 
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
-int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t);
+int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 
 u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
-int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t);
-int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t);
+int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
+int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
+int raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *);
 
 
 extern int                     memcasecmp(u_char *, u_char *, int);
@@ -107,7 +110,7 @@ extern char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, 
 
 
 int
-raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soacount, u_int16_t *rdlen, u_int32_t format)
+raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soacount, u_int16_t *rdlen, u_int32_t format, HMAC_CTX *ctx)
 {
 	int rrlen;
 	char *save;
@@ -157,7 +160,13 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 
 	*rrtype = ntohs(*rtype);
 
-	if (*rrtype == 41)	
+	if (ctx != NULL) {
+		if (*rrtype != DNS_TYPE_TSIG) {
+			HMAC_Update(ctx, p, q - p);
+		}
+	}
+
+	if (*rrtype == 41 || *rrtype == DNS_TYPE_TSIG)	
 		goto out;
 
 	humanname = convert_name(expand, elen);
@@ -216,7 +225,7 @@ raxfr_skip(FILE *f, u_char *p, u_char *estart)
 }
 
 int
-raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, int soacount, u_int32_t format, u_int16_t rdlen)
+raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, int soacount, u_int32_t format, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	u_int32_t *rvalue;
 	char *save, *humanname;
@@ -316,13 +325,15 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 				ntohl(mysoa->expire), ntohl(mysoa->minttl));
 		}
 	}
-	
+
+	if (ctx != NULL)
+		HMAC_Update(ctx, p, q - p);
 	
 	return (q - estart);
 }
 
 int 
-raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct rrsig rs;
 	char *save, *humanname;
@@ -409,11 +420,14 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	free(humanname);
 	free(b);
 
+	if (ctx != NULL)
+		HMAC_Update(ctx, p, q - p);
+
 	return (q - estart);
 }
 
 int 
-raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct ds d;
 	u_int16_t *tmpshort;
@@ -442,11 +456,14 @@ raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 			d.digest_type, bin2hex(d.digest, d.digestlen));
 	}
 
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
 	return (p - estart);
 }
 
 int 
-raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct sshfp s;
 	char *hex;
@@ -473,11 +490,14 @@ raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 		fprintf(f, "%u,%u,\"%s\"\n", s.algorithm, s.fptype, hex);
 	}
 
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
 	return (p - estart);
 }
 
 int 
-raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct dnskey dk;
 	u_int16_t *tmpshort;
@@ -522,12 +542,16 @@ raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 	}
 
 	free(b);
+
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
 	return (p - estart);
 }
 
 
 int 
-raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	u_int16_t *mxpriority;
 	char *save, *humanname;
@@ -567,17 +591,20 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 
 	free(humanname);
 
+	if (ctx != NULL)
+		HMAC_Update(ctx, p, q - p);
+
 	return (q - estart);
 }
 
 int 
-raxfr_ptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_ptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
-	return (raxfr_ns(f, p, estart, end, mysoa, rdlen));
+	return (raxfr_ns(f, p, estart, end, mysoa, rdlen, ctx));
 }
 
 int
-raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct nsec3 n;
 	u_int16_t *iter;
@@ -626,11 +653,14 @@ raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 				bitmap2human(n.bitmap, n.bitmap_len));
 	}
 
+	if (ctx != NULL)
+		HMAC_Update(ctx, brr, p - brr);
+
 	return (p - estart);
 }
 
 int
-raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct nsec3param np;
 	u_int16_t *iter;
@@ -659,12 +689,15 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 			(np.saltlen == 0 ? "-" : bin2hex(np.salt, np.saltlen)));
 	}
 
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
 	return (p - estart);
 }
 
 
 int
-raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	u_int8_t len;
 	int i;
@@ -688,12 +721,14 @@ raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 
 	p += i;
 	
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
 	
 	return (p - estart);
 }
 
 int
-raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	char *save, *humanname;
 	u_char *q = p;
@@ -724,18 +759,22 @@ raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 
 	free(humanname);
 
+	if (ctx != NULL) {
+		HMAC_Update(ctx, p, q - p);
+	}
+
 	return (q - estart);
 }
 
 int 
-raxfr_cname(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_cname(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
-	return (raxfr_ns(f, p, estart, end, mysoa, rdlen));
+	return (raxfr_ns(f, p, estart, end, mysoa, rdlen, ctx));
 }
 
 
 int
-raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	char buf[INET6_ADDRSTRLEN];
 	struct in6_addr *ia;
@@ -750,11 +789,14 @@ raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 
 	p += sizeof(*ia);
 
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
 	return (p - estart);
 }
 
 int
-raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	char buf[INET_ADDRSTRLEN];
 	struct in_addr *ia;
@@ -770,11 +812,14 @@ raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_in
 
 	p += sizeof(*ia);
 
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
 	return (p - estart);
 }
 
 int 
-raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct tlsa t;
 	u_char *q = p;
@@ -802,11 +847,14 @@ raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 			t.matchtype, bin2hex(t.data, t.datalen));
 	}
 
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
 	return (p - estart);
 }
 
 int 
-raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	u_int16_t *tmp16;
 	struct srv s;
@@ -853,11 +901,14 @@ raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 
 	free(humanname);
 
+	if (ctx != NULL)
+		HMAC_Update(ctx, p, q - p);
+
 	return (q - estart);
 }
 
 int 
-raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen)
+raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	u_int16_t *tmp16;
 	struct naptr n;
@@ -945,5 +996,185 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 
 	free(humanname);
 
+	if (ctx != NULL)
+		HMAC_Update(ctx, p, q - p);
+
 	return (q - estart);
+}
+
+int 
+raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *mac)
+{
+	struct dns_tsigrr *sdt;
+	char *save;
+	char *keyname = NULL, *algname = NULL;
+	char *rawkeyname = NULL, *rawalgname = NULL;
+	char *otherdata;
+	u_char expand[256];
+	u_char *q = p;
+	u_int16_t *rtype, *rclass, *origid, *tsigerror, *otherlen;
+	u_int32_t *rttl;
+	int rlen, rrlen = -1;
+	int elen = 0;
+	int max = sizeof(expand);
+	int rawkeynamelen, rawalgnamelen;
+	int macsize = 32;
+	
+	static int standardanswer = 1;
+
+
+	memset(&expand, 0, sizeof(expand));
+	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
+	if (save == NULL) {
+		fprintf(stderr, "expanding compression failure 0\n");
+		goto out;
+	} else 
+		q = save;
+
+	keyname = convert_name(expand, elen);
+	if (keyname == NULL) {
+		goto out;
+	}
+
+	rawkeyname = malloc(elen);
+	if (rawkeyname == NULL)
+		goto out;
+
+	memcpy(rawkeyname, expand, elen);
+	rawkeynamelen = elen;
+	
+	if ((q + 2) > end)
+		goto out;
+
+	rtype = (u_int16_t *)q;
+	q += 2;
+
+	if (ntohs(*rtype) != DNS_TYPE_TSIG)	
+		goto out;
+	
+	if ((q + 2) > end)
+		goto out;
+
+	rclass = (u_int16_t *)q;
+	q += 2;
+
+	if (ntohs(*rclass) != DNS_CLASS_ANY)
+		goto out;
+
+	if ((q + 4) > end)
+		goto out;
+
+	rttl = (u_int32_t *)q;
+	q += 4;
+
+	if (*rttl != 0)
+		goto out;
+
+	/* skip rdlen because raxfr_peek already got it */
+	if ((q + 2) > end)
+		goto out;
+	q += 2;
+
+	rlen = (q - estart);
+
+	memset(&expand, 0, sizeof(expand));
+	elen = 0;
+	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
+	if (save == NULL) {
+		fprintf(stderr, "expanding compression failure 0\n");
+		goto out;
+	} else 
+		q = save;
+
+	
+	algname = convert_name(expand, elen);
+	if (algname == NULL) {
+		goto out;
+	}
+
+	rawalgname = malloc(elen);
+	if (rawalgname == NULL)
+		goto out;
+	memcpy(rawalgname, expand, elen);
+	rawalgnamelen = elen;
+	
+	if (strcasecmp(algname, "hmac-sha256.") != 0) {
+		goto out;
+	}
+
+	if ((q + sizeof(struct dns_tsigrr)) > end) {
+		goto out;
+	}
+
+	sdt = (struct dns_tsigrr *)q;
+	q += sizeof(struct dns_tsigrr);
+
+	if ((q + 2) > end)
+		goto out;
+
+	origid = (uint16_t *)q;
+	q += 2;
+
+	if ((q + 2) > end)
+		goto out;
+
+	tsigerror = (uint16_t *)q;
+	q += 2;
+		
+	if ((q + 2) > end)
+		goto out;
+
+	otherlen = (uint16_t *)q;
+	q += 2;
+
+	otherdata = q;
+	q += ntohs(*otherlen);
+
+	if ((q - estart) != (rdlen + rlen)) {
+		goto out;
+	}
+
+	/* do something with the gathered data */
+
+	if (standardanswer) {
+		/* dns message */
+		HMAC_Update(ctx, rawkeyname, rawkeynamelen);
+		HMAC_Update(ctx, (char *)rclass, 2);
+		HMAC_Update(ctx, (char *)rttl, 4);
+		HMAC_Update(ctx, rawalgname, rawalgnamelen);
+		HMAC_Update(ctx, (char *)&sdt->timefudge, 8);
+		HMAC_Update(ctx, (char *)tsigerror, 2);
+		HMAC_Update(ctx, (char *)otherlen, 2);
+		if (ntohs(*otherlen))
+			HMAC_Update(ctx, otherdata, ntohs(*otherlen));
+
+		standardanswer = 0;
+	} else
+		HMAC_Update(ctx, (char *)&sdt->timefudge, 8);
+
+	HMAC_Final(ctx, mac, &macsize);
+
+	if (memcmp(sdt->mac, mac, macsize) != 0) {	
+		int i;
+
+		printf("the given mac: ");
+		for (i = 0; i < macsize; i++) {
+			printf("%02x", sdt->mac[i] & 0xff);
+		}
+		printf(" does not equal the calculated mac: ");
+		for (i = 0; i < macsize; i++) {
+			printf("%02x", mac[i]  & 0xff);
+		}
+		printf("\n");
+		goto out; 
+	}
+
+	rrlen = (q - estart);
+
+out:
+	free(keyname);
+	free(algname);
+	free(rawkeyname);
+	free(rawalgname);
+	return (rrlen);
 }
