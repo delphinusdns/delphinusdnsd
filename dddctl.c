@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.70 2019/10/08 08:44:18 pjp Exp $
+ * $Id: dddctl.c,v 1.71 2019/10/10 04:08:23 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -450,7 +450,7 @@ signmain(int argc, char *argv[])
 	
 	ddDB *db;
 
-	time_t now, serial;
+	time_t now, serial = 0;
 	struct tm *tm;
 
 #if __OpenBSD__
@@ -852,7 +852,8 @@ signmain(int argc, char *argv[])
 	}
 
 	/* update any serial updates here */
-	update_soa_serial(db, zonename, serial);
+	if (serial)
+		update_soa_serial(db, zonename, serial);
 
 	/* three passes to "sign" our zones */
 	/* first pass, add dnskey records, on apex */
