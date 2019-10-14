@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.75 2019/10/14 17:20:32 pjp Exp $
+ * $Id: dddctl.c,v 1.76 2019/10/14 17:38:32 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -7068,6 +7068,9 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 				maclen = htons(32);
 				HMAC_Update(ctx, (char *)&maclen, 2);
 				HMAC_Update(ctx, mac, 32);
+
+				if (soacount > 1)
+					goto out;
 			} else
 				p = (estart + rrlen);
 
@@ -7081,10 +7084,11 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 				/*
 				 * the envelopes are done because we have
-				 * two SOA's, go to the end...
+				 * two SOA's, continue here to catch the
+				 * TSIG.
 				 */
 				if (soacount > 1)
-					goto out;
+					continue;
 			} else {
 				for (sr = supported; sr->rrtype != 0; sr++) {
 					if (rrtype == sr->rrtype) {
