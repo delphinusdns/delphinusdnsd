@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.72 2019/10/10 16:47:18 pjp Exp $
+ * $Id: dddctl.c,v 1.73 2019/10/14 15:45:36 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -6693,6 +6693,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	char pseudo_packet[512];
 	char shabuf[32];
 	char *reply;
+	struct timeval tv, savetv;
 	struct question *q;
 	struct whole_header {
 		u_int16_t len;
@@ -6715,6 +6716,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	
 	time_t now;
 	HMAC_CTX *ctx;
+	socklen_t sizetv;
 	
 	if (!(format & TCP_FORMAT))
 		return -1;
@@ -6953,13 +6955,27 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	}
 
 	for (;;) {
-		len = recv(so, reply, 0xffff, MSG_PEEK | MSG_WAITALL);
+		if (getsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &savetv, &sizetv) < 0) {	
+			perror("getsockopt");
+		}
+
+		tv.tv_sec = 1;
+		tv.tv_usec = 0;
+
+		if (setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+			perror("setsockopt");
+		}
+		len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL);
 		if (len <= 0)	
 			break;
 
 		plen = (u_int16_t *)reply;
 		tcplen = ntohs(*plen) + 2;
 		
+		if (setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &savetv, sizeof(savetv)) < 0) {
+			perror("setsockopt");
+		}
+
 		len = recv(so, reply, tcplen, MSG_WAITALL);
 		if (len < 0) {
 			perror("recv");
@@ -7091,7 +7107,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	}
 
 	if ((len = recv(so, reply, 0xffff, 0)) != 0) {	
-		fprintf(stderr, ";; WARN: recieved %d more bytes.\n", len);
+		if (len > 0)
+			fprintf(stderr, ";; WARN: received %d more bytes.\n", len);
 	}
 
 	if (tsigkey) {
