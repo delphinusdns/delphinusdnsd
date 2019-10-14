@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.74 2019/10/14 16:55:49 pjp Exp $
+ * $Id: dddctl.c,v 1.75 2019/10/14 17:20:32 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -7078,6 +7078,13 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 				}
 				p = (estart + len);
 				soacount++;
+
+				/*
+				 * the envelopes are done because we have
+				 * two SOA's, go to the end...
+				 */
+				if (soacount > 1)
+					goto out;
 			} else {
 				for (sr = supported; sr->rrtype != 0; sr++) {
 					if (rrtype == sr->rrtype) {
@@ -7097,18 +7104,14 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 					} 
 				} 
 			}
-
-
-			if (soacount > 1)
-				break;
-
 		}
-				
 	}
 
 	if ((len = recv(so, reply, 0xffff, 0)) > 0) {	
 		fprintf(stderr, ";; WARN: received %d more bytes.\n", len);
 	}
+
+out:
 
 	if (tsigkey) {
 		HMAC_CTX_free(ctx);	
