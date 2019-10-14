@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.73 2019/10/14 15:45:36 pjp Exp $
+ * $Id: dddctl.c,v 1.74 2019/10/14 16:55:49 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -7106,9 +7106,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 				
 	}
 
-	if ((len = recv(so, reply, 0xffff, 0)) != 0) {	
-		if (len > 0)
-			fprintf(stderr, ";; WARN: received %d more bytes.\n", len);
+	if ((len = recv(so, reply, 0xffff, 0)) > 0) {	
+		fprintf(stderr, ";; WARN: received %d more bytes.\n", len);
 	}
 
 	if (tsigkey) {
