@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.37 2019/10/15 11:41:10 pjp Exp $
+ * $Id: util.c,v 1.38 2019/10/15 12:22:45 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1377,6 +1377,8 @@ tsig_pseudoheader(char *tsigkeyname, uint16_t fudge, time_t now, HMAC_CTX *ctx)
 	memcpy(&pseudo_packet, keyname, len);
 	ppoffset += len;	
 
+	free(keyname);
+
 	/* class */
 	type = (u_int16_t *) &pseudo_packet[ppoffset];
 	*type = htons(DNS_CLASS_ANY);
@@ -1395,6 +1397,8 @@ tsig_pseudoheader(char *tsigkeyname, uint16_t fudge, time_t now, HMAC_CTX *ctx)
 	/* alg name */	
 	memcpy(&pseudo_packet[ppoffset], keyname, len);
 	ppoffset += len;
+
+	free(keyname);
 
 	/* time 1 and 2 */
 	now = time(NULL);
