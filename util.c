@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.36 2019/09/10 11:15:16 pjp Exp $
+ * $Id: util.c,v 1.37 2019/10/15 11:41:10 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -98,6 +98,7 @@ int			free_question(struct question *);
 struct rrtab 	*rrlookup(char *);
 char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
 void log_diff(char *sha256, char *mac, int len);
+int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 
 /* externs */
 
@@ -1348,4 +1349,81 @@ log_diff(char *sha256, char *mac, int len)
 
 	dolog(LOG_INFO, "given HMAC = %s\n", buf);
 
+}
+
+/*
+ * TSIG_PSEUDOHEADER - assemble a pseudoheader and with a HMAC_CTX * and
+ * 			update it within this function...
+ */
+
+int
+tsig_pseudoheader(char *tsigkeyname, uint16_t fudge, time_t now, HMAC_CTX *ctx)
+{
+	char pseudo_packet[512];
+	char *keyname = NULL;
+
+	int ppoffset = 0I;
+	int len;
+
+	uint16_t *type;
+	uint32_t *ttl;
+
+	keyname = dns_label(tsigkeyname, &len);
+	if (keyname == NULL) {
+		return -1;
+	}
+
+	/* name of key */
+	memcpy(&pseudo_packet, keyname, len);
+	ppoffset += len;	
+
+	/* class */
+	type = (u_int16_t *) &pseudo_packet[ppoffset];
+	*type = htons(DNS_CLASS_ANY);
+	ppoffset += 2;
+
+	/* TTL */
+	ttl = (u_int32_t *) &pseudo_packet[ppoffset];
+	*ttl = htonl(0);
+	ppoffset += 4;
+		
+	keyname = dns_label("hmac-sha256", &len);
+	if (keyname == NULL) {
+		return -1;
+	}
+	
+	/* alg name */	
+	memcpy(&pseudo_packet[ppoffset], keyname, len);
+	ppoffset += len;
+
+	/* time 1 and 2 */
+	now = time(NULL);
+	type = (u_int16_t *)&pseudo_packet[ppoffset];	
+	*type = htons((now >> 32) & 0xffff);
+	ppoffset += 2;
+
+	ttl = (u_int32_t *)&pseudo_packet[ppoffset];
+	*ttl = htonl((now & 0xffffffff));
+	ppoffset += 4;
+	
+	/* fudge */
+	type = (u_int16_t *)&pseudo_packet[ppoffset];	
+	*type = htons(fudge);
+	ppoffset += 2;
+
+	/* error */
+
+	type = (u_int16_t *)&pseudo_packet[ppoffset];	
+	*type = htons(0);
+	ppoffset += 2;
+
+	/* other len */
+	
+	type = (u_int16_t *)&pseudo_packet[ppoffset];	
+	*type = htons(0);
+	ppoffset += 2;
+
+	HMAC_Update(ctx, pseudo_packet, ppoffset);
+
+	return 0;
 }

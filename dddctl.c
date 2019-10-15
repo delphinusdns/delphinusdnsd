@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.76 2019/10/14 17:38:32 pjp Exp $
+ * $Id: dddctl.c,v 1.77 2019/10/15 11:41:10 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -362,6 +362,7 @@ extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_
 extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *);
 
 extern int                      memcasecmp(u_char *, u_char *, int);
+extern int 			tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 
 
 extern int dnssec;
@@ -6705,7 +6706,6 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 	u_char *end, *estart;
 	int len, totallen, zonelen, rrlen, rrtype;
-	int ppoffset = 0;
 	int soacount = 0;
 	int elen = 0;
 	int segmentcount = 0;
@@ -6714,8 +6714,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	u_int16_t *class, *type, rdlen, *plen;
 	u_int16_t tcplen;
 	
-	time_t now;
 	HMAC_CTX *ctx;
+	time_t now = 0;
 	socklen_t sizetv;
 	
 	if (!(format & TCP_FORMAT))
@@ -6771,62 +6771,9 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
 		HMAC_Update(ctx, &query[2], totallen - 2);
 
-		keyname = dns_label(tsigkey, &len);
-		if (keyname == NULL) {
-			return -1;
-		}
-
-		/* name of key */
-		memcpy(&pseudo_packet, keyname, len);
-		ppoffset += len;	
-
-		/* class */
-		type = (u_int16_t *) &pseudo_packet[ppoffset];
-		*type = htons(DNS_CLASS_ANY);
-		ppoffset += 2;
-
-		/* TTL */
-		ttl = (u_int32_t *) &pseudo_packet[ppoffset];
-		*ttl = htonl(0);
-		ppoffset += 4;
-			
-		keyname = dns_label("hmac-sha256", &len);
-		if (keyname == NULL) {
-			return -1;
-		}
-		
-		/* alg name */	
-		memcpy(&pseudo_packet[ppoffset], keyname, len);
-		ppoffset += len;
-
-		/* time 1 and 2 */
 		now = time(NULL);
-		type = (u_int16_t *)&pseudo_packet[ppoffset];	
-		*type = htons((now >> 32) & 0xffff);
-		ppoffset += 2;
+		tsig_pseudoheader(tsigkey, 300, now, ctx);
 
-		ttl = (u_int32_t *)&pseudo_packet[ppoffset];
-		*ttl = htonl((now & 0xffffffff));
-		ppoffset += 4;
-		
-		/* fudge */
-		type = (u_int16_t *)&pseudo_packet[ppoffset];	
-		*type = htons(300);
-		ppoffset += 2;
-	
-		/* error */
-
-		type = (u_int16_t *)&pseudo_packet[ppoffset];	
-		*type = htons(0);
-		ppoffset += 2;
-
-		/* other len */
-		
-		type = (u_int16_t *)&pseudo_packet[ppoffset];	
-		*type = htons(0);
-		ppoffset += 2;
-
-		HMAC_Update(ctx, pseudo_packet, ppoffset);
 		HMAC_Final(ctx, shabuf, &len);
 
 		if (len != 32) {
