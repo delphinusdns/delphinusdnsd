@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.77 2019/10/15 11:41:10 pjp Exp $
+ * $Id: dddctl.c,v 1.78 2019/10/15 12:20:49 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -6772,7 +6772,10 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		HMAC_Update(ctx, &query[2], totallen - 2);
 
 		now = time(NULL);
-		tsig_pseudoheader(tsigkey, 300, now, ctx);
+		if (tsig_pseudoheader(tsigkey, 300, now, ctx) < 0) {
+			fprintf(stderr, "tsig_pseudoheader failed\n");
+			return -1;
+		}
 
 		HMAC_Final(ctx, shabuf, &len);
 
