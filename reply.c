@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.81 2019/10/25 10:24:49 pjp Exp $
+ * $Id: reply.c,v 1.82 2019/10/25 12:41:22 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -4539,13 +4539,7 @@ reply_notauth(struct sreply *sreply, ddDB *db)
 	}
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-
-	/* copy question to reply */
-	if (istcp)
-		memcpy(&reply[0], &buf[2], sizeof(struct dns_header) + q->hdr->namelen + 4);
-	else
-		memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-		
+	memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
 
 	outlen += (sizeof(struct dns_header) + q->hdr->namelen + 4); 
 
@@ -4628,16 +4622,7 @@ reply_notify(struct sreply *sreply, ddDB *db)
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
-#if 0
-	/* XXX is this really needed? */
-	/* copy question to reply */
-	if (istcp)
-		memcpy(&reply[0], &buf[2], sizeof(struct dns_header) + q->hdr->namelen + 4);
-	else
-#endif
-		memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-		
-
+	memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
 	outlen += (sizeof(struct dns_header) + q->hdr->namelen + 4); 
 
 
