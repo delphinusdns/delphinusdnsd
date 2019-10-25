@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.69 2019/10/25 10:24:49 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.70 2019/10/25 10:26:36 pjp Exp $
  */
 
 
@@ -242,7 +242,6 @@ struct tcpentry {
 
 extern char *__progname;
 extern struct logging logging;
-extern struct rzone *rz;
 extern int axfrport;
 extern int ratelimit;
 extern int ratelimit_packets_per_second;
