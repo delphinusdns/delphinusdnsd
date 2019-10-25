@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.82 2019/10/25 12:41:22 pjp Exp $
+ * $Id: reply.c,v 1.83 2019/10/25 13:56:28 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -4442,7 +4442,7 @@ reply_refused(struct sreply *sreply, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen;
+	u_int16_t outlen = 0;
 
 	int so = sreply->so;
 	int len = sreply->len;
@@ -4453,6 +4453,8 @@ reply_refused(struct sreply *sreply, ddDB *db)
 	int replysize = 512;
 	int retlen = -1;
 
+	struct question *q = sreply->q;
+
 	if (istcp) {
 		replysize = 65535;
 	}
@@ -4461,14 +4463,15 @@ reply_refused(struct sreply *sreply, ddDB *db)
 
 	odh = (struct dns_header *)&reply[0];
 
-	outlen = sizeof(struct dns_header);
-
 	if (len > replysize) {
 		return (retlen);
 	}
 
-	memcpy((char *)&odh->id, buf, sizeof(u_int16_t));
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+
+	memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+	outlen += (sizeof(struct dns_header) + q->hdr->namelen + 4); 
+
 
 	SET_DNS_REPLY(odh);
 	SET_DNS_RCODE_REFUSED(odh);
@@ -4493,7 +4496,7 @@ reply_refused(struct sreply *sreply, ddDB *db)
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, sizeof(struct dns_header), 0, sa, salen)) < 0) {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
 			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}

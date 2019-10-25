@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.70 2019/10/25 10:26:36 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.71 2019/10/25 13:56:28 pjp Exp $
  */
 
 
@@ -1860,7 +1860,7 @@ axfrentry:
 				}
 
 				/* goto drop beyond this point should goto out instead */
-
+				/* handle notifications */
 				if (question->notify) {
 					if (question->tsig.have_tsig && notifysource(question, (struct sockaddr_storage *)from) &&
 							question->tsig.tsigverified == 1) {
@@ -2791,6 +2791,39 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				/* pjp end of parseloop branch */
 				/* goto drop beyond this point should goto out instead */
 				fakequestion = NULL;
+				/* handle tcp notifications , XXX not tested */
+				if (question->notify) {
+					if (question->tsig.have_tsig && notifysource(question, (struct sockaddr_storage *)from) &&
+							question->tsig.tsigverified == 1) {
+							dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" authenticated dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+							snprintf(replystring, DNS_MAXNAME, "NOTIFY");
+							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+							slen = reply_notify(&sreply, NULL);
+							goto tcpout;
+					
+					} else if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0) {
+							dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns NOTIFY packet (code = %d) from %s, replying notauth\n", so, cfg->ident[tcpnp->intidx], question->tsig.tsigerrorcode, tcpnp->address);
+							snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
+							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+							slen = reply_notauth(&sreply, NULL);
+							goto tcpout;
+					}
+
+					if (notifysource(question, (struct sockaddr_storage *)from)) {
+						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+						snprintf(replystring, DNS_MAXNAME, "NOTIFY");
+					build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+						slen = reply_notify(&sreply, NULL);
+						goto tcpout;
+					} else {
+						/* RFC 1996 - 3.10 */
+						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying DROP\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+						snprintf(replystring, DNS_MAXNAME, "DROP");
+						slen = 0;
+
+						goto tcpout;
+					}
+				} /* if question->notify */
 
 				if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0)  {
 					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[tcpnp->intidx], question->tsig.tsigerrorcode, tcpnp->address);
