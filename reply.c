@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.83 2019/10/25 13:56:28 pjp Exp $
+ * $Id: reply.c,v 1.84 2019/10/25 15:13:49 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -4475,6 +4475,9 @@ reply_refused(struct sreply *sreply, ddDB *db)
 
 	SET_DNS_REPLY(odh);
 	SET_DNS_RCODE_REFUSED(odh);
+
+	if (q->notify)
+		SET_DNS_NOTIFY(odh);
 
 	HTONS(odh->query);		
 

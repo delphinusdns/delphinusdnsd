@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.71 2019/10/25 13:56:28 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.72 2019/10/25 15:13:49 pjp Exp $
  */
 
 
@@ -1885,10 +1885,11 @@ axfrentry:
 						slen = reply_notify(&sreply, NULL);
 						goto udpout;
 					} else {
-						/* RFC 1996 - 3.10 */
-						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying DROP\n", so, cfg->ident[i], address);
-						snprintf(replystring, DNS_MAXNAME, "DROP");
-						slen = 0;
+						/* RFC 1996 - 3.10 is probably broken reply REFUSED */
+						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying REFUSED\n", so, cfg->ident[i], address);
+						snprintf(replystring, DNS_MAXNAME, "REFUSED");
+						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+						slen = reply_refused(&sreply, NULL);
 
 						goto udpout;
 					}
@@ -2812,14 +2813,15 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					if (notifysource(question, (struct sockaddr_storage *)from)) {
 						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 						snprintf(replystring, DNS_MAXNAME, "NOTIFY");
-					build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_notify(&sreply, NULL);
 						goto tcpout;
 					} else {
-						/* RFC 1996 - 3.10 */
-						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying DROP\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
-						snprintf(replystring, DNS_MAXNAME, "DROP");
-						slen = 0;
+						/* RFC 1996 - 3.10 is probably broken, replying REFUSED */
+						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying REFUSED\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+						snprintf(replystring, DNS_MAXNAME, "REFUSED");
+						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+						slen = reply_refused(&sreply, NULL);
 
 						goto tcpout;
 					}
