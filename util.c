@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.38 2019/10/15 12:22:45 pjp Exp $
+ * $Id: util.c,v 1.39 2019/10/25 10:24:49 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1224,6 +1224,13 @@ build_question(char *buf, int len, int additional, char *mac)
 
 	/* make note of whether recursion is desired */
 	q->rd = ((ntohs(hdr->query) & DNS_RECURSE) == DNS_RECURSE);
+
+	/* are we a notify packet? */
+	if ((ntohs(*qtype) == DNS_TYPE_SOA) && (ntohs(*qclass) == DNS_CLASS_IN))
+		q->notify = ((ntohs(hdr->query) & (DNS_NOTIFY | DNS_AUTH)) \
+			== (DNS_NOTIFY | DNS_AUTH));
+	else
+		q->notify = 0;
 
 	return (q);
 }

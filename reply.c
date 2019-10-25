@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.80 2019/06/06 15:08:00 pjp Exp $
+ * $Id: reply.c,v 1.81 2019/10/25 10:24:49 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -125,6 +125,7 @@ int 		reply_any(struct sreply *, ddDB *);
 int 		reply_refused(struct sreply *, ddDB *);
 int 		reply_fmterror(struct sreply *, ddDB *);
 int 		reply_notauth(struct sreply *, ddDB *);
+int		reply_notify(struct sreply *, ddDB *);
 struct rbtree * find_nsec(char *name, int namelen, struct rbtree *, ddDB *db);
 int 		nsec_comp(const void *a, const void *b);
 char * 		convert_name(char *name, int namelen);
@@ -4554,12 +4555,14 @@ reply_notauth(struct sreply *sreply, ddDB *db)
 
 	HTONS(odh->query);		
 
-	odh->additional = htons(1);
 	
+	odh->additional = 0;
 	tmplen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
 	
 	if (tmplen != 0)
 		outlen = tmplen;
+
+	odh->additional = htons(1);
 
 	if (istcp) {
 		char *tmpbuf;
@@ -4587,6 +4590,98 @@ reply_notauth(struct sreply *sreply, ddDB *db)
 	return (retlen);
 }
 
+/* 
+ * REPLY_NOTIFY() - replies a DNS question (*q) on socket (so)
+ *
+ */
+
+int
+reply_notify(struct sreply *sreply, ddDB *db)
+{
+	char *reply = sreply->replybuf;
+	struct dns_header *odh;
+	u_int16_t outlen = 0;
+	u_int16_t tmplen;
+
+	int so = sreply->so;
+	int len = sreply->len;
+	char *buf = sreply->buf;
+	struct sockaddr *sa = sreply->sa;
+	int salen = sreply->salen;
+	int istcp = sreply->istcp;
+	int replysize = 512;
+	int retlen = -1;
+
+	struct question *q = sreply->q;
+
+	if (istcp) {
+		replysize = 65535;
+	}
+
+	memset(reply, 0, replysize);
+
+	odh = (struct dns_header *)&reply[0];
+
+	if (len > replysize) {
+		return (retlen);
+	}
+
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+
+#if 0
+	/* XXX is this really needed? */
+	/* copy question to reply */
+	if (istcp)
+		memcpy(&reply[0], &buf[2], sizeof(struct dns_header) + q->hdr->namelen + 4);
+	else
+#endif
+		memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+		
+
+	outlen += (sizeof(struct dns_header) + q->hdr->namelen + 4); 
+
+
+	SET_DNS_REPLY(odh);
+	SET_DNS_NOTIFY(odh);
+	SET_DNS_AUTHORITATIVE(odh);
+	SET_DNS_RCODE_NOERR(odh);
+
+	HTONS(odh->query);		
+
+	if (q->tsig.have_tsig && q->tsig.tsigverified) {
+		odh->additional = 0;
+		tmplen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL);
+		if (tmplen != 0)
+			outlen = tmplen;
+		odh->additional = htons(1);
+
+	}
+
+	if (istcp) {
+		char *tmpbuf;
+		u_int16_t *plen;
+
+		tmpbuf = malloc(outlen + 2);
+		if (tmpbuf == 0) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+		}
+		plen = (u_int16_t *)tmpbuf;
+		*plen = htons(outlen);
+		
+		memcpy(&tmpbuf[2], reply, outlen);
+
+		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		}
+	}
+
+	return (retlen);
+}
 /* 
  * REPLY_FMTERROR() - replies a DNS question (*q) on socket (so)
  *

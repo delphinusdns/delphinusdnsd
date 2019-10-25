@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.68 2019/09/12 07:24:54 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.69 2019/10/25 10:24:49 pjp Exp $
  */
 
 
@@ -129,6 +129,7 @@ extern int 	reply_notauth(struct sreply *, ddDB *);
 extern int 	reply_notimpl(struct sreply *, ddDB *);
 extern int 	reply_nxdomain(struct sreply *, ddDB *);
 extern int 	reply_noerror(struct sreply *, ddDB *);
+extern int	reply_notify(struct sreply *, ddDB *);
 extern int 	reply_soa(struct sreply *, ddDB *);
 extern int 	reply_mx(struct sreply *, ddDB *);
 extern int 	reply_naptr(struct sreply *, ddDB *);
@@ -156,8 +157,9 @@ extern int			free_question(struct question *);
 extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
-extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
-extern int display_rr(struct rrset *rrset);
+extern int 	add_rr(struct rbtree *, char *, int, u_int16_t, void *);
+extern int 	display_rr(struct rrset *rrset);
+extern int 	notifysource(struct question *, struct sockaddr_storage *);
 
 
 struct question		*convert_question(struct parsequestion *);
@@ -240,6 +242,7 @@ struct tcpentry {
 
 extern char *__progname;
 extern struct logging logging;
+extern struct rzone *rz;
 extern int axfrport;
 extern int ratelimit;
 extern int ratelimit_packets_per_second;
@@ -1410,7 +1413,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	pid_t pid;
 
 	int sel;
-	int len, slen;
+	int len, slen = 0;
 	int is_ipv6;
 	int i;
 	int istcp = 1;
@@ -1859,11 +1862,44 @@ axfrentry:
 
 				/* goto drop beyond this point should goto out instead */
 
+				if (question->notify) {
+					if (question->tsig.have_tsig && notifysource(question, (struct sockaddr_storage *)from) &&
+							question->tsig.tsigverified == 1) {
+							dolog(LOG_INFO, "on descriptor %u interface \"%s\" authenticated dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[i], address);
+							snprintf(replystring, DNS_MAXNAME, "NOTIFY");
+							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+							slen = reply_notify(&sreply, NULL);
+							goto udpout;
+					
+					} else if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0) {
+							dolog(LOG_INFO, "on descriptor %u interface \"%s\" not authenticated dns NOTIFY packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsig.tsigerrorcode, address);
+							snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
+							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+							slen = reply_notauth(&sreply, NULL);
+							goto udpout;
+					}
+
+					if (notifysource(question, (struct sockaddr_storage *)from)) {
+						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[i], address);
+						snprintf(replystring, DNS_MAXNAME, "NOTIFY");
+						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+						slen = reply_notify(&sreply, NULL);
+						goto udpout;
+					} else {
+						/* RFC 1996 - 3.10 */
+						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying DROP\n", so, cfg->ident[i], address);
+						snprintf(replystring, DNS_MAXNAME, "DROP");
+						slen = 0;
+
+						goto udpout;
+					}
+				} /* if question->notify */
+
 				if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0)  {
 					dolog(LOG_INFO, "on descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsig.tsigerrorcode, address);
 					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
 					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-					reply_notauth(&sreply, NULL);
+					slen = reply_notauth(&sreply, NULL);
 					goto udpout;
 				}
 				/* hack around whether we're edns version 0 */
@@ -1896,6 +1932,7 @@ axfrentry:
 						/* FALLTHROUGH */
 					case ERR_DROP:
 						snprintf(replystring, DNS_MAXNAME, "DROP");
+						slen = 0;
 						goto udpout;
 					case ERR_REFUSED:
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
@@ -1972,7 +2009,7 @@ axfrentry:
 						} 
 
 						snprintf(replystring, DNS_MAXNAME, "DROP");
-
+						slen = 0;
 						goto udpout;
 					}
 				}
@@ -2336,7 +2373,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 {
 	fd_set rset;
 	int sel;
-	int len, slen, length = 0;
+	int len, slen = 0, length = 0;
 	int is_ipv6;
 	int i;
 	int istcp = 1;
@@ -2760,7 +2797,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[tcpnp->intidx], question->tsig.tsigerrorcode, tcpnp->address);
 					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
 					build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
-					reply_notauth(&sreply, NULL);
+					slen = reply_notauth(&sreply, NULL);
 					goto tcpout;
 				}
 				/* hack around whether we're edns version 0 */
@@ -2777,6 +2814,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						dolog(LOG_INFO, "AXFR connection from %s on interface \"%s\" was not in our axfr acl, drop\n", tcpnp->address, cfg->ident[tcpnp->intidx]);
 							
 						snprintf(replystring, DNS_MAXNAME, "DROP");
+						slen = 0;
 						goto tcpout;
 					}
 					break;
@@ -2802,6 +2840,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						/* FALLTHROUGH */
 					case ERR_DROP:
 						snprintf(replystring, DNS_MAXNAME, "DROP");
+						slen = 0;
 						goto tcpout;
 
 					case ERR_REFUSED:
@@ -2876,6 +2915,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						}
 
 						snprintf(replystring, DNS_MAXNAME, "DROP");
+						slen = 0;
 						goto tcpout;
 
 					}
@@ -3210,6 +3250,7 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 					pq.tsig.tsigalglen = question->tsig.tsigalglen;
 					pq.tsig.tsig_timefudge = question->tsig.tsig_timefudge;
 					pq.tsig.tsigorigid = question->tsig.tsigorigid;
+					pq.notify = question->notify;
 
 					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&pq, sizeof(struct parsequestion));
 					msgbuf_write(&mybuf->w);
@@ -3291,6 +3332,8 @@ convert_question(struct parsequestion *pq)
 
 	q->tsig.tsig_timefudge = pq->tsig.tsig_timefudge;
 	q->tsig.tsigorigid = pq->tsig.tsigorigid;
+
+	q->notify = pq->notify;
 
 	return (q);
 }

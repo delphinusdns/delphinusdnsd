@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.74 2019/07/09 12:24:09 pjp Exp $
+ * $Id: parse.y,v 1.75 2019/10/25 10:24:49 pjp Exp $
  */
 
 %{
@@ -70,6 +70,7 @@
 void 		yyerror(const char *);
 int		yylex(void);
 
+extern int	memcasecmp(u_char *, u_char *, int);
 extern struct rrtab 	*rrlookup(char *);
 extern int	base32hex_decode(u_char *, u_char *);
 extern void 	dolog(int, char *, ...);
@@ -135,9 +136,11 @@ static struct file {
 SLIST_HEAD(rzones, rzone)	rzones = SLIST_HEAD_INITIALIZER(rzones);
 struct rzone {
 	SLIST_ENTRY(rzone)	rzone_entry;
+	int 			active;
 	char 			*zonename;
 	u_int16_t		masterport;
 	char			*master;
+	struct sockaddr_storage storage;
 	char			*tsigkey;
 	char 			*filename;
 } *rz, *rz0;
@@ -233,6 +236,7 @@ int 		yyparse(void);
 static struct rzone * add_rzone(void);
 static struct mzone * add_mzone(void);
 static int	pull_remote_zone(struct rzone *);
+int		notifysource(struct question *, struct sockaddr_storage *);
 
 
 %}
@@ -674,6 +678,7 @@ rzonestatement:
 				return -1;
 		}
 
+		rz->active = 1;
 		rz->masterport = $2 & 0xffff;
 
 #ifdef __OpenBSD__
@@ -684,6 +689,8 @@ rzonestatement:
 	|
 	MASTER ipcidr SEMICOLON CRLF
 	{	
+		struct sockaddr_in *sin;
+		struct sockaddr_in6 *sin6;
 		char *p;
 
 		rz = SLIST_FIRST(&rzones);
@@ -691,6 +698,7 @@ rzonestatement:
 				return -1;
 		}
 	
+		rz->active = 1;
 		p = strdup($2);
 		if (p == NULL) {
 			perror("strdup");
@@ -698,6 +706,19 @@ rzonestatement:
 		}
 
 		rz->master = p;
+
+		sin = (struct sockaddr_in *)&rz->storage;
+		sin6 = (struct sockaddr_in6 *)&rz->storage;
+
+		if (strchr(rz->master, ':')) {
+			rz->storage.ss_family = AF_INET6;
+			rz->storage.ss_len = 16;
+			inet_pton(AF_INET6, rz->master, &sin6->sin6_addr);
+		} else {
+			rz->storage.ss_family = AF_INET;
+			rz->storage.ss_len = 4;
+			inet_pton(AF_INET, rz->master, &sin->sin_addr.s_addr);
+		}
 
 #ifdef __OpenBSD__
 		if (debug)
@@ -718,6 +739,7 @@ rzonestatement:
 			return -1;
 		}
 
+		rz->active = 1;
 		p = strdup($2);
 		if (p == NULL) {
 			perror("strdup");
@@ -3673,6 +3695,7 @@ add_rzone(void)
 	lrz->master = NULL;
 	lrz->tsigkey = NULL;
 	lrz->filename = NULL;
+	memset(&lrz->storage, 0, sizeof(struct sockaddr_storage));
 
 	SLIST_INSERT_HEAD(&rzones, lrz, rzone_entry);
 #ifdef __OpenBSD__
@@ -3713,4 +3736,54 @@ add_mzone(void)
 	SLIST_INSERT_HEAD(&mzones, lmz, mzone_entry);
 
 	return (lmz);
+}
+
+int
+notifysource(struct question *q, struct sockaddr_storage *from)
+{
+	char *zone, *tsigkey;
+	int zoneretlen, tsigretlen;
+	struct sockaddr_in *rzs, *fromi = (struct sockaddr_in *)from;
+	struct sockaddr_in6 *rzs6, *fromi6 = (struct sockaddr_in6 *)from;
+
+	SLIST_FOREACH(rz, &rzones, rzone_entry) {
+		if (! rz->active)
+			continue;
+
+		tsigkey = dns_label(rz->tsigkey, &tsigretlen);
+		zone = dns_label(rz->zonename, &zoneretlen);
+
+		/* if we are the right zone, right tsigkey, and right master IP/IP6 */
+		if ((zoneretlen == q->hdr->namelen) &&
+			(memcasecmp(zone, q->hdr->name, zoneretlen) == 0) && 
+			(tsigretlen == q->tsig.tsigkeylen) &&
+			(memcasecmp(tsigkey, q->tsig.tsigkey, tsigretlen) == 0) &&
+			(rz->storage.ss_family == from->ss_family)) {
+				free(tsigkey);
+				free(zone);
+				if (from->ss_family == AF_INET) {
+					/* IPv4 notify */
+					rzs = (struct sockaddr_in *)&rz->storage;
+					
+					if (fromi->sin_addr.s_addr == rzs->sin_addr.s_addr) {
+#if 0
+					if (memcmp((void*)&fromi->sin_addr, (void*)&rzs->sin_addr, 4) == 0) {
+#endif
+						return 1;
+					}
+				} else {
+					/* IPv6 notify */
+					rzs6 = (struct sockaddr_in6 *)&rz->storage;
+
+					if (memcmp((void*)&fromi6->sin6_addr,
+						(void*)&rzs6->sin6_addr, 16) == 0)
+					return 1;
+				}
+		} else {
+			free(tsigkey);
+			free(zone);
+		}
+	}
+
+	return 0;
 }

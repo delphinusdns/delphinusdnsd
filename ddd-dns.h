@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.8 2019/02/24 14:53:02 pjp Exp $
+ * $Id: ddd-dns.h,v 1.9 2019/10/25 10:24:49 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -258,6 +258,7 @@ struct question {
 	int rd;
 	int dnssecok;
 	int badvers;
+	int notify;
 	struct tsig tsig;
 };
 
@@ -271,6 +272,7 @@ struct parsequestion {
 	u_int8_t ednsversion;
 	int rd;
 	int dnssecok;
+	int notify;
 	int badvers;
 	struct tsig tsig;
 	int rc;		/* return code */
