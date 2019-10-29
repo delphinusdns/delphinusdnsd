@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.75 2019/10/25 10:24:49 pjp Exp $
+ * $Id: parse.y,v 1.76 2019/10/29 09:19:32 pjp Exp $
  */
 
 %{
@@ -3201,6 +3201,7 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 	}
 
 	if (converted_name == NULL) {
+		dolog(LOG_INFO, "converted name == NULL\n");
 		return -1;
 	}
 
@@ -3218,9 +3219,7 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 			nstype = NS_TYPE_DELEGATE;
 
 		free(rbt);
-	} else 
-		return -1;
-
+	} 
 
 	if ((ns = (struct ns *)calloc(1, sizeof(struct ns))) == NULL) {
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
@@ -3230,7 +3229,7 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 	myname = dns_label(nameserver, (int *)&len);	
 	if (myname == NULL) {
 		dolog(LOG_INFO, "illegal nameserver, skipping line %d\n", file->lineno);
-		return 0;
+		return -1;
 	}
 
 	if (len > 0xff || len < 0) {
