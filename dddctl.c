@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.78 2019/10/15 12:20:49 pjp Exp $
+ * $Id: dddctl.c,v 1.79 2019/10/30 12:14:36 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -211,6 +211,7 @@ int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *
 int	lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *);
 int	count_db(ddDB *);
 void	update_soa_serial(ddDB *, char *, time_t);
+int	notglue(ddDB *, struct rbtree *, char *);
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 
@@ -1815,7 +1816,8 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
-			if (sign_a(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (notglue(db, rbt, zonename) && 
+				sign_a(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_a error\n");
 				return -1;
 			}
@@ -1845,7 +1847,9 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
-			if (sign_aaaa(db, zonename, zsk_key, expiry, rbt) < 0) {
+			/* find out if we're glue, if not sign */
+			if (notglue(db, rbt, zonename) && 
+				sign_aaaa(db, zonename, zsk_key, expiry, rbt) < 0) {
 				fprintf(stderr, "sign_aaaa error\n");
 				return -1;
 			}
@@ -5861,6 +5865,9 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			return -1;
 		}
 		
+		/* if we're a glue record, skip */
+		if (! notglue(db, rbt, zone))
+			continue;
 
 		bitmap[0] = '\0';
 		if (find_rr(rbt, DNS_TYPE_A) != NULL)
@@ -8571,4 +8578,67 @@ update_soa_serial(ddDB *db, char *zonename, time_t serial)
 	free(rbt0);
 	free_question(q);
 
+}
+
+int
+notglue(ddDB *db, struct rbtree *rbt, char *zonename)
+{
+	struct rbtree *rbt0;
+	struct question *q;
+	char *zoneapex, *p;
+	char replystring[512];
+	int apexlen, len;
+	int retval, lzerrno;
+	
+
+	zoneapex = dns_label(zonename, &apexlen);
+	if (zoneapex == NULL) {	
+		dolog(LOG_INFO, "can't get dns_label() to work\n");
+		return 0;
+	}
+
+	if (rbt->zonelen == apexlen && 
+		memcasecmp(rbt->zone, zoneapex, rbt->zonelen) == 0) {
+		free(zoneapex);
+		/* we aren't glue */
+		return 1;
+	}
+
+	p = rbt->zone;
+	len = rbt->zonelen;	
+
+	do {
+		len -= (*p + 1);
+		p += (*p + 1);
+		
+		if (*p == '\0')
+			break;
+
+		q = build_fake_question(p, len, DNS_TYPE_NS, NULL, 0);
+		if (q == NULL) {
+			free(zoneapex);
+			return 1;
+		}
+
+		if ((rbt0 = lookup_zone(db, q, &retval, &lzerrno, (char *)&replystring)) == NULL) {
+			free_question(q);
+			continue;
+		}
+
+		if (len > apexlen && find_rr(rbt0, DNS_TYPE_NS) != NULL) {
+			free(rbt0);
+			free_question(q);
+			free(zoneapex);
+			return 0;
+		}
+		
+		free_question(q);
+		free(rbt0);
+
+	} while (*p && len > 0 && ! (len == apexlen && memcasecmp(p, zoneapex, len) == 0));
+		
+
+	free(zoneapex);
+	/* let's pretend we're not glue here */
+	return 1;
 }

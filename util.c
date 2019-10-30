@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.39 2019/10/25 10:24:49 pjp Exp $
+ * $Id: util.c,v 1.40 2019/10/30 12:14:36 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -283,8 +283,7 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 {
 
 	struct rbtree *rbt = NULL;
-	struct rrset *rrset = NULL;
-	struct rr *rrp = NULL;
+	struct rrset *rrset = NULL, *rrset2 = NULL;
 	int plen, error;
 
 	char *p;
@@ -293,8 +292,9 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 	plen = question->hdr->namelen;
 
 	*returnval = 0;
+	/* if the find_rrset fails, the find_rr will not get questioned */
 	if ((rbt = find_rrset(db, p, plen)) == NULL ||
-		(rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
+		(rbt->dnssec && (rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL)) {
 		if (check_ent(p, plen) == 1) {
 			*lzerrno = ERR_NODATA;
 			*returnval = -1;
@@ -305,7 +305,7 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 
 			return NULL;
 		}
-
+	
 		if (rrset != NULL)
 			free(rbt);
 
@@ -326,6 +326,12 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 					*returnval = -1;
 					return (rbt);
 				}
+
+				if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+					*lzerrno = ERR_DELEGATE;
+					*returnval = -1;
+					return (rbt);
+				}
 	
 				free(rbt);
 			}
@@ -337,14 +343,11 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 	
 	snprintf(replystring, DNS_MAXNAME, "%s", rbt->humanname);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
-		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) != NULL) {
-			if (((struct ns *)(rrp->rdata))->ns_type > 0) {
-				*returnval = DNS_TYPE_NS;
-				*lzerrno = ERR_NOERROR;
-				return (rbt);
-			}
-		}
+	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL &&
+		(rrset2 = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
+		*returnval = -1;
+		*lzerrno = ERR_DELEGATE;
+		return (rbt);
 	} 
 
 	*returnval = check_qtype(rbt, ntohs(question->hdr->qtype), 0, &error);
@@ -368,7 +371,7 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 u_int16_t
 check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 {
-	u_int16_t returnval;
+	u_int16_t returnval = -1;
 
 	switch (type) {
 

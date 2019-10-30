@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.21 2019/09/20 09:51:43 pjp Exp $
+ * $Id: ddd-db.h,v 1.22 2019/10/30 12:14:36 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -54,6 +54,7 @@
 #define ERR_NOERROR	0x4
 #define ERR_REFUSED	0x8
 #define	ERR_NODATA	0x10
+#define ERR_DELEGATE	0x20
 
 #define RECORD_COUNT	20
 #define NEGATIVE_CACHE_TIME	600	/* DNS & Bind 3rd edition page 35 */

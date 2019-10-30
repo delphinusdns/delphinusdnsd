@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.84 2019/10/25 15:13:49 pjp Exp $
+ * $Id: reply.c,v 1.85 2019/10/30 12:14:36 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -93,9 +93,15 @@ extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern int rotate_rr(struct rrset *rrset);
+extern struct rbtree * find_nsec3_cover_next_closer(char *name, int namelen, struct rbtree *, ddDB *db);
+extern struct rbtree * find_nsec3_match_closest(char *name, int namelen, struct rbtree *, ddDB *db);
+extern struct rbtree * find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *, ddDB *db);
+extern struct rbtree * find_nsec3_match_qname(char *name, int namelen, struct rbtree *, ddDB *db);
+extern struct rbtree *         get_soa(ddDB *, struct question *);
 
 
 struct rbtree 	*Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
+struct rbtree 	*get_ns(ddDB *, struct rbtree *, int *);
 u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int);
 int 		reply_a(struct sreply *, ddDB *);
 int		reply_nsec3(struct sreply *, ddDB *);
@@ -131,10 +137,6 @@ int 		nsec_comp(const void *a, const void *b);
 char * 		convert_name(char *name, int namelen);
 int 		count_dots(char *name);
 char * 		base32hex_encode(u_char *input, int len);
-struct rbtree * find_nsec3_cover_next_closer(char *name, int namelen, struct rbtree *, ddDB *db);
-struct rbtree * find_nsec3_match_closest(char *name, int namelen, struct rbtree *, ddDB *db);
-struct rbtree * find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *, ddDB *db);
-struct rbtree * find_nsec3_match_qname(char *name, int namelen, struct rbtree *, ddDB *db);
 
 extern int debug, verbose, dnssec;
 extern char *versionstring;
@@ -1901,7 +1903,6 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	u_int16_t namelen;
 
 	struct answer {
-		char name[2];
 		u_int16_t type;
 		u_int16_t class;
 		u_int32_t ttl;
@@ -1918,6 +1919,8 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *rbt0 = NULL, *rbt1 = NULL;
+	struct rbtree *nrbt = NULL;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int istcp = sreply->istcp;
@@ -1925,9 +1928,23 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	int ns_type;
+	int delegation, addiscount;
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) == 0)
+	SLIST_HEAD(, addis) addishead;
+	struct addis {
+		char name[DNS_MAXNAME];
+		int namelen;
+		SLIST_ENTRY(addis) addis_entries;
+	} *ad0, *ad1;
+
+	SLIST_INIT(&addishead);
+	/* check for apex, delegations */
+	rbt1 = get_ns(db, rbt, &delegation);
+
+	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) == NULL) {
+		free(rbt1);
 		return -1;
+	}
 
 	if (istcp) {
 		replysize = 65535;
@@ -1941,6 +1958,7 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	outlen = sizeof(struct dns_header);
 
 	if (len > replysize) {
+		free(rbt1);
 		return (retlen);
 	}
 
@@ -1952,7 +1970,9 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	rollback = outlen;
 	
 	SET_DNS_REPLY(odh);
-	SET_DNS_AUTHORITATIVE(odh);
+	
+	if (! delegation) 
+		SET_DNS_AUTHORITATIVE(odh);
 
 	if (q->rd) {
 		SET_DNS_RECURSION(odh);
@@ -1965,15 +1985,12 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	odh->nsrr = 0;
 	odh->additional = 0;
 
-	/* skip dns header, question name, qtype and qclass */
-	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
-		q->hdr->namelen + 4);
 
 	ns_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-		answer->name[0] = 0xc0;
-		answer->name[1] = 0x0c;
+		memcpy(&reply[outlen], rbt1->zone, rbt1->zonelen);
+		answer = (struct answer *)(&reply[outlen] + rbt1->zonelen);
 		answer->type = htons(DNS_TYPE_NS);
 		answer->class = q->hdr->qclass;
 		answer->ttl = htonl(((struct ns *)rrp->rdata)->ttl);
@@ -1986,7 +2003,19 @@ reply_ns(struct sreply *sreply, ddDB *db)
 
 		memcpy((char *)&answer->ns, (char *)name, namelen);
 
-		outlen += (12 + namelen);
+		outlen += (10 + namelen + rbt1->zonelen);
+
+		ad0 = malloc(sizeof(struct addis));
+		if (ad0 == NULL) {
+			free(rbt1);
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+			return -1;
+		}
+
+		memcpy(ad0->name, name, namelen);
+		ad0->namelen = namelen;
+
+		SLIST_INSERT_HEAD(&addishead, ad0, addis_entries);
 
 		/* compress the label if possible */
 		if ((tmplen = compress_label((u_char*)reply, outlen, namelen)) > 0) {
@@ -1995,30 +2024,22 @@ reply_ns(struct sreply *sreply, ddDB *db)
 		}
 
 		answer->rdlength = htons(&reply[outlen] - &answer->ns);
-
-
-		/* set new offset for answer */
-		answer = (struct answer *)&reply[outlen];
 		ns_count++;
 	} 
 
-	switch (ns_type) {
-	case NS_TYPE_DELEGATE:
+	if (delegation) {
 		odh->answer = 0;
 		odh->nsrr = htons(ns_count);	
-		break;
-	default:
+	} else {
 		odh->answer = htons(ns_count);
 		odh->nsrr = 0;
-		break;
 	}
-
 
 	/* add RRSIG reply_ns */
 	if (dnssec && q->dnssecok && rbt->dnssec) {
 		int origlen = outlen;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NS, rbt, reply, replysize, outlen, 0);
+		tmplen = additional_rrsig(rbt1->zone, rbt1->zonelen, DNS_TYPE_NS, rbt1, reply, replysize, outlen, 0);
 
 		if (tmplen == 0) {
 			NTOHS(odh->query);
@@ -2038,7 +2059,160 @@ reply_ns(struct sreply *sreply, ddDB *db)
 			else if (odh->nsrr)
 				odh->nsrr = htons(ns_count + 1);	
 		}
+
+		if (delegation) {
+			rbt0 = get_soa(db, q);
+			if (rbt0 == NULL) {
+				free(rbt1);
+				return -1;
+			}
+
+			nrbt = find_nsec3_match_qname(rbt1->zone, rbt1->zonelen, rbt0, db);
+			if (nrbt != NULL) {
+				tmplen = additional_nsec3(nrbt->zone, nrbt->zonelen, DNS_TYPE_NSEC3, nrbt, reply, replysize, outlen);
+
+				if (tmplen == 0) {
+					NTOHS(odh->query);
+					SET_DNS_TRUNCATION(odh);
+					HTONS(odh->query);
+					odh->answer = 0;
+					odh->nsrr = 0; 
+					odh->additional = 0;
+					outlen = rollback;
+					goto out;
+				}
+
+				outlen = tmplen;
+
+				/* additional_nsec3 adds an RRSIG automatically */
+				if (delegation) {
+					NTOHS(odh->nsrr);	
+					odh->nsrr += 2;
+					HTONS(odh->nsrr);
+				} else {
+					NTOHS(odh->answer);	
+					odh->answer += 2;
+					HTONS(odh->answer);
+				}
+
+				free(nrbt);
+			}
+
+			free(rbt0);
+		}
 	}
+
+	if (delegation)
+		free(rbt1);
+
+	/* tack on additional A or AAAA records */
+
+	SLIST_FOREACH(ad0, &addishead, addis_entries) {
+		addiscount = 0;
+		rbt0 = Lookup_zone(db, ad0->name, ad0->namelen, htons(DNS_TYPE_AAAA), 0);
+		if (rbt0 != NULL && find_rr(rbt0, DNS_TYPE_AAAA) != NULL) {
+			tmplen = additional_aaaa(ad0->name, ad0->namelen, rbt0, reply, replysize, outlen, &addiscount);
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+
+			outlen = tmplen;
+			NTOHS(odh->additional);
+			odh->additional += addiscount;
+			HTONS(odh->additional);
+
+			/* additional RRSIG for the additional AAAA */
+			if (dnssec && q->dnssecok && rbt0->dnssec) {
+				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_AAAA, rbt0, reply, replysize, outlen, 0);
+
+				if (tmplen == 0) {
+					NTOHS(odh->query);
+					SET_DNS_TRUNCATION(odh);
+					HTONS(odh->query);
+					odh->answer = 0;
+					odh->nsrr = 0; 
+					odh->additional = 0;
+					outlen = rollback;
+					goto out;
+				}
+
+				NTOHS(odh->additional);
+				odh->additional += 1;
+				HTONS(odh->additional);
+
+				outlen = tmplen;
+			}
+
+			free(rbt0);
+			rbt0 = NULL;
+		}
+
+		if (rbt0)
+			free(rbt0);
+
+		addiscount = 0;
+		rbt0 = Lookup_zone(db, ad0->name, ad0->namelen, htons(DNS_TYPE_A), 0);
+		if (rbt0 != NULL && find_rr(rbt0, DNS_TYPE_A) != NULL) {
+			tmplen = additional_a(ad0->name, ad0->namelen, rbt0, reply, replysize, outlen, &addiscount);
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+
+			outlen = tmplen;
+			NTOHS(odh->additional);
+			odh->additional += addiscount;
+			HTONS(odh->additional);
+
+			/* additional RRSIG for the additional A RR */
+			if (dnssec && q->dnssecok && rbt0->dnssec) {
+				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_A, rbt0, reply, replysize, outlen, 0);
+
+				if (tmplen == 0) {
+					NTOHS(odh->query);
+					SET_DNS_TRUNCATION(odh);
+					HTONS(odh->query);
+					odh->answer = 0;
+					odh->nsrr = 0; 
+					odh->additional = 0;
+					outlen = rollback;
+					goto out;
+				}
+
+				NTOHS(odh->additional);
+				odh->additional += 1;
+				HTONS(odh->additional);
+
+				outlen = tmplen;
+			}
+
+			free(rbt0);
+			rbt0 = NULL;
+		}
+
+		if (rbt0)
+			free(rbt0);
+	}
+
+	while (!SLIST_EMPTY(&addishead)) {  /* clean up */
+		ad1 = SLIST_FIRST(&addishead);
+		SLIST_REMOVE_HEAD(&addishead, addis_entries);
+		free(ad1);
+	}
+
 
 out:
 	if (q->edns0len) {
@@ -5094,14 +5268,14 @@ Lookup_zone(ddDB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcar
 	fakequestion = build_fake_question(name, namelen, type, NULL, 0);
 	if (fakequestion == 0) {
 		dolog(LOG_INFO, "fakequestion(2) failed\n");
-		return (0);
+		return (NULL);
 	}
 
 	rbt = lookup_zone(db, fakequestion, &mytype, &lzerrno, (char *)&fakereplystring);
 
 	if (rbt == 0) {
 		free_question(fakequestion);
-		return (0);
+		return (NULL);
 	}
 
 	free_question(fakequestion);
@@ -6395,4 +6569,47 @@ int
 reply_nodata(struct sreply *sreply, ddDB *db)
 {
 	return (reply_noerror(sreply, db));
+}
+
+
+/*
+ * GET_NS - walk to delegation name
+ */
+
+struct rbtree *
+get_ns(ddDB *db, struct rbtree *rbt, int *delegation)
+{
+	struct rrset *rrset = NULL;
+	struct rbtree *rbt0;
+	char *p;
+	int len;
+
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
+		*delegation = 1;
+	} else {
+		*delegation = 0;
+		return (rbt);
+	}
+
+	p = rbt->zone;
+	len = rbt->zonelen;	
+
+	while (*p && len > 0) {
+		rbt0 = Lookup_zone(db, p, len, DNS_TYPE_NS, 0);	
+		if (rbt0 == NULL) {
+			p += (*p + 1);
+			len -= (*p + 1);
+	
+			continue;
+		} else
+			break;
+	}
+		
+	if ((rrset = find_rr(rbt0, DNS_TYPE_SOA)) != NULL) {
+		*delegation = 0;
+		free(rbt0);
+		return (rbt);
+	}
+		
+	return (rbt0);
 }

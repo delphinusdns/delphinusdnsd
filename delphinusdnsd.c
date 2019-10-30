@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.72 2019/10/25 15:13:49 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.73 2019/10/30 12:14:36 pjp Exp $
  */
 
 
@@ -2011,6 +2011,22 @@ axfrentry:
 						snprintf(replystring, DNS_MAXNAME, "DROP");
 						slen = 0;
 						goto udpout;
+
+					case ERR_DELEGATE:
+						if (rbt0 != NULL) {
+							build_reply(&sreply, so, buf, len, question, from, \
+							fromlen, rbt0, NULL, aregion, istcp, \
+							0, NULL, replybuf);
+
+							slen = reply_ns(&sreply, cfg->db);
+						} else {
+							slen = 0;
+							snprintf(replystring, DNS_MAXNAME, "DROP");
+						}
+
+						goto udpout;
+						break;
+						
 					}
 				}
 
@@ -2951,6 +2967,22 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						snprintf(replystring, DNS_MAXNAME, "DROP");
 						slen = 0;
 						goto tcpout;
+
+					case ERR_DELEGATE:
+						if (rbt0 != NULL) {
+			
+							build_reply(	&sreply, so, pbuf, len, question, 
+											from, fromlen, rbt0, NULL, 
+											aregion, istcp, 0, NULL,
+											replybuf);
+
+							slen = reply_ns(&sreply, cfg->db);
+						} else {
+							slen = 0;
+							snprintf(replystring, DNS_MAXNAME, "DROP");
+						}
+						goto tcpout;
+						
 
 					}
 				}
