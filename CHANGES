@@ -16,6 +16,8 @@ Changes in RELEASE_1_4 from RELEASE_1_3
 - add -X and -x argument for setting the serial automatically overriding what
   is in the zonefile
 - refused answers now tag on the question, which it did not do before.
+- fixed referrer NS code with DNSSEC and plain
+
 
 Changes in RELEASE_1_3 from RELEASE_1_2
 - created a "zinclude" config, which will only allow zone files to be 
