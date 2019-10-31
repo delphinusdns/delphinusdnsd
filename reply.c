@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.85 2019/10/30 12:14:36 pjp Exp $
+ * $Id: reply.c,v 1.86 2019/10/31 16:34:35 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -97,11 +97,11 @@ extern struct rbtree * find_nsec3_cover_next_closer(char *name, int namelen, str
 extern struct rbtree * find_nsec3_match_closest(char *name, int namelen, struct rbtree *, ddDB *db);
 extern struct rbtree * find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *, ddDB *db);
 extern struct rbtree * find_nsec3_match_qname(char *name, int namelen, struct rbtree *, ddDB *db);
-extern struct rbtree *         get_soa(ddDB *, struct question *);
+extern struct rbtree *		get_soa(ddDB *, struct question *);
+extern struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
+extern struct rbtree *		Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 
 
-struct rbtree 	*Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
-struct rbtree 	*get_ns(ddDB *, struct rbtree *, int *);
 u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int);
 int 		reply_a(struct sreply *, ddDB *);
 int		reply_nsec3(struct sreply *, ddDB *);
@@ -5252,37 +5252,6 @@ out:
 	return (retlen);
 }
 
-/* 
- * Lookup_zone: wrapper for lookup_zone() et al.
- */
-
-struct rbtree *
-Lookup_zone(ddDB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcard)
-{
-	struct rbtree *rbt;
-	struct question *fakequestion;
-	char fakereplystring[DNS_MAXNAME + 1];
-	int mytype;
-	int lzerrno;
-
-	fakequestion = build_fake_question(name, namelen, type, NULL, 0);
-	if (fakequestion == 0) {
-		dolog(LOG_INFO, "fakequestion(2) failed\n");
-		return (NULL);
-	}
-
-	rbt = lookup_zone(db, fakequestion, &mytype, &lzerrno, (char *)&fakereplystring);
-
-	if (rbt == 0) {
-		free_question(fakequestion);
-		return (NULL);
-	}
-
-	free_question(fakequestion);
-	
-	return (rbt);
-}
-
 int
 reply_any(struct sreply *sreply, ddDB *db)
 {
@@ -6569,47 +6538,4 @@ int
 reply_nodata(struct sreply *sreply, ddDB *db)
 {
 	return (reply_noerror(sreply, db));
-}
-
-
-/*
- * GET_NS - walk to delegation name
- */
-
-struct rbtree *
-get_ns(ddDB *db, struct rbtree *rbt, int *delegation)
-{
-	struct rrset *rrset = NULL;
-	struct rbtree *rbt0;
-	char *p;
-	int len;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
-		*delegation = 1;
-	} else {
-		*delegation = 0;
-		return (rbt);
-	}
-
-	p = rbt->zone;
-	len = rbt->zonelen;	
-
-	while (*p && len > 0) {
-		rbt0 = Lookup_zone(db, p, len, DNS_TYPE_NS, 0);	
-		if (rbt0 == NULL) {
-			p += (*p + 1);
-			len -= (*p + 1);
-	
-			continue;
-		} else
-			break;
-	}
-		
-	if ((rrset = find_rr(rbt0, DNS_TYPE_SOA)) != NULL) {
-		*delegation = 0;
-		free(rbt0);
-		return (rbt);
-	}
-		
-	return (rbt0);
 }

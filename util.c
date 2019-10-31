@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.40 2019/10/30 12:14:36 pjp Exp $
+ * $Id: util.c,v 1.41 2019/10/31 16:34:35 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -88,6 +88,7 @@ char * dns_label(char *, int *);
 void slave_shutdown(void);
 int get_record_size(ddDB *, char *, int);
 struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
+struct rbtree *		Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 u_int16_t check_qtype(struct rbtree *, u_int16_t, int, int *);
 struct question		*build_fake_question(char *, int, u_int16_t, char *, int);
 
@@ -358,6 +359,37 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 	}
 
 	return(rbt);
+}
+
+/* 
+ * Lookup_zone: wrapper for lookup_zone() et al.
+ */
+
+struct rbtree *
+Lookup_zone(ddDB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcard)
+{
+	struct rbtree *rbt;
+	struct question *fakequestion;
+	char fakereplystring[DNS_MAXNAME + 1];
+	int mytype;
+	int lzerrno;
+
+	fakequestion = build_fake_question(name, namelen, type, NULL, 0);
+	if (fakequestion == 0) {
+		dolog(LOG_INFO, "fakequestion(2) failed\n");
+		return (NULL);
+	}
+
+	rbt = lookup_zone(db, fakequestion, &mytype, &lzerrno, (char *)&fakereplystring);
+
+	if (rbt == 0) {
+		free_question(fakequestion);
+		return (NULL);
+	}
+
+	free_question(fakequestion);
+	
+	return (rbt);
 }
 
 /*

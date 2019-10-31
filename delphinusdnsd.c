@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.73 2019/10/30 12:14:36 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.74 2019/10/31 16:34:35 pjp Exp $
  */
 
 
@@ -116,6 +116,7 @@ extern void 	init_whitelist(void);
 extern void 	init_tsig(void);
 extern void 	init_notifyslave(void);
 extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
+extern struct rbtree *  Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 extern int 	memcasecmp(u_char *, u_char *, int);
 extern void 	receivelog(char *, int);
 extern int 	reply_a(struct sreply *, ddDB *);
@@ -166,6 +167,7 @@ struct question		*convert_question(struct parsequestion *);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, void *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
 struct rbtree * 	get_soa(ddDB *, struct question *);
+struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
 void			mainloop(struct cfg *, struct imsgbuf **);
 void 			master_reload(int);
 void 			master_shutdown(int);
@@ -1354,6 +1356,48 @@ out:
 	return (offset);
 }
 
+
+/*
+ * GET_NS - walk to delegation name
+ */
+
+struct rbtree *
+get_ns(ddDB *db, struct rbtree *rbt, int *delegation)
+{
+	struct rrset *rrset = NULL;
+	struct rbtree *rbt0;
+	char *p;
+	int len;
+
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
+		*delegation = 1;
+	} else {
+		*delegation = 0;
+		return (rbt);
+	}
+
+	p = rbt->zone;
+	len = rbt->zonelen;	
+
+	while (*p && len > 0) {
+		rbt0 = Lookup_zone(db, p, len, DNS_TYPE_NS, 0);	
+		if (rbt0 == NULL) {
+			p += (*p + 1);
+			len -= (*p + 1);
+	
+			continue;
+		} else
+			break;
+	}
+		
+	if ((rrset = find_rr(rbt0, DNS_TYPE_SOA)) != NULL) {
+		*delegation = 0;
+		free(rbt0);
+		return (rbt);
+	}
+		
+	return (rbt0);
+}
 
 
 /*
