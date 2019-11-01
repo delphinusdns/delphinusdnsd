@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.75 2019/11/01 19:46:56 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.76 2019/11/01 19:52:40 pjp Exp $
  */
 
 
@@ -925,6 +925,10 @@ main(int argc, char *argv[], char *environ[])
 			exit(1);
 		}
 		switch (pid = fork()) {
+		case -1:
+			dolog(LOG_ERR, "fork() failed: %s\n", strerror(errno));
+			slave_shutdown();
+			exit(1);
 		case 0:
 			/* chroot to the drop priv user home directory */
 			if (drop_privs(pw->pw_dir, pw) < 0) {
