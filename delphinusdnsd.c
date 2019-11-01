@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.74 2019/10/31 16:34:35 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.75 2019/11/01 19:46:56 pjp Exp $
  */
 
 
@@ -97,6 +97,7 @@
 
 extern void 	add_rrlimit(int, u_int16_t *, int, char *);
 extern void 	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *);
+extern void	replicantloop(ddDB *, struct imsgbuf *);
 extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
 extern int 	check_ent(char *, int);
 extern int 	check_rrlimit(int, u_int16_t *, int, char *);
@@ -166,6 +167,7 @@ extern int 	notifysource(struct question *, struct sockaddr_storage *);
 struct question		*convert_question(struct parsequestion *);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, void *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
+int 			drop_privs(char *, struct passwd *);
 struct rbtree * 	get_soa(ddDB *, struct question *);
 struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
 void			mainloop(struct cfg *, struct imsgbuf **);
@@ -250,6 +252,7 @@ extern int ratelimit_packets_per_second;
 extern int whitelist;
 extern int tsig;
 extern int dnssec;
+extern int raxfrflag;
 
 static int reload = 0;
 static int mshutdown = 0;
@@ -887,24 +890,18 @@ main(int argc, char *argv[], char *environ[])
 				
 	} /* if logging.bind */
 
-	/* chroot to the drop priv user home directory */
-	if (chroot(pw->pw_dir) < 0) {
-		dolog(LOG_INFO, "chroot: %s\n", strerror(errno));
-		slave_shutdown();
-		exit(1);
-	}
-
-	if (chdir("/") < 0) {
-		dolog(LOG_INFO, "chdir: %s\n", strerror(errno));
-		slave_shutdown();
-		exit(1);
-	}
-
 #if __OpenBSD__
-	if (pledge("stdio inet proc id sendfd recvfd unveil", NULL) < 0) {
-		perror("pledge");
+	if (unveil(DELPHINUS_RZONE_PATH, "rwc")  < 0) {
+		perror("unveil");
+		slave_shutdown();
 		exit(1);
 	}
+	if (unveil(pw->pw_dir, "wc") < 0) {
+		perror("unveil");
+		slave_shutdown();
+		exit(1);
+	}
+
 #endif
 
 	/*
@@ -916,48 +913,6 @@ main(int argc, char *argv[], char *environ[])
 	signal(SIGTERM, slave_signal);
 	signal(SIGINT, slave_signal);
 	signal(SIGQUIT, slave_signal);
-
-	/*
-	 * I open the log again after the chroot just in case I can't
-	 * reach the old /dev/log anymore.
- 	 */
-
-	closelog();
-	openlog(__progname, LOG_PID | LOG_NDELAY, LOG_DAEMON);
-
-	/* set groups */
-
-	if (setgroups(1, &pw->pw_gid) < 0) {
-		dolog(LOG_INFO, "setgroups: %s\n", strerror(errno));
-		slave_shutdown();
-		exit(1);
-	}
-
-#if defined __OpenBSD__ || defined __FreeBSD__
-	if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) < 0) {
-		dolog(LOG_INFO, "setresgid: %s\n", strerror(errno));
-		slave_shutdown();
-		exit(1);
-	}
-
-	if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) < 0) {
-		dolog(LOG_INFO, "setresuid: %s\n", strerror(errno));
-		slave_shutdown();
-		exit(1);
-	}
-
-#else
-	if (setgid(pw->pw_gid) < 0) {
-		dolog(LOG_INFO, "setgid: %s\n", strerror(errno));
-		slave_shutdown();
-		exit(1);
-	}
-	if (setuid(pw->pw_uid) < 0) {
-		dolog(LOG_INFO, "setuid: %s\n", strerror(errno));
-		slave_shutdown();
-		exit(1);
-	}
-#endif
 
 	/* 
 	 * start our axfr process 
@@ -971,6 +926,19 @@ main(int argc, char *argv[], char *environ[])
 		}
 		switch (pid = fork()) {
 		case 0:
+			/* chroot to the drop priv user home directory */
+			if (drop_privs(pw->pw_dir, pw) < 0) {
+				dolog(LOG_INFO, "axfr dropping privileges\n", strerror(errno));
+				slave_shutdown();
+				exit(1);
+			}
+#if __OpenBSD__
+			if (pledge("stdio inet proc id sendfd recvfd unveil", NULL) < 0) {
+				perror("pledge");
+				exit(1);
+			}
+#endif
+
 			/* close descriptors that we don't need */
 			for (j = 0; j < i; j++) {
 				close(tcp[j]);
@@ -979,9 +947,7 @@ main(int argc, char *argv[], char *environ[])
 					close(uafd[j]);
 			}
 
-#if !defined __APPLE__
 			setproctitle("AXFR engine on port %d", axfrport);
-#endif
 
 			/* don't need master here */
 			close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
@@ -1005,6 +971,86 @@ main(int argc, char *argv[], char *environ[])
 		}
 	
 	} /* axfrport */
+
+	if (raxfrflag) {
+
+		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_RAXFR].imsg_fds[0]) < 0) {
+			dolog(LOG_INFO, "socketpair() failed\n");
+			slave_shutdown();
+			exit(1);
+		}
+
+		switch (pid = fork()) {
+		case -1:
+			dolog(LOG_ERR, "fork() failed: %s\n", strerror(errno));
+			slave_shutdown();
+			exit(1);
+		case 0:
+			/* chroot to the drop priv user home directory */
+			if (drop_privs(DELPHINUS_RZONE_PATH, pw) < 0) {
+				dolog(LOG_INFO, "raxfr dropping privileges failed", strerror(errno));
+				slave_shutdown();
+				exit(1);
+			}
+
+#if __OpenBSD__
+			if (pledge("stdio inet proc id sendfd recvfd unveil cpath wpath rpath", NULL) < 0) {
+				perror("pledge");
+				slave_shutdown();
+				exit(1);
+			}
+#endif
+
+			/* close descriptors that we don't need */
+			for (j = 0; j < i; j++) {
+				close(tcp[j]);
+				close(udp[j]);
+			}
+
+			setproctitle("Replicant engine");
+
+			/* don't need master here */
+#if 0
+			close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
+#endif
+			/* close any axfr's */
+			close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[0]);
+			/* close the replicant parent */
+			close(cfg->my_imsg[MY_IMSG_RAXFR].imsg_fds[1]);
+			imsg_init(parent_ibuf[MY_IMSG_RAXFR], cfg->my_imsg[MY_IMSG_RAXFR].imsg_fds[0]);
+
+			replicantloop(db, parent_ibuf[MY_IMSG_RAXFR]);
+
+			/* NOTREACHED */
+			exit(1);
+
+		default:
+
+			close(cfg->my_imsg[MY_IMSG_RAXFR].imsg_fds[0]);
+			imsg_init(child_ibuf[MY_IMSG_RAXFR], cfg->my_imsg[MY_IMSG_RAXFR].imsg_fds[1]);
+		
+			break;
+		}
+
+	} /* raxfrflag */
+
+	/* the rest of the daemon goes on in TCP and UDP loops */
+	if (drop_privs(pw->pw_dir, pw) < 0) {
+		dolog(LOG_INFO, "dropping privileges failed\n");
+		slave_shutdown();
+		exit(1);
+	}
+#if __OpenBSD__
+	if (unveil(NULL, NULL) < 0) {
+		dolog(LOG_INFO, "unveil locking failed: %s\n", strerror(errno));
+		slave_shutdown();
+		exit(1);
+	}
+	if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
+		perror("pledge");
+		exit(1);
+	}
+#endif
 
 	/* what follows is a bit mangled code, we set up nflag + 1 amount of
 	 * server instances (1 per cpu?) and if we're recursive we also set up
@@ -1594,10 +1640,6 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	}
 
 #if __OpenBSD__
-	if (unveil(NULL, NULL) < 0) {
-		perror("unveil");
-		exit(1);
-	}
 	if (pledge("stdio inet sendfd recvfd", NULL) < 0) {
 		perror("pledge");
 		exit(1);
@@ -2519,12 +2561,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 		break;
 	}
 	
-	/* pjp */
 #if __OpenBSD__
-	if (unveil(NULL, NULL) < 0) {
-		perror("unveil");
-		exit(1);
-	}
 	if (pledge("stdio inet sendfd recvfd", NULL) < 0) {
 		perror("pledge");
 		exit(1);
@@ -3499,60 +3536,15 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 		exit(1);
 	}
 
-	/* chroot to the drop priv user home directory */
-	if (chroot(pw->pw_dir) < 0) {
-		perror("chroot");
+	if (drop_privs(pw->pw_dir, pw) < 0) {
+		dolog(LOG_INFO, "dropping privileges failed in unix socket\n");
 		slave_shutdown();
 		exit(1);
 	}
-
-	if (chdir("/") < 0) {
-		perror("chdir");
-		slave_shutdown();
-		exit(1);
-	}
-
-	if (setgroups(1, &pw->pw_gid) < 0) {
-		perror("setgroups");
-		slave_shutdown();
-		exit(1);
-	}
-
-#if defined __OpenBSD__ || defined __FreeBSD__
-	if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) < 0) {
-		perror("setresgid");
-		slave_shutdown();
-		exit(1);
-	}
-
-	if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) < 0) {
-		perror("setresuid");
-		slave_shutdown();
-		exit(1);
-	}
-
-#else
-	if (setgid(pw->pw_gid) < 0) {
-		perror("setgid");
-		slave_shutdown();
-		exit(1);
-	}
-	if (setuid(pw->pw_uid) < 0) {
-		perror("setuid");
-		slave_shutdown();
-		exit(1);
-	}
-#endif
 
 	listen(so, 5);
 
 #if __OpenBSD__
-	if (unveil(NULL, NULL) < 0) {
-		perror("unveil");
-		slave_shutdown();
-		exit(1);
-	}
-
 	if (pledge("stdio rpath wpath cpath unix proc", NULL) < 0) {
 		perror("pledge");
 		slave_shutdown();
@@ -3613,4 +3605,55 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	} /* for (;;) */
 	
 	/* NOTREACHED */
+}
+
+int
+drop_privs(char *chrootpath, struct passwd *pw)
+{
+	/* chroot to the drop priv user home directory */
+	if (chroot(chrootpath) < 0) {
+		dolog(LOG_INFO, "chroot: %s\n", strerror(errno));
+		return -1;
+	}
+
+	if (unveil("/", "r") < 0) {
+		dolog(LOG_INFO, "unveil: %s\n", strerror(errno));
+		return -1;
+	}
+
+	if (chdir("/") < 0) {
+		dolog(LOG_INFO, "chdir: %s\n", strerror(errno));
+		return -1;
+	}
+
+	/* set groups */
+
+	if (setgroups(1, &pw->pw_gid) < 0) {
+		dolog(LOG_INFO, "setgroups: %s\n", strerror(errno));
+		return -1;
+	}
+
+#if defined __OpenBSD__ || defined __FreeBSD__
+	if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) < 0) {
+		dolog(LOG_INFO, "setresgid: %s\n", strerror(errno));
+		return -1;
+	}
+
+	if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) < 0) {
+		dolog(LOG_INFO, "setresuid: %s\n", strerror(errno));
+		return -1;
+	}
+
+#else
+	if (setgid(pw->pw_gid) < 0) {
+		dolog(LOG_INFO, "setgid: %s\n", strerror(errno));
+		return -1;
+	}
+	if (setuid(pw->pw_uid) < 0) {
+		dolog(LOG_INFO, "setuid: %s\n", strerror(errno));
+		return -1;
+	}
+#endif
+
+	return 0;
 }

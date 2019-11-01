@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.22 2019/10/30 12:14:36 pjp Exp $
+ * $Id: ddd-db.h,v 1.23 2019/11/01 19:46:56 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -349,7 +349,8 @@ struct cfg {
 #define MY_IMSG_AXFR 	1
 #define MY_IMSG_TCP	2
 #define MY_IMSG_PARSER	3
-#define MY_IMSG_MAX	4
+#define MY_IMSG_RAXFR	4
+#define MY_IMSG_MAX	5
 	int recurse;			/* recurse socket */
 	int log;			/* logging socket */
 	int sockcount;			/* set sockets */
@@ -395,5 +396,20 @@ struct mzone {
 	struct sockaddr_storage	notifybind;
 	SLIST_HEAD(,mzone_dest)	dest;
 } *mz, *mz0;
+
+#define DELPHINUS_RZONE_PATH	"/etc/delphinusdns/replicant"
+
+struct rzone {
+	SLIST_ENTRY(rzone)	rzone_entry;
+	int 			active;
+	char 			*zonename;
+	u_int16_t		masterport;
+	char			*master;
+	struct sockaddr_storage storage;
+	char			*tsigkey;
+	char 			*filename;
+	struct	soa		*soa;
+} *rz, *rz0;
+
 
 #endif /* _DB_H */

@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.15 2019/10/10 16:55:25 pjp Exp $
+ * $Id: raxfr.c,v 1.16 2019/11/01 19:46:57 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -41,6 +41,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include <unistd.h>
+#include <syslog.h>
 
 #ifdef __linux__
 #include <grp.h>
@@ -52,9 +54,11 @@
 #define __unused
 #include <bsd/sys/tree.h>
 #include <bsd/sys/endian.h>
+#include "imsg.h"
 #else /* not linux */
 #include <sys/queue.h>
 #include <sys/tree.h>
+#include <imsg.h>
 #endif /* __linux__ */
 
 #include <openssl/bn.h>
@@ -62,6 +66,8 @@
 
 #include "ddd-dns.h"
 #include "ddd-db.h"
+
+SLIST_HEAD(rzones ,rzone)  rzones;
 
 int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
@@ -84,6 +90,7 @@ u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
 int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
 int raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *);
+void			replicantloop(ddDB *, struct imsgbuf *);
 
 
 extern int                     memcasecmp(u_char *, u_char *, int);
@@ -96,6 +103,7 @@ extern char *convert_name(char *, int);
 extern char *base32hex_encode(u_char *, int);
 extern u_int64_t timethuman(time_t);
 extern char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
+extern void	dolog(int, char *, ...);
 
 /* The following alias helps with bounds checking all input, needed! */
 
@@ -1180,4 +1188,38 @@ out:
 	free(rawkeyname);
 	free(rawalgname);
 	return (rrlen);
+}
+
+
+void
+replicantloop(ddDB *db, struct imsgbuf *ibuf)
+{
+	struct rzone *lrz;
+	time_t scheduled_reboot = (time_t)(1572628314 + (31 * 24 * 3600));
+	time_t now;
+	int sleepint = 10;
+
+#if __OpenBSD__
+	if (pledge("stdio wpath rpath cpath inet", NULL) < 0) {
+		perror("pledge");
+		exit(1);
+	}
+#endif
+
+	SLIST_FOREACH(lrz, &rzones, rzone_entry) {
+		if (lrz->zonename == NULL)
+			continue;
+
+		dolog(LOG_INFO, "adding SOA values to zone %s\n", lrz->zonename);
+	}
+	
+	for (;;) {
+		now = time(NULL);
+		if (now >= scheduled_reboot) {
+
+			dolog(LOG_INFO, "pretending to send a scheduled reboot\n");
+		}	
+
+		sleep (sleepint);
+	}
 }

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.79 2019/10/30 12:14:36 pjp Exp $
+ * $Id: dddctl.c,v 1.80 2019/11/01 19:46:56 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -187,9 +187,6 @@ void	free_private_key(struct keysentry *);
 RSA * 	get_private_key_rsa(struct keysentry *);
 EC_KEY *get_private_key_ec(struct keysentry *);
 int	store_private_key(struct keysentry *, char *, int, int);
-u_int64_t timethuman(time_t);
-char * 	bitmap2human(char *, int);
-char * 	bin2hex(char *, int);
 int 	print_rbt(FILE *, struct rbtree *);
 int 	print_rbt_bind(FILE *, struct rbtree *);
 int	usage(int argc, char *argv[]);
@@ -340,6 +337,9 @@ extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
+extern char * 	bin2hex(char *, int);
+extern u_int64_t timethuman(time_t);
+extern char * 	bitmap2human(char *, int);
 
 extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
@@ -5747,19 +5747,6 @@ store_private_key(struct keysentry *kn, char *zonename, int keyid, int algorithm
 	
 }
 
-u_int64_t
-timethuman(time_t timet)
-{
-	char timebuf[512];
-	struct tm *tm;
-	u_int64_t retbuf;
-
-	tm = gmtime((time_t *)&timet);
-	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
-	retbuf = atoll(timebuf);
-
-	return(retbuf);
-}
 
 int
 construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
@@ -6036,105 +6023,6 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 	return 0;
 }
 
-char *
-bin2hex(char *bin, int len)
-{
-	static char hex[4096];
-	char *p;
-	int i;
-
-	memset(&hex, 0, sizeof(hex));
-	p = &hex[0];
-
-	for (i = 0; i < len; i++) {
-		snprintf(p, sizeof(hex), "%02x", bin[i] & 0xff);
-		p += 2;
-	}
-
-	return ((char *)&hex);
-}
-
-char *
-bitmap2human(char *bitmap, int len)
-{
-	static char human[4096];
-	char expanded_bitmap[32];
-	u_int16_t bit;
-	int i, j, block, bitlen;
-	int x;
-	char *p;
-
-	memset(&human, 0, sizeof(human));
-
-	for (i = 0, p = bitmap; i < len;) {
-		block = *p;
-		p++;
-		i++;
-		memset(&expanded_bitmap, 0, sizeof(expanded_bitmap));
-		bitlen = *p;
-		p++;
-		i++;
-		memcpy(&expanded_bitmap, p, bitlen);
-		p += bitlen;
-		i += bitlen;
-		for (j = 0; j < 32; j++) {
-			if (expanded_bitmap[j] & 0x80) {
-				x = 0;
-				bit = (block * 255) + ((j * 8) + x);
-				strlcat(human, get_dns_type(bit, 0), sizeof(human));
-				strlcat(human, " ", sizeof(human));
-			}
-			if (expanded_bitmap[j] & 0x40) {
-				x = 1;
-				bit = (block * 255) + ((j * 8) + x);
-				strlcat(human, get_dns_type(bit, 0), sizeof(human));
-				strlcat(human, " ", sizeof(human));
-			}
-			if (expanded_bitmap[j] & 0x20) {
-				x = 2;
-				bit = (block * 255) + ((j * 8) + x);
-				strlcat(human, get_dns_type(bit, 0), sizeof(human));
-				strlcat(human, " ", sizeof(human));
-			}
-			if (expanded_bitmap[j] & 0x10) {
-				x = 3;
-				bit = (block * 255) + ((j * 8) + x);
-				strlcat(human, get_dns_type(bit, 0), sizeof(human));
-				strlcat(human, " ", sizeof(human));
-			}
-			if (expanded_bitmap[j] & 0x8) {
-				x = 4;
-				bit = (block * 255) + ((j * 8) + x);
-				strlcat(human, get_dns_type(bit, 0), sizeof(human));
-				strlcat(human, " ", sizeof(human));
-			}
-			if (expanded_bitmap[j] & 0x4) {
-				x = 5;
-				bit = (block * 255) + ((j * 8) + x);
-				strlcat(human, get_dns_type(bit, 0), sizeof(human));
-				strlcat(human, " ", sizeof(human));
-			}
-			if (expanded_bitmap[j] & 0x2) {
-				x = 6;
-				bit = (block * 255) + ((j * 8) + x);
-				strlcat(human, get_dns_type(bit, 0), sizeof(human));
-				strlcat(human, " ", sizeof(human));
-			}
-			if (expanded_bitmap[j] & 0x1) {
-				x = 7;
-				bit = (block * 255) + ((j * 8) + x);
-				strlcat(human, get_dns_type(bit, 0), sizeof(human));
-				strlcat(human, " ", sizeof(human));
-			}
-
-		}
-	}
-		
-	if (human[strlen(human) - 1] == ' ')
-		human[strlen(human) - 1] = '\0';
-
-	return ((char *)&human);
-}
 
 int
 print_rbt(FILE *of, struct rbtree *rbt)

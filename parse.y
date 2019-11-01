@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.76 2019/10/29 09:19:32 pjp Exp $
+ * $Id: parse.y,v 1.77 2019/11/01 19:46:57 pjp Exp $
  */
 
 %{
@@ -134,17 +134,6 @@ static struct file {
 } *file, *topfile, *rzonefile;
 
 SLIST_HEAD(rzones, rzone)	rzones = SLIST_HEAD_INITIALIZER(rzones);
-struct rzone {
-	SLIST_ENTRY(rzone)	rzone_entry;
-	int 			active;
-	char 			*zonename;
-	u_int16_t		masterport;
-	char			*master;
-	struct sockaddr_storage storage;
-	char			*tsigkey;
-	char 			*filename;
-} *rz, *rz0;
-
 SLIST_HEAD(mzones ,mzone)	mzones = SLIST_HEAD_INITIALIZER(mzones);
 
 #define STATE_IP 1
@@ -197,6 +186,7 @@ struct logging logging;
 int axfrport = 0;
 time_t time_changed;
 int dnssec = 0;
+int raxfrflag = 0;
 
 char 		*check_rr(char *, char *, int, int *);
 int 		fill_a(char *, char *, int, char *);
@@ -652,6 +642,7 @@ rzone:
 		}
 
 		(void)add_rzone();
+		raxfrflag = 1;
 	}
 	;
 
