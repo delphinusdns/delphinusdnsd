@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.17 2019/11/02 17:24:27 pjp Exp $
+ * $Id: raxfr.c,v 1.18 2019/11/02 18:32:24 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -34,6 +34,7 @@
 #include <sys/socket.h>
 #include <sys/queue.h>
 #include <sys/uio.h>
+#include <sys/stat.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -1405,6 +1406,8 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 								schedule_retry(lrz->zonename, now + lrz->soa.retry);
 								goto out;
 							}
+
+							umask(022);
 								
 							f = fopen(p, "w");
 							if (f == NULL) {
@@ -1413,7 +1416,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 								goto out;
 							}
 
-							fprintf(f, "; This is a REPLICANT file for zone %s gotten on %lu\n\n", lrz->zonename, now);
+							fprintf(f, "; This is a REPLICANT file for zone %s gotten on %lld\n\n", lrz->zonename, now);
 							
 							if (do_raxfr(f, serial, lrz) < 0) {
 								dolog(LOG_INFO, "do_raxfr failed\n");
@@ -1487,6 +1490,8 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 								schedule_retry(lrz->zonename, now + lrz->soa.retry);
 								goto out;
 							}
+
+							umask(022);
 								
 							f = fopen(p, "w");
 							if (f == NULL) {
@@ -1495,7 +1500,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 								goto out;
 							}
 
-							fprintf(f, "; This is a REPLICANT file for zone %s gotten on %lu\n\n", lrz->zonename, now);
+							fprintf(f, "; This is a REPLICANT file for zone %s gotten on %lld\n\n", lrz->zonename, now);
 							
 							if (do_raxfr(f, serial, lrz) < 0) {
 								dolog(LOG_INFO, "do_raxfr failed\n");
