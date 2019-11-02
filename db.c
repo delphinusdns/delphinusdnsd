@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.13 2019/06/06 14:56:08 pjp Exp $
+ * $Id: db.c,v 1.14 2019/11/02 17:24:27 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -329,7 +329,7 @@ add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata)
 struct rrset *
 find_rr(struct rbtree *rbt, u_int16_t rrtype)
 {
-	struct rrset *rp, *rp0;
+	struct rrset *rp = NULL, *rp0 = NULL;
 
 #ifdef __linux__
 	TAILQ_FOREACH(rp, &rbt->rrset_head, entries) {

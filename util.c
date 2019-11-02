@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.42 2019/11/01 19:46:57 pjp Exp $
+ * $Id: util.c,v 1.43 2019/11/02 17:24:27 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -103,6 +103,12 @@ int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 char * 	bin2hex(char *, int);
 u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
+int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *);
+
+static int segment;
+static int bytes_received, answers;
+static int additionalcount = 0;
+
 
 /* externs */
 
@@ -119,6 +125,28 @@ extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, voi
 extern int display_rr(struct rrset *rrset);
 extern int 	check_ent(char *, int);
 extern int     find_tsig_key(char *, int, char *, int);
+extern int      mybase64_decode(char const *, u_char *, size_t);
+
+extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
+extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
+extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
+extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *);
 
 
 /* internals */
@@ -169,6 +197,28 @@ static struct rrtab myrrtab[] =  {
  { "sshfp", 	DNS_TYPE_SSHFP,		DNS_TYPE_SSHFP },
  { "tlsa", 	DNS_TYPE_TLSA,		DNS_TYPE_TLSA },
  { "txt",       DNS_TYPE_TXT,		DNS_TYPE_TXT },
+};
+
+
+
+static struct raxfr_logic supported[] = {
+	{ DNS_TYPE_A, 0, raxfr_a },
+	{ DNS_TYPE_NS, 0, raxfr_ns },
+	{ DNS_TYPE_MX, 0, raxfr_mx },
+	{ DNS_TYPE_PTR, 0, raxfr_ptr },
+	{ DNS_TYPE_AAAA, 0, raxfr_aaaa },
+	{ DNS_TYPE_CNAME, 0, raxfr_cname },
+	{ DNS_TYPE_TXT, 0, raxfr_txt },
+	{ DNS_TYPE_DNSKEY, 1, raxfr_dnskey },
+	{ DNS_TYPE_RRSIG, 1, raxfr_rrsig },
+	{ DNS_TYPE_NSEC3PARAM, 1, raxfr_nsec3param },
+	{ DNS_TYPE_NSEC3, 1, raxfr_nsec3 },
+	{ DNS_TYPE_DS, 1, raxfr_ds },
+	{ DNS_TYPE_SSHFP, 0, raxfr_sshfp },
+	{ DNS_TYPE_TLSA, 0, raxfr_tlsa },
+	{ DNS_TYPE_SRV, 0, raxfr_srv },
+	{ DNS_TYPE_NAPTR, 0, raxfr_naptr },
+	{ 0, 0, NULL }
 };
 
 /*
@@ -365,7 +415,7 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 }
 
 /* 
- * Lookup_zone: wrapper for lookup_zone() et al.
+ * Lookup_zone: wrapper for lookup_zone() et al. type must be htons()'ed!
  */
 
 struct rbtree *
@@ -1592,3 +1642,401 @@ bitmap2human(char *bitmap, int len)
 
 	return ((char *)&human);
 }
+
+
+int
+lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass)
+{
+	char query[512];
+	char pseudo_packet[512];
+	char shabuf[32];
+	char *reply;
+	struct timeval tv, savetv;
+	struct question *q;
+	struct whole_header {
+		u_int16_t len;
+		struct dns_header dh;
+	} *wh, *rwh;
+	struct raxfr_logic *sr;
+	
+	u_char *p, *name, *keyname;
+
+	u_char *end, *estart;
+	int len, totallen, zonelen, rrlen, rrtype;
+	int soacount = 0;
+	int elen = 0;
+	int segmentcount = 0;
+	int count = 0;
+	u_int32_t *ttl;
+	u_int16_t *class, *type, rdlen, *plen;
+	u_int16_t tcplen;
+	
+	HMAC_CTX *ctx;
+	time_t now = 0;
+	socklen_t sizetv;
+	
+	if (!(format & TCP_FORMAT))
+		return -1;
+
+	memset(&query, 0, sizeof(query));
+	
+	wh = (struct whole_header *)&query[0];
+	
+	wh->dh.id = htons(arc4random() & 0xffff);
+	wh->dh.query = 0;
+	wh->dh.question = htons(1);
+	wh->dh.answer = 0;
+	wh->dh.nsrr = 0;
+	wh->dh.additional = htons(0);
+
+
+	SET_DNS_QUERY(&wh->dh);
+	SET_DNS_RECURSION(&wh->dh);
+	HTONS(wh->dh.query);
+
+	totallen = sizeof(struct whole_header);
+
+	name = dns_label(zonename, &len);
+	if (name == NULL) {
+		return -1;
+	}
+
+	zonelen = len;
+	
+	p = (char *)&wh[1];	
+	
+	memcpy(p, name, len);
+	totallen += len;
+
+	type = (u_int16_t *)&query[totallen];
+	*type = htons(DNS_TYPE_AXFR);
+	totallen += sizeof(u_int16_t);
+	
+	class = (u_int16_t *)&query[totallen];
+	*class = htons(DNS_CLASS_IN);
+	totallen += sizeof(u_int16_t);
+
+	/* we have a key, attach a TSIG payload */
+	if (tsigkey) {
+
+		if ((len = mybase64_decode(tsigpass, (u_char *)&pseudo_packet, sizeof(pseudo_packet))) < 0) {
+			fprintf(stderr, "bad base64 password\n");
+			return -1;
+		}
+		
+		ctx = HMAC_CTX_new();
+		HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
+		HMAC_Update(ctx, &query[2], totallen - 2);
+
+		now = time(NULL);
+		if (tsig_pseudoheader(tsigkey, 300, now, ctx) < 0) {
+			fprintf(stderr, "tsig_pseudoheader failed\n");
+			return -1;
+		}
+
+		HMAC_Final(ctx, shabuf, &len);
+
+		if (len != 32) {
+			fprintf(stderr, "not expected len != 32\n");
+			return -1;
+		}
+
+#if defined __linux__ || defined __FreeBSD__
+		HMAC_CTX_free(ctx);
+#else
+		HMAC_cleanup(ctx);
+#endif
+
+		keyname = dns_label(tsigkey, &len);
+		if (keyname == NULL) {
+			return -1;
+		}
+
+		memcpy(&query[totallen], keyname, len);
+		totallen += len;
+		
+		type = (u_int16_t *)&query[totallen];
+		*type = htons(DNS_TYPE_TSIG);
+		totallen += 2;
+
+		class = (u_int16_t *)&query[totallen];
+		*class = htons(DNS_CLASS_ANY);
+		totallen += 2;
+
+		ttl = (u_int32_t *)&query[totallen];
+		*ttl = htonl(0);
+		totallen += 4;
+
+		keyname = dns_label("hmac-sha256", &len);
+		if (keyname == NULL) {
+			return -1;
+		}
+
+		/* rdlen */
+		type = (u_int16_t *)&query[totallen];
+		*type = htons(len + 2 + 4 + 2 + 2 + 32 + 2 + 2 + 2);
+		totallen += 2;
+
+		/* algorithm name */
+		memcpy(&query[totallen], keyname, len);
+		totallen += len;
+
+		/* time 1 */
+		type = (u_int16_t *)&query[totallen];	
+		*type = htons((now >> 32) & 0xffff);
+		totallen += 2;
+
+		/* time 2 */
+		ttl = (u_int32_t *)&query[totallen];
+		*ttl = htonl((now & 0xffffffff));
+		totallen += 4;
+
+		/* fudge */
+		type = (u_int16_t *)&query[totallen];	
+		*type = htons(300);
+		totallen += 2;
+	
+		/* hmac size */
+		type = (u_int16_t *)&query[totallen];	
+		*type = htons(sizeof(shabuf));
+		totallen += 2;
+
+		/* hmac */
+		memcpy(&query[totallen], shabuf, sizeof(shabuf));
+		totallen += sizeof(shabuf);
+
+		/* original id */
+		type = (u_int16_t *)&query[totallen];	
+		*type = wh->dh.id;
+		totallen += 2;
+
+		/* error */
+		type = (u_int16_t *)&query[totallen];	
+		*type = 0;
+		totallen += 2;
+		
+		/* other len */
+		type = (u_int16_t *)&query[totallen];	
+		*type = 0;
+		totallen += 2;
+
+		wh->dh.additional = htons(1);
+	}
+	
+
+	wh->len = htons(totallen - 2);
+
+	if (send(so, query, totallen, 0) < 0) {
+		perror("send");
+		return -1;
+	}
+
+	/* catch reply */
+
+	reply = calloc(1, 0xffff + 2);
+	if (reply == NULL) {
+		perror("calloc");
+		return -1;
+	}
+
+	if (tsigkey) {
+		uint16_t maclen;
+	
+		if ((len = mybase64_decode(tsigpass, (u_char *)&pseudo_packet, sizeof(pseudo_packet))) < 0) {
+			fprintf(stderr, "bad base64 password\n");
+			return -1;
+		}
+		
+		ctx = HMAC_CTX_new();
+		HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
+		maclen = htons(32);
+		HMAC_Update(ctx, (char *)&maclen, 2);
+		HMAC_Update(ctx, shabuf, sizeof(shabuf));
+	} else
+		ctx = NULL;
+
+	q = build_question((char *)&wh->dh, wh->len, wh->dh.additional, (tsigkey == NULL) ? NULL : shabuf);
+	if (q == NULL) {
+		fprintf(stderr, "failed to build_question\n");
+		return -1;
+	}
+
+	for (;;) {
+		if (getsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &savetv, &sizetv) < 0) {	
+			perror("getsockopt");
+		}
+
+		tv.tv_sec = 1;
+		tv.tv_usec = 0;
+
+		if (setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+			perror("setsockopt");
+		}
+		len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL);
+		if (len <= 0)	
+			break;
+
+		plen = (u_int16_t *)reply;
+		tcplen = ntohs(*plen) + 2;
+		
+		if (setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &savetv, sizeof(savetv)) < 0) {
+			perror("setsockopt");
+		}
+
+		len = recv(so, reply, tcplen, MSG_WAITALL);
+		if (len < 0) {
+			perror("recv");
+			return -1;
+		}
+		rwh = (struct whole_header *)&reply[0];
+		bytes_received += ntohs(rwh->len);
+
+		end = &reply[len];
+		len = rwh->len;
+
+		if (rwh->dh.id != wh->dh.id) {
+			fprintf(stderr, "DNS ID mismatch\n");
+			return -1;
+		}
+
+		if (!(htons(rwh->dh.query) & DNS_REPLY)) {
+			fprintf(stderr, "NOT a DNS reply\n");
+			return -1;
+		}
+		
+		if (ntohs(rwh->dh.answer) < 1) {	
+			fprintf(stderr, "NO ANSWER provided\n");
+			return -1;
+		}
+
+		segmentcount = ntohs(rwh->dh.answer);
+		if (tsigkey) {
+			segmentcount += ntohs(rwh->dh.additional);
+			additionalcount += ntohs(rwh->dh.additional);
+			rwh->dh.additional = 0;
+		} 
+		answers += segmentcount;
+
+			
+		if (memcmp(q->hdr->name, name, q->hdr->namelen) != 0) {
+			fprintf(stderr, "question name not for what we asked\n");
+			return -1;
+		}
+
+		if (q->hdr->qclass != htons(DNS_CLASS_IN) || q->hdr->qtype != htons(DNS_TYPE_AXFR)) {
+			fprintf(stderr, "wrong class or type\n");
+			return -1;
+		}
+		
+		p = (char *)&rwh[1];		
+		p += q->hdr->namelen;
+		p += sizeof(u_int16_t);	 	/* type */
+		p += sizeof(u_int16_t);		/* class */
+		/* end of question */
+
+		estart = (u_char *)&rwh->dh;
+
+		if (tsigkey) {
+			HMAC_Update(ctx, estart, (p - estart));
+		}
+
+		if (segment == 0 && (format & ZONE_FORMAT) && f != NULL) 
+			fprintf(f, "zone \"%s\" {\n", zonename);
+	
+		segment++;
+
+		for (count = 0; count < segmentcount; count++) {
+			char mac[32];
+			elen = 0;
+
+			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format, ctx)) < 0) {
+				fprintf(stderr, "not a SOA reply, or ERROR\n");
+				return -1;
+			}
+
+			if (tsigkey && (rrtype == DNS_TYPE_TSIG)) {
+				uint16_t maclen;
+
+				/* do tsig checks here */
+				if ((len = raxfr_tsig(f,p,estart,end,mysoa,rdlen,ctx, (char *)&mac)) < 0) {
+					fprintf(stderr, "error with TSIG record\n");
+					return -1;
+				}
+		
+				p = (estart + len);
+
+				if ((len = mybase64_decode(tsigpass, (u_char *)&pseudo_packet, sizeof(pseudo_packet))) < 0) {
+					fprintf(stderr, "bad base64 password\n");
+					return -1;
+				}
+
+			 	HMAC_CTX_reset(ctx);	
+				HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
+				maclen = htons(32);
+				HMAC_Update(ctx, (char *)&maclen, 2);
+				HMAC_Update(ctx, mac, 32);
+
+				if (soacount > 1)
+					goto out;
+			} else
+				p = (estart + rrlen);
+
+			if (rrtype == DNS_TYPE_SOA) {
+				if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen, ctx)) < 0) {
+					fprintf(stderr, "raxfr_soa failed\n");
+					return -1;
+				}
+				p = (estart + len);
+				soacount++;
+
+				/*
+				 * the envelopes are done because we have
+				 * two SOA's, continue here to catch the
+				 * TSIG.
+				 */
+				if (soacount > 1)
+					continue;
+			} else {
+				for (sr = supported; sr->rrtype != 0; sr++) {
+					if (rrtype == sr->rrtype) {
+						if ((len = (*sr->raxfr)(f, p, estart, end, mysoa, rdlen, ctx)) < 0) {
+							fprintf(stderr, "error with rrtype %d\n", sr->rrtype);
+							return -1;
+						}
+						p = (estart + len);
+						break;
+					}
+				}
+
+				if (sr->rrtype == 0) {
+					if (rrtype != DNS_TYPE_TSIG) {
+						fprintf(stderr, "unsupported RRTYPE %d\n", rrtype);
+						return -1;
+					} 
+				} 
+			}
+		}
+	}
+
+	if ((len = recv(so, reply, 0xffff, 0)) > 0) {	
+		fprintf(stderr, ";; WARN: received %d more bytes.\n", len);
+	}
+
+out:
+
+	if (tsigkey) {
+		HMAC_CTX_free(ctx);	
+	}
+
+	if (f != NULL) {
+		if ((format & ZONE_FORMAT))
+			fprintf(f, "}\n");
+	}
+
+	free_question(q);
+
+	return 0;
+
+}
+
+

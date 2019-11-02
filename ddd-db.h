@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.23 2019/11/01 19:46:56 pjp Exp $
+ * $Id: ddd-db.h,v 1.24 2019/11/02 17:24:27 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -35,6 +35,8 @@
 
 #include <sys/types.h>
 #include <limits.h>
+
+#include <openssl/hmac.h>
 
 #define CONFFILE "/etc/delphinusdns/delphinusdns.conf"
 #define DEFAULT_SOCKET 64
@@ -408,8 +410,13 @@ struct rzone {
 	struct sockaddr_storage storage;
 	char			*tsigkey;
 	char 			*filename;
-	struct	soa		*soa;
+	struct	soa		soa;
 } *rz, *rz0;
 
+struct raxfr_logic {
+	int rrtype;
+	int dnssec;
+	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+};
 
 #endif /* _DB_H */

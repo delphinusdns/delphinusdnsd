@@ -26,11 +26,14 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.16 2019/11/01 19:46:57 pjp Exp $
+ * $Id: raxfr.c,v 1.17 2019/11/02 17:24:27 pjp Exp $
  */
 
 #include <sys/types.h>
+#include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/queue.h>
+#include <sys/uio.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -38,6 +41,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
@@ -58,7 +62,11 @@
 #else /* not linux */
 #include <sys/queue.h>
 #include <sys/tree.h>
+#ifdef __FreeBSD__
+#include "imsg.h"
+#else
 #include <imsg.h>
+#endif /* __FreeBSD__ */
 #endif /* __linux__ */
 
 #include <openssl/bn.h>
@@ -67,7 +75,23 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
+
+#define MY_SOCK_TIMEOUT		-10
+
 SLIST_HEAD(rzones ,rzone)  rzones;
+LIST_HEAD(, myschedule)       myschedules = LIST_HEAD_INITIALIZER(myschedules);
+
+struct myschedule {
+	char zonename[DNS_MAXNAME + 1];
+	time_t when;
+	int action;
+#define SCHEDULE_ACTION_REBOOT	0x1
+#define SCHEDULE_ACTION_REFRESH 0x2
+#define SCHEDULE_ACTION_RETRY	0x3
+	LIST_ENTRY(myschedule)	myschedule_entry;
+} *sp0, *sp1, *spn;
+
+
 
 int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
@@ -90,8 +114,13 @@ u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
 int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
 int raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *);
-void			replicantloop(ddDB *, struct imsgbuf *);
-
+void			replicantloop(ddDB *, struct imsgbuf *, struct imsgbuf *);
+static void		schedule_refresh(char *, time_t);
+static void		schedule_retry(char *, time_t);
+static void		schedule_reboot(char *, time_t);
+static void		schedule_delete(struct myschedule *);
+int64_t get_remote_soa(struct rzone *rzone);
+int do_raxfr(FILE *f, int64_t serial, struct rzone *rzone);
 
 extern int                     memcasecmp(u_char *, u_char *, int);
 extern char * dns_label(char *, int *);
@@ -104,6 +133,13 @@ extern char *base32hex_encode(u_char *, int);
 extern u_int64_t timethuman(time_t);
 extern char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
 extern void	dolog(int, char *, ...);
+extern struct rbtree *  Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
+extern struct rbtree * find_rrset(ddDB *db, char *name, int len);               
+extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);    
+extern struct question         *build_question(char *, int, int, char *);
+extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *);
+extern int     find_tsig_key(char *, int, char *, int);
+
 
 /* The following alias helps with bounds checking all input, needed! */
 
@@ -115,6 +151,25 @@ extern void	dolog(int, char *, ...);
 		return -1;					\
 } while (0)
 
+static struct raxfr_logic supported[] = {
+	{ DNS_TYPE_A, 0, raxfr_a },
+	{ DNS_TYPE_NS, 0, raxfr_ns },
+	{ DNS_TYPE_MX, 0, raxfr_mx },
+	{ DNS_TYPE_PTR, 0, raxfr_ptr },
+	{ DNS_TYPE_AAAA, 0, raxfr_aaaa },
+	{ DNS_TYPE_CNAME, 0, raxfr_cname },
+	{ DNS_TYPE_TXT, 0, raxfr_txt },
+	{ DNS_TYPE_DNSKEY, 1, raxfr_dnskey },
+	{ DNS_TYPE_RRSIG, 1, raxfr_rrsig },
+	{ DNS_TYPE_NSEC3PARAM, 1, raxfr_nsec3param },
+	{ DNS_TYPE_NSEC3, 1, raxfr_nsec3 },
+	{ DNS_TYPE_DS, 1, raxfr_ds },
+	{ DNS_TYPE_SSHFP, 0, raxfr_sshfp },
+	{ DNS_TYPE_TLSA, 0, raxfr_tlsa },
+	{ DNS_TYPE_SRV, 0, raxfr_srv },
+	{ DNS_TYPE_NAPTR, 0, raxfr_naptr },
+	{ 0, 0, NULL }
+};
 
 
 int
@@ -1192,12 +1247,22 @@ out:
 
 
 void
-replicantloop(ddDB *db, struct imsgbuf *ibuf)
+replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 {
-	struct rzone *lrz;
-	time_t scheduled_reboot = (time_t)(1572628314 + (31 * 24 * 3600));
-	time_t now;
-	int sleepint = 10;
+	struct rzone *lrz, *lrz0;
+	char buf[PATH_MAX];
+	char *p, *q;
+	time_t now, lastnow;
+	int apexlen, sel, endspurt = 0;
+	int idata;
+	int64_t serial;
+	char *apex;
+	struct rbtree *rbt;
+	struct rrset *rrset;
+	struct rr *rrp;
+	struct timeval tv;
+
+	FILE *f = NULL;
 
 #if __OpenBSD__
 	if (pledge("stdio wpath rpath cpath inet", NULL) < 0) {
@@ -1206,20 +1271,692 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 	}
 #endif
 
-	SLIST_FOREACH(lrz, &rzones, rzone_entry) {
+	lastnow = time(NULL);
+
+	SLIST_FOREACH_SAFE(lrz, &rzones, rzone_entry, lrz0) {
 		if (lrz->zonename == NULL)
 			continue;
 
 		dolog(LOG_INFO, "adding SOA values to zone %s\n", lrz->zonename);
+		apex = dns_label(lrz->zonename, &apexlen);
+		if (apex == NULL) {
+			dolog(LOG_INFO, "dns_label failed\n");
+			continue;
+		}
+	
+		rbt = find_rrset(db, apex, apexlen);
+		if (rbt == NULL) {
+			dolog(LOG_INFO, "%s has no apex, removing zone from replicant engine\n", lrz->zonename);
+			SLIST_REMOVE(&rzones, lrz, rzone, rzone_entry);
+			continue;
+		}
+		
+		rrset = find_rr(rbt, DNS_TYPE_SOA);
+		if (rrset == NULL) {
+			dolog(LOG_INFO, "%s has no SOA, removing zone from replicant engine\n", lrz->zonename);
+			SLIST_REMOVE(&rzones, lrz, rzone, rzone_entry);
+			continue;
+		}
+		rrp = TAILQ_FIRST(&rrset->rr_head);
+		if (rrp == NULL) {
+			dolog(LOG_INFO, "SOA record corrupted for zone %s, removing zone from replicant engine\n", lrz->zonename);
+			SLIST_REMOVE(&rzones, lrz, rzone, rzone_entry);
+			continue;
+		}
+
+		lrz->soa.serial = ((struct soa *)rrp->rdata)->serial;
+		lrz->soa.refresh = ((struct soa *)rrp->rdata)->refresh;
+		lrz->soa.retry = ((struct soa *)rrp->rdata)->retry;
+		lrz->soa.expire = ((struct soa *)rrp->rdata)->expire;
+
+		dolog(LOG_INFO, "%s -> %u, %u, %u, %u\n", lrz->zonename, 
+			lrz->soa.serial, lrz->soa.refresh, lrz->soa.retry,
+			lrz->soa.expire);
+
+		now = time(NULL);
+		schedule_refresh(lrz->zonename, now + lrz->soa.refresh);
+		free(rbt);
+		free(apex);
 	}
 	
 	for (;;) {
+		if (endspurt) {
+			tv.tv_sec = 0;
+			tv.tv_usec = 5000;
+		} else {
+			tv.tv_sec = 10;
+			tv.tv_usec = 0;
+		}
+		
+		sel = select(0, NULL, NULL, NULL, &tv);
+		if (sel == -1) {	
+			dolog(LOG_INFO, "select error: %s\n", strerror(errno));
+			continue;
+		}
+
 		now = time(NULL);
-		if (now >= scheduled_reboot) {
 
-			dolog(LOG_INFO, "pretending to send a scheduled reboot\n");
-		}	
+		/* some time safety */
+		if (now < lastnow) {
+			/* we had time go backwards, this is bad */
+			dolog(LOG_ERR, "time went backwards!  rescheduling all schedules on refresh timeouts...\n");
 
-		sleep (sleepint);
+			/* blow away all schedules and redo them */
+			while (!LIST_EMPTY(&myschedules)) {
+				sp0 = LIST_FIRST(&myschedules);
+				LIST_REMOVE(sp0, myschedule_entry);
+				free(sp0);
+			}
+
+			SLIST_FOREACH(lrz, &rzones, rzone_entry) {
+				if (lrz->zonename == NULL)
+					continue;
+				schedule_refresh(lrz->zonename, now + lrz->soa.refresh);
+			}
+
+			lastnow = now;
+			continue;
+		}
+
+		lastnow = now;
+
+		LIST_FOREACH_SAFE(sp0, &myschedules, myschedule_entry, sp1) {
+			if (sp0->when <= now) {
+				/* we hit a timeout on refresh */
+				if (sp0->action == SCHEDULE_ACTION_REFRESH) {
+					SLIST_FOREACH(lrz, &rzones, rzone_entry) {
+						if (lrz->zonename == NULL)
+							continue;
+
+						if (strcmp(sp0->zonename, lrz->zonename) == 0)
+							break;
+					}
+
+					if (lrz != NULL) {
+						dolog(LOG_DEBUG, "zone %s is being refreshed now\n", sp0->zonename);
+						/* must delete before adding any more */
+						schedule_delete(sp0);
+						if ((serial = get_remote_soa(lrz)) == MY_SOCK_TIMEOUT) {
+							/* we didn't get a reply and our socket timed out */
+							schedule_retry(lrz->zonename, now + lrz->soa.retry);
+							/* schedule a retry and go on */
+						} else if (serial > lrz->soa.serial) {
+							/* initiate AXFR and update zone */
+							dolog(LOG_INFO, "new higher serial detected (%ld vs. %ld)\n", serial, lrz->soa.serial);
+
+							p = strrchr(lrz->filename, '/');
+							if (p == NULL) {
+								dolog(LOG_INFO, "can't determine temporary filename from %s\n", lrz->filename);
+								schedule_retry(lrz->zonename, now + lrz->soa.retry);
+								goto out;
+							}
+
+							p++;
+							q = p;
+							if (*p == '\0') {
+								dolog(LOG_INFO, "can't determine temporary filename from %s (2)\n", lrz->filename);
+								schedule_retry(lrz->zonename, now + lrz->soa.retry);
+								goto out;
+							}
+
+							snprintf(buf, sizeof(buf), "%s.XXXXXXXXXXXXXX", p);	
+							if ((p = mktemp(buf)) == NULL) {
+								dolog(LOG_INFO, "can't determine temporary filename from %s (3)\n", lrz->filename);
+								schedule_retry(lrz->zonename, now + lrz->soa.retry);
+								goto out;
+							}
+								
+							f = fopen(p, "w");
+							if (f == NULL) {
+								dolog(LOG_INFO, "can't create temporary filename for zone %s\n", lrz->zonename);
+								schedule_retry(lrz->zonename, now + lrz->soa.retry);
+								goto out;
+							}
+
+							fprintf(f, "; This is a REPLICANT file for zone %s gotten on %lu\n\n", lrz->zonename, now);
+							
+							if (do_raxfr(f, serial, lrz) < 0) {
+								dolog(LOG_INFO, "do_raxfr failed\n");
+								schedule_retry(lrz->zonename, now + lrz->soa.retry);
+								goto out;
+							}
+
+							fclose(f);
+
+							unlink(q);	
+							if (link(p, q) < 0) {
+								dolog(LOG_ERR, "can't link %s to %s\n", p, q);
+								schedule_retry(lrz->zonename, now + lrz->soa.retry);
+								goto out;
+							}
+
+							unlink(p);
+
+							/* schedule reboot */
+							schedule_reboot(lrz->zonename, now + 100);
+								/*
+								 * we've scheduled a reboot  and there may be more
+								 * AXFR's to do we only have a window of 100 seconds
+								 * so we select for 5000 microseconds only, so that
+								 * other tasks can still complete.
+								 */
+								endspurt = 1;
+						}
+					}
+				} else if (sp0->action == SCHEDULE_ACTION_RETRY) {
+					/* we hit a timeout on retry */
+
+					SLIST_FOREACH(lrz, &rzones, rzone_entry) {
+						if (lrz->zonename == NULL)
+							continue;
+
+						if (strcmp(sp0->zonename, lrz->zonename) == 0)
+							break;
+					}
+
+					if (lrz != NULL) {
+						dolog(LOG_INFO, "zone %s is being retried now\n", sp0->zonename);
+						schedule_delete(sp0);
+						if ((serial = get_remote_soa(lrz)) == MY_SOCK_TIMEOUT) {
+							/* we didn't get a reply and our socket timed out */
+							schedule_retry(lrz->zonename, now + lrz->soa.retry);
+							/* schedule a retry and go on */
+						} else if (serial > lrz->soa.serial) {
+							/* initiate AXFR and update zone */
+
+							dolog(LOG_INFO, "new higher serial detected (%ld vs. %ld)\n", serial, lrz->soa.serial);
+
+							p = strrchr(lrz->filename, '/');
+							if (p == NULL) {
+								dolog(LOG_INFO, "can't determine temporary filename from %s\n", lrz->filename);
+								schedule_retry(lrz->zonename, now + lrz->soa.retry);
+								goto out;
+							}
+
+							p++;
+							q = p;
+							if (*p == '\0') {
+								dolog(LOG_INFO, "can't determine temporary filename from %s (2)\n", lrz->filename);
+								schedule_retry(lrz->zonename, now + lrz->soa.retry);
+								goto out;
+							}
+
+							snprintf(buf, sizeof(buf), "%s.XXXXXXXXXXXXXX", p);	
+							if ((p = mktemp(buf)) == NULL) {
+								dolog(LOG_INFO, "can't determine temporary filename from %s (3)\n", lrz->filename);
+								schedule_retry(lrz->zonename, now + lrz->soa.retry);
+								goto out;
+							}
+								
+							f = fopen(p, "w");
+							if (f == NULL) {
+								dolog(LOG_INFO, "can't create temporary filename for zone %s\n", lrz->zonename);
+								schedule_retry(lrz->zonename, now + lrz->soa.retry);
+								goto out;
+							}
+
+							fprintf(f, "; This is a REPLICANT file for zone %s gotten on %lu\n\n", lrz->zonename, now);
+							
+							if (do_raxfr(f, serial, lrz) < 0) {
+								dolog(LOG_INFO, "do_raxfr failed\n");
+								schedule_retry(lrz->zonename, now + lrz->soa.retry);
+								goto out;
+							}
+
+							fclose(f);
+							
+							unlink(q);
+							if (link(p, q) < 0) {
+								dolog(LOG_ERR, "can't link %s to %s\n", p, q);
+								schedule_retry(lrz->zonename, now + lrz->soa.retry);
+								goto out;
+							}
+
+							unlink(p);
+							/* schedule reboot */
+							schedule_reboot(lrz->zonename, now + 100);
+						  /*
+						   * we've scheduled a reboot  and there may be more
+						   * AXFR's to do we only have a window of 100 seconds
+						   * so we select for 5000 microseconds only, so that
+						   * other tasks can still complete.
+					     */
+
+							endspurt = 1;
+					  }
+					}
+
+				} else if (sp0->action == SCHEDULE_ACTION_REBOOT) {
+					/* we hit a scheduling on rebooting, nothing can save you now! */
+					dolog(LOG_INFO, "I'm supposed to reboot now, REBOOT\n");
+
+					idata = 1;
+					imsg_compose(master_ibuf, IMSG_RELOAD_MESSAGE, 
+						0, 0, -1, &idata, sizeof(idata));
+					msgbuf_write(&master_ibuf->w);
+					exit(0);
+				}
+		
+			} /* when below now */
+out:	
+			continue;
+		} /* LIST_FOREACH schedules */
+	} /* for (;;) */
+
+	/* NOTREACHED */
+}
+
+static void
+schedule_refresh(char *zonename, time_t seconds)
+{
+	sp0 = calloc(1, sizeof(struct myschedule));
+	if (sp0 == NULL)
+		return;
+
+	strlcpy(sp0->zonename, zonename, sizeof(sp0->zonename));
+	sp0->when = seconds;
+	sp0->action = SCHEDULE_ACTION_REFRESH;
+
+	LIST_INSERT_HEAD(&myschedules, sp0, myschedule_entry);
+}
+
+static void
+schedule_retry(char *zonename, time_t seconds)
+{
+	sp0 = calloc(1, sizeof(struct myschedule));
+	if (sp0 == NULL)
+		return;
+
+	strlcpy(sp0->zonename, zonename, sizeof(sp0->zonename));
+	sp0->when = seconds;
+	sp0->action = SCHEDULE_ACTION_RETRY;
+
+	LIST_INSERT_HEAD(&myschedules, sp0, myschedule_entry);
+
+}
+
+static void
+schedule_reboot(char *zonename, time_t seconds)
+{
+	sp0 = calloc(1, sizeof(struct myschedule));
+	if (sp0 == NULL)
+		return;
+
+	strlcpy(sp0->zonename, zonename, sizeof(sp0->zonename));
+	sp0->when = seconds;
+	sp0->action = SCHEDULE_ACTION_REBOOT;
+
+	LIST_INSERT_HEAD(&myschedules, sp0, myschedule_entry);
+
+	dolog(LOG_INFO, "scheduling reboot at %lu\n", seconds);
+}
+
+static void
+schedule_delete(struct myschedule *sched)
+{
+	LIST_REMOVE(sched, myschedule_entry);
+	free(sched);
+}
+
+/*
+ * get the remote serial from the SOA, via TCP
+ */
+
+int64_t
+get_remote_soa(struct rzone *rzone)
+{
+	int so;
+	struct sockaddr_in sin;
+	struct sockaddr_in6 sin6;
+	struct sockaddr *sa;
+	struct soa mysoa;
+	socklen_t slen = sizeof(struct sockaddr_in);
+
+	int len, i, answers;
+	int numansw, numaddi, numauth;
+	int rrtype, soacount = 0;
+	u_int16_t rdlen;
+	char query[512];
+	char *reply;
+	struct raxfr_logic *sr;
+	struct question *q;
+	struct dns_optrr *optrr;
+	struct whole_header {
+		struct dns_header dh;
+	} *wh, *rwh;
+	
+	u_char *p, *name;
+
+	u_char *end, *estart;
+	int totallen, zonelen, rrlen;
+	int replysize = 0;
+	u_int16_t *class, *type, *tcpsize;
+	u_int16_t *plen;
+	u_int16_t tcplen;
+
+	FILE *f = NULL;
+	int format = 0;
+
+
+	if ((so = socket(rzone->storage.ss_family, SOCK_STREAM, 0)) < 0) {
+		dolog(LOG_INFO, "get_remote_soa: %s\n", strerror(errno));
+		return MY_SOCK_TIMEOUT;
 	}
+
+	if (rzone->storage.ss_family == AF_INET6) {
+		memset(&sin6, 0, sizeof(sin6));
+		sin6.sin6_family = AF_INET6;
+		sin6.sin6_port = htons(rzone->masterport);
+		memcpy(&sin6.sin6_addr, (void *)&((struct sockaddr_in6 *)(&rzone->storage))->sin6_addr, sizeof(struct in6_addr));
+		sin6.sin6_len = sizeof(struct sockaddr_in6);
+		sa = (struct sockaddr *)&sin6;
+		slen = sizeof(struct sockaddr_in6);
+	} else {
+		memset(&sin, 0, sizeof(sin));
+		sin.sin_family = AF_INET;
+		sin.sin_port = htons(rzone->masterport);
+		sin.sin_addr.s_addr = ((struct sockaddr_in *)(&rzone->storage))->sin_addr.s_addr;
+		sa = (struct sockaddr *)&sin;
+	}
+
+        if (connect(so, sa, slen) < 0) {
+                dolog(LOG_INFO, "connect to master %s port %u: %s\n", rzone->master, rzone->masterport, strerror(errno));
+		close(so);
+		return(MY_SOCK_TIMEOUT);
+        }
+
+
+
+	replysize = 0xffff;
+	memset(&query, 0, sizeof(query));
+	
+	tcpsize = (u_int16_t *)&query[0];
+	wh = (struct whole_header *)&query[2];
+
+	wh->dh.id = htons(arc4random() & 0xffff);
+	wh->dh.query = 0;
+	wh->dh.question = htons(1);
+	wh->dh.answer = 0;
+	wh->dh.nsrr = 0;
+	wh->dh.additional = htons(1);;
+
+	SET_DNS_QUERY(&wh->dh);
+	SET_DNS_RECURSION(&wh->dh);
+
+	
+	HTONS(wh->dh.query);
+
+	totallen = sizeof(struct whole_header) + 2;
+
+	name = dns_label(rzone->zonename, &len);
+	if (name == NULL) {
+		close(so);
+		return(MY_SOCK_TIMEOUT);
+	}
+
+	zonelen = len;
+	
+	p = (char *)&wh[1];	
+	
+	memcpy(p, name, len);
+	totallen += len;
+
+	type = (u_int16_t *)&query[totallen];
+	*type = htons(DNS_TYPE_SOA);
+	totallen += sizeof(u_int16_t);
+	
+	class = (u_int16_t *)&query[totallen];
+	*class = htons(DNS_CLASS_IN);
+	totallen += sizeof(u_int16_t);
+
+	/* attach EDNS0 */
+
+	optrr = (struct dns_optrr *)&query[totallen];
+
+	optrr->name[0] = 0;
+	optrr->type = htons(DNS_TYPE_OPT); 
+	optrr->class = htons(replysize);
+	optrr->ttl = htonl(0);		/* EDNS version 0 */
+#if 0
+	if ((format & DNSSEC_FORMAT))
+		SET_DNS_ERCODE_DNSSECOK(optrr);
+#endif
+	HTONL(optrr->ttl);
+	optrr->rdlen = 0;
+	optrr->rdata[0] = 0;
+
+	totallen += (sizeof(struct dns_optrr));
+	*tcpsize = htons(totallen - 2);
+
+	if (send(so, query, totallen, 0) < 0) {
+		close(so);
+		return(MY_SOCK_TIMEOUT);
+	}
+
+	/* catch reply */
+
+	reply = calloc(1, replysize + 2);
+	if (reply == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		close(so);
+		return(MY_SOCK_TIMEOUT);
+	}
+	
+	if ((len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL)) < 0) {
+		dolog(LOG_INFO, "recv: %s\n", strerror(errno));
+		close(so);
+		free(reply);
+		return(MY_SOCK_TIMEOUT);
+	}
+
+	plen = (u_int16_t *)reply;
+	tcplen = ntohs(*plen);
+
+	if ((len = recv(so, reply, tcplen + 2, MSG_WAITALL)) < 0) {
+		dolog(LOG_INFO, "recv: %s\n", strerror(errno));
+		close(so);
+		free(reply);
+		return(MY_SOCK_TIMEOUT);
+	}
+
+	rwh = (struct whole_header *)&reply[2];
+
+	end = &reply[len];
+
+	if (rwh->dh.id != wh->dh.id) {
+		dolog(LOG_INFO, "DNS ID mismatch\n");
+		close(so);
+		free(reply);
+		return(MY_SOCK_TIMEOUT);
+	}
+
+	if (!(htons(rwh->dh.query) & DNS_REPLY)) {
+		dolog(LOG_INFO, "NOT a DNS reply\n");
+		close(so);
+		free(reply);
+		return(MY_SOCK_TIMEOUT);
+	}
+
+	numansw = ntohs(rwh->dh.answer);
+	numauth = ntohs(rwh->dh.nsrr);
+	numaddi = ntohs(rwh->dh.additional);
+	answers = numansw + numauth + numaddi;
+
+	if (answers < 1) {	
+		dolog(LOG_INFO, "NO ANSWER provided\n");
+		close(so);
+		free(reply);
+		return(MY_SOCK_TIMEOUT);
+	}
+
+	q = build_question((char *)&wh->dh, len, wh->dh.additional, NULL);
+	if (q == NULL) {
+		dolog(LOG_INFO, "failed to build_question\n");
+		close(so);
+		free(reply);
+		return(MY_SOCK_TIMEOUT);
+	}
+		
+	if (memcmp(q->hdr->name, name, q->hdr->namelen) != 0) {
+		dolog(LOG_INFO, "question name not for what we asked\n");
+		close(so);
+		free(reply);
+		return(MY_SOCK_TIMEOUT);
+	}
+
+	if (q->hdr->qclass != *class || q->hdr->qtype != *type) {
+		dolog(LOG_INFO, "wrong class or type\n");
+		close(so);
+		free(reply);
+		return(MY_SOCK_TIMEOUT);
+	}
+	
+	p = (u_char *)&rwh[1];		
+	
+	p += q->hdr->namelen;
+	p += sizeof(u_int16_t);	 	/* type */
+	p += sizeof(u_int16_t);		/* class */
+
+	/* end of question */
+	
+
+	estart = (u_char *)&rwh->dh;
+
+	for (i = answers; i > 0; i--) {
+		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, NULL)) < 0) {
+			dolog(LOG_INFO, "not a SOA reply, or ERROR\n");
+			close(so);
+			free(reply);
+			return(MY_SOCK_TIMEOUT);
+		}
+		
+		p = (estart + rrlen);
+
+		if (rrtype == DNS_TYPE_SOA) {
+			if ((len = raxfr_soa(f, p, estart, end, &mysoa, soacount, format, rdlen, NULL)) < 0) {
+				dolog(LOG_INFO, "raxfr_soa failed\n");
+				close(so);
+				free(reply);
+				return(MY_SOCK_TIMEOUT);
+			}
+			p = (estart + len);
+			soacount++;
+		} else {
+			for (sr = supported; sr->rrtype != 0; sr++) {
+				if (rrtype == sr->rrtype) {
+					if ((len = (*sr->raxfr)(f, p, estart, end, &mysoa, rdlen, NULL)) < 0) {
+						dolog(LOG_INFO, "error with rrtype %d\n", sr->rrtype);
+						close(so);
+						free(reply);
+						return(MY_SOCK_TIMEOUT);
+					}
+					p = (estart + len);
+					break;
+				}
+			}
+
+			if (sr->rrtype == 0) {
+				if (rrtype != 41) {
+					dolog(LOG_INFO, "unsupported RRTYPE %u\n", rrtype);
+					close(so);
+					free(reply);
+					return(MY_SOCK_TIMEOUT);
+				}
+			} 
+		} /* rrtype == DNS_TYPE_SOA */
+
+
+	} /* for () */
+
+	free(reply);
+
+	close(so);
+	return ((int64_t)ntohl(mysoa.serial));
+}
+
+int
+do_raxfr(FILE *f, int64_t serial, struct rzone *rzone)
+{
+	int so;
+	struct sockaddr_in sin;
+	struct sockaddr_in6 sin6;
+	struct sockaddr *sa;
+	socklen_t slen = sizeof(struct sockaddr_in);
+	
+	int window = 32768;
+	char tsigpass[512];
+	char humanpass[1024];
+	char *keyname;
+	int tsigpasslen, keynamelen;
+	int format = (TCP_FORMAT | ZONE_FORMAT);
+	int len;
+
+	struct soa mysoa;
+
+
+	if ((so = socket(rzone->storage.ss_family, SOCK_STREAM, 0)) < 0) {
+		dolog(LOG_INFO, "get_remote_soa: %s\n", strerror(errno));
+		return -1;
+	}
+
+#ifndef __linux__
+	/* biggen the window */
+
+	while (setsockopt(so, SOL_SOCKET, SO_RCVBUF, &window, sizeof(window)) != -1)
+		window <<= 1;
+#endif
+
+	if (rzone->storage.ss_family == AF_INET6) {
+		memset(&sin6, 0, sizeof(sin6));
+		sin6.sin6_family = AF_INET6;
+		sin6.sin6_port = htons(rzone->masterport);
+		memcpy(&sin6.sin6_addr, (void *)&((struct sockaddr_in6 *)(&rzone->storage))->sin6_addr, sizeof(struct in6_addr));
+		sin6.sin6_len = sizeof(struct sockaddr_in6);
+		sa = (struct sockaddr *)&sin6;
+		slen = sizeof(struct sockaddr_in6);
+	} else {
+		memset(&sin, 0, sizeof(sin));
+		sin.sin_family = AF_INET;
+		sin.sin_port = htons(rzone->masterport);
+		sin.sin_addr.s_addr = ((struct sockaddr_in *)(&rzone->storage))->sin_addr.s_addr;
+		sa = (struct sockaddr *)&sin;
+	}
+
+        if (connect(so, sa, slen) < 0) {
+                dolog(LOG_INFO, "connect to master %s port %u: %s\n", rzone->master, rzone->masterport, strerror(errno));
+		close(so);
+		return -1;
+        }
+
+	keyname = dns_label(rzone->tsigkey, &keynamelen);
+	if (keyname == NULL) {
+		dolog(LOG_ERR, "dns_label failed\n");
+		close(so);
+		return -1;
+	}
+
+	if ((tsigpasslen = find_tsig_key(keyname, keynamelen, (char *)&tsigpass, sizeof(tsigpass))) < 0) {
+		dolog(LOG_ERR, "do not have a record of TSIG key %s\n", rzone->tsigkey);
+		close(so);
+		return -1;
+	}
+
+	free(keyname);
+
+	if ((len = mybase64_encode(tsigpass, tsigpasslen, humanpass, sizeof(humanpass))) < 0) {
+		dolog(LOG_ERR, "base64_encode() failed\n");
+		close(so);
+		return -1;
+	}
+
+	humanpass[len] = '\0';
+
+	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, rzone->tsigkey, humanpass) < 0) {
+		dolog(LOG_ERR, "lookup_axfr() failed\n");
+		close(so);
+		return -1;
+	}
+				
+	close(so);
+	return (0);
 }

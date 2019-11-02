@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.76 2019/11/01 19:52:40 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.77 2019/11/02 17:24:27 pjp Exp $
  */
 
 
@@ -97,7 +97,7 @@
 
 extern void 	add_rrlimit(int, u_int16_t *, int, char *);
 extern void 	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *);
-extern void	replicantloop(ddDB *, struct imsgbuf *);
+extern void	replicantloop(ddDB *, struct imsgbuf *, struct imsgbuf *);
 extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
 extern int 	check_ent(char *, int);
 extern int 	check_rrlimit(int, u_int16_t *, int, char *);
@@ -389,6 +389,13 @@ main(int argc, char *argv[], char *environ[])
 	if (! debug)
 		daemon(0,0);
 	else {
+		int status;
+		/*
+		 * clean up any zombies left behind, this is only in debug mode
+		 */
+
+		while (waitpid(-1, &status, WNOHANG) > 0);
+	
 		/*
 		 * even if in debug mode we want to have our own parent group
 		 * for reasons in that regress needs it when killing debug
@@ -998,6 +1005,12 @@ main(int argc, char *argv[], char *environ[])
 			}
 
 #if __OpenBSD__
+			if (unveil("/replicant", "rwc") < 0) {
+				perror("unveil");
+				slave_shutdown();
+				exit(1);
+			}
+
 			if (pledge("stdio inet proc id sendfd recvfd unveil cpath wpath rpath", NULL) < 0) {
 				perror("pledge");
 				slave_shutdown();
@@ -1023,7 +1036,7 @@ main(int argc, char *argv[], char *environ[])
 			close(cfg->my_imsg[MY_IMSG_RAXFR].imsg_fds[1]);
 			imsg_init(parent_ibuf[MY_IMSG_RAXFR], cfg->my_imsg[MY_IMSG_RAXFR].imsg_fds[0]);
 
-			replicantloop(db, parent_ibuf[MY_IMSG_RAXFR]);
+			replicantloop(db, parent_ibuf[MY_IMSG_RAXFR], child_ibuf[MY_IMSG_MASTER]);
 
 			/* NOTREACHED */
 			exit(1);
@@ -1430,7 +1443,7 @@ get_ns(ddDB *db, struct rbtree *rbt, int *delegation)
 	len = rbt->zonelen;	
 
 	while (*p && len > 0) {
-		rbt0 = Lookup_zone(db, p, len, DNS_TYPE_NS, 0);	
+		rbt0 = Lookup_zone(db, p, len, htons(DNS_TYPE_NS), 0);	
 		if (rbt0 == NULL) {
 			p += (*p + 1);
 			len -= (*p + 1);
@@ -3620,7 +3633,7 @@ drop_privs(char *chrootpath, struct passwd *pw)
 		return -1;
 	}
 
-	if (unveil("/", "r") < 0) {
+	if (unveil("/", "rwc") < 0) {
 		dolog(LOG_INFO, "unveil: %s\n", strerror(errno));
 		return -1;
 	}
