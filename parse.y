@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.77 2019/11/01 19:46:57 pjp Exp $
+ * $Id: parse.y,v 1.78 2019/11/03 15:21:19 pjp Exp $
  */
 
 %{
@@ -46,6 +46,7 @@
 #include <ctype.h>
 #include <signal.h>
 #include <time.h>
+#include <pwd.h>
 
 #ifdef __linux__
 #include <grp.h>
@@ -94,6 +95,7 @@ extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 extern int display_rr(struct rrset *rrset);
 extern void flag_rr(struct rbtree *);
+extern int pull_rzone(struct rzone *, time_t, int);
 
 
 extern int whitelist;
@@ -3699,11 +3701,38 @@ add_rzone(void)
 static int
 pull_remote_zone(struct rzone *lrz)
 {
-	if (rename("/etc/delphinusdns/sample.zone", lrz->filename) < 0) {
-		perror("rename");
+	struct passwd *pw;
+	int ret;
+	char *current;
+
+	current = getcwd(NULL, PATH_MAX);
+	if (current == NULL) {
+		dolog(LOG_INFO, "pull_remote_zone getcwd: %s\n", strerror(errno));
 		return -1;
 	}
-	return 0;
+
+	if (chdir(DELPHINUS_RZONE_PATH) < 0) {
+		dolog(LOG_INFO, "pull_remote_zone chdir: %s\n", strerror(errno));
+		return -1;
+	}
+
+	ret = pull_rzone(lrz, time(NULL), 0);
+
+	pw = getpwnam(DEFAULT_PRIVILEGE);
+	if (pw == NULL) {
+		unlink(lrz->filename);
+		return -1;
+	}
+
+	if (chown(lrz->filename, pw->pw_uid, pw->pw_gid) < 0) {
+		unlink(lrz->filename);
+		return -1;
+	}
+	
+	chdir(current);
+	free(current);
+
+	return (ret);
 }
 
 /*

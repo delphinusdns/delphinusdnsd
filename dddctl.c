@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.81 2019/11/02 17:24:27 pjp Exp $
+ * $Id: dddctl.c,v 1.82 2019/11/03 15:21:19 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -7070,7 +7070,7 @@ configtest(int argc, char *argv[])
 		zonefile = argv[0];
 
 #if __OpenBSD__
-	if (pledge("stdio rpath wpath cpath", NULL) < 0) {
+	if (pledge("stdio rpath wpath cpath chown inet getpw", NULL) < 0) {
 		perror("pledge");
 		exit(1);
 	}

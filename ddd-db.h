@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.24 2019/11/02 17:24:27 pjp Exp $
+ * $Id: ddd-db.h,v 1.25 2019/11/03 15:21:19 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -60,6 +60,10 @@
 
 #define RECORD_COUNT	20
 #define NEGATIVE_CACHE_TIME	600	/* DNS & Bind 3rd edition page 35 */
+
+#ifndef DEFAULT_PRIVILEGE
+#define DEFAULT_PRIVILEGE "_ddd"
+#endif
 
 /* db stuff */
 

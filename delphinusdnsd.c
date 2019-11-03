@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.77 2019/11/02 17:24:27 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.78 2019/11/03 15:21:19 pjp Exp $
  */
 
 
@@ -181,9 +181,6 @@ void 			parseloop(struct cfg *, struct imsgbuf **);
 
 /* aliases */
 
-#ifndef DEFAULT_PRIVILEGE
-#define DEFAULT_PRIVILEGE "_ddd"
-#endif
 
 #define MYDB_PATH "/var/db/delphinusdns"
 
@@ -500,16 +497,18 @@ main(int argc, char *argv[], char *environ[])
 		exit(1);
 	}
 
-	switch (pid = fork()) {
-	case -1:
-		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
-		exit(1);
-	case 0:
-		setup_unixsocket(socketpath, child_ibuf[MY_IMSG_MASTER]);
-		slave_shutdown();	
-		exit(1);
-	default:
-		break;
+	if (! debug) {
+		switch (pid = fork()) {
+		case -1:
+			dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
+			exit(1);
+		case 0:
+			setup_unixsocket(socketpath, child_ibuf[MY_IMSG_MASTER]);
+			slave_shutdown();	
+			exit(1);
+		default:
+			break;
+		}
 	} 
 
 

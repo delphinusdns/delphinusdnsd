@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.20 2019/11/03 07:26:12 pjp Exp $
+ * $Id: raxfr.c,v 1.21 2019/11/03 15:21:19 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -121,7 +121,8 @@ static void		schedule_retry(char *, time_t);
 static void		schedule_restart(char *, time_t);
 static void		schedule_delete(struct myschedule *);
 int64_t get_remote_soa(struct rzone *rzone);
-int do_raxfr(FILE *f, int64_t serial, struct rzone *rzone);
+int do_raxfr(FILE *, struct rzone *);
+int pull_rzone(struct rzone *, time_t, int);
 
 extern int                     memcasecmp(u_char *, u_char *, int);
 extern char * dns_label(char *, int *);
@@ -1251,8 +1252,6 @@ void
 replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 {
 	struct rzone *lrz, *lrz0;
-	char buf[PATH_MAX];
-	char *p, *q;
 	time_t now, lastnow;
 	int apexlen, sel, endspurt = 0;
 	int idata;
@@ -1263,7 +1262,6 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 	struct rr *rrp;
 	struct timeval tv;
 
-	FILE *f = NULL;
 
 #if __OpenBSD__
 	if (pledge("stdio wpath rpath cpath inet", NULL) < 0) {
@@ -1385,55 +1383,10 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 							/* initiate AXFR and update zone */
 							dolog(LOG_INFO, "new higher serial detected (%ld vs. %ld)\n", serial, lrz->soa.serial);
 
-							p = strrchr(lrz->filename, '/');
-							if (p == NULL) {
-								dolog(LOG_INFO, "can't determine temporary filename from %s\n", lrz->filename);
+							if (pull_rzone(lrz, now,1) < 0) {
 								schedule_retry(lrz->zonename, now + lrz->soa.retry);
 								goto out;
 							}
-
-							p++;
-							q = p;
-							if (*p == '\0') {
-								dolog(LOG_INFO, "can't determine temporary filename from %s (2)\n", lrz->filename);
-								schedule_retry(lrz->zonename, now + lrz->soa.retry);
-								goto out;
-							}
-
-							snprintf(buf, sizeof(buf), "%s.XXXXXXXXXXXXXX", p);	
-							if ((p = mktemp(buf)) == NULL) {
-								dolog(LOG_INFO, "can't determine temporary filename from %s (3)\n", lrz->filename);
-								schedule_retry(lrz->zonename, now + lrz->soa.retry);
-								goto out;
-							}
-
-							umask(022);
-								
-							f = fopen(p, "w");
-							if (f == NULL) {
-								dolog(LOG_INFO, "can't create temporary filename for zone %s\n", lrz->zonename);
-								schedule_retry(lrz->zonename, now + lrz->soa.retry);
-								goto out;
-							}
-
-							fprintf(f, "; This is a REPLICANT file for zone %s gotten on %lld\n\n", lrz->zonename, now);
-							
-							if (do_raxfr(f, serial, lrz) < 0) {
-								dolog(LOG_INFO, "do_raxfr failed\n");
-								schedule_retry(lrz->zonename, now + lrz->soa.retry);
-								goto out;
-							}
-
-							fclose(f);
-
-							unlink(q);	
-							if (link(p, q) < 0) {
-								dolog(LOG_ERR, "can't link %s to %s\n", p, q);
-								schedule_retry(lrz->zonename, now + lrz->soa.retry);
-								goto out;
-							}
-
-							unlink(p);
 
 							/* schedule restart */
 							schedule_restart(lrz->zonename, now + 100);
@@ -1471,55 +1424,11 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 
 							dolog(LOG_INFO, "new higher serial detected (%ld vs. %ld)\n", serial, lrz->soa.serial);
 
-							p = strrchr(lrz->filename, '/');
-							if (p == NULL) {
-								dolog(LOG_INFO, "can't determine temporary filename from %s\n", lrz->filename);
+							if (pull_rzone(lrz, now,1) < 0) {
 								schedule_retry(lrz->zonename, now + lrz->soa.retry);
 								goto out;
 							}
 
-							p++;
-							q = p;
-							if (*p == '\0') {
-								dolog(LOG_INFO, "can't determine temporary filename from %s (2)\n", lrz->filename);
-								schedule_retry(lrz->zonename, now + lrz->soa.retry);
-								goto out;
-							}
-
-							snprintf(buf, sizeof(buf), "%s.XXXXXXXXXXXXXX", p);	
-							if ((p = mktemp(buf)) == NULL) {
-								dolog(LOG_INFO, "can't determine temporary filename from %s (3)\n", lrz->filename);
-								schedule_retry(lrz->zonename, now + lrz->soa.retry);
-								goto out;
-							}
-
-							umask(022);
-								
-							f = fopen(p, "w");
-							if (f == NULL) {
-								dolog(LOG_INFO, "can't create temporary filename for zone %s\n", lrz->zonename);
-								schedule_retry(lrz->zonename, now + lrz->soa.retry);
-								goto out;
-							}
-
-							fprintf(f, "; This is a REPLICANT file for zone %s gotten on %lld\n\n", lrz->zonename, now);
-							
-							if (do_raxfr(f, serial, lrz) < 0) {
-								dolog(LOG_INFO, "do_raxfr failed\n");
-								schedule_retry(lrz->zonename, now + lrz->soa.retry);
-								goto out;
-							}
-
-							fclose(f);
-							
-							unlink(q);
-							if (link(p, q) < 0) {
-								dolog(LOG_ERR, "can't link %s to %s\n", p, q);
-								schedule_retry(lrz->zonename, now + lrz->soa.retry);
-								goto out;
-							}
-
-							unlink(p);
 							/* schedule restart */
 							schedule_restart(lrz->zonename, now + 100);
 						  /*
@@ -1884,7 +1793,7 @@ get_remote_soa(struct rzone *rzone)
 }
 
 int
-do_raxfr(FILE *f, int64_t serial, struct rzone *rzone)
+do_raxfr(FILE *f, struct rzone *rzone)
 {
 	int so;
 	struct sockaddr_in sin;
@@ -1898,7 +1807,7 @@ do_raxfr(FILE *f, int64_t serial, struct rzone *rzone)
 	char *keyname;
 	int tsigpasslen, keynamelen;
 	int format = (TCP_FORMAT | ZONE_FORMAT);
-	int len;
+	int len, dotsig = 1;
 
 	struct soa mysoa;
 
@@ -1937,30 +1846,36 @@ do_raxfr(FILE *f, int64_t serial, struct rzone *rzone)
 		return -1;
         }
 
-	keyname = dns_label(rzone->tsigkey, &keynamelen);
-	if (keyname == NULL) {
-		dolog(LOG_ERR, "dns_label failed\n");
-		close(so);
-		return -1;
+	if (strcmp(rzone->tsigkey, "NOKEY") != 0) {
+
+		keyname = dns_label(rzone->tsigkey, &keynamelen);
+		if (keyname == NULL) {
+			dolog(LOG_ERR, "dns_label failed\n");
+			close(so);
+			return -1;
+		}
+
+		if ((tsigpasslen = find_tsig_key(keyname, keynamelen, (char *)&tsigpass, sizeof(tsigpass))) < 0) {
+			dolog(LOG_ERR, "do not have a record of TSIG key %s\n", rzone->tsigkey);
+			close(so);
+			return -1;
+		}
+
+		free(keyname);
+
+		if ((len = mybase64_encode(tsigpass, tsigpasslen, humanpass, sizeof(humanpass))) < 0) {
+			dolog(LOG_ERR, "base64_encode() failed\n");
+			close(so);
+			return -1;
+		}
+
+		humanpass[len] = '\0';
+	} else {
+		dotsig = 0;
 	}
 
-	if ((tsigpasslen = find_tsig_key(keyname, keynamelen, (char *)&tsigpass, sizeof(tsigpass))) < 0) {
-		dolog(LOG_ERR, "do not have a record of TSIG key %s\n", rzone->tsigkey);
-		close(so);
-		return -1;
-	}
 
-	free(keyname);
-
-	if ((len = mybase64_encode(tsigpass, tsigpasslen, humanpass, sizeof(humanpass))) < 0) {
-		dolog(LOG_ERR, "base64_encode() failed\n");
-		close(so);
-		return -1;
-	}
-
-	humanpass[len] = '\0';
-
-	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, rzone->tsigkey, humanpass) < 0) {
+	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), ((dotsig == 0) ? NULL : humanpass)) < 0) {
 		dolog(LOG_ERR, "lookup_axfr() failed\n");
 		close(so);
 		return -1;
@@ -1968,4 +1883,71 @@ do_raxfr(FILE *f, int64_t serial, struct rzone *rzone)
 				
 	close(so);
 	return (0);
+}
+
+
+int
+pull_rzone(struct rzone *lrz, time_t now, int doschedule)
+{
+	char *p, *q;
+	FILE *f;
+	char buf[PATH_MAX];
+
+	p = strrchr(lrz->filename, '/');
+	if (p == NULL) {
+		dolog(LOG_INFO, "can't determine temporary filename from %s\n", lrz->filename);
+		if (doschedule)
+			schedule_retry(lrz->zonename, now + lrz->soa.retry);
+		return -1;
+	}
+
+	p++;
+	q = p;
+	if (*p == '\0') {
+		dolog(LOG_INFO, "can't determine temporary filename from %s (2)\n", lrz->filename);
+		if (doschedule)
+			schedule_retry(lrz->zonename, now + lrz->soa.retry);
+		return -1;
+	}
+
+	snprintf(buf, sizeof(buf), "%s.XXXXXXXXXXXXXX", p);	
+	if ((p = mktemp(buf)) == NULL) {
+		dolog(LOG_INFO, "can't determine temporary filename from %s (3)\n", lrz->filename);
+		if (doschedule)
+			schedule_retry(lrz->zonename, now + lrz->soa.retry);
+		return -1;
+	}
+
+	umask(022);
+		
+	f = fopen(p, "w");
+	if (f == NULL) {
+		dolog(LOG_INFO, "can't create temporary filename for zone %s\n", lrz->zonename);
+		if (doschedule)
+			schedule_retry(lrz->zonename, now + lrz->soa.retry);
+		return -1;
+	}
+
+	fprintf(f, "; REPLICANT file for zone %s gotten on %lld\n\n", lrz->zonename, now);
+	
+	if (do_raxfr(f, lrz) < 0) {
+		dolog(LOG_INFO, "do_raxfr failed\n");
+		if (doschedule)
+			schedule_retry(lrz->zonename, now + lrz->soa.retry);
+		return -1;
+	}
+
+	fclose(f);
+
+	unlink(q);	
+	if (link(p, q) < 0) {
+		dolog(LOG_ERR, "can't link %s to %s\n", p, q);
+		if (doschedule)
+			schedule_retry(lrz->zonename, now + lrz->soa.retry);
+		return -1;
+	}
+
+	unlink(p);
+
+	return 0;
 }
