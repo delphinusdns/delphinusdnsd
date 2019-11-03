@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.18 2019/11/02 18:32:24 pjp Exp $
+ * $Id: raxfr.c,v 1.19 2019/11/03 07:01:26 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1444,6 +1444,8 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 								 * other tasks can still complete.
 								 */
 								endspurt = 1;
+						} else {
+							schedule_refresh(lrz->zonename, now + lrz->soa.refresh);
 						}
 					}
 				} else if (sp0->action == SCHEDULE_ACTION_RETRY) {
@@ -1528,7 +1530,9 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 					     */
 
 							endspurt = 1;
-					  }
+					  } else {
+							schedule_refresh(lrz->zonename, now + lrz->soa.refresh);
+						}
 					}
 
 				} else if (sp0->action == SCHEDULE_ACTION_REBOOT) {
@@ -1542,7 +1546,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 					exit(0);
 				}
 		
-			} /* when below now */
+			} 
 out:	
 			continue;
 		} /* LIST_FOREACH schedules */
