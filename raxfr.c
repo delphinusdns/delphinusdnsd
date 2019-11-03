@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.21 2019/11/03 15:21:19 pjp Exp $
+ * $Id: raxfr.c,v 1.22 2019/11/03 15:47:41 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1323,7 +1323,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 			tv.tv_sec = 0;
 			tv.tv_usec = 5000;
 		} else {
-			tv.tv_sec = 10;
+			tv.tv_sec = 1;
 			tv.tv_usec = 0;
 		}
 		
