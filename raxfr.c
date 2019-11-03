@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.19 2019/11/03 07:01:26 pjp Exp $
+ * $Id: raxfr.c,v 1.20 2019/11/03 07:26:12 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -86,7 +86,7 @@ struct myschedule {
 	char zonename[DNS_MAXNAME + 1];
 	time_t when;
 	int action;
-#define SCHEDULE_ACTION_REBOOT	0x1
+#define SCHEDULE_ACTION_RESTART	0x1
 #define SCHEDULE_ACTION_REFRESH 0x2
 #define SCHEDULE_ACTION_RETRY	0x3
 	LIST_ENTRY(myschedule)	myschedule_entry;
@@ -118,7 +118,7 @@ int raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *myso
 void			replicantloop(ddDB *, struct imsgbuf *, struct imsgbuf *);
 static void		schedule_refresh(char *, time_t);
 static void		schedule_retry(char *, time_t);
-static void		schedule_reboot(char *, time_t);
+static void		schedule_restart(char *, time_t);
 static void		schedule_delete(struct myschedule *);
 int64_t get_remote_soa(struct rzone *rzone);
 int do_raxfr(FILE *f, int64_t serial, struct rzone *rzone);
@@ -1435,10 +1435,10 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 
 							unlink(p);
 
-							/* schedule reboot */
-							schedule_reboot(lrz->zonename, now + 100);
+							/* schedule restart */
+							schedule_restart(lrz->zonename, now + 100);
 								/*
-								 * we've scheduled a reboot  and there may be more
+								 * we've scheduled a restart and there may be more
 								 * AXFR's to do we only have a window of 100 seconds
 								 * so we select for 5000 microseconds only, so that
 								 * other tasks can still complete.
@@ -1520,10 +1520,10 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 							}
 
 							unlink(p);
-							/* schedule reboot */
-							schedule_reboot(lrz->zonename, now + 100);
+							/* schedule restart */
+							schedule_restart(lrz->zonename, now + 100);
 						  /*
-						   * we've scheduled a reboot  and there may be more
+						   * we've scheduled a restart and there may be more
 						   * AXFR's to do we only have a window of 100 seconds
 						   * so we select for 5000 microseconds only, so that
 						   * other tasks can still complete.
@@ -1535,9 +1535,9 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 						}
 					}
 
-				} else if (sp0->action == SCHEDULE_ACTION_REBOOT) {
-					/* we hit a scheduling on rebooting, nothing can save you now! */
-					dolog(LOG_INFO, "I'm supposed to reboot now, REBOOT\n");
+				} else if (sp0->action == SCHEDULE_ACTION_RESTART) {
+					/* we hit a scheduling on restarting, nothing can save you now! */
+					dolog(LOG_INFO, "I'm supposed to restart now, RESTART\n");
 
 					idata = 1;
 					imsg_compose(master_ibuf, IMSG_RELOAD_MESSAGE, 
@@ -1585,7 +1585,7 @@ schedule_retry(char *zonename, time_t seconds)
 }
 
 static void
-schedule_reboot(char *zonename, time_t seconds)
+schedule_restart(char *zonename, time_t seconds)
 {
 	sp0 = calloc(1, sizeof(struct myschedule));
 	if (sp0 == NULL)
@@ -1593,11 +1593,11 @@ schedule_reboot(char *zonename, time_t seconds)
 
 	strlcpy(sp0->zonename, zonename, sizeof(sp0->zonename));
 	sp0->when = seconds;
-	sp0->action = SCHEDULE_ACTION_REBOOT;
+	sp0->action = SCHEDULE_ACTION_RESTART;
 
 	LIST_INSERT_HEAD(&myschedules, sp0, myschedule_entry);
 
-	dolog(LOG_INFO, "scheduling reboot at %lu\n", seconds);
+	dolog(LOG_INFO, "scheduling restart at %lu\n", seconds);
 }
 
 static void
