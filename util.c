@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.43 2019/11/02 17:24:27 pjp Exp $
+ * $Id: util.c,v 1.44 2019/11/03 10:37:05 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1094,6 +1094,7 @@ build_question(char *buf, int len, int additional, char *mac)
 		/* we don't have any tsig keys configured, no auth done */
 		if (tsig == 0) {
 			i = rollback;
+			dolog(LOG_INFO, "build_question(): received a TSIG request, but tsig is not turned on for this IP range, this could result in a '1' error reply\n");
 			break;
 		}
 
