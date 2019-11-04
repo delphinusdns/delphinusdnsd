@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.83 2019/11/04 07:00:40 pjp Exp $
+ * $Id: dddctl.c,v 1.84 2019/11/04 08:22:14 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -279,13 +279,9 @@ struct _mycmdtab {
 
 /* glue */
 int insert_axfr(char *, char *);
-int insert_region(char *, char *);
 int insert_filter(char *, char *);
 int insert_whitelist(char *, char *);
 int insert_notifyslave(char *, char *);
-int insert_tsig(char *, char *);
-int  find_tsig_key(char *, int, char *, int);
-int  insert_tsig_key(char *, int, char *);
 
 
 int illdestination;
@@ -293,7 +289,6 @@ int *ptr = &illdestination;
 
 int notify = 0;
 int whitelist = 0;
-int tsig = 0;
 int bcount = 0;
 char *bind_list[255];
 char *interface_list[255];
@@ -364,10 +359,15 @@ extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int1
 
 extern int                      memcasecmp(u_char *, u_char *, int);
 extern int 			tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
-extern int			lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *);
+extern int  lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *);
+extern int 			insert_tsig(char *, char *);
+extern int  			find_tsig_key(char *, int, char *, int);
+extern int  			insert_tsig_key(char *, int, char *);
+extern int 			insert_region(char *, char *);
 
 
 extern int dnssec;
+extern int tsig;
 
 static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_A, 0, raxfr_a },
@@ -907,12 +907,6 @@ insert_axfr(char *address, char *prefixlen)
 }
 
 int
-insert_region(char *address, char *prefixlen)
-{
-	return 0;
-}
-
-int
 insert_filter(char *address, char *prefixlen)
 {
 	return 0;
@@ -920,18 +914,6 @@ insert_filter(char *address, char *prefixlen)
 
 int
 insert_whitelist(char *address, char *prefixlen)
-{
-	return 0;
-}
-
-int
-insert_tsig(char *address, char *prefixlen)
-{
-	return 0;
-}
-
-int
-insert_tsig_key(char *key, int keylen, char *authkey)
 {
 	return 0;
 }
@@ -7888,13 +7870,6 @@ count_db(ddDB *db)
 
 	return count;
 }
-
-int
-find_tsig_key(char *keyname, int keynamelen, char *key, int keylen)
-{
-	return -1;
-}
-
 
 /*
  * sign() - sign an RR
