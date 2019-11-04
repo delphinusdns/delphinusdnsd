@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.80 2019/11/04 09:17:02 pjp Exp $
+ * $Id: parse.y,v 1.81 2019/11/04 12:10:49 pjp Exp $
  */
 
 %{
@@ -741,6 +741,12 @@ rzonestatement:
 
 		if (strcmp($1, "zonename") == 0) {
 			rz->zonename = p;
+	
+			rz->zone = dns_label(p, &rz->zonelen);
+			if (rz->zone == NULL) {
+				perror("dns_label");
+				return -1;
+			} 
 #ifdef __OpenBSD__
 			if (debug)
 				printf("at rzone %x, added zonename of %s\n", (unsigned int)rz, p);

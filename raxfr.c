@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.24 2019/11/04 09:17:02 pjp Exp $
+ * $Id: raxfr.c,v 1.25 2019/11/04 12:10:49 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1267,6 +1267,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 	struct imsg imsg;
 	ssize_t         n, datalen;
 	char *dn = NULL;	
+	char *humanconv = NULL;
 
 
 #if __OpenBSD__
@@ -1393,8 +1394,6 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 
 					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
 
-					dolog(LOG_DEBUG, "got imsg of type %d\n", imsg.hdr.type);
-
 					switch(imsg.hdr.type) {
 					case IMSG_NOTIFY_MESSAGE:
 						dn = malloc(datalen);
@@ -1404,18 +1403,18 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 						}
 
 						memcpy(dn, imsg.data, datalen);
-						dn[datalen - 1] = '\0';
 
 						SLIST_FOREACH(lrz, &rzones, rzone_entry) {
 								if (lrz->zonename == NULL)
 								continue;
 
-								if (strcmp(dn, lrz->zonename) == 0)
+								if (datalen == lrz->zonelen &&
+										memcasecmp(lrz->zone, dn, datalen) == 0)
 											break;
 						}
 
 						if (lrz != NULL) {
-										dolog(LOG_DEBUG, "zone %s is being notified now\n", dn);
+										dolog(LOG_DEBUG, "zone %s is being notified now\n", lrz->zonename);
 										if ((serial = get_remote_soa(lrz)) == MY_SOCK_TIMEOUT) {
 												dolog(LOG_INFO, "timeout upon notify, dropping\n");
 										} else if (serial > lrz->soa.serial) {
@@ -1435,9 +1434,13 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 												 * other tasks can still complete.
 												 */
 												endspurt = 1;
-										} 
+										} /* else serial ... */
 							} else {
-								dolog(LOG_DEBUG, "couldn't find a rzone for domainame %s\n", dn);
+								humanconv = convert_name(dn, datalen);
+								if (humanconv != NULL) {
+									dolog(LOG_DEBUG, "couldn't find an rzone for domainame %s\n", humanconv);
+									free(humanconv);
+								}
 							}
 
 							free(dn);

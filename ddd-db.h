@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.26 2019/11/04 07:00:40 pjp Exp $
+ * $Id: ddd-db.h,v 1.27 2019/11/04 12:10:49 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -410,6 +410,8 @@ struct rzone {
 	SLIST_ENTRY(rzone)	rzone_entry;
 	int 			active;
 	char 			*zonename;
+	char			*zone;
+	int			zonelen;
 	u_int16_t		masterport;
 	char			*master;
 	struct sockaddr_storage storage;

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.79 2019/11/04 07:00:41 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.80 2019/11/04 12:10:49 pjp Exp $
  */
 
 
@@ -1972,9 +1972,9 @@ axfrentry:
 							slen = reply_notify(&sreply, NULL);
 
 							/* send notify to replicant process */
-							idata = strlen(question->converted_name) + 1;
+							idata = question->hdr->namelen;
 							imsg_compose(ibuf[MY_IMSG_RAXFR], IMSG_NOTIFY_MESSAGE, 
-									0, 0, -1, question->converted_name, idata);
+									0, 0, -1, question->hdr->name, idata);
 							msgbuf_write(&ibuf[MY_IMSG_RAXFR]->w);
 							goto udpout;
 					
@@ -1992,9 +1992,9 @@ axfrentry:
 						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_notify(&sreply, NULL);
 							/* send notify to replicant process */
-							idata = strlen(question->converted_name) + 1;
+							idata = question->hdr->namelen;
 							imsg_compose(ibuf[MY_IMSG_RAXFR], IMSG_NOTIFY_MESSAGE, 
-									0, 0, -1, question->converted_name, idata);
+									0, 0, -1, question->hdr->name, idata);
 							msgbuf_write(&ibuf[MY_IMSG_RAXFR]->w);
 						goto udpout;
 					} else {
@@ -2928,9 +2928,9 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 							slen = reply_notify(&sreply, NULL);
 							/* send notify to replicant process */
-							idata = strlen(question->converted_name) + 1;
+							idata = question->hdr->namelen;
 							imsg_compose(ibuf[MY_IMSG_RAXFR], IMSG_NOTIFY_MESSAGE, 
-									0, 0, -1, &question->converted_name, idata);
+									0, 0, -1, question->hdr->name, idata);
 							msgbuf_write(&ibuf[MY_IMSG_RAXFR]->w);
 							goto tcpout;
 					
@@ -2948,9 +2948,9 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_notify(&sreply, NULL);
 						/* send notify to replicant process */
-						idata = strlen(question->converted_name) + 1;
+						idata = question->hdr->namelen;
 						imsg_compose(ibuf[MY_IMSG_RAXFR], IMSG_NOTIFY_MESSAGE, 
-								0, 0, -1, &question->converted_name, idata);
+								0, 0, -1, question->hdr->name, idata);
 						msgbuf_write(&ibuf[MY_IMSG_RAXFR]->w);
 						goto tcpout;
 					} else {
