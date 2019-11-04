@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.25 2019/11/04 12:10:49 pjp Exp $
+ * $Id: raxfr.c,v 1.26 2019/11/04 12:38:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1253,10 +1253,9 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 {
 	struct rzone *lrz, *lrz0;
 	time_t now, lastnow;
-	int apexlen, sel, endspurt = 0;
+	int sel, endspurt = 0;
 	int idata;
 	int64_t serial;
-	char *apex;
 	struct rbtree *rbt;
 	struct rrset *rrset;
 	struct rr *rrp;
@@ -1284,13 +1283,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 			continue;
 
 		dolog(LOG_INFO, "adding SOA values to zone %s\n", lrz->zonename);
-		apex = dns_label(lrz->zonename, &apexlen);
-		if (apex == NULL) {
-			dolog(LOG_INFO, "dns_label failed\n");
-			continue;
-		}
-	
-		rbt = find_rrset(db, apex, apexlen);
+		rbt = find_rrset(db, lrz->zone, lrz->zonelen);
 		if (rbt == NULL) {
 			dolog(LOG_INFO, "%s has no apex, removing zone from replicant engine\n", lrz->zonename);
 			SLIST_REMOVE(&rzones, lrz, rzone, rzone_entry);
@@ -1322,7 +1315,6 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 		now = time(NULL);
 		schedule_refresh(lrz->zonename, now + lrz->soa.refresh);
 		free(rbt);
-		free(apex);
 	}
 
 	for (;;) {
