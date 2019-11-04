@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.25 2019/11/03 15:21:19 pjp Exp $
+ * $Id: ddd-db.h,v 1.26 2019/11/04 07:00:40 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -50,6 +50,7 @@
 #define IMSG_SHUTDOWN_MESSAGE 6		/* shut the server down */
 #define IMSG_RELOAD_MESSAGE 7		/* reload/restart the server */
 #define IMSG_PARSEAUTH_MESSAGE	8	/* parse message with auth required */
+#define	IMSG_NOTIFY_MESSAGE	9	/* notify our replicant engine */
 
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2

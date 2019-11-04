@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.22 2019/11/03 15:47:41 pjp Exp $
+ * $Id: raxfr.c,v 1.23 2019/11/04 07:00:41 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -139,7 +139,7 @@ extern struct rbtree *  Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);               
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);    
 extern struct question         *build_question(char *, int, int, char *);
-extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *);
+extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *);
 extern int     find_tsig_key(char *, int, char *, int);
 
 
@@ -1261,6 +1261,12 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 	struct rrset *rrset;
 	struct rr *rrp;
 	struct timeval tv;
+	fd_set rset;
+	int max = 0;
+
+	struct imsg imsg;
+	ssize_t         n, datalen;
+	char *dn = NULL;	
 
 
 #if __OpenBSD__
@@ -1317,8 +1323,9 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 		free(rbt);
 		free(apex);
 	}
-	
+
 	for (;;) {
+		FD_ZERO(&rset);
 		if (endspurt) {
 			tv.tv_sec = 0;
 			tv.tv_usec = 5000;
@@ -1326,8 +1333,14 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 			tv.tv_sec = 1;
 			tv.tv_usec = 0;
 		}
+
+		FD_SET(ibuf->fd, &rset);
+
+		if (ibuf->fd > max)
+			max = ibuf->fd;
+
 		
-		sel = select(0, NULL, NULL, NULL, &tv);
+		sel = select(max + 1, &rset, NULL, NULL, &tv);
 		if (sel == -1) {	
 			dolog(LOG_INFO, "select error: %s\n", strerror(errno));
 			continue;
@@ -1358,6 +1371,83 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 		}
 
 		lastnow = now;
+
+		if (FD_ISSET(ibuf->fd, &rset)) {
+			if ((n = imsg_read(ibuf)) < 0 && errno != EAGAIN) {
+				dolog(LOG_ERR, "imsg read failure %s\n", strerror(errno));
+				continue;
+			}
+			if (n == 0) {
+				/* child died? */
+				dolog(LOG_INFO, "sigpipe on child?  exiting.\n");
+				continue;
+			}
+
+			for (;;) {
+				if ((n = imsg_get(ibuf, &imsg)) < 0) {
+					dolog(LOG_ERR, "imsg read error: %s\n", strerror(errno));
+					break;
+				} else {
+					if (n == 0)
+						break;
+
+					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+
+					dolog(LOG_DEBUG, "got imsg of type %d\n", imsg.hdr.type);
+
+					switch(imsg.hdr.type) {
+					case IMSG_NOTIFY_MESSAGE:
+						dn = malloc(datalen);
+						if (dn == NULL) {
+							dolog(LOG_INFO, "malloc: %s\n", strerror(errno)); 
+							break;
+						}
+
+						memcpy(dn, imsg.data, datalen);
+						dn[datalen - 1] = '\0';
+
+						SLIST_FOREACH(lrz, &rzones, rzone_entry) {
+								if (lrz->zonename == NULL)
+								continue;
+
+								if (strcmp(dn, lrz->zonename) == 0)
+											break;
+						}
+
+						if (lrz != NULL) {
+										dolog(LOG_DEBUG, "zone %s is being notified now\n", dn);
+										if ((serial = get_remote_soa(lrz)) == MY_SOCK_TIMEOUT) {
+												dolog(LOG_INFO, "timeout upon notify, dropping\n");
+										} else if (serial > lrz->soa.serial) {
+											/* initiate AXFR and update zone */
+											dolog(LOG_INFO, "new higher serial detected (%ld vs. %ld)\n", serial, lrz->soa.serial);
+
+											if (pull_rzone(lrz, now, 0) < 0) {
+												dolog(LOG_INFO, "AXFR failed\n");
+											}
+
+											/* schedule restart */
+											schedule_restart(lrz->zonename, now + 100);
+												/*
+												 * we've scheduled a restart and there may be more
+												 * AXFR's to do we only have a window of 100 seconds
+												 * so we select for 5000 microseconds only, so that
+												 * other tasks can still complete.
+												 */
+												endspurt = 1;
+										} 
+							} else {
+								dolog(LOG_DEBUG, "couldn't find a rzone for domainame %s\n", dn);
+							}
+
+							free(dn);
+							break;
+					} /* switch */
+
+					imsg_free(&imsg);
+				}
+			}
+		}
 
 		LIST_FOREACH_SAFE(sp0, &myschedules, myschedule_entry, sp1) {
 			if (sp0->when <= now) {
@@ -1801,13 +1891,14 @@ do_raxfr(FILE *f, struct rzone *rzone)
 	struct sockaddr *sa;
 	socklen_t slen = sizeof(struct sockaddr_in);
 	
-	int window = 32768;
+	u_int window = 32768;
 	char tsigpass[512];
 	char humanpass[1024];
 	char *keyname;
 	int tsigpasslen, keynamelen;
-	int format = (TCP_FORMAT | ZONE_FORMAT);
+	u_int32_t format = (TCP_FORMAT | ZONE_FORMAT);
 	int len, dotsig = 1;
+	int segment;
 
 	struct soa mysoa;
 
@@ -1820,7 +1911,7 @@ do_raxfr(FILE *f, struct rzone *rzone)
 #ifndef __linux__
 	/* biggen the window */
 
-	while (setsockopt(so, SOL_SOCKET, SO_RCVBUF, &window, sizeof(window)) != -1)
+	while (window && setsockopt(so, SOL_SOCKET, SO_RCVBUF, &window, sizeof(window)) != -1)
 		window <<= 1;
 #endif
 
@@ -1874,8 +1965,9 @@ do_raxfr(FILE *f, struct rzone *rzone)
 		dotsig = 0;
 	}
 
+	segment = 0;
 
-	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), ((dotsig == 0) ? NULL : humanpass)) < 0) {
+	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), humanpass, &segment) < 0) {
 		dolog(LOG_ERR, "lookup_axfr() failed\n");
 		close(so);
 		return -1;
@@ -1887,34 +1979,34 @@ do_raxfr(FILE *f, struct rzone *rzone)
 
 
 int
-pull_rzone(struct rzone *lrz, time_t now, int doschedule)
+pull_rzone(struct rzone *rzone, time_t now, int doschedule)
 {
 	char *p, *q;
 	FILE *f;
 	char buf[PATH_MAX];
 
-	p = strrchr(lrz->filename, '/');
+	p = strrchr(rzone->filename, '/');
 	if (p == NULL) {
-		dolog(LOG_INFO, "can't determine temporary filename from %s\n", lrz->filename);
+		dolog(LOG_INFO, "can't determine temporary filename from %s\n", rzone->filename);
 		if (doschedule)
-			schedule_retry(lrz->zonename, now + lrz->soa.retry);
+			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 
 	p++;
 	q = p;
 	if (*p == '\0') {
-		dolog(LOG_INFO, "can't determine temporary filename from %s (2)\n", lrz->filename);
+		dolog(LOG_INFO, "can't determine temporary filename from %s (2)\n", rzone->filename);
 		if (doschedule)
-			schedule_retry(lrz->zonename, now + lrz->soa.retry);
+			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 
 	snprintf(buf, sizeof(buf), "%s.XXXXXXXXXXXXXX", p);	
 	if ((p = mktemp(buf)) == NULL) {
-		dolog(LOG_INFO, "can't determine temporary filename from %s (3)\n", lrz->filename);
+		dolog(LOG_INFO, "can't determine temporary filename from %s (3)\n", rzone->filename);
 		if (doschedule)
-			schedule_retry(lrz->zonename, now + lrz->soa.retry);
+			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 
@@ -1922,18 +2014,18 @@ pull_rzone(struct rzone *lrz, time_t now, int doschedule)
 		
 	f = fopen(p, "w");
 	if (f == NULL) {
-		dolog(LOG_INFO, "can't create temporary filename for zone %s\n", lrz->zonename);
+		dolog(LOG_INFO, "can't create temporary filename for zone %s\n", rzone->zonename);
 		if (doschedule)
-			schedule_retry(lrz->zonename, now + lrz->soa.retry);
+			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 
-	fprintf(f, "; REPLICANT file for zone %s gotten on %lld\n\n", lrz->zonename, now);
+	fprintf(f, "; REPLICANT file for zone %s gotten on %lld\n\n", rzone->zonename, now);
 	
-	if (do_raxfr(f, lrz) < 0) {
+	if (do_raxfr(f, rzone) < 0) {
 		dolog(LOG_INFO, "do_raxfr failed\n");
 		if (doschedule)
-			schedule_retry(lrz->zonename, now + lrz->soa.retry);
+			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 
@@ -1943,7 +2035,7 @@ pull_rzone(struct rzone *lrz, time_t now, int doschedule)
 	if (link(p, q) < 0) {
 		dolog(LOG_ERR, "can't link %s to %s\n", p, q);
 		if (doschedule)
-			schedule_retry(lrz->zonename, now + lrz->soa.retry);
+			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 

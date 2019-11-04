@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.44 2019/11/03 10:37:05 pjp Exp $
+ * $Id: util.c,v 1.45 2019/11/04 07:00:41 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -103,9 +103,8 @@ int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 char * 	bin2hex(char *, int);
 u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
-int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *);
+int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *);
 
-static int segment;
 static int bytes_received, answers;
 static int additionalcount = 0;
 
@@ -1646,7 +1645,7 @@ bitmap2human(char *bitmap, int len)
 
 
 int
-lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass)
+lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass, int *segment)
 {
 	char query[512];
 	char pseudo_packet[512];
@@ -1941,10 +1940,10 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			HMAC_Update(ctx, estart, (p - estart));
 		}
 
-		if (segment == 0 && (format & ZONE_FORMAT) && f != NULL) 
+		if (*segment == 0 && (format & ZONE_FORMAT) && f != NULL) 
 			fprintf(f, "zone \"%s\" {\n", zonename);
 	
-		segment++;
+		(*segment)++;
 
 		for (count = 0; count < segmentcount; count++) {
 			char mac[32];

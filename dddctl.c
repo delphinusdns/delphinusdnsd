@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.82 2019/11/03 15:21:19 pjp Exp $
+ * $Id: dddctl.c,v 1.83 2019/11/04 07:00:40 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -364,7 +364,7 @@ extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int1
 
 extern int                      memcasecmp(u_char *, u_char *, int);
 extern int 			tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
-extern int			lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *);
+extern int			lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *);
 
 
 extern int dnssec;
@@ -6492,7 +6492,7 @@ dig(int argc, char *argv[])
 	}
 
 	if (type == DNS_TYPE_AXFR) {
-		if (lookup_axfr(f, so, domainname, &mysoa, format, tsigkey, tsigpass) < 0) {
+		if (lookup_axfr(f, so, domainname, &mysoa, format, tsigkey, tsigpass, &segment) < 0) {
 			exit(1);
 		}
 				

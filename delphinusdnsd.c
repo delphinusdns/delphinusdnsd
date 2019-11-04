@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.78 2019/11/03 15:21:19 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.79 2019/11/04 07:00:41 pjp Exp $
  */
 
 
@@ -1970,6 +1970,12 @@ axfrentry:
 							snprintf(replystring, DNS_MAXNAME, "NOTIFY");
 							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 							slen = reply_notify(&sreply, NULL);
+
+							/* send notify to replicant process */
+							idata = strlen(question->converted_name) + 1;
+							imsg_compose(ibuf[MY_IMSG_RAXFR], IMSG_NOTIFY_MESSAGE, 
+									0, 0, -1, question->converted_name, idata);
+							msgbuf_write(&ibuf[MY_IMSG_RAXFR]->w);
 							goto udpout;
 					
 					} else if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0) {
@@ -1985,6 +1991,11 @@ axfrentry:
 						snprintf(replystring, DNS_MAXNAME, "NOTIFY");
 						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_notify(&sreply, NULL);
+							/* send notify to replicant process */
+							idata = strlen(question->converted_name) + 1;
+							imsg_compose(ibuf[MY_IMSG_RAXFR], IMSG_NOTIFY_MESSAGE, 
+									0, 0, -1, question->converted_name, idata);
+							msgbuf_write(&ibuf[MY_IMSG_RAXFR]->w);
 						goto udpout;
 					} else {
 						/* RFC 1996 - 3.10 is probably broken reply REFUSED */
@@ -2373,7 +2384,8 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 
 			if (mshutdown) {
 				dolog(LOG_INFO, "shutting down on signal %d\n", msig);
-				unlink(socketpath);
+				if (! debug)
+					unlink(socketpath);
 
 				pid = getpgrp();
 				killpg(pid, msig);
@@ -2390,7 +2402,8 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 					dolog(LOG_ERR, "munmap: %s\n", strerror(errno));
 				}
 			
-				unlink(socketpath);
+				if (! debug)
+					unlink(socketpath);
 
 				dolog(LOG_INFO, "restarting on SIGHUP or command\n");
 
@@ -2505,6 +2518,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	int axfr_acl = 0;
 	int sp; 
 	int lfd;
+	int idata;
 	uint conncnt = 0;
 	int tcpflags;
 	pid_t pid;
@@ -2913,6 +2927,11 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 							snprintf(replystring, DNS_MAXNAME, "NOTIFY");
 							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 							slen = reply_notify(&sreply, NULL);
+							/* send notify to replicant process */
+							idata = strlen(question->converted_name) + 1;
+							imsg_compose(ibuf[MY_IMSG_RAXFR], IMSG_NOTIFY_MESSAGE, 
+									0, 0, -1, &question->converted_name, idata);
+							msgbuf_write(&ibuf[MY_IMSG_RAXFR]->w);
 							goto tcpout;
 					
 					} else if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0) {
@@ -2928,6 +2947,11 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						snprintf(replystring, DNS_MAXNAME, "NOTIFY");
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_notify(&sreply, NULL);
+						/* send notify to replicant process */
+						idata = strlen(question->converted_name) + 1;
+						imsg_compose(ibuf[MY_IMSG_RAXFR], IMSG_NOTIFY_MESSAGE, 
+								0, 0, -1, &question->converted_name, idata);
+						msgbuf_write(&ibuf[MY_IMSG_RAXFR]->w);
 						goto tcpout;
 					} else {
 						/* RFC 1996 - 3.10 is probably broken, replying REFUSED */

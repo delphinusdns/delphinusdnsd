@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.78 2019/11/03 15:21:19 pjp Exp $
+ * $Id: parse.y,v 1.79 2019/11/04 07:00:41 pjp Exp $
  */
 
 %{
@@ -3769,40 +3769,68 @@ notifysource(struct question *q, struct sockaddr_storage *from)
 		if (! rz->active)
 			continue;
 
-		tsigkey = dns_label(rz->tsigkey, &tsigretlen);
 		zone = dns_label(rz->zonename, &zoneretlen);
 
-		/* if we are the right zone, right tsigkey, and right master IP/IP6 */
-		if ((zoneretlen == q->hdr->namelen) &&
-			(memcasecmp(zone, q->hdr->name, zoneretlen) == 0) && 
-			(tsigretlen == q->tsig.tsigkeylen) &&
-			(memcasecmp(tsigkey, q->tsig.tsigkey, tsigretlen) == 0) &&
-			(rz->storage.ss_family == from->ss_family)) {
-				free(tsigkey);
-				free(zone);
-				if (from->ss_family == AF_INET) {
-					/* IPv4 notify */
-					rzs = (struct sockaddr_in *)&rz->storage;
-					
-					if (fromi->sin_addr.s_addr == rzs->sin_addr.s_addr) {
+		if (q->tsig.have_tsig && q->tsig.tsigverified) {
+				tsigkey = dns_label(rz->tsigkey, &tsigretlen);
+				/* if we are the right zone, right tsigkey, and right master IP/IP6 */
+				if ((zoneretlen == q->hdr->namelen) &&
+					(memcasecmp(zone, q->hdr->name, zoneretlen) == 0) && 
+					(tsigretlen == q->tsig.tsigkeylen) &&
+					(memcasecmp(tsigkey, q->tsig.tsigkey, tsigretlen) == 0) &&
+					(rz->storage.ss_family == from->ss_family)) {
+						free(tsigkey);
+						free(zone);
+						if (from->ss_family == AF_INET) {
+							/* IPv4 notify */
+							rzs = (struct sockaddr_in *)&rz->storage;
+							
+							if (fromi->sin_addr.s_addr == rzs->sin_addr.s_addr) {
 #if 0
-					if (memcmp((void*)&fromi->sin_addr, (void*)&rzs->sin_addr, 4) == 0) {
+							if (memcmp((void*)&fromi->sin_addr, (void*)&rzs->sin_addr, 4) == 0) {
 #endif
-						return 1;
-					}
-				} else {
-					/* IPv6 notify */
-					rzs6 = (struct sockaddr_in6 *)&rz->storage;
+								return 1;
+							}
+						} else {
+							/* IPv6 notify */
+							rzs6 = (struct sockaddr_in6 *)&rz->storage;
 
-					if (memcmp((void*)&fromi6->sin6_addr,
-						(void*)&rzs6->sin6_addr, 16) == 0)
-					return 1;
+							if (memcmp((void*)&fromi6->sin6_addr,
+								(void*)&rzs6->sin6_addr, 16) == 0)
+							return 1;
+						}
+				} else {
+					free(tsigkey);
+					free(zone);
 				}
 		} else {
-			free(tsigkey);
-			free(zone);
-		}
-	}
+				/* we don't have tsig here */
+
+				if ((zoneretlen == q->hdr->namelen) &&
+					(memcasecmp(zone, q->hdr->name, zoneretlen) == 0) && 
+					(rz->storage.ss_family == from->ss_family)) {
+						free(zone);
+						if (from->ss_family == AF_INET) {
+							/* IPv4 notify */
+							rzs = (struct sockaddr_in *)&rz->storage;
+							
+							if (fromi->sin_addr.s_addr == rzs->sin_addr.s_addr) {
+								return 1;
+							}
+						} else {
+							/* IPv6 notify */
+							rzs6 = (struct sockaddr_in6 *)&rz->storage;
+
+							if (memcmp((void*)&fromi6->sin6_addr,
+								(void*)&rzs6->sin6_addr, 16) == 0)
+							return 1;
+						}
+				} else {
+					free(zone);
+				}
+		} /* if havetsig */
+	
+	} /* SLIST_FOREACH */
 
 	return 0;
 }
