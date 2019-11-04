@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.45 2019/11/04 07:00:41 pjp Exp $
+ * $Id: util.c,v 1.46 2019/11/04 09:17:02 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -304,8 +304,10 @@ dns_label(char *name, int *returnlen)
 		p++;
 	}
 
+#if DEBUG
 	if (debug)
 		dolog(LOG_DEBUG, "converting name= %s\n", name);
+#endif
 
 	return dnslabel;
 }

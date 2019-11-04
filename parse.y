@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.79 2019/11/04 07:00:41 pjp Exp $
+ * $Id: parse.y,v 1.80 2019/11/04 09:17:02 pjp Exp $
  */
 
 %{
@@ -806,8 +806,10 @@ zonestatement:
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf("%s SOA\n", $1);
+#endif
 			} else {
 				if (debug)
 					printf("soa error\n");
@@ -845,8 +847,10 @@ zonestatement:
 				if (fill_srv($1, $3, $5, $7, $9, $11, $13) < 0) {
 					return -1;
 				}
+#if DEBUG
 				if (debug)
 					printf("SRV\n");
+#endif
 
 			} else {
 				if (debug)
@@ -867,24 +871,30 @@ zonestatement:
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf("%s NS\n", $1);
+#endif
 
 			} else if (strcasecmp($3, "ptr") == 0) {
 				if (fill_ptr($1, $3, $5, $7) < 0) {
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf("%s PTR\n", $1);
+#endif
 
 			} else if (strcasecmp($3, "cname") == 0) {
 				if (fill_cname($1, $3, $5, $7) < 0) {
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf("%s CNAME\n", $3);
+#endif
 
 			} else {
 				if (debug)
@@ -903,8 +913,10 @@ zonestatement:
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf("%s AAAA\n", $1);
+#endif
 			} else {
 
 				if (debug)
@@ -923,8 +935,10 @@ zonestatement:
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf("%s A\n", $1);
+#endif
 
 			} else {
 				if (debug)
@@ -944,8 +958,10 @@ zonestatement:
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf("%s MX -> %lld %s\n", $1, $7, $9);
+#endif
 
 			} else {
 				if (debug)
@@ -965,8 +981,10 @@ zonestatement:
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf(" %s TXT -> %s\n", $1, $7);
+#endif
 			} else {
 				if (debug)
 					printf("another txt like record I don't know?\n");
@@ -985,8 +1003,10 @@ zonestatement:
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf(" %s NAPTR\n", $1);
+#endif
 			} else {
 				if (debug)
 					printf("another naptr like record I don't know?\n");
@@ -1012,26 +1032,34 @@ zonestatement:
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf(" %s DNSKEY\n", $1);
+#endif
 			} else if (strcasecmp($3, "ds") == 0) {
 				if (fill_ds($1, $3, $5, $7, $9, $11, $13) < 0) {
 					return -1;
 				}
+#if DEBUG
 				if (debug)
 					printf(" %s DS\n", $1);
+#endif
 			} else if (strcasecmp($3, "nsec3param") == 0) {
 				if (fill_nsec3param($1, $3, $5, $7, $9, $11, $13) < 0) {
 					return -1;
 				}
+#if DEBUG
 				if (debug)
 					printf(" %s NSEC3PARAM\n", $1);
+#endif
 			} else if (strcasecmp($3, "tlsa") == 0) {
 				if (fill_tlsa($1, $3, $5, $7, $9, $11, $13) < 0) {
 					return -1;
 				}
+#if DEBUG
 				if (debug)
 					printf(" %s TLSA\n", $1);
+#endif
 			} else {
 				if (debug)
 					printf("another dnskey like record I don't know?\n");
@@ -1055,8 +1083,10 @@ zonestatement:
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf(" %s RRSIG\n", $1);
+#endif
 			} else {
 				if (debug)
 					printf("another rrsig like record I don't know?\n");
@@ -1081,8 +1111,10 @@ zonestatement:
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf(" %s NSEC\n", $1);
+#endif
 			} else {
 				if (debug)
 					printf("another nsec like record I don't know?\n");
@@ -1106,8 +1138,10 @@ zonestatement:
 					return -1;
 				}
 
+#if DEBUG
 				if (debug)
 					printf(" %s NSEC3\n", $1);
+#endif
 			}
 
 

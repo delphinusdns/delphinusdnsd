@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.23 2019/11/04 07:00:41 pjp Exp $
+ * $Id: raxfr.c,v 1.24 2019/11/04 09:17:02 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1596,7 +1596,7 @@ schedule_restart(char *zonename, time_t seconds)
 
 	LIST_INSERT_HEAD(&myschedules, sp0, myschedule_entry);
 
-	dolog(LOG_INFO, "scheduling restart at %lu\n", seconds);
+	dolog(LOG_INFO, "scheduling restart at %s", ctime(&seconds));
 }
 
 static void
