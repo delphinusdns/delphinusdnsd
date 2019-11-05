@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.26 2019/11/04 12:38:40 pjp Exp $
+ * $Id: raxfr.c,v 1.27 2019/11/05 07:52:27 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -70,6 +70,7 @@
 #endif /* __FreeBSD__ */
 #endif /* __linux__ */
 
+#include <openssl/evp.h>
 #include <openssl/bn.h>
 #include <openssl/hmac.h>
 
@@ -114,7 +115,7 @@ int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, H
 u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
 int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
-int raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *);
+int raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *, int);
 void			replicantloop(ddDB *, struct imsgbuf *, struct imsgbuf *);
 static void		schedule_refresh(char *, time_t);
 static void		schedule_retry(char *, time_t);
@@ -139,8 +140,9 @@ extern struct rbtree *  Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);               
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);    
 extern struct question         *build_question(char *, int, int, char *);
-extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *);
+extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *);
 extern int     find_tsig_key(char *, int, char *, int);
+extern int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 
 
 /* The following alias helps with bounds checking all input, needed! */
@@ -1068,7 +1070,7 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 }
 
 int 
-raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *mac)
+raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *mac, int standardanswer)
 {
 	struct dns_tsigrr *sdt;
 	char *save;
@@ -1085,9 +1087,6 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	int rawkeynamelen, rawalgnamelen;
 	int macsize = 32;
 	
-	static int standardanswer = 1;
-
-
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
@@ -1220,7 +1219,7 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	HMAC_Final(ctx, mac, &macsize);
 
 	if (memcmp(sdt->mac, mac, macsize) != 0) {	
-#if 0
+#if 1
 		int i;
 
 		printf("the given mac: ");
@@ -1415,10 +1414,8 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 
 											if (pull_rzone(lrz, now, 0) < 0) {
 												dolog(LOG_INFO, "AXFR failed\n");
-											}
-
-											/* schedule restart */
-											schedule_restart(lrz->zonename, now + 100);
+											} else {
+												schedule_restart(lrz->zonename, now + 100);
 												/*
 												 * we've scheduled a restart and there may be more
 												 * AXFR's to do we only have a window of 100 seconds
@@ -1426,6 +1423,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 												 * other tasks can still complete.
 												 */
 												endspurt = 1;
+											}
 										} /* else serial ... */
 							} else {
 								humanconv = convert_name(dn, datalen);
@@ -1615,15 +1613,17 @@ get_remote_soa(struct rzone *rzone)
 	struct soa mysoa;
 	socklen_t slen = sizeof(struct sockaddr_in);
 
+	char tsigpass[512];
+	char *keyname;
+	int tsigpasslen, keynamelen;
 	int len, i, answers;
 	int numansw, numaddi, numauth;
 	int rrtype, soacount = 0;
 	u_int16_t rdlen;
 	char query[512];
-	char *reply;
+	char *reply, *dupreply;
 	struct raxfr_logic *sr;
 	struct question *q;
-	struct dns_optrr *optrr;
 	struct whole_header {
 		struct dns_header dh;
 	} *wh, *rwh;
@@ -1633,13 +1633,23 @@ get_remote_soa(struct rzone *rzone)
 	u_char *end, *estart;
 	int totallen, zonelen, rrlen;
 	int replysize = 0;
-	u_int16_t *class, *type, *tcpsize;
+	u_int16_t *tsigclass, *tsigtype, *class, *type, *tcpsize;
 	u_int16_t *plen;
 	u_int16_t tcplen;
 
 	FILE *f = NULL;
 	int format = 0;
+	int dotsig = 1;
+	time_t now;
+	
+	char shabuf[32];
+	char *algname = NULL;
 
+	uint32_t *ttl;
+	HMAC_CTX *ctx;
+	uint16_t hmaclen;
+	int sacount = 0;
+	
 
 	if ((so = socket(rzone->storage.ss_family, SOCK_STREAM, 0)) < 0) {
 		dolog(LOG_INFO, "get_remote_soa: %s\n", strerror(errno));
@@ -1662,6 +1672,27 @@ get_remote_soa(struct rzone *rzone)
 		sa = (struct sockaddr *)&sin;
 	}
 
+	if (strcmp(rzone->tsigkey, "NOKEY") != 0) {
+
+		keyname = dns_label(rzone->tsigkey, &keynamelen);
+		if (keyname == NULL) {
+			dolog(LOG_ERR, "dns_label failed\n");
+			close(so);
+			return -1;
+		}
+
+		if ((tsigpasslen = find_tsig_key(keyname, keynamelen, (char *)&tsigpass, sizeof(tsigpass))) < 0) {
+			dolog(LOG_ERR, "do not have a record of TSIG key %s\n", rzone->tsigkey);
+			close(so);
+			return -1;
+		}
+
+		dotsig = 1;
+
+	} else {
+		dotsig = 0;
+	}
+
         if (connect(so, sa, slen) < 0) {
                 dolog(LOG_INFO, "connect to master %s port %u: %s\n", rzone->master, rzone->masterport, strerror(errno));
 		close(so);
@@ -1681,7 +1712,7 @@ get_remote_soa(struct rzone *rzone)
 	wh->dh.question = htons(1);
 	wh->dh.answer = 0;
 	wh->dh.nsrr = 0;
-	wh->dh.additional = htons(1);;
+	wh->dh.additional = 0;
 
 	SET_DNS_QUERY(&wh->dh);
 	SET_DNS_RECURSION(&wh->dh);
@@ -1712,23 +1743,104 @@ get_remote_soa(struct rzone *rzone)
 	*class = htons(DNS_CLASS_IN);
 	totallen += sizeof(u_int16_t);
 
-	/* attach EDNS0 */
+	/* we have a key, attach a TSIG payload */
+	if (dotsig) {
+		ctx = HMAC_CTX_new();
+		HMAC_Init_ex(ctx, tsigpass, tsigpasslen, EVP_sha256(), NULL);
+		HMAC_Update(ctx, &query[2], totallen - 2);
 
-	optrr = (struct dns_optrr *)&query[totallen];
+		now = time(NULL);
+		if (tsig_pseudoheader(rzone->tsigkey, 300, now, ctx) < 0) {
+			fprintf(stderr, "tsig_pseudoheader failed\n");
+			return -1;
+		}
 
-	optrr->name[0] = 0;
-	optrr->type = htons(DNS_TYPE_OPT); 
-	optrr->class = htons(replysize);
-	optrr->ttl = htonl(0);		/* EDNS version 0 */
-#if 0
-	if ((format & DNSSEC_FORMAT))
-		SET_DNS_ERCODE_DNSSECOK(optrr);
+		HMAC_Final(ctx, shabuf, &len);
+
+		if (len != 32) {
+			fprintf(stderr, "not expected len != 32\n");
+			return -1;
+		}
+
+#if defined __linux__ || defined __FreeBSD__
+		HMAC_CTX_free(ctx);
+#else
+		HMAC_cleanup(ctx);
 #endif
-	HTONL(optrr->ttl);
-	optrr->rdlen = 0;
-	optrr->rdata[0] = 0;
 
-	totallen += (sizeof(struct dns_optrr));
+		memcpy(&query[totallen], keyname, keynamelen);
+		totallen += keynamelen;
+		
+		tsigtype = (u_int16_t *)&query[totallen];
+		*tsigtype = htons(DNS_TYPE_TSIG);
+		totallen += 2;
+
+		tsigclass = (u_int16_t *)&query[totallen];
+		*tsigclass = htons(DNS_CLASS_ANY);
+		totallen += 2;
+
+		ttl = (u_int32_t *)&query[totallen];
+		*ttl = htonl(0);
+		totallen += 4;
+
+		algname = dns_label("hmac-sha256", &len);
+		if (algname == NULL) {
+			return -1;
+		}
+
+		/* rdlen */
+		type = (u_int16_t *)&query[totallen];
+		*type = htons(len + 2 + 4 + 2 + 2 + 32 + 2 + 2 + 2);
+		totallen += 2;
+
+		/* algorithm name */
+		memcpy(&query[totallen], algname, len);
+		totallen += len;
+
+		free(algname);
+
+		/* time 1 */
+		type = (u_int16_t *)&query[totallen];	
+		*type = htons((now >> 32) & 0xffff);
+		totallen += 2;
+
+		/* time 2 */
+		ttl = (u_int32_t *)&query[totallen];
+		*ttl = htonl((now & 0xffffffff));
+		totallen += 4;
+
+		/* fudge */
+		type = (u_int16_t *)&query[totallen];	
+		*type = htons(300);
+		totallen += 2;
+	
+		/* hmac size */
+		type = (u_int16_t *)&query[totallen];	
+		*type = htons(sizeof(shabuf));
+		totallen += 2;
+
+		/* hmac */
+		memcpy(&query[totallen], shabuf, sizeof(shabuf));
+		totallen += sizeof(shabuf);
+
+		/* original id */
+		type = (u_int16_t *)&query[totallen];	
+		*type = wh->dh.id;
+		totallen += 2;
+
+		/* error */
+		type = (u_int16_t *)&query[totallen];	
+		*type = 0;
+		totallen += 2;
+		
+		/* other len */
+		type = (u_int16_t *)&query[totallen];	
+		*type = 0;
+		totallen += 2;
+
+		wh->dh.additional = htons(1);
+	}
+
 	*tcpsize = htons(totallen - 2);
 
 	if (send(so, query, totallen, 0) < 0) {
@@ -1744,11 +1856,17 @@ get_remote_soa(struct rzone *rzone)
 		close(so);
 		return(MY_SOCK_TIMEOUT);
 	}
+	dupreply = calloc(1, replysize + 2);
+	if (dupreply == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		close(so);
+		return(MY_SOCK_TIMEOUT);
+	}
 	
 	if ((len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL)) < 0) {
 		dolog(LOG_INFO, "recv: %s\n", strerror(errno));
 		close(so);
-		free(reply);
+		free(reply);  free(dupreply);
 		return(MY_SOCK_TIMEOUT);
 	}
 
@@ -1758,10 +1876,11 @@ get_remote_soa(struct rzone *rzone)
 	if ((len = recv(so, reply, tcplen + 2, MSG_WAITALL)) < 0) {
 		dolog(LOG_INFO, "recv: %s\n", strerror(errno));
 		close(so);
-		free(reply);
+		free(reply);  free(dupreply);
 		return(MY_SOCK_TIMEOUT);
 	}
 
+	memcpy(dupreply, reply, len);
 	rwh = (struct whole_header *)&reply[2];
 
 	end = &reply[len];
@@ -1769,14 +1888,14 @@ get_remote_soa(struct rzone *rzone)
 	if (rwh->dh.id != wh->dh.id) {
 		dolog(LOG_INFO, "DNS ID mismatch\n");
 		close(so);
-		free(reply);
+		free(reply);  free(dupreply);
 		return(MY_SOCK_TIMEOUT);
 	}
 
 	if (!(htons(rwh->dh.query) & DNS_REPLY)) {
 		dolog(LOG_INFO, "NOT a DNS reply\n");
 		close(so);
-		free(reply);
+		free(reply);  free(dupreply);
 		return(MY_SOCK_TIMEOUT);
 	}
 
@@ -1788,31 +1907,32 @@ get_remote_soa(struct rzone *rzone)
 	if (answers < 1) {	
 		dolog(LOG_INFO, "NO ANSWER provided\n");
 		close(so);
-		free(reply);
+		free(reply);  free(dupreply);
 		return(MY_SOCK_TIMEOUT);
 	}
 
-	q = build_question((char *)&wh->dh, len, wh->dh.additional, NULL);
+	q = build_question((char *)dupreply + 2, len - 2, wh->dh.additional, NULL);
 	if (q == NULL) {
 		dolog(LOG_INFO, "failed to build_question\n");
 		close(so);
-		free(reply);
+		free(reply);  free(dupreply);
 		return(MY_SOCK_TIMEOUT);
 	}
 		
-	if (memcmp(q->hdr->name, name, q->hdr->namelen) != 0) {
+	if (memcasecmp(q->hdr->name, name, q->hdr->namelen) != 0) {
 		dolog(LOG_INFO, "question name not for what we asked\n");
 		close(so);
-		free(reply);
+		free(reply);  free(dupreply);
 		return(MY_SOCK_TIMEOUT);
 	}
 
-	if (q->hdr->qclass != *class || q->hdr->qtype != *type) {
+	if (ntohs(q->hdr->qclass) != DNS_CLASS_IN || ntohs(q->hdr->qtype) != DNS_TYPE_SOA) {
 		dolog(LOG_INFO, "wrong class or type\n");
 		close(so);
-		free(reply);
+		free(reply);  free(dupreply);
 		return(MY_SOCK_TIMEOUT);
 	}
+
 	
 	p = (u_char *)&rwh[1];		
 	
@@ -1825,32 +1945,58 @@ get_remote_soa(struct rzone *rzone)
 
 	estart = (u_char *)&rwh->dh;
 
+	if (dotsig) {
+		ctx = HMAC_CTX_new();
+		HMAC_Init_ex(ctx, tsigpass, tsigpasslen, EVP_sha256(), NULL);
+		hmaclen = htons(32);
+		HMAC_Update(ctx, (char *)&hmaclen, sizeof(hmaclen));
+		HMAC_Update(ctx, shabuf, sizeof(shabuf));
+		hmaclen = rwh->dh.additional;		/* save additional */
+		NTOHS(rwh->dh.additional);
+		rwh->dh.additional--;
+		HTONS(rwh->dh.additional);
+		HMAC_Update(ctx, estart, (p - estart));
+		rwh->dh.additional = hmaclen;		/* restore additional */
+	}
+
+
 	for (i = answers; i > 0; i--) {
-		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, NULL)) < 0) {
+		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, (dotsig ? ctx : NULL))) < 0) {
 			dolog(LOG_INFO, "not a SOA reply, or ERROR\n");
 			close(so);
-			free(reply);
+			free(reply);  free(dupreply);
 			return(MY_SOCK_TIMEOUT);
 		}
 		
-		p = (estart + rrlen);
+		if (rrtype != DNS_TYPE_TSIG) 
+			p = (estart + rrlen);
 
 		if (rrtype == DNS_TYPE_SOA) {
-			if ((len = raxfr_soa(f, p, estart, end, &mysoa, soacount, format, rdlen, NULL)) < 0) {
+			if ((len = raxfr_soa(f, p, estart, end, &mysoa, soacount, format, rdlen, (dotsig ? ctx : NULL))) < 0) {
 				dolog(LOG_INFO, "raxfr_soa failed\n");
 				close(so);
-				free(reply);
+				free(reply);  free(dupreply);
 				return(MY_SOCK_TIMEOUT);
 			}
 			p = (estart + len);
 			soacount++;
+		} else if (dotsig && (rrtype == DNS_TYPE_TSIG)) {
+			/* do tsig checks here */
+			if ((len = raxfr_tsig(f,p,estart,end,&mysoa,rdlen,ctx, (char *)&shabuf, (sacount++ == 0) ? 1 : 0)) < 0) {
+				fprintf(stderr, "error with TSIG record\n");
+				close(so);
+				free(reply);  free(dupreply);
+				return(MY_SOCK_TIMEOUT);
+			}
+
+			p = (estart + len);
 		} else {
 			for (sr = supported; sr->rrtype != 0; sr++) {
 				if (rrtype == sr->rrtype) {
-					if ((len = (*sr->raxfr)(f, p, estart, end, &mysoa, rdlen, NULL)) < 0) {
+					if ((len = (*sr->raxfr)(f, p, estart, end, &mysoa, rdlen, ctx)) < 0) {
 						dolog(LOG_INFO, "error with rrtype %d\n", sr->rrtype);
 						close(so);
-						free(reply);
+						free(reply);  free(dupreply);
 						return(MY_SOCK_TIMEOUT);
 					}
 					p = (estart + len);
@@ -1859,10 +2005,10 @@ get_remote_soa(struct rzone *rzone)
 			}
 
 			if (sr->rrtype == 0) {
-				if (rrtype != 41) {
+				if (rrtype != 41 && rrtype != 250) {
 					dolog(LOG_INFO, "unsupported RRTYPE %u\n", rrtype);
 					close(so);
-					free(reply);
+					free(reply);  free(dupreply);
 					return(MY_SOCK_TIMEOUT);
 				}
 			} 
@@ -1871,9 +2017,18 @@ get_remote_soa(struct rzone *rzone)
 
 	} /* for () */
 
-	free(reply);
+	free(reply);  free(dupreply);
 
 	close(so);
+
+	if (dotsig) {
+#if defined __linux__ || defined __FreeBSD__
+		HMAC_CTX_free(ctx);
+#else
+		HMAC_cleanup(ctx);
+#endif
+	}
+
 	return ((int64_t)ntohl(mysoa.serial));
 }
 
@@ -1893,7 +2048,9 @@ do_raxfr(FILE *f, struct rzone *rzone)
 	int tsigpasslen, keynamelen;
 	u_int32_t format = (TCP_FORMAT | ZONE_FORMAT);
 	int len, dotsig = 1;
-	int segment;
+	int segment = 0;
+	int answers = 0;
+	int additionalcount = 0;
 
 	struct soa mysoa;
 
@@ -1933,7 +2090,6 @@ do_raxfr(FILE *f, struct rzone *rzone)
         }
 
 	if (strcmp(rzone->tsigkey, "NOKEY") != 0) {
-
 		keyname = dns_label(rzone->tsigkey, &keynamelen);
 		if (keyname == NULL) {
 			dolog(LOG_ERR, "dns_label failed\n");
@@ -1961,8 +2117,10 @@ do_raxfr(FILE *f, struct rzone *rzone)
 	}
 
 	segment = 0;
+	answers = 0;
+	additionalcount = 0;
 
-	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), humanpass, &segment) < 0) {
+	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), humanpass, &segment, &answers, &additionalcount) < 0) {
 		dolog(LOG_ERR, "lookup_axfr() failed\n");
 		close(so);
 		return -1;

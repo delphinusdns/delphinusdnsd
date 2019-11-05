@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.46 2019/11/04 09:17:02 pjp Exp $
+ * $Id: util.c,v 1.47 2019/11/05 07:52:27 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -103,10 +103,9 @@ int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 char * 	bin2hex(char *, int);
 u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
-int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *);
+int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *);
 
-static int bytes_received, answers;
-static int additionalcount = 0;
+int bytes_received;
 
 
 /* externs */
@@ -145,7 +144,7 @@ extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
 extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
-extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *);
+extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int);
 
 
 /* internals */
@@ -1095,7 +1094,9 @@ build_question(char *buf, int len, int additional, char *mac)
 		/* we don't have any tsig keys configured, no auth done */
 		if (tsig == 0) {
 			i = rollback;
+#if 0
 			dolog(LOG_INFO, "build_question(): received a TSIG request, but tsig is not turned on for this IP range, this could result in a '1' error reply\n");
+#endif
 			break;
 		}
 
@@ -1647,7 +1648,7 @@ bitmap2human(char *bitmap, int len)
 
 
 int
-lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass, int *segment)
+lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass, int *segment, int *answers, int *additionalcount)
 {
 	char query[512];
 	char pseudo_packet[512];
@@ -1676,6 +1677,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	HMAC_CTX *ctx;
 	time_t now = 0;
 	socklen_t sizetv;
+	int sacount = 0;
 	
 	if (!(format & TCP_FORMAT))
 		return -1;
@@ -1743,11 +1745,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			return -1;
 		}
 
-#if defined __linux__ || defined __FreeBSD__
 		HMAC_CTX_free(ctx);
-#else
-		HMAC_cleanup(ctx);
-#endif
 
 		keyname = dns_label(tsigkey, &len);
 		if (keyname == NULL) {
@@ -1852,7 +1850,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		ctx = HMAC_CTX_new();
 		HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
 		maclen = htons(32);
-		HMAC_Update(ctx, (char *)&maclen, 2);
+		HMAC_Update(ctx, (char *)&maclen, sizeof(maclen));
 		HMAC_Update(ctx, shabuf, sizeof(shabuf));
 	} else
 		ctx = NULL;
@@ -1914,10 +1912,13 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		segmentcount = ntohs(rwh->dh.answer);
 		if (tsigkey) {
 			segmentcount += ntohs(rwh->dh.additional);
-			additionalcount += ntohs(rwh->dh.additional);
-			rwh->dh.additional = 0;
+			*additionalcount += ntohs(rwh->dh.additional);
+#if 0
+			printf("additional = %d\n", ntohs(rwh->dh.additional));
+			// rwh->dh.additional = 0;
+#endif
 		} 
-		answers += segmentcount;
+		*answers += segmentcount;
 
 			
 		if (memcmp(q->hdr->name, name, q->hdr->namelen) != 0) {
@@ -1939,7 +1940,14 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		estart = (u_char *)&rwh->dh;
 
 		if (tsigkey) {
+			uint16_t saveadd;
+
+			saveadd = rwh->dh.additional;
+			NTOHS(rwh->dh.additional);
+			rwh->dh.additional--;
+			HTONS(rwh->dh.additional);
 			HMAC_Update(ctx, estart, (p - estart));
+			rwh->dh.additional = saveadd;
 		}
 
 		if (*segment == 0 && (format & ZONE_FORMAT) && f != NULL) 
@@ -1960,7 +1968,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 				uint16_t maclen;
 
 				/* do tsig checks here */
-				if ((len = raxfr_tsig(f,p,estart,end,mysoa,rdlen,ctx, (char *)&mac)) < 0) {
+				if ((len = raxfr_tsig(f,p,estart,end,mysoa,rdlen,ctx, (char *)&mac, (sacount++ == 0) ? 1 : 0)) < 0) {
 					fprintf(stderr, "error with TSIG record\n");
 					return -1;
 				}
@@ -1975,8 +1983,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			 	HMAC_CTX_reset(ctx);	
 				HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
 				maclen = htons(32);
-				HMAC_Update(ctx, (char *)&maclen, 2);
-				HMAC_Update(ctx, mac, 32);
+				HMAC_Update(ctx, (char *)&maclen, sizeof(maclen));
+				HMAC_Update(ctx, mac, sizeof(mac));
 
 				if (soacount > 1)
 					goto out;

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.84 2019/11/04 08:22:14 pjp Exp $
+ * $Id: dddctl.c,v 1.85 2019/11/05 07:52:27 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -105,8 +105,7 @@ int debug = 0;
 int verbose = 0;
 static struct timeval tv0;
 static time_t current_time;
-static int bytes_received, answers;
-static int segment;
+extern int bytes_received;
 
 SLIST_HEAD(, keysentry) keyshead;
 
@@ -204,7 +203,7 @@ pid_t 	getdaemonpid(void);
 void	debug_bindump(const char *, int);
 int	command_socket(char *);
 int 	connect_server(char *, int, u_int32_t);
-int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *, u_int16_t);
+int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *, u_int16_t, int *, int*);
 int	count_db(ddDB *);
 void	update_soa_serial(ddDB *, char *, time_t);
 int	notglue(ddDB *, struct rbtree *, char *);
@@ -303,7 +302,6 @@ int icount = 0;
 int vslen = 0;
 char *versionstring = NULL;
 u_int64_t expiredon, signedon;
-int additionalcount = 0;
 
 /* externs */
 
@@ -355,11 +353,10 @@ extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
 extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
-extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *);
 
 extern int                      memcasecmp(u_char *, u_char *, int);
 extern int 			tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
-extern int  lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *);
+extern int  lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *);
 extern int 			insert_tsig(char *, char *);
 extern int  			find_tsig_key(char *, int, char *, int);
 extern int  			insert_tsig_key(char *, int, char *);
@@ -6357,6 +6354,9 @@ dig(int argc, char *argv[])
 	u_int16_t port = 53;
 	int ch, so, ms;
 	int type = DNS_TYPE_A;
+	int segment = 0;
+	int answers = 0;
+	int additionalcount = 0;
 
 	while ((ch = getopt(argc, argv, "@:BDIP:TZp:Q:y:")) != -1) {
 		switch (ch) {
@@ -6473,13 +6473,16 @@ dig(int argc, char *argv[])
 		exit(1);
 	}
 
+	segment = 0;
+	answers = 0;
+
 	if (type == DNS_TYPE_AXFR) {
-		if (lookup_axfr(f, so, domainname, &mysoa, format, tsigkey, tsigpass, &segment) < 0) {
+		if (lookup_axfr(f, so, domainname, &mysoa, format, tsigkey, tsigpass, &segment, &answers, &additionalcount) < 0) {
 			exit(1);
 		}
 				
 	} else {
-		if (lookup_name(f, so, domainname, type, &mysoa, format, nameserver, port) < 0) {
+		if (lookup_name(f, so, domainname, type, &mysoa, format, nameserver, port, &answers, &additionalcount) < 0) {
 			/* XXX maybe a packet dump here? */
 			exit(1);
 		}
@@ -6561,7 +6564,7 @@ connect_server(char *nameserver, int port, u_int32_t format)
 }
 
 int
-lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mysoa, u_int32_t format, char *nameserver, u_int16_t port)
+lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mysoa, u_int32_t format, char *nameserver, u_int16_t port, int *answers, int *additionalcount)
 {
 	int len, i;
 	int numansw, numaddi, numauth;
@@ -6719,7 +6722,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 			exit(1);
 		}
 
-		ret = lookup_name(f, so, zonename, myrrtype, mysoa, format, nameserver, port);
+		ret = lookup_name(f, so, zonename, myrrtype, mysoa, format, nameserver, port, answers, additionalcount);
 		close(so);
 		return (ret);
 	}
@@ -6727,9 +6730,9 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	numansw = ntohs(rwh->dh.answer);
 	numauth = ntohs(rwh->dh.nsrr);
 	numaddi = ntohs(rwh->dh.additional);
-	answers = numansw + numauth + numaddi;
+	*answers = numansw + numauth + numaddi;
 
-	if (answers < 1) {	
+	if (*answers < 1) {	
 		fprintf(stderr, "NO ANSWER provided\n");
 		return -1;
 	}
@@ -6762,7 +6765,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 
 	estart = (u_char *)&rwh->dh;
 
-	for (i = answers; i > 0; i--) {
+	for (i = *answers; i > 0; i--) {
 		if (numansw > 0) { 
 			numansw--;
 			if (printansw-- > 0) {
