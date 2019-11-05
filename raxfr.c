@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.27 2019/11/05 07:52:27 pjp Exp $
+ * $Id: raxfr.c,v 1.28 2019/11/05 07:53:36 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1219,7 +1219,7 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	HMAC_Final(ctx, mac, &macsize);
 
 	if (memcmp(sdt->mac, mac, macsize) != 0) {	
-#if 1
+#if 0
 		int i;
 
 		printf("the given mac: ");
