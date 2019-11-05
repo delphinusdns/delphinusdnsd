@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.34 2019/10/26 08:13:04 pjp Exp $
+ * $Id: axfr.c,v 1.35 2019/11/05 17:07:20 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -931,7 +931,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 		/* now we can be reasonably sure that it's an AXFR for us */
 
-		reply = calloc(1, 65538);	
+		reply = calloc(1, 0xffff + 2);	
 		if (reply == NULL) {
 			dolog(LOG_INFO, "internal error: %s\n", strerror(errno));
 			goto drop;
@@ -979,7 +979,16 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			outlen = 0;
 			outlen = build_header(db, (reply + 2), (p + 2), question, 1);
 			outlen = build_soa(db, (reply + 2), outlen, soa, question);
-		
+			if (question->tsig.tsigverified == 1) {
+				struct dns_header *odh;
+
+				odh = (struct dns_header *)&reply[2];
+				outlen = additional_tsig(question, (reply + 2), 0xffff, outlen, 0, 0, NULL);
+				NTOHS(odh->additional); 
+				odh->additional++;
+				HTONS(odh->additional);
+			}
+
 			tmp = (u_int16_t *)reply;
 			*tmp = htons(outlen);
 		
