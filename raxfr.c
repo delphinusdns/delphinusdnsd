@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.28 2019/11/05 07:53:36 pjp Exp $
+ * $Id: raxfr.c,v 1.29 2019/11/05 08:06:48 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1762,11 +1762,7 @@ get_remote_soa(struct rzone *rzone)
 			return -1;
 		}
 
-#if defined __linux__ || defined __FreeBSD__
 		HMAC_CTX_free(ctx);
-#else
-		HMAC_cleanup(ctx);
-#endif
 
 		memcpy(&query[totallen], keyname, keynamelen);
 		totallen += keynamelen;
@@ -2022,11 +2018,7 @@ get_remote_soa(struct rzone *rzone)
 	close(so);
 
 	if (dotsig) {
-#if defined __linux__ || defined __FreeBSD__
 		HMAC_CTX_free(ctx);
-#else
-		HMAC_cleanup(ctx);
-#endif
 	}
 
 	return ((int64_t)ntohl(mysoa.serial));
