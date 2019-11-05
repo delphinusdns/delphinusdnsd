@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.81 2019/11/04 12:10:49 pjp Exp $
+ * $Id: parse.y,v 1.82 2019/11/05 16:33:41 pjp Exp $
  */
 
 %{
@@ -403,6 +403,10 @@ tsigauth:
 		}
 
 		keyname = dns_label($2, &keynamelen);
+		if (keyname == NULL) {
+			dolog(LOG_ERR, "dns_label: %s\n", strerror(errno));
+			return -1;
+		}
 
 		insert_tsig_key(key, keylen, keyname, keynamelen);
 
@@ -3810,9 +3814,18 @@ notifysource(struct question *q, struct sockaddr_storage *from)
 			continue;
 
 		zone = dns_label(rz->zonename, &zoneretlen);
+		if (zone == NULL) {
+			dolog(LOG_ERR, "dns_label: %s\n", strerror(errno));
+			return 0;	/* I guess return 0 is error */
+		}
+			
 
 		if (q->tsig.have_tsig && q->tsig.tsigverified) {
 				tsigkey = dns_label(rz->tsigkey, &tsigretlen);
+				if (tsigkey == NULL) {
+					dolog(LOG_ERR, "dns_label: %s\n", strerror(errno));
+					return 0;
+				}	
 				/* if we are the right zone, right tsigkey, and right master IP/IP6 */
 				if ((zoneretlen == q->hdr->namelen) &&
 					(memcasecmp(zone, q->hdr->name, zoneretlen) == 0) && 
