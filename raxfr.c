@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.29 2019/11/05 08:06:48 pjp Exp $
+ * $Id: raxfr.c,v 1.30 2019/11/05 08:28:23 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1678,13 +1678,13 @@ get_remote_soa(struct rzone *rzone)
 		if (keyname == NULL) {
 			dolog(LOG_ERR, "dns_label failed\n");
 			close(so);
-			return -1;
+			return MY_SOCK_TIMEOUT;
 		}
 
 		if ((tsigpasslen = find_tsig_key(keyname, keynamelen, (char *)&tsigpass, sizeof(tsigpass))) < 0) {
 			dolog(LOG_ERR, "do not have a record of TSIG key %s\n", rzone->tsigkey);
 			close(so);
-			return -1;
+			return MY_SOCK_TIMEOUT;
 		}
 
 		dotsig = 1;
@@ -1695,8 +1695,8 @@ get_remote_soa(struct rzone *rzone)
 
         if (connect(so, sa, slen) < 0) {
                 dolog(LOG_INFO, "connect to master %s port %u: %s\n", rzone->master, rzone->masterport, strerror(errno));
-		close(so);
-		return(MY_SOCK_TIMEOUT);
+				close(so);
+				return(MY_SOCK_TIMEOUT);
         }
 
 
@@ -1752,14 +1752,14 @@ get_remote_soa(struct rzone *rzone)
 		now = time(NULL);
 		if (tsig_pseudoheader(rzone->tsigkey, 300, now, ctx) < 0) {
 			fprintf(stderr, "tsig_pseudoheader failed\n");
-			return -1;
+			return(MY_SOCK_TIMEOUT);
 		}
 
 		HMAC_Final(ctx, shabuf, &len);
 
 		if (len != 32) {
 			fprintf(stderr, "not expected len != 32\n");
-			return -1;
+			return(MY_SOCK_TIMEOUT);
 		}
 
 		HMAC_CTX_free(ctx);
@@ -1781,7 +1781,7 @@ get_remote_soa(struct rzone *rzone)
 
 		algname = dns_label("hmac-sha256", &len);
 		if (algname == NULL) {
-			return -1;
+			return(MY_SOCK_TIMEOUT);
 		}
 
 		/* rdlen */
@@ -1957,7 +1957,7 @@ get_remote_soa(struct rzone *rzone)
 
 
 	for (i = answers; i > 0; i--) {
-		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, (dotsig ? ctx : NULL))) < 0) {
+		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, (dotsig == 1) ? ctx : NULL)) < 0) {
 			dolog(LOG_INFO, "not a SOA reply, or ERROR\n");
 			close(so);
 			free(reply);  free(dupreply);
@@ -1968,7 +1968,7 @@ get_remote_soa(struct rzone *rzone)
 			p = (estart + rrlen);
 
 		if (rrtype == DNS_TYPE_SOA) {
-			if ((len = raxfr_soa(f, p, estart, end, &mysoa, soacount, format, rdlen, (dotsig ? ctx : NULL))) < 0) {
+			if ((len = raxfr_soa(f, p, estart, end, &mysoa, soacount, format, rdlen, (dotsig == 1) ? ctx : NULL)) < 0) {
 				dolog(LOG_INFO, "raxfr_soa failed\n");
 				close(so);
 				free(reply);  free(dupreply);
@@ -1989,7 +1989,7 @@ get_remote_soa(struct rzone *rzone)
 		} else {
 			for (sr = supported; sr->rrtype != 0; sr++) {
 				if (rrtype == sr->rrtype) {
-					if ((len = (*sr->raxfr)(f, p, estart, end, &mysoa, rdlen, ctx)) < 0) {
+					if ((len = (*sr->raxfr)(f, p, estart, end, &mysoa, rdlen, (dotsig == 1) ? ctx : NULL)) < 0) {
 						dolog(LOG_INFO, "error with rrtype %d\n", sr->rrtype);
 						close(so);
 						free(reply);  free(dupreply);
