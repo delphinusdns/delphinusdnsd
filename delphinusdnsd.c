@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.80 2019/11/04 12:10:49 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.81 2019/11/06 05:18:06 pjp Exp $
  */
 
 
@@ -162,12 +162,12 @@ extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int 	add_rr(struct rbtree *, char *, int, u_int16_t, void *);
 extern int 	display_rr(struct rrset *rrset);
 extern int 	notifysource(struct question *, struct sockaddr_storage *);
+extern int 	drop_privs(char *, struct passwd *);
 
 
 struct question		*convert_question(struct parsequestion *);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, void *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
-int 			drop_privs(char *, struct passwd *);
 struct rbtree * 	get_soa(ddDB *, struct question *);
 struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
 void			mainloop(struct cfg *, struct imsgbuf **);
@@ -3645,55 +3645,4 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	} /* for (;;) */
 	
 	/* NOTREACHED */
-}
-
-int
-drop_privs(char *chrootpath, struct passwd *pw)
-{
-	/* chroot to the drop priv user home directory */
-	if (chroot(chrootpath) < 0) {
-		dolog(LOG_INFO, "chroot: %s\n", strerror(errno));
-		return -1;
-	}
-
-	if (unveil("/", "rwc") < 0) {
-		dolog(LOG_INFO, "unveil: %s\n", strerror(errno));
-		return -1;
-	}
-
-	if (chdir("/") < 0) {
-		dolog(LOG_INFO, "chdir: %s\n", strerror(errno));
-		return -1;
-	}
-
-	/* set groups */
-
-	if (setgroups(1, &pw->pw_gid) < 0) {
-		dolog(LOG_INFO, "setgroups: %s\n", strerror(errno));
-		return -1;
-	}
-
-#if defined __OpenBSD__ || defined __FreeBSD__
-	if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) < 0) {
-		dolog(LOG_INFO, "setresgid: %s\n", strerror(errno));
-		return -1;
-	}
-
-	if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) < 0) {
-		dolog(LOG_INFO, "setresuid: %s\n", strerror(errno));
-		return -1;
-	}
-
-#else
-	if (setgid(pw->pw_gid) < 0) {
-		dolog(LOG_INFO, "setgid: %s\n", strerror(errno));
-		return -1;
-	}
-	if (setuid(pw->pw_uid) < 0) {
-		dolog(LOG_INFO, "setuid: %s\n", strerror(errno));
-		return -1;
-	}
-#endif
-
-	return 0;
 }

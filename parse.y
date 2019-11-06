@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.82 2019/11/05 16:33:41 pjp Exp $
+ * $Id: parse.y,v 1.83 2019/11/06 05:18:06 pjp Exp $
  */
 
 %{
@@ -29,6 +29,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -96,7 +97,6 @@ extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, voi
 extern int display_rr(struct rrset *rrset);
 extern void flag_rr(struct rbtree *);
 extern int pull_rzone(struct rzone *, time_t, int);
-
 
 extern int whitelist;
 extern int tsig;
@@ -229,6 +229,7 @@ static struct rzone * add_rzone(void);
 static struct mzone * add_mzone(void);
 static int	pull_remote_zone(struct rzone *);
 int		notifysource(struct question *, struct sockaddr_storage *);
+int 		drop_privs(char *, struct passwd *);
 
 
 %}
@@ -3746,37 +3747,42 @@ static int
 pull_remote_zone(struct rzone *lrz)
 {
 	struct passwd *pw;
-	int ret;
-	char *current;
+	int status;
+	pid_t pid;
 
-	current = getcwd(NULL, PATH_MAX);
-	if (current == NULL) {
-		dolog(LOG_INFO, "pull_remote_zone getcwd: %s\n", strerror(errno));
+	switch (pid = fork()) {
+	case -1:
+		dolog(LOG_ERR, "can't fork: %s\n", strerror(errno));
 		return -1;
-	}
+	case 0:
+			pw = getpwnam(DEFAULT_PRIVILEGE);
+			if (pw == NULL) {
+				dolog(LOG_INFO, "getpwnam: %s\n", strerror(errno));
+				exit(1);
+			}
 
-	if (chdir(DELPHINUS_RZONE_PATH) < 0) {
-		dolog(LOG_INFO, "pull_remote_zone chdir: %s\n", strerror(errno));
-		return -1;
-	}
+			if (drop_privs(DELPHINUS_RZONE_PATH, pw) < 0) {
+				dolog(LOG_INFO, "can't drop privileges\n");
+				exit(1);
+			}
 
-	ret = pull_rzone(lrz, time(NULL), 0);
-
-	pw = getpwnam(DEFAULT_PRIVILEGE);
-	if (pw == NULL) {
-		unlink(lrz->filename);
-		return -1;
-	}
-
-	if (chown(lrz->filename, pw->pw_uid, pw->pw_gid) < 0) {
-		unlink(lrz->filename);
-		return -1;
-	}
+			if (pledge("stdio rpath wpath cpath chown inet getpw", NULL) < 0) {
+				dolog(LOG_INFO, "pledge: %s\n", strerror(errno));
+				exit(1);
+			}
 	
-	chdir(current);
-	free(current);
+			if (pull_rzone(lrz, time(NULL), 0) < 0)
+				exit(1);
+			
+			exit(0);
+	default:
+		if (waitpid(pid, &status, 0) < 0) {
+			return -1;
+		}
+		break;
+	}
 
-	return (ret);
+	return (0);
 }
 
 /*
@@ -3884,6 +3890,57 @@ notifysource(struct question *q, struct sockaddr_storage *from)
 		} /* if havetsig */
 	
 	} /* SLIST_FOREACH */
+
+	return 0;
+}
+
+int
+drop_privs(char *chrootpath, struct passwd *pw)
+{
+	/* chroot to the drop priv user home directory */
+	if (chroot(chrootpath) < 0) {
+		dolog(LOG_INFO, "chroot: %s\n", strerror(errno));
+		return -1;
+	}
+
+	if (unveil("/", "rwc") < 0) {
+		dolog(LOG_INFO, "unveil: %s\n", strerror(errno));
+		return -1;
+	}
+
+	if (chdir("/") < 0) {
+		dolog(LOG_INFO, "chdir: %s\n", strerror(errno));
+		return -1;
+	}
+
+	/* set groups */
+
+	if (setgroups(1, &pw->pw_gid) < 0) {
+		dolog(LOG_INFO, "setgroups: %s\n", strerror(errno));
+		return -1;
+	}
+
+#if defined __OpenBSD__ || defined __FreeBSD__
+	if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) < 0) {
+		dolog(LOG_INFO, "setresgid: %s\n", strerror(errno));
+		return -1;
+	}
+
+	if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) < 0) {
+		dolog(LOG_INFO, "setresuid: %s\n", strerror(errno));
+		return -1;
+	}
+
+#else
+	if (setgid(pw->pw_gid) < 0) {
+		dolog(LOG_INFO, "setgid: %s\n", strerror(errno));
+		return -1;
+	}
+	if (setuid(pw->pw_uid) < 0) {
+		dolog(LOG_INFO, "setuid: %s\n", strerror(errno));
+		return -1;
+	}
+#endif
 
 	return 0;
 }

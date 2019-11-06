@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.85 2019/11/05 07:52:27 pjp Exp $
+ * $Id: dddctl.c,v 1.86 2019/11/06 05:18:06 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -7054,12 +7054,6 @@ configtest(int argc, char *argv[])
 	if (argc)
 		zonefile = argv[0];
 
-#if __OpenBSD__
-	if (pledge("stdio rpath wpath cpath chown inet getpw", NULL) < 0) {
-		perror("pledge");
-		exit(1);
-	}
-#endif
 
 
 
@@ -7076,6 +7070,14 @@ configtest(int argc, char *argv[])
 		dolog(LOG_INFO, "parsing config file failed\n");
 		return 1;
 	}
+
+#if __OpenBSD__
+	/* better late than never */
+	if (pledge("stdio", NULL) < 0) {
+		perror("pledge");
+		exit(1);
+	}
+#endif
 
 	if (count)
 		count_db(db);
