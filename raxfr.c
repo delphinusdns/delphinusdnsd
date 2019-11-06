@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.30 2019/11/05 08:28:23 pjp Exp $
+ * $Id: raxfr.c,v 1.31 2019/11/06 08:45:57 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -121,6 +121,7 @@ static void		schedule_refresh(char *, time_t);
 static void		schedule_retry(char *, time_t);
 static void		schedule_restart(char *, time_t);
 static void		schedule_delete(struct myschedule *);
+static int 		rand_restarttime(void);
 int64_t get_remote_soa(struct rzone *rzone);
 int do_raxfr(FILE *, struct rzone *);
 int pull_rzone(struct rzone *, time_t, int);
@@ -1415,13 +1416,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 											if (pull_rzone(lrz, now, 0) < 0) {
 												dolog(LOG_INFO, "AXFR failed\n");
 											} else {
-												schedule_restart(lrz->zonename, now + 100);
-												/*
-												 * we've scheduled a restart and there may be more
-												 * AXFR's to do we only have a window of 100 seconds
-												 * so we select for 5000 microseconds only, so that
-												 * other tasks can still complete.
-												 */
+												schedule_restart(lrz->zonename, now + rand_restarttime());
 												endspurt = 1;
 											}
 										} /* else serial ... */
@@ -1472,14 +1467,8 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 							}
 
 							/* schedule restart */
-							schedule_restart(lrz->zonename, now + 100);
-								/*
-								 * we've scheduled a restart and there may be more
-								 * AXFR's to do we only have a window of 100 seconds
-								 * so we select for 5000 microseconds only, so that
-								 * other tasks can still complete.
-								 */
-								endspurt = 1;
+							schedule_restart(lrz->zonename, now + rand_restarttime());
+							endspurt = 1;
 						} else {
 							schedule_refresh(lrz->zonename, now + lrz->soa.refresh);
 						}
@@ -1513,14 +1502,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 							}
 
 							/* schedule restart */
-							schedule_restart(lrz->zonename, now + 100);
-						  /*
-						   * we've scheduled a restart and there may be more
-						   * AXFR's to do we only have a window of 100 seconds
-						   * so we select for 5000 microseconds only, so that
-						   * other tasks can still complete.
-					     */
-
+							schedule_restart(lrz->zonename, now + rand_restarttime());
 							endspurt = 1;
 					  } else {
 							schedule_refresh(lrz->zonename, now + lrz->soa.refresh);
@@ -2187,4 +2169,14 @@ pull_rzone(struct rzone *rzone, time_t now, int doschedule)
 	unlink(p);
 
 	return 0;
+}
+
+/*
+ * restarttime is 80 seconds plus a random interval between 0 and 39
+ */
+
+static int
+rand_restarttime(void)
+{
+	return (80 + (arc4random() % 40));
 }
