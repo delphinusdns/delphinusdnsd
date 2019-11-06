@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.47 2019/11/05 07:52:27 pjp Exp $
+ * $Id: util.c,v 1.48 2019/11/06 13:25:06 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1862,6 +1862,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	}
 
 	for (;;) {
+		sizetv = sizeof(struct timeval);
 		if (getsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &savetv, &sizetv) < 0) {	
 			perror("getsockopt");
 		}
@@ -1870,8 +1871,9 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		tv.tv_usec = 0;
 
 		if (setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
-			perror("setsockopt");
+			dolog(LOG_DEBUG, "setsockopt failed with sec 1, usec 0: %s\n", strerror(errno));
 		}
+
 		len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL);
 		if (len <= 0)	
 			break;
@@ -1879,6 +1881,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		plen = (u_int16_t *)reply;
 		tcplen = ntohs(*plen) + 2;
 		
+		/* restore original timeout values */
 		if (setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &savetv, sizeof(savetv)) < 0) {
 			perror("setsockopt");
 		}
