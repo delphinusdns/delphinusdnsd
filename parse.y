@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.83 2019/11/06 05:18:06 pjp Exp $
+ * $Id: parse.y,v 1.84 2019/11/06 05:20:11 pjp Exp $
  */
 
 %{
@@ -3766,10 +3766,12 @@ pull_remote_zone(struct rzone *lrz)
 				exit(1);
 			}
 
+#if __OpenBSD__
 			if (pledge("stdio rpath wpath cpath chown inet getpw", NULL) < 0) {
 				dolog(LOG_INFO, "pledge: %s\n", strerror(errno));
 				exit(1);
 			}
+#endif
 	
 			if (pull_rzone(lrz, time(NULL), 0) < 0)
 				exit(1);
