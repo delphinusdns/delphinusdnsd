@@ -4,6 +4,9 @@ Please see http://delphinusdns.org for updates/news.
 For 1.5.0 release
 - make sure an RRset has the same TTL, we don't need TTL in a single RR because
   the set requires per RFC 2181 section 5.2 to be the same in the RRset.
+- CAA RR support
+- a github mirrored copy
+- an OpenBSD port/package starting with 1.4 release
 
 For 1.4.0 release
 - a github mirrored copy
@@ -11,7 +14,7 @@ For 1.4.0 release
 - TSIG support would still be nice				[DONE]
 - CAA RR support
 - More ciphers for signing (GOST, ECDSA, Elliptic Curves)	[ECDSA DONE]
-- Slave AXFR mode (with TSIG)
+- Slave AXFR mode (with TSIG)					[DONE]
 - Redo TCP support						[DONE]
 
 For 1.3.0 release
