@@ -31,15 +31,13 @@
 .Nd the Delphinus DNS daemon
 .Sh SYNOPSIS
 .Nm delphinusdnsd
+.Op Fl dlv
 .Op Fl b Ar address
-.Op Fl d
 .Op Fl f Ar file
 .Op Fl i Ar interface
-.Op Fl l
 .Op Fl n Ar instances
 .Op Fl p Ar port
 .Op Fl s Ar path
-.Op Fl v
 .Sh DESCRIPTION
 .Nm
 is the daemon that runs Delphinus DNS.
@@ -89,10 +87,7 @@ Specifies the
 .Ar port
 that 
 .Nm 
-should listen on.  This can be useful when using 
-.Nm 
-with 
-.Xr pf 4 
+should listen on.
 .It Fl s
 .Ar path
 Specifies the socket path to use with 
@@ -100,15 +95,26 @@ Specifies the socket path to use with
 .It Fl v
 Be more verbose in debug mode.  This shows configfile parsing logic.
 .El
+.Pp
+.Nm 
+is an authoritative only DNS server.  It can run as master or replicant.
+When new configfiles are written it must be restarted.  For replicants that
+receive notifies or timeout on the refresh or retry SOA values the daemon is
+restarted automatically. 
 .Sh FILES
-.Pa /etc/delphinusdns/delphinusdns.conf
+.Bl -tag -width /etc/delphinusdns/delphinusdns.conf -compact
+.It Pa /etc/delphinusdns/delphinusdns.conf
+default 
+.Nm
+config file
+.It Pa /var/run/delphinusdnsd.sock
+default 
+.Nm
+control socket
+.El
 .Sh SEE ALSO
 .Xr delphinusdns.conf 5 , 
-.Xr dddctl 8 ,
-.Xr bind 2 , 
-.Xr fork 2 ,
-.Xr daemon 3 , 
-.Xr pf 4 
+.Xr dddctl 8
 .Sh AUTHORS
 This software was written by
 .An Peter J. Philipp Aq petphi@delphinusdns.org
