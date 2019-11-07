@@ -1,9 +1,9 @@
-.\" $Id: dddctl.8,v 1.4 2019/10/08 08:44:18 pjp Exp $
+.\" $Id: dddctl.8,v 1.5 2019/11/07 05:42:14 pjp Exp $
 .\" In parts copyright (template) by:
 .\"
 .\"	$OpenBSD: vmctl.8,v 1.39 2018/02/24 13:14:09 jmc Exp $
 .\"
-.\" Copyright (c) 2018 Peter J. Philipp
+.\" Copyright (c) 2018-2019 Peter J. Philipp
 .\" Copyright (c) 2015 Mike Larkin <mlarkin@openbsd.org>
 .\"
 .\" Permission to use, copy, modify, and distribute this software for any
@@ -18,7 +18,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: October 8 2019 $
+.Dd $Mdocdate: November 7 2019 $
 .Dt DDDCTL 8
 .Os
 .Sh NAME
@@ -39,10 +39,15 @@ The commands are as follows:
 Convert a 
 .Xr delphinusdns.conf 5
 zonefile to BIND format with the specified zonename domain name.
-.It Cm configtest Ar [configfile]
+.It Xo Cm configtest 
+.Op Fl c 
+.Op Ar configfile
+.Xc
 Test the entire config, alternatively you can test a
 .Xr delphinusdns.conf 5
-config file by specifying such a file.
+config file by specifying such a file.  In case of configured rzones, when
+there is no .repl file in /etc/delphinusdns/replicant/ it will pull the
+replicant file via a socket.
 .It Cm help Ar [command]
 provides an in-binary help.  Alternatively you can specify a subcommand 
 to provide help for.  Ie. 
@@ -112,13 +117,23 @@ starts
 with an optional configfile and control socket path.
 .It Cm stop Ar [-s path]
 stops delphinusdnsd with optional control socket path.
-.It Cm restart [-s path]
+.It Cm restart Ar [-s path]
 restarts delphinusdnsd with optional control socket path.
+.Sh EXAMPLES
+To sign a delphinusdns zone the first time one may do:
+.Pp
+dddctl sign -Z -K -a 13 -B 2048 -n delphinusdns.org -i delphinusdns.org.zone -o delphinusdns.org.zone.signed
+.Pp
+Please see the https://delphinusdns.org website for more examples.
 .Sh SEE ALSO
 .Xr delphinusdnsd 8
 .Xr delphinusdns.conf 5
-.Xr named 8
-.Xr nsd 8
+.Sh FILES
+.Bl -tag -width /etc/delphinusdns/delphinusdns.conf -compact
+.It Pa /var/run/delphinusdnsd.sock
+default 
+.Nm
+control socket
 .Sh AUTHORS
 .An -nosplit
 .An Peter J. Philipp Aq Mt petphi@delphinusdns.org
