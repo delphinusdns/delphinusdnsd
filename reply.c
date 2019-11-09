@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.86 2019/10/31 16:34:35 pjp Exp $
+ * $Id: reply.c,v 1.87 2019/11/09 07:53:45 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -75,6 +75,7 @@ extern int 		additional_nsec3(char *, int, int, struct rbtree *, char *, int, in
 extern int 		additional_a(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_aaaa(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
+extern int 		additional_ds(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_opt(struct question *, char *, int, int);
 extern int 		additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *);
@@ -1929,6 +1930,7 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	u_int16_t rollback;
 	int ns_type;
 	int delegation, addiscount;
+	int addcount = 0;
 
 	SLIST_HEAD(, addis) addishead;
 	struct addis {
@@ -2061,15 +2063,15 @@ reply_ns(struct sreply *sreply, ddDB *db)
 		}
 
 		if (delegation) {
-			rbt0 = get_soa(db, q);
-			if (rbt0 == NULL) {
-				free(rbt1);
-				return -1;
-			}
+			tmplen = additional_ds(rbt1->zone, rbt1->zonelen, rbt1, reply, replysize, outlen, &addcount);
+			if (tmplen != 0) {
+				outlen = tmplen;
 
-			nrbt = find_nsec3_match_qname(rbt1->zone, rbt1->zonelen, rbt0, db);
-			if (nrbt != NULL) {
-				tmplen = additional_nsec3(nrbt->zone, nrbt->zonelen, DNS_TYPE_NSEC3, nrbt, reply, replysize, outlen);
+				NTOHS(odh->nsrr);	
+				odh->nsrr += addcount;
+				HTONS(odh->nsrr);
+
+				tmplen = additional_rrsig(rbt1->zone, rbt1->zonelen, DNS_TYPE_DS, rbt1, reply, replysize, outlen, 0);
 
 				if (tmplen == 0) {
 					NTOHS(odh->query);
@@ -2084,23 +2086,46 @@ reply_ns(struct sreply *sreply, ddDB *db)
 
 				outlen = tmplen;
 
-				/* additional_nsec3 adds an RRSIG automatically */
-				if (delegation) {
+				NTOHS(odh->nsrr);	
+				odh->nsrr += 1;
+				HTONS(odh->nsrr);
+
+			} else {
+				rbt0 = get_soa(db, q);
+				if (rbt0 == NULL) {
+					free(rbt1);
+					return -1;
+				}
+
+				nrbt = find_nsec3_match_qname(rbt1->zone, rbt1->zonelen, rbt0, db);
+				if (nrbt != NULL) {
+					tmplen = additional_nsec3(nrbt->zone, nrbt->zonelen, DNS_TYPE_NSEC3, nrbt, reply, replysize, outlen);
+
+					if (tmplen == 0) {
+						NTOHS(odh->query);
+						SET_DNS_TRUNCATION(odh);
+						HTONS(odh->query);
+						odh->answer = 0;
+						odh->nsrr = 0; 
+						odh->additional = 0;
+						outlen = rollback;
+						goto out;
+					}
+
+					outlen = tmplen;
+
+					/* additional_nsec3 adds an RRSIG automatically */
 					NTOHS(odh->nsrr);	
 					odh->nsrr += 2;
 					HTONS(odh->nsrr);
-				} else {
-					NTOHS(odh->answer);	
-					odh->answer += 2;
-					HTONS(odh->answer);
+
+					free(nrbt);
 				}
 
-				free(nrbt);
-			}
-
 			free(rbt0);
-		}
-	}
+			}  /* nrbt != NULL */
+		} /* else tmplen != 0 */
+	} /* if delegation */
 
 	if (delegation)
 		free(rbt1);

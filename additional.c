@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.28 2019/06/07 04:25:50 pjp Exp $
+ * $Id: additional.c,v 1.29 2019/11/09 07:53:45 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -69,6 +69,7 @@
 int additional_a(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_aaaa(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
+int additional_ds(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_opt(struct question *, char *, int, int);
 int additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int);
@@ -938,4 +939,89 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 out:
 	return (offset);
 
+}
+
+/* 
+ * ADDITIONAL_DS() - replies a DNS question (*q) on socket (so)
+ *			based on additional_mx()
+ *
+ */
+
+int 
+additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
+{
+	int ds_count = 0;
+	int tmplen;
+	int rroffset = offset;
+
+	struct answer {
+		u_int16_t type;
+		u_int16_t class;
+		u_int32_t ttl;
+		u_int16_t rdlength;	 
+		u_int16_t key_tag;
+		u_int8_t algorithm;
+		u_int8_t digest_type;
+
+	} __attribute__((packed));
+
+	struct answer *answer;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+
+	*retcount = 0;
+
+	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) == NULL)
+		return 0;
+
+
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		rroffset = offset;
+
+		if ((offset + namelen) > replylen)
+			return 0;
+
+		memcpy(&reply[offset], name, namelen);
+		offset += namelen;
+		tmplen = compress_label((u_char*)reply, offset, namelen);
+		
+		if (tmplen != 0) {
+			offset = tmplen;
+		}	
+
+		if ((offset + sizeof(struct answer)) > replylen) {
+			offset = rroffset;
+			return 0;
+		}
+
+		answer = (struct answer *)&reply[offset];
+		
+		answer->type = htons(DNS_TYPE_DS);
+		answer->class = htons(DNS_CLASS_IN);
+		answer->ttl = htonl(((struct ds *)rrp->rdata)->ttl);
+		answer->key_tag = htons(((struct ds *)rrp->rdata)->key_tag);
+		answer->algorithm = ((struct ds *)rrp->rdata)->algorithm;
+		answer->digest_type = ((struct ds *)rrp->rdata)->digest_type; 
+
+		offset += sizeof(struct answer);
+
+		if ((offset + ((struct ds *)rrp->rdata)->digestlen) > replylen) {
+			offset = rroffset;
+			return 0;
+		}
+
+		memcpy(&reply[offset], ((struct ds *)rrp->rdata)->digest,
+			((struct ds *)rrp->rdata)->digestlen);
+
+		offset += ((struct ds *)rrp->rdata)->digestlen;
+
+		answer->rdlength = htons(((struct ds *)rrp->rdata)->digestlen + sizeof(u_int16_t) + sizeof(u_int8_t) + sizeof(u_int8_t));
+
+
+		(*retcount)++;
+
+		ds_count++;
+	}
+
+	return (offset);
 }
