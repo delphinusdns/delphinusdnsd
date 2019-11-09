@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.81 2019/11/06 05:18:06 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.82 2019/11/09 08:04:39 pjp Exp $
  */
 
 
@@ -503,6 +503,16 @@ main(int argc, char *argv[], char *environ[])
 			dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
 			exit(1);
 		case 0:
+			/*
+			 * add signals here too
+			 */
+
+			signal(SIGPIPE, SIG_IGN);
+
+			signal(SIGTERM, slave_signal);
+			signal(SIGINT, slave_signal);
+			signal(SIGQUIT, slave_signal);
+
 			setup_unixsocket(socketpath, child_ibuf[MY_IMSG_MASTER]);
 			slave_shutdown();	
 			exit(1);
