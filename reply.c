@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.89 2019/11/11 09:15:40 pjp Exp $
+ * $Id: reply.c,v 1.90 2019/11/11 10:29:07 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1734,12 +1734,25 @@ reply_mx(struct sreply *sreply, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *rbt0 = NULL;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
 	u_int16_t rollback;
+
+	int addiscount;
+
+	SLIST_HEAD(, addis) addishead;
+	struct addis {
+		char name[DNS_MAXNAME];
+		int namelen;
+		SLIST_ENTRY(addis) addis_entries;
+	} *ad0, *ad1;
+
+	SLIST_INIT(&addishead);
+	/* check for apex, delegations */
 	
 	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) == 0)
 		return -1;
@@ -1815,6 +1828,17 @@ reply_mx(struct sreply *sreply, ddDB *db)
 			goto out;
 		}
 
+		ad0 = malloc(sizeof(struct addis));
+		if (ad0 == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+			return -1;
+		}
+
+		memcpy(ad0->name, name, namelen);
+		ad0->namelen = namelen;
+
+		SLIST_INSERT_HEAD(&addishead, ad0, addis_entries);
+
 		/* set new offset for answer */
 		answer = (struct answer *)&reply[outlen];
 		mx_count++;
@@ -1847,7 +1871,115 @@ reply_mx(struct sreply *sreply, ddDB *db)
 
 	}
 
+	/* tack on additional A or AAAA records */
+
+	SLIST_FOREACH(ad0, &addishead, addis_entries) {
+		addiscount = 0;
+		rbt0 = find_rrset(db, ad0->name, ad0->namelen);
+		if (rbt0 != NULL && find_rr(rbt0, DNS_TYPE_AAAA) != NULL) {
+			tmplen = additional_aaaa(ad0->name, ad0->namelen, rbt0, reply, replysize, outlen, &addiscount);
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+
+			outlen = tmplen;
+			NTOHS(odh->additional);
+			odh->additional += addiscount;
+			HTONS(odh->additional);
+
+			/* additional RRSIG for the additional AAAA */
+			if (dnssec && q->dnssecok && (rbt0->flags & RBT_DNSSEC)) {
+				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_AAAA, rbt0, reply, replysize, outlen, 0);
+
+				if (tmplen == 0) {
+					NTOHS(odh->query);
+					SET_DNS_TRUNCATION(odh);
+					HTONS(odh->query);
+					odh->answer = 0;
+					odh->nsrr = 0; 
+					odh->additional = 0;
+					outlen = rollback;
+					goto out;
+				}
+
+				NTOHS(odh->additional);
+				odh->additional += 1;
+				HTONS(odh->additional);
+
+				outlen = tmplen;
+			}
+
+			free(rbt0);
+			rbt0 = NULL;
+		}
+
+		if (rbt0)
+			free(rbt0);
+
+		addiscount = 0;
+		rbt0 = find_rrset(db, ad0->name, ad0->namelen);
+		if (rbt0 != NULL && find_rr(rbt0, DNS_TYPE_A) != NULL) {
+			tmplen = additional_a(ad0->name, ad0->namelen, rbt0, reply, replysize, outlen, &addiscount);
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+
+			outlen = tmplen;
+			NTOHS(odh->additional);
+			odh->additional += addiscount;
+			HTONS(odh->additional);
+
+			/* additional RRSIG for the additional A RR */
+			if (dnssec && q->dnssecok && (rbt0->flags & RBT_DNSSEC)) {
+				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_A, rbt0, reply, replysize, outlen, 0);
+
+				if (tmplen == 0) {
+					NTOHS(odh->query);
+					SET_DNS_TRUNCATION(odh);
+					HTONS(odh->query);
+					odh->answer = 0;
+					odh->nsrr = 0; 
+					odh->additional = 0;
+					outlen = rollback;
+					goto out;
+				}
+
+				NTOHS(odh->additional);
+				odh->additional += 1;
+				HTONS(odh->additional);
+
+				outlen = tmplen;
+			}
+
+			free(rbt0);
+			rbt0 = NULL;
+		}
+
+		if (rbt0)
+			free(rbt0);
+	}
+
 out:
+	while (!SLIST_EMPTY(&addishead)) {  /* clean up */
+		ad1 = SLIST_FIRST(&addishead);
+		SLIST_REMOVE_HEAD(&addishead, addis_entries);
+		free(ad1);
+	}
+
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
@@ -2235,6 +2367,7 @@ reply_ns(struct sreply *sreply, ddDB *db)
 			free(rbt0);
 	}
 
+out:
 	while (!SLIST_EMPTY(&addishead)) {  /* clean up */
 		ad1 = SLIST_FIRST(&addishead);
 		SLIST_REMOVE_HEAD(&addishead, addis_entries);
@@ -2242,7 +2375,6 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	}
 
 
-out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
