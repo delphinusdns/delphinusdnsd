@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.49 2019/11/11 05:04:21 pjp Exp $
+ * $Id: util.c,v 1.50 2019/11/11 05:22:50 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -350,7 +350,7 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 	*returnval = 0;
 	/* if the find_rrset fails, the find_rr will not get questioned */
 	if ((rbt = find_rrset(db, p, plen)) == NULL ||
-		(rbt->dnssec && (rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL)) {
+		((rbt->flags & RBT_DNSSEC) && (rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL)) {
 		if (check_ent(p, plen) == 1) {
 			*lzerrno = ERR_NODATA;
 			*returnval = -1;

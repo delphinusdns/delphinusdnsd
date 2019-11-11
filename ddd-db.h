@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.27 2019/11/04 12:10:49 pjp Exp $
+ * $Id: ddd-db.h,v 1.28 2019/11/11 05:22:50 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -332,7 +332,12 @@ struct rbtree {
 	char zone[DNS_MAXNAME];
 	int zonelen;
 	char humanname[DNS_MAXNAME + 1];
-	int dnssec;
+	uint32_t flags;			/* 32 bit flags */
+
+#define RBT_DNSSEC		0x1 /* this rbtree entry is of type DNSSEC */
+#define RBT_APEX		0x2 /* this rbtree entry is the apex of zone */
+#define RBT_GLUE		0x4 /* this rbtree entry is GLUE data */
+
 
 	TAILQ_HEAD(, rrset) rrset_head;
 };

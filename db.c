@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.14 2019/11/02 17:24:27 pjp Exp $
+ * $Id: db.c,v 1.15 2019/11/11 05:22:50 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -199,7 +199,7 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata)
 		rbt->zonelen = len;
 		humanname = convert_name(name, len);
 		strlcpy(rbt->humanname, humanname, sizeof(rbt->humanname));
-		rbt->dnssec = 0;		 /* by default not dnssec'ed */
+		rbt->flags &= ~RBT_DNSSEC;	 /* by default not dnssec'ed */
 		TAILQ_INIT(&rbt->rrset_head);
 	}
 	
@@ -346,7 +346,7 @@ find_rr(struct rbtree *rbt, u_int16_t rrtype)
 void 
 flag_rr(struct rbtree *rbt)
 {
-	rbt->dnssec = 1;
+	rbt->flags |= RBT_DNSSEC;
 }
 
 int
