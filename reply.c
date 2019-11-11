@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.88 2019/11/11 05:22:50 pjp Exp $
+ * $Id: reply.c,v 1.89 2019/11/11 09:15:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -85,7 +85,6 @@ extern struct question 	*build_fake_question(char *, int, u_int16_t, char *, int
 extern int 		compress_label(u_char *, int, int);
 extern void 		dolog(int, char *, ...);
 extern int 		free_question(struct question *);
-extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
 extern void 		slave_shutdown(void);
 extern int 		get_record_size(ddDB *, char *, int);
 extern char *		dns_label(char *, int *);
@@ -1112,8 +1111,12 @@ reply_ds(struct sreply *sreply, ddDB *db)
 
 		outlen = tmplen;
 
-		if (outlen > origlen)
-			odh->answer = htons(a_count + 1 + 1);	
+		if (outlen > origlen) {
+			//odh->answer = htons(a_count + 1 + 1);	
+			NTOHS(odh->answer);
+			odh->answer += 1;
+			HTONS(odh->answer);
+		}
 	}
 
 out:
@@ -2134,7 +2137,7 @@ reply_ns(struct sreply *sreply, ddDB *db)
 
 	SLIST_FOREACH(ad0, &addishead, addis_entries) {
 		addiscount = 0;
-		rbt0 = Lookup_zone(db, ad0->name, ad0->namelen, htons(DNS_TYPE_AAAA), 0);
+		rbt0 = find_rrset(db, ad0->name, ad0->namelen);
 		if (rbt0 != NULL && find_rr(rbt0, DNS_TYPE_AAAA) != NULL) {
 			tmplen = additional_aaaa(ad0->name, ad0->namelen, rbt0, reply, replysize, outlen, &addiscount);
 			if (tmplen == 0) {
@@ -2183,7 +2186,7 @@ reply_ns(struct sreply *sreply, ddDB *db)
 			free(rbt0);
 
 		addiscount = 0;
-		rbt0 = Lookup_zone(db, ad0->name, ad0->namelen, htons(DNS_TYPE_A), 0);
+		rbt0 = find_rrset(db, ad0->name, ad0->namelen);
 		if (rbt0 != NULL && find_rr(rbt0, DNS_TYPE_A) != NULL) {
 			tmplen = additional_a(ad0->name, ad0->namelen, rbt0, reply, replysize, outlen, &addiscount);
 			if (tmplen == 0) {
@@ -5201,9 +5204,11 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 
 		origlen = outlen;
 		if (find_rr(rbt, DNS_TYPE_NSEC)) {
-			rbt0 = Lookup_zone(db, q->hdr->name, q->hdr->namelen, htons(DNS_TYPE_NSEC), 0);
-			tmplen = additional_nsec(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, rbt0, reply, replysize, outlen);
-			free(rbt0);
+			rbt0 = Lookup_zone(db, q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, 0);
+			if (rbt0 != NULL) {
+				tmplen = additional_nsec(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, rbt0, reply, replysize, outlen);
+				free(rbt0);
+			}
 		} else if (find_rr(rbt, DNS_TYPE_NSEC3PARAM)) {
 			rbt0 = find_nsec3_match_qname(q->hdr->name, q->hdr->namelen, rbt, db);
 			if (rbt0 == 0)

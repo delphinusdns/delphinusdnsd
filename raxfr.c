@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.31 2019/11/06 08:45:57 pjp Exp $
+ * $Id: raxfr.c,v 1.32 2019/11/11 09:15:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -137,7 +137,6 @@ extern char *base32hex_encode(u_char *, int);
 extern u_int64_t timethuman(time_t);
 extern char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
 extern void	dolog(int, char *, ...);
-extern struct rbtree *  Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);               
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);    
 extern struct question         *build_question(char *, int, int, char *);

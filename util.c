@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.50 2019/11/11 05:22:50 pjp Exp $
+ * $Id: util.c,v 1.51 2019/11/11 09:15:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -339,10 +339,11 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 {
 
 	struct rbtree *rbt = NULL;
+	struct rbtree *rbt0 = NULL;
 	struct rrset *rrset = NULL, *rrset2 = NULL;
-	int plen, error;
+	int plen, splen, error;
 
-	char *p;
+	char *p, *sp;
 	
 	p = question->hdr->name;
 	plen = question->hdr->namelen;
@@ -350,19 +351,60 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 	*returnval = 0;
 	/* if the find_rrset fails, the find_rr will not get questioned */
 	if ((rbt = find_rrset(db, p, plen)) == NULL ||
+		((ntohs(question->hdr->qtype) != DNS_TYPE_DS) && 
+			(rbt->flags & RBT_GLUE)) ||
 		((rbt->flags & RBT_DNSSEC) && (rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL)) {
+		if (rbt == NULL) {
+			splen = plen;
+			sp = p;
+
+			while ((rbt0 = find_rrset(db, sp, splen)) == NULL) {
+				if (*sp == 0 && splen == 1)
+					break;
+				splen -= (*sp + 1);
+				sp += (*sp + 1);
+			}
+
+			if (rbt0 && rbt0->flags & RBT_GLUE)
+				rbt = rbt0;
+		}
+		/* check our delegations */
+		if (rbt && rbt->flags & RBT_GLUE) {
+			while (rbt && (rbt->flags & RBT_GLUE)) {
+				plen -= (*p + 1);
+				p += (*p + 1);
+
+				while ((rbt0 = find_rrset(db, p, plen)) == NULL) {
+					plen -= (*p + 1);
+					p += (*p + 1);
+				}
+
+				if (rbt0->flags & RBT_GLUE) {
+					free(rbt);
+					rbt = rbt0;
+				} else {
+					free(rbt0);
+					/* answer the delegation */
+					snprintf(replystring, DNS_MAXNAME, "%s", rbt->humanname);
+					*lzerrno = ERR_DELEGATE;
+					*returnval = -1;
+					return (rbt);
+				}
+			}
+		}
+				
 		if (check_ent(p, plen) == 1) {
 			*lzerrno = ERR_NODATA;
 			*returnval = -1;
 
 			/* stop leakage */
-			if (rrset != NULL)
+			if (rbt != NULL)
 				free(rbt);
 
 			return NULL;
 		}
 	
-		if (rrset != NULL)
+		if (rbt != NULL)
 			free(rbt);
 
 		/*
@@ -384,6 +426,7 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 				}
 
 				if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+					snprintf(replystring, DNS_MAXNAME, "%s", rbt->humanname);
 					*lzerrno = ERR_DELEGATE;
 					*returnval = -1;
 					return (rbt);
@@ -400,6 +443,7 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 	snprintf(replystring, DNS_MAXNAME, "%s", rbt->humanname);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL &&
+		! ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) && 
 		(rrset2 = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
 		*returnval = -1;
 		*lzerrno = ERR_DELEGATE;
@@ -482,7 +526,7 @@ get_ns(ddDB *db, struct rbtree *rbt, int *delegation)
 	len = rbt->zonelen;	
 
 	while (*p && len > 0) {
-		rbt0 = Lookup_zone(db, p, len, htons(DNS_TYPE_NS), 0);	
+		rbt0 = Lookup_zone(db, p, len, DNS_TYPE_NS, 0);	
 		if (rbt0 == NULL) {
 			p += (*p + 1);
 			len -= (*p + 1);
@@ -511,27 +555,18 @@ struct rbtree *
 Lookup_zone(ddDB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcard)
 {
 	struct rbtree *rbt;
-	struct question *fakequestion;
-	char fakereplystring[DNS_MAXNAME + 1];
-	int mytype;
-	int lzerrno;
+	struct rrset *rrset = NULL;
 
-	fakequestion = build_fake_question(name, namelen, type, NULL, 0);
-	if (fakequestion == 0) {
-		dolog(LOG_INFO, "fakequestion(2) failed\n");
-		return (NULL);
+	rbt = find_rrset(db, name, namelen);
+	if (rbt != NULL) {
+		rrset = find_rr(rbt, type);
+		if (rrset != NULL)
+			return (rbt);
+		else
+			free(rbt);
 	}
 
-	rbt = lookup_zone(db, fakequestion, &mytype, &lzerrno, (char *)&fakereplystring);
-
-	if (rbt == 0) {
-		free_question(fakequestion);
-		return (NULL);
-	}
-
-	free_question(fakequestion);
-	
-	return (rbt);
+	return NULL;
 }
 
 /*

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.83 2019/11/11 05:04:21 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.84 2019/11/11 09:15:40 pjp Exp $
  */
 
 
@@ -170,6 +170,7 @@ extern struct rbtree *	get_ns(ddDB *, struct rbtree *, int *);
 struct question		*convert_question(struct parsequestion *);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, void *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
+int			determine_glue(ddDB *db);
 void			mainloop(struct cfg *, struct imsgbuf **);
 void 			master_reload(int);
 void 			master_shutdown(int);
@@ -533,6 +534,12 @@ main(int argc, char *argv[], char *environ[])
 
 	if (parse_file(db, conffile) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
+		slave_shutdown();
+		exit(1);
+	}
+
+	if (determine_glue(db) < 0) {
+		dolog(LOG_INFO, "determine_glue() failed\n");
 		slave_shutdown();
 		exit(1);
 	}
@@ -3570,4 +3577,165 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	} /* for (;;) */
 	
 	/* NOTREACHED */
+}
+
+int
+determine_glue(ddDB *db)
+{
+	struct rbtree *rbt, *rbt0;
+	struct rrset *rrset;
+	ddDBT key, data;
+	int rs;
+	struct node *n, *nx;
+	int len;
+	char *p;
+
+	/* mark SOA's */
+        RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
+                rs = n->datalen;
+                if ((rbt = calloc(1, rs)) == NULL) {
+                        dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+                        exit(1);
+                }
+
+                memcpy((char *)rbt, (char *)n->data, n->datalen);
+
+		rrset = find_rr(rbt, DNS_TYPE_SOA);
+		if (rrset == NULL) {
+			free(rbt);
+			continue;
+		}
+
+		rbt->flags |= RBT_APEX;
+
+		memset(&key, 0, sizeof(key));
+		memset(&data, 0, sizeof(data));
+
+		key.data = (char *)rbt->zone;
+		key.size = rbt->zonelen;	
+
+		data.data = (void *)rbt;
+		data.size = sizeof(struct rbtree);
+
+		if (db->put(db, &key, &data) != 0) {
+			dolog(LOG_INFO, "db->put failed\n");
+			free(rbt);
+			return -1;
+		}
+
+		free(rbt);
+	}
+
+	/* mark glue */
+        RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
+                rs = n->datalen;
+                if ((rbt = calloc(1, rs)) == NULL) {
+                        dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+                        exit(1);
+                }
+
+                memcpy((char *)rbt, (char *)n->data, n->datalen);
+
+		if (rbt->flags & RBT_APEX) {
+			free(rbt);
+			continue;
+		}
+
+		rrset = find_rr(rbt, DNS_TYPE_NS);
+		if (rrset == NULL) {
+			free(rbt);
+			continue;
+		}
+
+		rbt->flags |= RBT_GLUE;
+
+		memset(&key, 0, sizeof(key));
+		memset(&data, 0, sizeof(data));
+
+		key.data = (char *)rbt->zone;
+		key.size = rbt->zonelen;	
+
+		data.data = (void *)rbt;
+		data.size = sizeof(struct rbtree);
+
+		if (db->put(db, &key, &data) != 0) {
+			dolog(LOG_INFO, "db->put failed\n");
+			free(rbt);
+			return -1;
+		}
+
+		free(rbt);
+	}
+        RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
+                rs = n->datalen;
+                if ((rbt = calloc(1, rs)) == NULL) {
+                        dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+                        exit(1);
+                }
+
+                memcpy((char *)rbt, (char *)n->data, n->datalen);
+
+
+		p = rbt->zone;
+		len = rbt->zonelen;
+
+		rbt0 = find_rrset(db, rbt->zone, rbt->zonelen);
+		while (! (rbt0->flags & RBT_APEX)) {
+			if (rbt0->flags & RBT_GLUE) {
+				/* repeat */
+				free(rbt0);
+				p = rbt->zone;
+				len = rbt->zonelen;
+				rbt0 = find_rrset(db, p, len);
+
+				while (!(rbt0->flags & RBT_GLUE)) {
+					rbt0->flags |= RBT_GLUE;
+
+					memset(&key, 0, sizeof(key));
+					memset(&data, 0, sizeof(data));
+
+					key.data = (char *)p;
+					key.size = len;
+
+					data.data = (void *)rbt0;
+					data.size = sizeof(struct rbtree);
+
+					if (db->put(db, &key, &data) != 0) {
+						dolog(LOG_INFO, "db->put failed\n");
+						free(rbt);
+						return -1;
+					}
+
+					free(rbt0);
+
+					len -= (*p + 1);
+					p += (*p + 1);
+
+					/* there could be ENT's so do loop */
+					while ((rbt0 = find_rrset(db, p, len)) == NULL) {
+						len -= (*p + 1);
+						p += (*p + 1);
+		
+					}
+				} 
+
+				break;
+			}
+			free(rbt0);
+	
+			len -= (1 + *p);
+			p += (1 + *p);
+
+			/* there could be ENT's so do loop */
+			while ((rbt0 = find_rrset(db, p, len)) == NULL) {
+				len -= (*p + 1);
+				p += (*p + 1);
+
+			}
+		}
+
+		free(rbt);
+	}
+
+	return 0;
 }
