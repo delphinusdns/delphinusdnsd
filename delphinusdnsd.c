@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.82 2019/11/09 08:04:39 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.83 2019/11/11 05:04:21 pjp Exp $
  */
 
 
@@ -163,13 +163,13 @@ extern int 	add_rr(struct rbtree *, char *, int, u_int16_t, void *);
 extern int 	display_rr(struct rrset *rrset);
 extern int 	notifysource(struct question *, struct sockaddr_storage *);
 extern int 	drop_privs(char *, struct passwd *);
+extern struct rbtree * 	get_soa(ddDB *, struct question *);
+extern struct rbtree *	get_ns(ddDB *, struct rbtree *, int *);
 
 
 struct question		*convert_question(struct parsequestion *);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, void *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
-struct rbtree * 	get_soa(ddDB *, struct question *);
-struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
 void			mainloop(struct cfg *, struct imsgbuf **);
 void 			master_reload(int);
 void 			master_shutdown(int);
@@ -1429,91 +1429,6 @@ out:
 }
 
 
-/*
- * GET_NS - walk to delegation name
- */
-
-struct rbtree *
-get_ns(ddDB *db, struct rbtree *rbt, int *delegation)
-{
-	struct rrset *rrset = NULL;
-	struct rbtree *rbt0;
-	char *p;
-	int len;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
-		*delegation = 1;
-	} else {
-		*delegation = 0;
-		return (rbt);
-	}
-
-	p = rbt->zone;
-	len = rbt->zonelen;	
-
-	while (*p && len > 0) {
-		rbt0 = Lookup_zone(db, p, len, htons(DNS_TYPE_NS), 0);	
-		if (rbt0 == NULL) {
-			p += (*p + 1);
-			len -= (*p + 1);
-	
-			continue;
-		} else
-			break;
-	}
-		
-	if ((rrset = find_rr(rbt0, DNS_TYPE_SOA)) != NULL) {
-		*delegation = 0;
-		free(rbt0);
-		return (rbt);
-	}
-		
-	return (rbt0);
-}
-
-
-/*
- * GET_SOA - get authoritative soa for a particular domain
- */
-
-struct rbtree *
-get_soa(ddDB *db, struct question *question)
-{
-	struct rbtree *rbt = NULL;
-
-	int plen;
-	char *p;
-
-	p = question->hdr->name;
-	plen = question->hdr->namelen;
-
-	do {
-		struct rrset *rrset;
-
-		rbt = find_rrset(db, p, plen);
-		if (rbt == NULL) {
-			if (*p == '\0')
-				return (NULL);
-
-			plen -= (*p + 1);
-			p = (p + (*p + 1));
-			continue;
-		}
-		
-		rrset = find_rr(rbt, DNS_TYPE_SOA);
-		if (rrset != NULL) {
-			/* we'll take this one */
-			return (rbt);	
-		} else {
-			plen -= (*p + 1);
-			p = (p + (*p + 1));
-		} 
-
-		free(rbt);
-	} while (*p);
-
-	return (NULL);
-}
 
 /*
  * MAINLOOP - does the polling of tcp & udp descriptors and if ready receives the 

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.48 2019/11/06 13:25:06 pjp Exp $
+ * $Id: util.c,v 1.49 2019/11/11 05:04:21 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -87,6 +87,8 @@ int label_count(char *);
 char * dns_label(char *, int *);
 void slave_shutdown(void);
 int get_record_size(ddDB *, char *, int);
+struct rbtree * 	get_soa(ddDB *, struct question *);
+struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
 struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
 struct rbtree *		Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 u_int16_t check_qtype(struct rbtree *, u_int16_t, int, int *);
@@ -413,6 +415,93 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 
 	return(rbt);
 }
+
+/*
+ * GET_SOA - get authoritative soa for a particular domain
+ */
+
+struct rbtree *
+get_soa(ddDB *db, struct question *question)
+{
+	struct rbtree *rbt = NULL;
+
+	int plen;
+	char *p;
+
+	p = question->hdr->name;
+	plen = question->hdr->namelen;
+
+	do {
+		struct rrset *rrset;
+
+		rbt = find_rrset(db, p, plen);
+		if (rbt == NULL) {
+			if (*p == '\0')
+				return (NULL);
+
+			plen -= (*p + 1);
+			p = (p + (*p + 1));
+			continue;
+		}
+		
+		rrset = find_rr(rbt, DNS_TYPE_SOA);
+		if (rrset != NULL) {
+			/* we'll take this one */
+			return (rbt);	
+		} else {
+			plen -= (*p + 1);
+			p = (p + (*p + 1));
+		} 
+
+		free(rbt);
+	} while (*p);
+
+	return (NULL);
+}
+
+/*
+ * GET_NS - walk to delegation name
+ */
+
+struct rbtree *
+get_ns(ddDB *db, struct rbtree *rbt, int *delegation)
+{
+	struct rrset *rrset = NULL;
+	struct rbtree *rbt0;
+	char *p;
+	int len;
+
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
+		*delegation = 1;
+	} else {
+		*delegation = 0;
+		return (rbt);
+	}
+
+	p = rbt->zone;
+	len = rbt->zonelen;	
+
+	while (*p && len > 0) {
+		rbt0 = Lookup_zone(db, p, len, htons(DNS_TYPE_NS), 0);	
+		if (rbt0 == NULL) {
+			p += (*p + 1);
+			len -= (*p + 1);
+	
+			continue;
+		} else
+			break;
+	}
+		
+	if ((rrset = find_rr(rbt0, DNS_TYPE_SOA)) != NULL) {
+		*delegation = 0;
+		free(rbt0);
+		return (rbt);
+	}
+		
+	return (rbt0);
+}
+
+
 
 /* 
  * Lookup_zone: wrapper for lookup_zone() et al. type must be htons()'ed!
