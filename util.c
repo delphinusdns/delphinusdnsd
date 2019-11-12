@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.52 2019/11/12 04:45:55 pjp Exp $
+ * $Id: util.c,v 1.53 2019/11/12 08:14:09 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -341,7 +341,7 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 
 	struct rbtree *rbt = NULL;
 	struct rbtree *rbt0 = NULL;
-	struct rrset *rrset = NULL, *rrset2 = NULL;
+	struct rrset *rrset = NULL;
 	int plen, splen, error;
 
 	char *p, *sp;
@@ -443,13 +443,14 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 	
 	snprintf(replystring, DNS_MAXNAME, "%s", rbt->humanname);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL &&
-		! ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) && 
-		(rrset2 = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
+	if ((ntohs(question->hdr->qtype) != DNS_TYPE_DS) && 
+		(rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL &&
+		! (rbt->flags & RBT_APEX)) {
 		*returnval = -1;
 		*lzerrno = ERR_DELEGATE;
 		return (rbt);
 	} 
+
 
 	*returnval = check_qtype(rbt, ntohs(question->hdr->qtype), 0, &error);
 	if (*returnval == 0) {
