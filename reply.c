@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.90 2019/11/11 10:29:07 pjp Exp $
+ * $Id: reply.c,v 1.91 2019/11/12 04:45:55 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -100,6 +100,7 @@ extern struct rbtree * find_nsec3_match_qname(char *name, int namelen, struct rb
 extern struct rbtree *		get_soa(ddDB *, struct question *);
 extern struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
 extern struct rbtree *		Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
+extern int 			dn_contains(char *, int, char *, int);
 
 
 u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int);
@@ -1748,6 +1749,7 @@ reply_mx(struct sreply *sreply, ddDB *db)
 	struct addis {
 		char name[DNS_MAXNAME];
 		int namelen;
+		int contained;
 		SLIST_ENTRY(addis) addis_entries;
 	} *ad0, *ad1;
 
@@ -1837,6 +1839,11 @@ reply_mx(struct sreply *sreply, ddDB *db)
 		memcpy(ad0->name, name, namelen);
 		ad0->namelen = namelen;
 
+		if (dn_contains(name, namelen, rbt->zone, rbt->zonelen) == 1)
+			ad0->contained = 1;
+		else
+			ad0->contained = 0;
+
 		SLIST_INSERT_HEAD(&addishead, ad0, addis_entries);
 
 		/* set new offset for answer */
@@ -1874,6 +1881,9 @@ reply_mx(struct sreply *sreply, ddDB *db)
 	/* tack on additional A or AAAA records */
 
 	SLIST_FOREACH(ad0, &addishead, addis_entries) {
+		if (ad0->contained == 0)
+			continue;
+
 		addiscount = 0;
 		rbt0 = find_rrset(db, ad0->name, ad0->namelen);
 		if (rbt0 != NULL && find_rr(rbt0, DNS_TYPE_AAAA) != NULL) {

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.51 2019/11/11 09:15:40 pjp Exp $
+ * $Id: util.c,v 1.52 2019/11/12 04:45:55 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -106,6 +106,7 @@ char * 	bin2hex(char *, int);
 u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
 int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *);
+int dn_contains(char *name, int len, char *anchorname, int alen);
 
 int bytes_received;
 
@@ -2176,4 +2177,25 @@ out:
 
 }
 
+/* 
+ * DN_CONTAINS - is anchorname contained in name?
+ */
 
+int
+dn_contains(char *name, int len, char *anchorname, int alen)
+{
+	char *p = name;
+	int plen = len;
+
+	while (plen >= alen) {
+		if (plen == alen &&
+			memcasecmp(p, anchorname, alen) == 0) {
+			return 1;
+		}
+
+		plen -= (*p + 1);
+		p += (*p + 1);
+	}
+
+	return 0;
+}
