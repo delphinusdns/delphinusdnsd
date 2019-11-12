@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.84 2019/11/06 05:20:11 pjp Exp $
+ * $Id: parse.y,v 1.85 2019/11/12 07:14:59 pjp Exp $
  */
 
 %{
@@ -1786,9 +1786,9 @@ parse_file(ddDB *db, char *filename)
         popfile();
 
 
-	if (!TAILQ_EMPTY(&rzonefiles)) {
+	while (!TAILQ_EMPTY(&rzonefiles)) {
 		/* handle the rzone files */
-		topfile = file = rzonefile;
+		topfile = file = TAILQ_FIRST(&rzonefiles);
 
 		if (yyparse() < 0) {
 			dolog(LOG_ERR, "error: %s line: %d\n", file->name, file->lineno);
