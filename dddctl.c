@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.88 2019/11/14 18:02:12 pjp Exp $
+ * $Id: dddctl.c,v 1.89 2019/11/14 18:07:58 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -6298,7 +6298,7 @@ usage(int argc, char *argv[])
 	} else {
 		fprintf(stderr, "usage: command [arg ...]\n");
 		fprintf(stderr, "\tbindfile zonename zonefile\n");
-		fprintf(stderr, "\tconfigtest [-c] [configfile]\n");
+		fprintf(stderr, "\tconfigtest [-cn] [configfile]\n");
 		fprintf(stderr, "\tquery [-BDITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-x serial] [-z ZSK]\n");

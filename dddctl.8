@@ -1,4 +1,4 @@
-.\" $Id: dddctl.8,v 1.5 2019/11/07 05:42:14 pjp Exp $
+.\" $Id: dddctl.8,v 1.6 2019/11/14 18:07:58 pjp Exp $
 .\" In parts copyright (template) by:
 .\"
 .\"	$OpenBSD: vmctl.8,v 1.39 2018/02/24 13:14:09 jmc Exp $
@@ -18,7 +18,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: November 7 2019 $
+.Dd $Mdocdate: November 14 2019 $
 .Dt DDDCTL 8
 .Os
 .Sh NAME
@@ -40,14 +40,16 @@ Convert a
 .Xr delphinusdns.conf 5
 zonefile to BIND format with the specified zonename domain name.
 .It Xo Cm configtest 
-.Op Fl c 
+.Op Fl cn 
 .Op Ar configfile
 .Xc
 Test the entire config, alternatively you can test a
 .Xr delphinusdns.conf 5
 config file by specifying such a file.  In case of configured rzones, when
 there is no .repl file in /etc/delphinusdns/replicant/ it will pull the
-replicant file via a socket.
+replicant file via a socket, unless the
+.Op Fl n
+flag has been specified.
 .It Cm help Ar [command]
 provides an in-binary help.  Alternatively you can specify a subcommand 
 to provide help for.  Ie. 
