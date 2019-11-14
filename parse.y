@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.85 2019/11/12 07:14:59 pjp Exp $
+ * $Id: parse.y,v 1.86 2019/11/14 18:02:12 pjp Exp $
  */
 
 %{
@@ -177,6 +177,7 @@ static uint8_t region = 0;
 static uint64_t confstatus = 0;
 static ddDB *mydb;
 static char *current_zone = NULL;
+static int pullzone = 1;
 
 YYSTYPE yylval;
 
@@ -220,7 +221,7 @@ int		hex2bin(char *, int, char *);
 int             lgetc(int);
 struct tab * 	lookup(struct tab *, char *);
 int             lungetc(int);
-int 		parse_file(ddDB *, char *);
+int 		parse_file(ddDB *, char *, uint32_t);
 struct file     *pushfile(const char *, int, int, int);
 int             popfile(void);
 static int 	temp_inet_net_pton_ipv6(const char *, void *, size_t);
@@ -632,7 +633,7 @@ rzone:
 			return -1;
 		}
 		if (lstat(lrz->filename, &sb) < 0 || sb.st_size == 0) {
-			if (pull_remote_zone(lrz) < 0) {
+			if (pullzone && pull_remote_zone(lrz) < 0) {
 				dolog(LOG_ERR, "can't pull zone %s into filename %s, stop.\n", lrz->zonename, lrz->filename);
 				return -1;
 			}
@@ -1760,11 +1761,14 @@ yywrap()
 }
 
 int
-parse_file(ddDB *db, char *filename)
+parse_file(ddDB *db, char *filename, uint32_t flags)
 {
 	int errors = 0;
 
 	mydb = db;
+
+	if (flags & PARSEFILE_FLAG_NOSOCKET)
+		pullzone = 0;
 
 	memset(&logging, 0, sizeof(struct logging));
 	logging.active = 0;

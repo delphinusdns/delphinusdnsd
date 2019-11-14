@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.28 2019/11/11 05:22:50 pjp Exp $
+ * $Id: ddd-db.h,v 1.29 2019/11/14 18:02:12 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -40,6 +40,9 @@
 
 #define CONFFILE "/etc/delphinusdns/delphinusdns.conf"
 #define DEFAULT_SOCKET 64
+
+#define PARSEFILE_FLAG_NOSOCKET 0x1
+
 
 #define IMSG_HELLO_MESSAGE  0		/* hello the master process a few */
 #define IMSG_SPREAD_MESSAGE 1		/* spread a record to all childs */
@@ -379,7 +382,7 @@ int dddbclose(ddDB *);
 
 #define DDDB_NOTFOUND 	(-1)
 
-int parse_file(ddDB *db, char *);
+int parse_file(ddDB *db, char *, uint32_t);
 ddDB * opendatabase(ddDB *);
 
 /* dig stuff */

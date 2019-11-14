@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.84 2019/11/11 09:15:40 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.85 2019/11/14 18:02:12 pjp Exp $
  */
 
 
@@ -532,7 +532,7 @@ main(int argc, char *argv[], char *environ[])
 	init_tsig();
 	TAILQ_INIT(&tcphead);
 
-	if (parse_file(db, conffile) < 0) {
+	if (parse_file(db, conffile, 0) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
 		slave_shutdown();
 		exit(1);

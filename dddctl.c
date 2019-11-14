@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.87 2019/11/11 09:15:40 pjp Exp $
+ * $Id: dddctl.c,v 1.88 2019/11/14 18:02:12 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -449,6 +449,7 @@ signmain(int argc, char *argv[])
 
 	time_t now, serial = 0;
 	struct tm *tm;
+	uint32_t parseflags = PARSEFILE_FLAG_NOSOCKET;
 
 #if __OpenBSD__
 	if (pledge("stdio rpath wpath cpath", NULL) < 0) {
@@ -837,7 +838,7 @@ signmain(int argc, char *argv[])
 
 	/* now we start reading our configfile */
 		
-	if ((mask & MASK_PARSE_FILE) && parse_file(db, zonefile) < 0) {
+	if ((mask & MASK_PARSE_FILE) && parse_file(db, zonefile, parseflags) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
 		exit(1);
 	}
@@ -7008,12 +7009,16 @@ configtest(int argc, char *argv[])
 	ddDB *db;
 	char *zonefile = CONFFILE;
 	int ch, count = 0;
+	uint32_t flags = 0;
 
 	
-	while ((ch = getopt(argc, argv, "c")) != -1) {
+	while ((ch = getopt(argc, argv, "cn")) != -1) {
 		switch (ch) {
 		case 'c':
 			count = 1;
+			break;
+		case 'n':
+			flags = PARSEFILE_FLAG_NOSOCKET;
 			break;
 		default:
 			fprintf(stderr, "usage: dddctl configtest [-c] [input]\n");
@@ -7039,7 +7044,7 @@ configtest(int argc, char *argv[])
 
 	/* now we start reading our configfile */
 		
-	if (parse_file(db, zonefile) < 0) {
+	if (parse_file(db, zonefile, flags) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
 		return 1;
 	}
@@ -7569,6 +7574,7 @@ bindfile(int argc, char *argv[])
 	char *zonename;
 	FILE *of = stdout;
 	int len;
+	uint32_t flags = PARSEFILE_FLAG_NOSOCKET;
 
 	if (argc != 3) {
 		usage(argc, argv);
@@ -7610,7 +7616,7 @@ bindfile(int argc, char *argv[])
 
 	/* now we start reading our configfile */
 		
-	if (parse_file(db, zonefile) < 0) {
+	if (parse_file(db, zonefile, flags) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
 		return 1;
 	}
