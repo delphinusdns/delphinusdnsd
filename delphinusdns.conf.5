@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd July 11, 2018
+.Dd November 14, 2019
 .Dt DELPHINUSDNS.CONF 5
 .Os 
 .Sh NAME
@@ -115,13 +115,6 @@ zone "centroid.eu" {
 	irc2.centroid.eu,a,3600,200.46.208.61
 	localhost.centroid.eu,a,3600,127.0.0.1
 	localhost.centroid.eu,aaaa,3600,::1
-	; the below are new delegations (NS) records
-	;delegation.centroid.eu,delegate,3600,ns1.server.com.
-	; glue record
-	;ns1.server.com.,a,3600,10.0.0.1
-	;delegation.centroid.eu,delegate,3600,ns2.server.com.
-	; glue record
-	;ns2.server.com.,a,3600,10.0.0.2
 }
 .Ed
 Here is a sample 
@@ -160,6 +153,37 @@ zinclude "/etc/delphinusdns/virgostar.net.signed";
 .Ed
 Then the included files are output of
 .Xr dddctl 8
+.Pp
+Finally below is a sample replicant 
+.Nm
+as taken from a 
+.Xr delphinusdnsd 
+with only one zone:
+.Bd -literal
+version "9";
+
+options "arrowhead" {
+        ratelimit-pps 12;
+        interface "lo0";
+        interface "vio0";
+        port 53;
+        log;
+        dnssec;
+        versionstring "delphinusdnsd-20191103";
+}
+
+include "/etc/delphinusdns/delphinusdns.tsig";
+
+rzone "ip6.centroid.eu." {
+        tsigkey "pass";
+        masterport 10053;
+        master 2a01:4f8:162:e700:881c:fe60:3582:f49c;
+        zonename "ip6.centroid.eu.";
+        filename "/etc/delphinusdns/replicant/ip6.centroid.eu.repl";
+}
+
+.Ed
+Notice the /etc/delphinusdns/replicant/ directory, this is a hardcoded path.
 .Sh GRAMMAR
 Syntax for 
 .Nm
@@ -181,9 +205,8 @@ zone = "zone" ("string") [ "{" zonedata "}" ]
 zonedata = { [hostname] [ "," dnstype] [ "," ttl ] ["," variablednsdata] }
 hostname = string
 dnstype = ( 	"a" | "aaaa" | "cname" | "dnskey" | "ds" | "mx" | "naptr" |
-		"ns" | "nsec" | "nsec3" | "nsec3param" | "ptr" | "rrsig" |
-		"soa" | "srv" | "sshfp" | "tlsa" | "txt" |
-		"delegate" | "hint" )
+		"ns" | "nsec3" | "nsec3param" | "ptr" | "rrsig" |
+		"soa" | "srv" | "sshfp" | "tlsa" | "txt" | "hint" )
 
 ttl = number
 
@@ -207,6 +230,19 @@ filter = "filter" ("string") [ "{" cidrlist "}" ]
 
 recurse = "recurse-for" ("string") [ "{" cidrlist "}" ]
 
+base64-string = (string)
+tsig-auth = "tsig-auth" (string) ("base64-string") ;
+tsig = "tsig" ("string") [ "{" cidrlist "}" ]
+
+rzonelist = ( opttsig | optmaster | optmasterport | optrzonename | optfilename )
+opttsig = "tsigkey" ("string") ;
+optmaster = "master" ("cidr-address") ;
+optmasterport = "masterport"  (number) ;
+optrzonename = "zonename" ("string") ;
+optfilename = "filename" ("string") ;
+
+rzone = "rzone" ("string") [ "{" rzonelist "}" ]
+
 logging = "logging" ("string") [ "{" logstatements "}" ]
 logstatements = ( "logbind" | "logpasswd" | "logport" | "loghost" ) 
 logbind = "logbind" ("string") ; 
@@ -225,6 +261,7 @@ optfork = "fork" number ;
 optratelimit = "ratelimit-pps" number ; 
 optbind = "bind" cidr-address ;
 optdnssec = "dnssec" ; 
+
 .Ed
 .Sh FILES
 .Pa /etc/delphinusdns/delphinusdns.conf
