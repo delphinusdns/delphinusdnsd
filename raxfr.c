@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.33 2019/11/18 15:49:45 pjp Exp $
+ * $Id: raxfr.c,v 1.34 2019/11/18 18:46:01 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -65,6 +65,7 @@
 #include <sys/tree.h>
 #ifdef __FreeBSD__
 #include "imsg.h"
+#include "endian.h"
 #else
 #include <imsg.h>
 #endif /* __FreeBSD__ */

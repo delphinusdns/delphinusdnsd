@@ -2,7 +2,7 @@
 
 PROG=dddctl
 
-SRCS=dddctl.c parse.y base64.c dnssec.c util.c ent.c db.c raxfr.c tsig.c region.c
+SRCS=dddctl.c parse.y base64.c dnssec.c util.c ent.c db.c raxfr.c tsig.c region.c imsg-buffer.c imsg.c
 
 CFLAGS= -Wall -g  -I${.CURDIR}/..
 LDFLAGS= -Wall -g 

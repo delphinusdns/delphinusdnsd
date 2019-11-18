@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.87 2019/11/18 15:53:49 pjp Exp $
+ * $Id: parse.y,v 1.88 2019/11/18 18:46:01 pjp Exp $
  */
 
 %{
@@ -3912,10 +3912,12 @@ drop_privs(char *chrootpath, struct passwd *pw)
 		return -1;
 	}
 
+#if __OpenBSD__
 	if (unveil("/", "rwc") < 0) {
 		dolog(LOG_INFO, "unveil: %s\n", strerror(errno));
 		return -1;
 	}
+#endif
 
 	if (chdir("/") < 0) {
 		dolog(LOG_INFO, "chdir: %s\n", strerror(errno));
