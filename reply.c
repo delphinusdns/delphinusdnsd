@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.91 2019/11/12 04:45:55 pjp Exp $
+ * $Id: reply.c,v 1.92 2019/11/18 16:01:27 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -4824,6 +4824,12 @@ reply_refused(struct sreply *sreply, ddDB *db)
 		SET_DNS_NOTIFY(odh);
 
 	HTONS(odh->query);		
+
+	if (q->edns0len) {
+		/* tag on edns0 opt record */
+		odh->additional = htons(1);
+		outlen = additional_opt(q, reply, replysize, outlen);
+	}
 
 	if (istcp) {
 		char *tmpbuf;
