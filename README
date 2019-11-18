@@ -1,4 +1,4 @@
-$Id: README,v 1.35 2019/11/01 14:58:08 pjp Exp $
+$Id: README,v 1.36 2019/11/18 16:05:18 pjp Exp $
 
 1. README
  1.1 AUTHOR(S)
@@ -242,11 +242,10 @@ registrar and from there to your parent zone.
 6.4 How can I sub-delegate a zone with DNSSEC
 ---------------------------------------------
 
-A delegation from zone that is DNSSEC signed should be possible only if
-the sub-zone is not signed.  This has to do with it not answering a DS
-RR with the NS RR in a referral yet.  A delegation from a non-signed zone
-to a non-signed sub-zone should work as well.  A delegation from a 
-non-signed zone to a signed sub-zone is not working yet either.
+This was recently fixed.  When delegating to a signed zone be sure to copy
+back the DS file (dsset-zone. file), it is in RFC1034/BIND format so you'll
+have to convert it to delphinusdnsd format most likely.  You then sign over
+this and publish the delegation (restart delphinusdnsd).  That should be all.
 
 
 6.5 What algorithms are supported with dddctl sign
