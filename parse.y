@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.86 2019/11/14 18:02:12 pjp Exp $
+ * $Id: parse.y,v 1.87 2019/11/18 15:53:49 pjp Exp $
  */
 
 %{
@@ -619,6 +619,8 @@ mzonestatement:
 		}
 		free($2);
 	}
+	| comment CRLF
+	;
 
 rzone:
 	RZONE rzonelabel rzonecontent {
@@ -775,6 +777,7 @@ rzonestatement:
 		free($1);
 		free($2);
 	}
+	| comment CRLF
 	;
 
 /* zone */
