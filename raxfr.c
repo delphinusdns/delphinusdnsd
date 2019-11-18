@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.32 2019/11/11 09:15:40 pjp Exp $
+ * $Id: raxfr.c,v 1.33 2019/11/18 15:49:45 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1267,6 +1267,9 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 	char *dn = NULL;	
 	char *humanconv = NULL;
 
+	int period, tot_refresh = 0, zonecount = 1;
+	int add_period = 0;
+
 
 #if __OpenBSD__
 	if (pledge("stdio wpath rpath cpath inet", NULL) < 0) {
@@ -1293,12 +1296,14 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 		if (rrset == NULL) {
 			dolog(LOG_INFO, "%s has no SOA, removing zone from replicant engine\n", lrz->zonename);
 			SLIST_REMOVE(&rzones, lrz, rzone, rzone_entry);
+			free(rbt);
 			continue;
 		}
 		rrp = TAILQ_FIRST(&rrset->rr_head);
 		if (rrp == NULL) {
 			dolog(LOG_INFO, "SOA record corrupted for zone %s, removing zone from replicant engine\n", lrz->zonename);
 			SLIST_REMOVE(&rzones, lrz, rzone, rzone_entry);
+			free(rbt);
 			continue;
 		}
 
@@ -1311,9 +1316,24 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 			lrz->soa.serial, lrz->soa.refresh, lrz->soa.retry,
 			lrz->soa.expire);
 
-		now = time(NULL);
-		schedule_refresh(lrz->zonename, now + lrz->soa.refresh);
+		zonecount++;
+		tot_refresh += lrz->soa.refresh;
+
 		free(rbt);
+	}
+
+	period = (tot_refresh / zonecount) / zonecount;
+	add_period = period;
+
+	SLIST_FOREACH_SAFE(lrz, &rzones, rzone_entry, lrz0) {
+		if (lrz->zonename == NULL)
+			continue;
+
+		now = time(NULL);
+		now += period;
+		dolog(LOG_INFO, "refreshing %s at %s\n", lrz->zonename, ctime(&now));
+		schedule_refresh(lrz->zonename, now);
+		period += add_period;
 	}
 
 	for (;;) {
