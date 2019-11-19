@@ -15,7 +15,8 @@ Changes in RELEASE_1_4 from RELEASE_1_3
   update documentation for this
 - add -X and -x argument for setting the serial automatically overriding what
   is in the zonefile
-- refused answers now tag on the question, which it did not do before.
+- refused answers now tag on the question, and add on a possible EDNS0 tag,
+  which it did not do before.
 - fixed referrer NS code with plain subzones incorporating some DNSSEC elements
 
 
