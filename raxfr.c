@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.37 2019/11/19 16:58:41 pjp Exp $
+ * $Id: raxfr.c,v 1.38 2019/11/19 16:59:43 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1222,7 +1222,11 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 		goto out;
 	}
 
+#if __OpenBSD__
 	if (timingsafe_memcmp(sdt->mac, mac, macsize) != 0) {	
+#else
+	if (memcmp(sdt->mac, mac, macsize) != 0) {	
+#endif
 #if 0
 		int i;
 
