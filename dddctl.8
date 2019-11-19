@@ -1,4 +1,4 @@
-.\" $Id: dddctl.8,v 1.6 2019/11/14 18:07:58 pjp Exp $
+.\" $Id: dddctl.8,v 1.7 2019/11/19 08:51:26 pjp Exp $
 .\" In parts copyright (template) by:
 .\"
 .\"	$OpenBSD: vmctl.8,v 1.39 2018/02/24 13:14:09 jmc Exp $
@@ -18,7 +18,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: November 14 2019 $
+.Dd $Mdocdate: November 19 2019 $
 .Dt DDDCTL 8
 .Os
 .Sh NAME
@@ -132,10 +132,15 @@ Please see the https://delphinusdns.org website for more examples.
 .Xr delphinusdns.conf 5
 .Sh FILES
 .Bl -tag -width /etc/delphinusdns/delphinusdns.conf -compact
+.It Pa /etc/delphinusdns/delphinusdns.conf
+default configfile
+.It Pa /etc/delphinusdns/replicant/
+replicant zone files pulled via AXFR
 .It Pa /var/run/delphinusdnsd.sock
 default 
 .Nm
 control socket
+.El
 .Sh AUTHORS
 .An -nosplit
 .An Peter J. Philipp Aq Mt petphi@delphinusdns.org
