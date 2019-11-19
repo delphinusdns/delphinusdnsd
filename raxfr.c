@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.35 2019/11/19 07:13:04 pjp Exp $
+ * $Id: raxfr.c,v 1.36 2019/11/19 07:24:53 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -2167,13 +2167,14 @@ pull_rzone(struct rzone *rzone, time_t now, int doschedule)
 	}
 
 	snprintf(buf, sizeof(buf), "%s.XXXXXXXXXXXXXX", p);	
-	if ((p = mktemp(buf)) == NULL) {
+	if ((mkstemp(buf)) == -1) {
 		dolog(LOG_INFO, "can't determine temporary filename from %s (3)\n", rzone->filename);
 		if (doschedule)
 			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 
+	p = &buf[0];
 	umask(022);
 		
 	f = fopen(p, "w");
