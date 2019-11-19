@@ -1,4 +1,4 @@
-$Id: README,v 1.38 2019/11/19 09:02:48 pjp Exp $
+$Id: README,v 1.39 2019/11/19 09:07:19 pjp Exp $
 
 1. README
  1.1 AUTHOR(S)
@@ -269,7 +269,5 @@ dddctl.c.  It is what's being used now.
 7. WHAT IT CAN'T DO
 -------------------
 
-* Solaris.  Unless you port some functions to solaris it won't compile on
-there.
-
-* DNSSEC algorithm rollover.  Maybe for version 1.5.0 or higher.
+* DNSSEC algorithm rollover.  Maybe for version 1.5.0 or higher.  Please pick
+a good strong algorithm, it may take years until this is fixed.
