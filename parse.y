@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.88 2019/11/18 18:46:01 pjp Exp $
+ * $Id: parse.y,v 1.89 2019/11/19 07:13:04 pjp Exp $
  */
 
 %{
@@ -713,11 +713,15 @@ rzonestatement:
 
 		if (strchr(rz->master, ':')) {
 			rz->storage.ss_family = AF_INET6;
+#ifndef __linux__
 			rz->storage.ss_len = 16;
+#endif
 			inet_pton(AF_INET6, rz->master, &sin6->sin6_addr);
 		} else {
 			rz->storage.ss_family = AF_INET;
+#ifndef __linux__
 			rz->storage.ss_len = 4;
+#endif
 			inet_pton(AF_INET, rz->master, &sin->sin_addr.s_addr);
 		}
 

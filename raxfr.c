@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.34 2019/11/18 18:46:01 pjp Exp $
+ * $Id: raxfr.c,v 1.35 2019/11/19 07:13:04 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -60,6 +60,7 @@
 #include <bsd/sys/tree.h>
 #include <bsd/sys/endian.h>
 #include "imsg.h"
+#include "endian.h"
 #else /* not linux */
 #include <sys/queue.h>
 #include <sys/tree.h>
@@ -1281,7 +1282,11 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 
 	lastnow = time(NULL);
 
+#ifdef __linux__
+	SLIST_FOREACH(lrz, &rzones, rzone_entry) {
+#else
 	SLIST_FOREACH_SAFE(lrz, &rzones, rzone_entry, lrz0) {
+#endif
 		if (lrz->zonename == NULL)
 			continue;
 
@@ -1326,7 +1331,11 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 	period = (tot_refresh / zonecount) / zonecount;
 	add_period = period;
 
+#ifdef __linux__
+	SLIST_FOREACH(lrz, &rzones, rzone_entry) {
+#else
 	SLIST_FOREACH_SAFE(lrz, &rzones, rzone_entry, lrz0) {
+#endif
 		if (lrz->zonename == NULL)
 			continue;
 
@@ -1457,7 +1466,11 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 			}
 		}
 
+#ifdef __linux__
+		LIST_FOREACH(sp0, &myschedules, myschedule_entry) {
+#else
 		LIST_FOREACH_SAFE(sp0, &myschedules, myschedule_entry, sp1) {
+#endif
 			if (sp0->when <= now) {
 				/* we hit a timeout on refresh */
 				if (sp0->action == SCHEDULE_ACTION_REFRESH) {
@@ -1663,7 +1676,9 @@ get_remote_soa(struct rzone *rzone)
 		sin6.sin6_family = AF_INET6;
 		sin6.sin6_port = htons(rzone->masterport);
 		memcpy(&sin6.sin6_addr, (void *)&((struct sockaddr_in6 *)(&rzone->storage))->sin6_addr, sizeof(struct in6_addr));
+#ifndef __linux__
 		sin6.sin6_len = sizeof(struct sockaddr_in6);
+#endif
 		sa = (struct sockaddr *)&sin6;
 		slen = sizeof(struct sockaddr_in6);
 	} else {
@@ -2066,7 +2081,9 @@ do_raxfr(FILE *f, struct rzone *rzone)
 		sin6.sin6_family = AF_INET6;
 		sin6.sin6_port = htons(rzone->masterport);
 		memcpy(&sin6.sin6_addr, (void *)&((struct sockaddr_in6 *)(&rzone->storage))->sin6_addr, sizeof(struct in6_addr));
+#ifndef __linux__
 		sin6.sin6_len = sizeof(struct sockaddr_in6);
+#endif
 		sa = (struct sockaddr *)&sin6;
 		slen = sizeof(struct sockaddr_in6);
 	} else {

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.35 2019/11/05 17:07:20 pjp Exp $
+ * $Id: axfr.c,v 1.36 2019/11/19 07:13:04 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -358,7 +358,9 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 			sin6 = (struct sockaddr_in6 *)&from;
 			sin6->sin6_family = AF_INET6;
 			sin6->sin6_port = htons(0);
+#ifndef __linux__
 			sin6->sin6_len = sizeof(struct sockaddr_in6);
+#endif
 	
 			if (bind(notifyfd[1], (struct sockaddr *)sin6, sizeof(*sin6)) < 0) {
 				dolog(LOG_INFO, "bind notify6: %s\n", strerror(errno));
@@ -1619,7 +1621,9 @@ notifypacket(int so, void *vnotnp, void *vmd, int packetcount)
 		struct sockaddr_in6 *tmpsin = (struct sockaddr_in6 *)&newsin;
 
 		tmpsin->sin6_port = ((struct sockaddr_in6 *)&savesin)->sin6_port;
+#ifndef __linux__
 		tmpsin->sin6_len = sizeof(struct sockaddr_in6);	
+#endif
 
 		if (bind(so, (struct sockaddr *)tmpsin, sizeof(struct sockaddr_in6)) < 0) {
 			dolog(LOG_INFO, "can't bind to v6 bind address found in mzone for zone \"%s\"", mz->humanname);
@@ -1697,7 +1701,9 @@ notifypacket(int so, void *vnotnp, void *vmd, int packetcount)
 		memset(&bsin6, 0, sizeof(bsin6));
 		bsin6.sin6_family = AF_INET6;
 		bsin6.sin6_port = htons(md->port);
+#ifndef __linux__
 		bsin6.sin6_len = sizeof(struct sockaddr_in6);
+#endif
 		memcpy(&bsin6.sin6_addr, &tmpsin->sin6_addr, 16);
 
 		ret = sendto(so, packet, outlen, 0, (struct sockaddr *)&bsin6, slen);

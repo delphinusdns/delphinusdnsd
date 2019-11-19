@@ -8,12 +8,15 @@ AR=ar
 
 all: delphinusdnsd dddctl
 
-delphinusdnsd: imsg-buffer.o imsg.o additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o db.o tsig.o
-	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o imsg-buffer.o imsg.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o db.o tsig.o $(LDADD)
+delphinusdnsd: imsg-buffer.o imsg.o additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o
+	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o imsg-buffer.o imsg.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o $(LDADD)
 
-dddctl:  dddctl.o util.o dnssec.o parse.o base64.o ent.o raxfr.o tsig.o region.o
-	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o $(LDADD)
+dddctl:  dddctl.o util.o dnssec.o parse.o base64.o ent.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o
+	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o $(LDADD)
 	
+
+raxfr.o: raxfr.c
+	$(CC) $(CFLAGS) -c raxfr.c
 
 imsg-buffer.o: imsg-buffer.c
 	$(CC) $(CFLAGS) -c imsg-buffer.c
