@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.38 2019/11/19 16:59:43 pjp Exp $
+ * $Id: raxfr.c,v 1.39 2019/11/19 19:10:25 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -126,7 +126,7 @@ static void		schedule_delete(struct myschedule *);
 static int 		rand_restarttime(void);
 int64_t get_remote_soa(struct rzone *rzone);
 int do_raxfr(FILE *, struct rzone *);
-int pull_rzone(struct rzone *, time_t, int);
+int pull_rzone(struct rzone *, time_t);
 
 extern int                     memcasecmp(u_char *, u_char *, int);
 extern char * dns_label(char *, int *);
@@ -1441,20 +1441,20 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 						}
 
 						if (lrz != NULL) {
-										dolog(LOG_DEBUG, "zone %s is being notified now\n", lrz->zonename);
-										if ((serial = get_remote_soa(lrz)) == MY_SOCK_TIMEOUT) {
-												dolog(LOG_INFO, "timeout upon notify, dropping\n");
-										} else if (serial > lrz->soa.serial) {
-											/* initiate AXFR and update zone */
-											dolog(LOG_INFO, "new higher serial detected (%ld vs. %ld)\n", serial, lrz->soa.serial);
+								dolog(LOG_DEBUG, "zone %s is being notified now\n", lrz->zonename);
+								if ((serial = get_remote_soa(lrz)) == MY_SOCK_TIMEOUT) {
+										dolog(LOG_INFO, "timeout upon notify, dropping\n");
+								} else if (serial > lrz->soa.serial) {
+										/* initiate AXFR and update zone */
+										dolog(LOG_INFO, "new higher serial detected (%ld vs. %ld)\n", serial, lrz->soa.serial);
 
-											if (pull_rzone(lrz, now, 0) < 0) {
-												dolog(LOG_INFO, "AXFR failed\n");
-											} else {
+										if (pull_rzone(lrz, now) < 0) {
+											dolog(LOG_INFO, "AXFR failed\n");
+										} else {
 												schedule_restart(lrz->zonename, now + rand_restarttime());
 												endspurt = 1;
-											}
-										} /* else serial ... */
+										}
+									} /* else serial ... */
 							} else {
 								humanconv = convert_name(dn, datalen);
 								if (humanconv != NULL) {
@@ -1470,6 +1470,8 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 					imsg_free(&imsg);
 				}
 			}
+
+			continue;
 		}
 
 #ifdef __linux__
@@ -1493,6 +1495,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 						/* must delete before adding any more */
 						schedule_delete(sp0);
 						if ((serial = get_remote_soa(lrz)) == MY_SOCK_TIMEOUT) {
+							dolog(LOG_ERR, "SOA lookup for zone %s failed\n", lrz->zonename);
 							/* we didn't get a reply and our socket timed out */
 							schedule_retry(lrz->zonename, now + lrz->soa.retry);
 							/* schedule a retry and go on */
@@ -1500,7 +1503,8 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 							/* initiate AXFR and update zone */
 							dolog(LOG_INFO, "new higher serial detected (%ld vs. %ld)\n", serial, lrz->soa.serial);
 
-							if (pull_rzone(lrz, now,1) < 0) {
+							if (pull_rzone(lrz, now) < 0) {
+								dolog(LOG_ERR, "AXFR for zone %s failed\n", lrz->zonename);
 								schedule_retry(lrz->zonename, now + lrz->soa.retry);
 								goto out;
 							}
@@ -1512,6 +1516,8 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 							schedule_refresh(lrz->zonename, now + lrz->soa.refresh);
 						}
 					}
+
+					goto out;
 				} else if (sp0->action == SCHEDULE_ACTION_RETRY) {
 					/* we hit a timeout on retry */
 
@@ -1524,18 +1530,21 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 					}
 
 					if (lrz != NULL) {
-						dolog(LOG_INFO, "zone %s is being retried now\n", sp0->zonename);
+						dolog(LOG_INFO, "AXFR for zone %s is being retried now\n", sp0->zonename);
 						schedule_delete(sp0);
 						if ((serial = get_remote_soa(lrz)) == MY_SOCK_TIMEOUT) {
+							dolog(LOG_ERR, "SOA lookup for zone %s failed\n", lrz->zonename);
 							/* we didn't get a reply and our socket timed out */
 							schedule_retry(lrz->zonename, now + lrz->soa.retry);
 							/* schedule a retry and go on */
+							goto out;
 						} else if (serial > lrz->soa.serial) {
 							/* initiate AXFR and update zone */
 
 							dolog(LOG_INFO, "new higher serial detected (%ld vs. %ld)\n", serial, lrz->soa.serial);
 
-							if (pull_rzone(lrz, now,1) < 0) {
+							if (pull_rzone(lrz, now) < 0) {
+								dolog(LOG_ERR, "AXFR for zone %s failed\n", lrz->zonename);
 								schedule_retry(lrz->zonename, now + lrz->soa.retry);
 								goto out;
 							}
@@ -1547,7 +1556,8 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 							schedule_refresh(lrz->zonename, now + lrz->soa.refresh);
 						}
 					}
-
+				
+					goto out;
 				} else if (sp0->action == SCHEDULE_ACTION_RESTART) {
 					/* we hit a scheduling on restarting, nothing can save you now! */
 					dolog(LOG_INFO, "I'm supposed to restart now, RESTART\n");
@@ -1616,6 +1626,7 @@ schedule_restart(char *zonename, time_t seconds)
 static void
 schedule_delete(struct myschedule *sched)
 {
+	sched->action = 0;
 	LIST_REMOVE(sched, myschedule_entry);
 	free(sched);
 }
@@ -2150,7 +2161,7 @@ do_raxfr(FILE *f, struct rzone *rzone)
 
 
 int
-pull_rzone(struct rzone *rzone, time_t now, int doschedule)
+pull_rzone(struct rzone *rzone, time_t now)
 {
 	char *p, *q;
 	FILE *f;
@@ -2159,8 +2170,6 @@ pull_rzone(struct rzone *rzone, time_t now, int doschedule)
 	p = strrchr(rzone->filename, '/');
 	if (p == NULL) {
 		dolog(LOG_INFO, "can't determine temporary filename from %s\n", rzone->filename);
-		if (doschedule)
-			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 
@@ -2168,16 +2177,12 @@ pull_rzone(struct rzone *rzone, time_t now, int doschedule)
 	q = p;
 	if (*p == '\0') {
 		dolog(LOG_INFO, "can't determine temporary filename from %s (2)\n", rzone->filename);
-		if (doschedule)
-			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 
 	snprintf(buf, sizeof(buf), "%s.XXXXXXXXXXXXXX", p);	
 	if ((mkstemp(buf)) == -1) {
 		dolog(LOG_INFO, "can't determine temporary filename from %s (3)\n", rzone->filename);
-		if (doschedule)
-			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 
@@ -2187,8 +2192,6 @@ pull_rzone(struct rzone *rzone, time_t now, int doschedule)
 	f = fopen(p, "w");
 	if (f == NULL) {
 		dolog(LOG_INFO, "can't create temporary filename for zone %s\n", rzone->zonename);
-		if (doschedule)
-			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 
@@ -2196,8 +2199,6 @@ pull_rzone(struct rzone *rzone, time_t now, int doschedule)
 	
 	if (do_raxfr(f, rzone) < 0) {
 		dolog(LOG_INFO, "do_raxfr failed\n");
-		if (doschedule)
-			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 
@@ -2206,8 +2207,6 @@ pull_rzone(struct rzone *rzone, time_t now, int doschedule)
 	unlink(q);	
 	if (link(p, q) < 0) {
 		dolog(LOG_ERR, "can't link %s to %s\n", p, q);
-		if (doschedule)
-			schedule_retry(rzone->zonename, now + rzone->soa.retry);
 		return -1;
 	}
 

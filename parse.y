@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.89 2019/11/19 07:13:04 pjp Exp $
+ * $Id: parse.y,v 1.90 2019/11/19 19:10:25 pjp Exp $
  */
 
 %{
@@ -96,7 +96,7 @@ extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 extern int display_rr(struct rrset *rrset);
 extern void flag_rr(struct rbtree *);
-extern int pull_rzone(struct rzone *, time_t, int);
+extern int pull_rzone(struct rzone *, time_t);
 
 extern int whitelist;
 extern int tsig;
@@ -3784,7 +3784,7 @@ pull_remote_zone(struct rzone *lrz)
 			}
 #endif
 	
-			if (pull_rzone(lrz, time(NULL), 0) < 0)
+			if (pull_rzone(lrz, time(NULL)) < 0)
 				exit(1);
 			
 			exit(0);
