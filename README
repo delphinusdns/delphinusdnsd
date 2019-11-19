@@ -1,4 +1,4 @@
-$Id: README,v 1.36 2019/11/18 16:05:18 pjp Exp $
+$Id: README,v 1.37 2019/11/19 08:57:06 pjp Exp $
 
 1. README
  1.1 AUTHOR(S)
@@ -158,7 +158,7 @@ it they can send patches for the Makefile.
 ------------------+--------------------+---------------------+
 Operating System  | makes and compiles | responds to queries |
 ------------------+--------------------+---------------------+
-FreeBSD 11.2      |        yes         |       yes           |
+FreeBSD 12.1      |        yes         |       yes           |
 ------------------+--------------------+---------------------+
 NetBSD 8.1        |        yes         |       yes           |
 ------------------+--------------------+---------------------+
