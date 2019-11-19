@@ -1,4 +1,4 @@
-$Id: README,v 1.37 2019/11/19 08:57:06 pjp Exp $
+$Id: README,v 1.38 2019/11/19 09:02:48 pjp Exp $
 
 1. README
  1.1 AUTHOR(S)
@@ -246,6 +246,9 @@ This was recently fixed.  When delegating to a signed zone be sure to copy
 back the DS file (dsset-zone. file), it is in RFC1034/BIND format so you'll
 have to convert it to delphinusdnsd format most likely.  You then sign over
 this and publish the delegation (restart delphinusdnsd).  That should be all.
+Here is an example zone entry for ip6.centroid.eu:
+
+ ip6.centroid.eu,ds,86400,35905,13,2,"CB0EC7995E5223BC823A0AF96180613C7B24295F47E066E690EE448626995044"
 
 
 6.5 What algorithms are supported with dddctl sign
