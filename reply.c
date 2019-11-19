@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.92 2019/11/18 16:01:27 pjp Exp $
+ * $Id: reply.c,v 1.93 2019/11/19 14:15:51 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -5570,7 +5570,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	int labellen;
 	char *label, *plabel;
 	u_int32_t *soa_val;
-	u_int16_t namelen;
+	u_int16_t namelen = 0;
 	u_int16_t *mx_priority, *srv_priority, *srv_port, *srv_weight;
 	u_int16_t *naptr_order, *naptr_preference, *ds_keytag;
 	u_int16_t *dnskey_flags, *nsec3param_iterations;
