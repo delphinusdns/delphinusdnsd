@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.36 2019/11/19 07:24:53 pjp Exp $
+ * $Id: raxfr.c,v 1.37 2019/11/19 16:58:41 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1214,13 +1214,15 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 		if (ntohs(*otherlen))
 			HMAC_Update(ctx, otherdata, ntohs(*otherlen));
 
-		standardanswer = 0;
-	} else
+	} else {
 		HMAC_Update(ctx, (char *)&sdt->timefudge, 8);
+	}
 
-	HMAC_Final(ctx, mac, &macsize);
+	if (HMAC_Final(ctx, mac, &macsize) != 1) {
+		goto out;
+	}
 
-	if (memcmp(sdt->mac, mac, macsize) != 0) {	
+	if (timingsafe_memcmp(sdt->mac, mac, macsize) != 0) {	
 #if 0
 		int i;
 
@@ -1966,7 +1968,8 @@ get_remote_soa(struct rzone *rzone)
 		HMAC_Update(ctx, shabuf, sizeof(shabuf));
 		hmaclen = rwh->dh.additional;		/* save additional */
 		NTOHS(rwh->dh.additional);
-		rwh->dh.additional--;
+		if (rwh->dh.additional)
+			rwh->dh.additional--;
 		HTONS(rwh->dh.additional);
 		HMAC_Update(ctx, estart, (p - estart));
 		rwh->dh.additional = hmaclen;		/* restore additional */

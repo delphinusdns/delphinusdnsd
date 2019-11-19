@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.53 2019/11/12 08:14:09 pjp Exp $
+ * $Id: util.c,v 1.54 2019/11/19 16:58:41 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -2073,7 +2073,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 			saveadd = rwh->dh.additional;
 			NTOHS(rwh->dh.additional);
-			rwh->dh.additional--;
+			if (rwh->dh.additional)
+				rwh->dh.additional--;
 			HTONS(rwh->dh.additional);
 			HMAC_Update(ctx, estart, (p - estart));
 			rwh->dh.additional = saveadd;
@@ -2109,8 +2110,14 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 					return -1;
 				}
 
-			 	HMAC_CTX_reset(ctx);	
-				HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
+			 	if (HMAC_CTX_reset(ctx) != 1) {
+					fprintf(stderr, "HMAC_CTX_reset failed!\n");
+					return -1;
+				}
+				if (HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL) != 1) {
+					fprintf(stderr, "HMAC_Init_ex failed!\n");
+					return -1;
+				}
 				maclen = htons(32);
 				HMAC_Update(ctx, (char *)&maclen, sizeof(maclen));
 				HMAC_Update(ctx, mac, sizeof(mac));
