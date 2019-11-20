@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2011-2018 Peter J. Philipp
+ * Copyright (c) 2011-2019 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: log.c,v 1.7 2019/11/20 18:20:49 pjp Exp $
+ * $Id: log.c,v 1.8 2019/11/20 18:30:07 pjp Exp $
  */
 
 
