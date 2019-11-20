@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: log.c,v 1.6 2019/06/06 14:56:08 pjp Exp $
+ * $Id: log.c,v 1.7 2019/11/20 18:20:49 pjp Exp $
  */
 
 
@@ -41,6 +41,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #include <syslog.h>
 
@@ -72,6 +73,62 @@ extern int verbose;
 void	dolog(int pri, char *fmt, ...);
 void	receivelog(char *buf, int len);
 int	remotelog(int fd, char *fmt, ...);
+char	*input_sanitize(char *);
+
+
+/*
+ * INPUT_SANITIZE - syslogd does this sanitization, but in debug mode we want
+ *			this sanitizer at least.
+ */
+
+char *
+input_sanitize(char *fmt)
+{
+	char *buf;
+	char *p, *q;
+	char backslash = '\\';
+
+	buf = malloc((4 * strlen(fmt)) + 1);
+	if (buf == NULL)
+		return NULL;
+
+	q = buf;
+
+	for (p = fmt; *p; p++) {
+		if (*p == backslash) {
+			*q++ = *p++;	
+			if (*p == '\0')
+				break;
+			switch (*p) {
+			case 'n':
+			case 't':
+			case 'r':
+			case '\'':
+			case '\\':
+			case '"':
+				*q++ = *p;
+				break;
+			default:
+				*q++ = '\\';
+				*q++ = *p;
+				break;
+			}
+		} else {
+			if (isprint(*p) || *p == '\n') {
+				*q++ = *p;
+			} else {
+				*q++ = '\\';
+				*q++ = 'x'; 
+				snprintf(q, 3, "%02X", *p & 0xff);
+				q += 2;
+			}
+		}
+	}
+
+	*q = '\0';
+
+	return (buf);
+}
 
 
 /*
@@ -83,6 +140,7 @@ void
 dolog(int pri, char *fmt, ...)
 {
 	va_list ap;
+	char *buf, *sanitize;
 
 	va_start(ap, fmt);
 
@@ -92,14 +150,40 @@ dolog(int pri, char *fmt, ...)
 	 */
 
 	if (pri == LOG_DEBUG) {
-		if (verbose && debug)
-			vprintf(fmt, ap);
-		else if (verbose)
+		if (verbose && debug) {
+			buf = malloc(1024);
+			if (buf == NULL) {
+				printf("-= failed to allocate memory for output buffer =-\n");
+			} else {
+				vsnprintf(buf, 1024, fmt, ap);
+				sanitize = input_sanitize(buf);
+				if (sanitize == NULL) {
+					printf("-= failed to allocate memory for output buffer =-\n");
+				} else {
+					printf("%s", sanitize);
+					free(sanitize);
+				}
+				free(buf); 
+			}
+		} else if (verbose)
 			vsyslog(pri, fmt, ap);
 	} else {
-		if (debug)
-			vprintf(fmt, ap);
-		else 
+		if (debug) {
+			buf = malloc(1024);
+			if (buf == NULL) {
+				printf("-= failed to allocate memory for output buffer =-\n");
+			} else {
+				vsnprintf(buf, 1024, fmt, ap);
+				sanitize = input_sanitize(buf);
+				if (sanitize == NULL) {
+					printf("-= failed to allocate memory for output buffer =-\n");
+				} else {
+					printf("%s", sanitize);
+					free(sanitize);
+				}
+				free(buf); 
+			}
+		} else 
 			vsyslog(pri, fmt, ap);
 	}	
 	
