@@ -1,3 +1,3 @@
-SUBDIR= rr zinclude
+SUBDIR= rr 
 
 .include <bsd.subdir.mk>
