@@ -10,7 +10,7 @@ if [ $? -eq 1 ]; then
 	exit 1
 fi
 
-(delphinusdnsd  -dvvv -l -f `pwd`/$i -s `pwd`/control.sock > output  2>&1 ) &
+delphinusdnsd  -l -f `pwd`/$i -s `pwd`/control.sock
 
 sleep 3
 
@@ -19,14 +19,14 @@ case $1 in
 "a")
 	dddctl query -@127.0.0.1 -P4053 centroid.eu a  > output.2
 
-	grep -q `grep -v '^;' output.2 | grep ,a,` a
+	grep -v '^;' output.2 | grep ,a, | grep -q a
 	RETCODE=$?
 	;;
 
 "aaaa")
 	dddctl query -@127.0.0.1 -P4053 centroid.eu aaaa  > output.2
 
-	grep -q `grep -v '^;' output.2 | grep ,aaaa,` aaaa
+	grep -v '^;' output.2 | grep ,aaaa, | grep -q aaaa
 	RETCODE=$?
 	;;
 
@@ -51,7 +51,7 @@ case $1 in
 "ns")
 	dddctl query -@127.0.0.1 -P4053 centroid.eu ns  > output.2
 
-	grep -q `grep -v '^;' output.2 | grep ,ns,` ns
+	grep -v '^;' output.2 | grep ,ns, | grep -q ns
 	RETCODE=$?
 	;;
 
@@ -59,21 +59,21 @@ case $1 in
 "mx")
 	dddctl query -@127.0.0.1 -P4053 centroid.eu mx  > output.2
 
-	grep -q `grep -v '^;' output.2 | grep ,mx,` mx
+	grep -v '^;' output.2 | grep ,mx, | grep -q mx
 	RETCODE=$?
 	;;
 
 "soa")
 	dddctl query -@127.0.0.1 -P4053 centroid.eu soa  > output.2
 
-	grep -q `grep -v '^;' output.2 | grep ,soa,` soa
+	grep -v '^;' output.2 | grep ,soa, | grep -q soa
 	RETCODE=$?
 	;;
 
 "naptr")
 	dddctl query -@127.0.0.1 -P4053 centroid.eu naptr > output.2
 
-	grep -q `grep -v '^;' output.2 | grep ,naptr,` naptr
+	grep -v '^;' output.2 | grep ,naptr, | grep -q naptr
 	RETCODE=$?
 	;;
 
