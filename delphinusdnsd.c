@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.86 2019/11/25 15:14:42 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.87 2019/11/25 15:22:11 pjp Exp $
  */
 
 
@@ -119,7 +119,6 @@ extern void 	init_notifyslave(void);
 extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
 extern struct rbtree *  Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 extern int 	memcasecmp(u_char *, u_char *, int);
-extern void 	receivelog(char *, int);
 extern int 	reply_a(struct sreply *, ddDB *);
 extern int 	reply_aaaa(struct sreply *, ddDB *);
 extern int 	reply_any(struct sreply *, ddDB *);
