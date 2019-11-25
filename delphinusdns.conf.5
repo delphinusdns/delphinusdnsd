@@ -158,8 +158,8 @@ Syntax for
 in BNF:
 .Bd -literal
 line = ( version | axfrport | include | zinclude | zone | region | 
-	axfr | mzone | whitelist | filter | recurse | logging 
-        | comment | options )
+	axfr | mzone | whitelist | filter | recurse | comment | 
+		options )
 
 version = "version" ("number") ;
 
@@ -210,13 +210,6 @@ optrzonename = "zonename" ("string") ;
 optfilename = "filename" ("string") ;
 
 rzone = "rzone" ("string") [ "{" rzonelist "}" ]
-
-logging = "logging" ("string") [ "{" logstatements "}" ]
-logstatements = ( "logbind" | "logpasswd" | "logport" | "loghost" ) 
-logbind = "logbind" ("string") ; 
-logpasswd = "logpasswd" ("string") ; 
-logport = "logport" number ;
-loghost = "loghost" cidr-address ; 
 
 comment = ( ; | pound ) line
 

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.85 2019/11/14 18:02:12 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.86 2019/11/25 15:14:42 pjp Exp $
  */
 
 
@@ -149,7 +149,6 @@ extern int	reply_ds(struct sreply *, ddDB *);
 extern int	reply_nsec(struct sreply *, ddDB *);
 extern int	reply_nsec3(struct sreply *, ddDB *);
 extern int	reply_nsec3param(struct sreply *, ddDB *);
-extern int 	remotelog(int, char *, ...);
 extern char 	*rrlimit_setup(int);
 extern char 	*dns_label(char *, int *);
 extern void 	slave_shutdown(void);
@@ -243,7 +242,6 @@ struct tcpentry {
 /* global variables */
 
 extern char *__progname;
-extern struct logging logging;
 extern int axfrport;
 extern int ratelimit;
 extern int ratelimit_packets_per_second;
@@ -291,7 +289,6 @@ main(int argc, char *argv[], char *environ[])
 	static int tcp[DEFAULT_SOCKET];
 	static int afd[DEFAULT_SOCKET];
 	static int uafd[DEFAULT_SOCKET];
-	int lfd = -1;
 	int n;
 
 	int ch, i, j;
@@ -849,70 +846,6 @@ main(int argc, char *argv[], char *environ[])
 		}
 	} /* if bflag? */
 
-	/* if we are binding a log socket do it now */
-	if (logging.bind == 1 || logging.active == 1)  {
-		switch (logging.loghost2.ss_family) {
-	 	case AF_INET:
-			lfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-			if (lfd < 0) {
-				dolog(LOG_INFO, "logging socket: %s\n", strerror(errno));
-				slave_shutdown();
-				exit(1);
-			}
-			sin = (struct sockaddr_in *)&logging.loghost2;
-			sin->sin_port = htons(logging.logport2);
-			break;
-		case AF_INET6:
-			lfd = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-			if (lfd < 0) {	
-				dolog(LOG_INFO, "logging socket: %s\n", strerror(errno));
-				slave_shutdown();
-				exit(1);
-			}
-			sin6 = (struct sockaddr_in6 *)&logging.loghost2;
-			sin6->sin6_port = htons(logging.logport2);
-			break;
-		}
-
-		if (logging.bind == 1) {
-			if (bind(lfd, (struct sockaddr *)&logging.loghost2, 
-				((logging.loghost2.ss_family == AF_INET6) ?	
-				 	sizeof(struct sockaddr_in6) :
-					sizeof(struct sockaddr_in))	
-				) < 0) {
-				dolog(LOG_INFO, "binding log socket: %s\n", strerror(errno));
-				slave_shutdown();
-				exit(1);
-			}
-	
-#ifndef __linux__
-			if (shutdown(lfd, SHUT_WR) < 0) {
-				dolog(LOG_INFO, "shutdown log socket: %s\n", strerror(errno));
-				slave_shutdown();
-				exit(1);
-			}
-#endif
-				
-		} else {
-			if (connect(lfd, (struct sockaddr *)&logging.loghost2,
-				((logging.loghost2.ss_family == AF_INET6) ?	
-				 	sizeof(struct sockaddr_in6) :
-					sizeof(struct sockaddr_in))) < 0) {
-					dolog(LOG_INFO, "connecting log socket: %s\n", strerror(errno));
-					slave_shutdown();
-					exit(1);
-			}
-
-			if (shutdown(lfd, SHUT_RD) < 0) {
-				dolog(LOG_INFO, "shutdown log socket: %s\n", strerror(errno));
-				slave_shutdown();
-				exit(1);
-			}
-	
-		} /* if logging.bind */
-				
-	} /* if logging.bind */
-
 #if __OpenBSD__
 	if (unveil(DELPHINUS_RZONE_PATH, "rwc")  < 0) {
 		perror("unveil");
@@ -1126,8 +1059,6 @@ main(int argc, char *argv[], char *environ[])
 				cfg->ident[i] = strdup(ident[i]);
 			}
 
-			cfg->log = lfd;
-
 			close(cfg->my_imsg[MY_IMSG_MAX + n].imsg_fds[0]);
 			imsg_init(child_ibuf[MY_IMSG_MAX + n], cfg->my_imsg[MY_IMSG_MAX + n].imsg_fds[1]);
 			
@@ -1153,8 +1084,6 @@ main(int argc, char *argv[], char *environ[])
 
 		cfg->ident[i] = strdup(ident[i]);
 	}
-	cfg->log = lfd;
-
 
 	(void)mainloop(cfg, child_ibuf);
 
@@ -1463,7 +1392,6 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	int blacklist = 1;
 	int require_tsig = 0;
 	int sp; 
-	int lfd;
 	int idata;
 
 	u_int32_t received_ttl;
@@ -1486,12 +1414,10 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	} sockaddr_large;
 
 	socklen_t fromlen = sizeof(sockaddr_large);
-	socklen_t logfromlen = sizeof(struct sockaddr_storage);
 
 	struct sockaddr *from = (void *)&sockaddr_large;
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
-	struct sockaddr_storage logfrom;
 
 	struct question *question = NULL, *fakequestion = NULL;
 	struct parsequestion pq;
@@ -1596,7 +1522,6 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 
 
 	sp = cfg->recurse;
-	lfd = cfg->log;
 
 	for (;;) {
 		is_ipv6 = 0;
@@ -1616,12 +1541,6 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 				FD_SET(cfg->axfr[i], &rset);
 		}
 	
-		if (logging.bind == 1) {
-			if (maxso < lfd)
-				maxso = lfd;
-			FD_SET(lfd, &rset);
-		}
-
 		tv.tv_sec = 10;
 		tv.tv_usec = 0;
 
@@ -2178,10 +2097,6 @@ axfrentry:
 
 				}
 
-				if (logging.active == 1 && logging.bind == 0) {
-					remotelog(lfd, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d) for \"%s\" type=%s class=%u, %s%sanswering \"%s\" (%d/%d)", so, cfg->ident[i], address, received_ttl, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, ": ""), (question->dnssecok ? "dnssecok" : ""), replystring, len, slen);
-				}
-
 				if (fakequestion != NULL) {
 					free_question(fakequestion);
 				}
@@ -2200,15 +2115,6 @@ axfrentry:
 			}	/* END ISSET */
 
 		} /* for */
-
-		if (logging.bind == 1 && FD_ISSET(lfd, &rset)) {
-			logfromlen = sizeof(struct sockaddr_storage);
-			len = recvfrom(lfd, buf, sizeof(buf), 0, (struct sockaddr *)&logfrom, &logfromlen);
-			if (len < 0) {
-				dolog(LOG_INFO, "recvfrom: logging %s\n", strerror(errno));
-			} else
-				receivelog(buf, len);
-		}
 
 	drop:
 		
@@ -2449,7 +2355,6 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	int require_tsig = 0;
 	int axfr_acl = 0;
 	int sp; 
-	int lfd;
 	int idata;
 	uint conncnt = 0;
 	int tcpflags;
@@ -2540,7 +2445,6 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 
 
 	sp = cfg->recurse;
-	lfd = cfg->log;
 
 	/* 
 	 * listen on descriptors

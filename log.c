@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: log.c,v 1.8 2019/11/20 18:30:07 pjp Exp $
+ * $Id: log.c,v 1.9 2019/11/25 15:14:42 pjp Exp $
  */
 
 
@@ -66,13 +66,10 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-extern struct logging logging;
 extern int debug;
 extern int verbose;
 
 void	dolog(int pri, char *fmt, ...);
-void	receivelog(char *buf, int len);
-int	remotelog(int fd, char *fmt, ...);
 char	*input_sanitize(char *);
 
 
@@ -189,81 +186,4 @@ dolog(int pri, char *fmt, ...)
 	
 	va_end(ap);
 
-}
-
-/*
- * remotelog() - is like syslog() only the first argument is a filedescriptor
- *		 instead of severity, it will send a packet to the loghost
- *		 signed.
- */
-
-int
-remotelog(int fd, char *fmt, ...)
-{
-	va_list ap;
-	static char buf[1500];
-	static char outbuf[1500];
-	char sign[20];
-	char *p;
-	u_int rlen;
-	static u_int64_t sequence = 0;
-
-
-	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
-	va_end(ap);
-
-#ifdef __NetBSD__
-	snprintf(outbuf, sizeof(outbuf), "XXXXXXXXXXXXXXXXXXXX%lu %s %s", 
-#else
-	snprintf(outbuf, sizeof(outbuf), "XXXXXXXXXXXXXXXXXXXX%llu %s %s", 
-#endif
-			sequence++, logging.hostname, buf);
-
-	p = &outbuf[20];
-
-	
-	HMAC(EVP_sha1(), logging.logpasswd, strlen(logging.logpasswd),
-		(unsigned char *)p, strlen(p), (unsigned char *)&sign, 
-		&rlen);
-
-	memcpy(outbuf, sign, 20);
-
-	return (send(fd, outbuf, strlen(outbuf), 0));
-}
-
-
-void
-receivelog(char *buf, int len)
-{
-	static char inbuf[1500];
-	char sign[20];
-	char *p;
-	int rlen;
-
-	if (len < 21 || len > 1450)
-		return;
-
-	memcpy(&inbuf, buf, len);
-	inbuf[len] = '\0';
-
-	p = &inbuf[20];
-
-	HMAC(EVP_sha1(), logging.logpasswd, strlen(logging.logpasswd),
-		(unsigned char *)p, strlen(p), (unsigned char *)&sign, 
-		(unsigned int *)&rlen);
-
-	if (memcmp(inbuf, sign, 20) != 0) 
-		return;
-
-	/* skip sequence number */
-	p = strchr(p, ' ');
-	if (p == NULL)
-		return;
-
-	p++;
-
-	syslog(LOG_INFO, "%s", p);
-
-	return;
 }

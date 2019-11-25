@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.29 2019/11/14 18:02:12 pjp Exp $
+ * $Id: ddd-db.h,v 1.30 2019/11/25 15:14:42 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -264,18 +264,6 @@ struct sreply {
 };
 
 
-struct logging {
-	int active;
-	char *hostname;
-	int bind;
-	char *loghost;
-	struct sockaddr_storage loghost2;
-	char *logport;
-	u_int16_t logport2;
-	char *logpasswd;
-};
-
-
 /* ddd command socket */
 
 #define SOCKPATH	"/var/run/delphinusdnsd.sock"
@@ -367,7 +355,6 @@ struct cfg {
 #define MY_IMSG_RAXFR	4
 #define MY_IMSG_MAX	5
 	int recurse;			/* recurse socket */
-	int log;			/* logging socket */
 	int sockcount;			/* set sockets */
 	int nth;
 	pid_t pid;

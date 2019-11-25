@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.90 2019/11/19 19:10:25 pjp Exp $
+ * $Id: parse.y,v 1.91 2019/11/25 15:14:42 pjp Exp $
  */
 
 %{
@@ -153,7 +153,7 @@ SLIST_HEAD(mzones ,mzone)	mzones = SLIST_HEAD_INITIALIZER(mzones);
 #define CONFIG_INCLUDE          0x10
 #define CONFIG_WILDCARDONLYFOR  0x20
 #define CONFIG_RECURSEFOR       0x40
-#define CONFIG_LOGGING          0x80
+#define CONFIG_LOGGING          0x80		/* deprecated */
 #define CONFIG_AXFRFOR          0x100
 #define CONFIG_AXFRPORT         0x200
 #define CONFIG_ZINCLUDE		0x400
@@ -185,7 +185,6 @@ YYSTYPE yylval;
 char *converted_name;
 int converted_namelen;
 ddDBT key, data;
-struct logging logging;
 int axfrport = 0;
 time_t time_changed;
 int dnssec = 0;
@@ -238,7 +237,7 @@ int 		drop_privs(char *, struct passwd *);
 
 %token VERSION OBRACE EBRACE REGION RZONE AXFRFOR 
 %token DOT COLON TEXT WOF INCLUDE ZONE COMMA CRLF 
-%token ERROR AXFRPORT LOGGING OPTIONS FILTER MZONE
+%token ERROR AXFRPORT OPTIONS FILTER MZONE
 %token WHITELIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
 %token TSIG NOTIFYDEST NOTIFYBIND PORT
 
@@ -275,7 +274,6 @@ cmd	:
 	| whitelist CRLF
 	| tsig CRLF
 	| filter CRLF
-	| logging
 	| comment CRLF
 	| options
 	;
@@ -1280,166 +1278,6 @@ optionsstatement:
 	| comment CRLF
 	;
 
-/* logging below */
-	
-logging:
-	LOGGING logginglabel loggingcontent
-	{
-		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
-                        dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
-                        return (-1);
-                }
-	}
-	;
-
-logginglabel:
-	QUOTEDSTRING 
-	;
-
-loggingcontent:
-			OBRACE loggingstatements EBRACE CRLF
-			| OBRACE CRLF loggingstatements EBRACE CRLF
-			;
-
-loggingstatements:
-			loggingstatement CRLF
-			| loggingstatements loggingstatement CRLF
-			;
-			
-loggingstatement:
-	STRING STRING SEMICOLON 
-	{
-		char buf[512];
-		
-		if (file->descend == DESCEND_YES) {
-			if (strcasecmp($1, "logbind") == 0) {
-				logging.active = 1;
-				logging.bind = 0;
-
-				gethostname(buf, sizeof(buf));
-				logging.hostname = strdup(buf);
-				if (logging.hostname == NULL) {
-					dolog(LOG_ERR, "strdup failed\n");
-					return (-1);
-				}
-		
-				if (strcmp($2, "yes") == 0) {
-					logging.bind = 1;
-				}
-			} else if (strcasecmp($1, "logpasswd") == 0) {
-			
-				logging.logpasswd = strdup($2);
-			
-				if (logging.logpasswd == NULL) {
-					dolog(LOG_ERR, "strdup failed\n");
-					return (-1);
-				}
-
-			} else {
-				if (debug)
-					printf("another logging statement I don't know?\n");
-				return (-1);
-			}
-		}
-	}
-	|
-	STRING NUMBER SEMICOLON 
-	{
-		char buf[16];
-
-		if (file->descend == DESCEND_YES) {
-			if (strcasecmp($1, "logport") == 0) {
-				snprintf(buf, sizeof(buf), "%lld", $2);
-				logging.logport = strdup(buf);
-				if (logging.logport == NULL) {
-					dolog(LOG_ERR, "strdup failed\n");
-					return (-1);
-				}
-				logging.logport2 = $2;
-			}
-		}	
-	}
-	|
-	STRING ipcidr SEMICOLON
-	{
-		struct addrinfo hints, *res0;
-		struct sockaddr_in6 *psin6;
-		struct sockaddr_in *psin;
-		int error;
-
-		if (file->descend == DESCEND_YES) {
-			if (strcasecmp($1, "loghost") == 0) {
-				logging.loghost = strdup($2);
-				if (logging.loghost == NULL) {
-					dolog(LOG_ERR, "strdup failed\n");
-
-					return (-1);
-				}
-
-				if (strchr($2, ':') != NULL) {
-					memset(&hints, 0, sizeof(hints));
-					hints.ai_family = AF_INET6;
-					hints.ai_socktype = SOCK_STREAM;
-					hints.ai_flags = AI_NUMERICHOST;
-
-					error = getaddrinfo($2, "www", &hints, &res0);
-					if (error) {
-						dolog(LOG_ERR, "%s line %d: %s\n", 
-							file->name, file->lineno,
-							gai_strerror(error));
-		
-						return (-1);
-					}
-
-					if (res0 == NULL) {
-						dolog(LOG_ERR, "%s line %d: could not"
-							" determine IPv6 address\n"
-							, file->name, file->lineno);
-						return (-1);
-					}
-		
-					psin6 = (struct sockaddr_in6 *)&logging.loghost2;
-					psin6->sin6_family = res0->ai_family;
-					memcpy(psin6, res0->ai_addr, res0->ai_addrlen);
-					freeaddrinfo(res0);
-				} else {
-					memset(&hints, 0, sizeof(hints));
-
-					hints.ai_family = AF_INET;
-					hints.ai_socktype = SOCK_STREAM;
-					hints.ai_flags = AI_NUMERICHOST;
-
-					error = getaddrinfo($2, "www", &hints, &res0);
-					if (error) {
-						dolog(LOG_ERR, "%s line %d: %s\n", 
-							file->name, file->lineno,
-							gai_strerror(error));
-		
-						return (-1);
-					}
-
-					if (res0 == NULL) {
-						dolog(LOG_ERR, "%s line %d: could not"
-							" determine IPv6 address\n"
-							, file->name, file->lineno);
-						return (-1);
-					}
-						
-					psin = (struct sockaddr_in *)&logging.loghost2;
-					psin->sin_family = res0->ai_family;
-					memcpy(psin, res0->ai_addr, res0->ai_addrlen);
-
-					freeaddrinfo(res0);
-				}
-			} else {
-				if (debug)
-					printf("2 another logging statement I don't know?\n");
-				return (-1);
-			}
-		}
-	}
-	| comment CRLF
-	;
 /* tsig "these hosts" { .. } */
 
 tsig:
@@ -1733,7 +1571,6 @@ struct tab cmdtab[] = {
 	{ "whitelist", WHITELIST, STATE_IP },
 	{ "filter", FILTER, STATE_IP },
 	{ "include", INCLUDE, 0 },
-	{ "logging", LOGGING, 0 },
 	{ "master", MASTER, 0 },
 	{ "masterport", MASTERPORT, 0 },
 	{ "mzone", MZONE, 0},
@@ -1777,8 +1614,6 @@ parse_file(ddDB *db, char *filename, uint32_t flags)
 	if (flags & PARSEFILE_FLAG_NOSOCKET)
 		pullzone = 0;
 
-	memset(&logging, 0, sizeof(struct logging));
-	logging.active = 0;
 
 	(void)add_rzone();
 
