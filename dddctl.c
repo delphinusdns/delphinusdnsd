@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.89 2019/11/14 18:07:58 pjp Exp $
+ * $Id: dddctl.c,v 1.90 2019/11/27 09:29:37 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -2059,7 +2059,7 @@ int
 sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
 {
 	struct rrset *rrset = NULL;
-	struct rr *rrp = NULL;
+	struct rr *rrp = NULL, *rrp2 = NULL;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2067,8 +2067,8 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	
 
 	char *dnsname;
-	char *p;
-	char *key;
+	char *p, *q;
+	char *key, *tmpkey = NULL;
 	char *zone;
 
 	uint32_t ttl;
@@ -2087,6 +2087,16 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
+	TAILQ_HEAD(listhead, canonical) head;
+
+	struct canonical {
+		char *data;
+		int len;
+		TAILQ_ENTRY(canonical) entries;
+	} *c1, *c2, *cp;
+
+	TAILQ_INIT(&head);
+
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -2094,6 +2104,13 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		dolog(LOG_INFO, "out of memory\n");
 		return -1;
 	}
+
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
+		return -1;
+	}
+
 
 	/* get the ZSK */
 	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
@@ -2166,21 +2183,66 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	pack(p, dnsname, labellen);
 	p += labellen;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_TXT));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		/* the below uses rrp! because we can't have an rrsig differ */
+		pack32(q, htonl(((struct txt *)rrp->rdata)->ttl));
+		q += 4;
+		pack16(q, htons(((struct txt *)rrp2->rdata)->txtlen));
+		q += 2;
+		pack(q, (char *)((struct txt *)rrp2->rdata)->txt, ((struct txt *)rrp2->rdata)->txtlen);
+		q += ((struct txt *)rrp2->rdata)->txtlen;
 
-	pack(p, rbt->zone, rbt->zonelen);
-	p += rbt->zonelen;
-	pack16(p, htons(DNS_TYPE_TXT));
-	p += 2;
-	pack16(p, htons(DNS_CLASS_IN));
-	p += 2;
-	pack32(p, htonl(((struct txt *)rrp->rdata)->ttl));
-	p += 4;
-	pack16(p, htons(((struct txt *)rrp->rdata)->txtlen));
-	p += 2;
-	pack(p, ((struct txt *)rrp->rdata)->txt, ((struct txt *)rrp->rdata)->txtlen);
-	p += ((struct txt *)rrp->rdata)->txtlen;
+	        c1 = malloc(sizeof(struct canonical));
+                if (c1 == NULL) {
+                        dolog(LOG_INFO, "c1 out of memory\n");
+                        return -1;
+                }
+
+                c1->len = (q - tmpkey);
+                c1->data = malloc(c1->len);
+                if (c1->data == NULL) {
+                        dolog(LOG_INFO, "c1->data out of memory\n");
+                        return -1;
+                }
+
+                memcpy(c1->data, tmpkey, c1->len);
+
+                if (TAILQ_EMPTY(&head))
+                        TAILQ_INSERT_TAIL(&head, c1, entries);
+                else {
+                        TAILQ_FOREACH(c2, &head, entries) {
+                                if (c1->len < c2->len)
+                                        break;
+                                else if (c2->len == c1->len &&
+                                        memcmp(c1->data, c2->data, c1->len) < 0)
+                                        break;
+                        }
+
+                        if (c2 != NULL)
+                                TAILQ_INSERT_BEFORE(c2, c1, entries);
+                        else
+                                TAILQ_INSERT_TAIL(&head, c1, entries);
+                }
+	}
+
+#ifdef __linux__
+	TAILQ_FOREACH(c2, &head, entries) {
+#else
+	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+#endif
+                pack(p, c2->data, c2->len);
+                p += c2->len;
+
+                TAILQ_REMOVE(&head, c2, entries);
+        }
+
 
 	keylen = (p - key);	
 
@@ -6082,17 +6144,19 @@ print_rbt(FILE *of, struct rbtree *rbt)
 			dolog(LOG_INFO, "no txt in zone!\n");
 			return -1;
 		}
-		fprintf(of, "  %s,txt,%d,\"", 
-				convert_name(rbt->zone, rbt->zonelen),
-				((struct txt *)rrp->rdata)->ttl);
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			fprintf(of, "  %s,txt,%d,\"", 
+					convert_name(rbt->zone, rbt->zonelen),
+					((struct txt *)rrp->rdata)->ttl);
 
-		for (i = 0; i < ((struct txt *)rrp->rdata)->txtlen; i++) {
-			if (i % 256 == 0)
-				continue;
+			for (i = 0; i < ((struct txt *)rrp2->rdata)->txtlen; i++) {
+				if (i % 256 == 0)
+					continue;
 
-			fprintf(of, "%c", ((struct txt *)rrp->rdata)->txt[i]);
+				fprintf(of, "%c", ((struct txt *)rrp2->rdata)->txt[i]);
+			}
+			fprintf(of, "\"\n");
 		}
-		fprintf(of, "\"\n");
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
@@ -7396,20 +7460,22 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
-			dolog(LOG_INFO, "no ds in zone!\n");
+			dolog(LOG_INFO, "no txt in zone!\n");
 			return -1;
 		}
-		fprintf(of, "%s %d IN TXT \"", 
-				convert_name(rbt->zone, rbt->zonelen),
-				((struct txt *)rrp->rdata)->ttl);
-				
-		for (i = 0; i < ((struct txt *)rrp->rdata)->txtlen; i++) {
-			if (i % 256 == 0)
-				continue;
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			fprintf(of, "%s %d IN TXT \"", 
+					convert_name(rbt->zone, rbt->zonelen),
+					((struct txt *)rrp->rdata)->ttl);
+					
+			for (i = 0; i < ((struct txt *)rrp2->rdata)->txtlen; i++) {
+				if (i % 256 == 0)
+					continue;
 
-			fprintf(of, "%c", ((struct txt *)rrp->rdata)->txt[i]);
+				fprintf(of, "%c", ((struct txt *)rrp2->rdata)->txt[i]);
+			}
+			fprintf(of, "\"\n");
 		}
-		fprintf(of, "\"\n");
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {

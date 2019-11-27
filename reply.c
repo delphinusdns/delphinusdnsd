@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.93 2019/11/19 14:15:51 pjp Exp $
+ * $Id: reply.c,v 1.94 2019/11/27 09:29:37 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -3230,6 +3230,7 @@ reply_txt(struct sreply *sreply, ddDB *db)
 	int replysize = 512;
 	int retlen = -1;
 	u_int16_t rollback;
+	int txt_count = 0;
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) == 0)
 		return -1;
@@ -3249,10 +3250,6 @@ reply_txt(struct sreply *sreply, ddDB *db)
 	if (len > replysize) {
 		return (retlen);
 	}
-
-	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == 0)
-		return -1;
 
 	/* copy question to reply */
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
@@ -3279,32 +3276,48 @@ reply_txt(struct sreply *sreply, ddDB *db)
 	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
 		q->hdr->namelen + 4);
 
-	answer->name[0] = 0xc0;
-	answer->name[1] = 0x0c;
-	answer->type = q->hdr->qtype;
-	answer->class = q->hdr->qclass;
-	answer->ttl = htonl(((struct txt *)rrp->rdata)->ttl);
+	txt_count = 0;
 
-	outlen += 12;			/* up to rdata length */
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		/*
+		 * answer->name is a pointer to the request (0xc00c) 
+		 */
 
-	p = (char *)&answer->rdata;
+		answer->name[0] = 0xc0;				/* 1 byte */
+		answer->name[1] = 0x0c;				/* 2 bytes */
+		answer->type = q->hdr->qtype;			/* 4 bytes */	
+		answer->class = q->hdr->qclass;			/* 6 bytes */
+		answer->ttl = htonl(((struct txt *)rrp->rdata)->ttl); /* 10 b */
 
-	memcpy(p, ((struct txt *)rrp->rdata)->txt, ((struct txt *)rrp->rdata)->txtlen);
-	outlen += (((struct txt *)rrp->rdata)->txtlen);
+		/* 12 bytes */
+		answer->rdlength = htons(((struct txt *)rrp->rdata)->txtlen);
+		outlen += 12;
 
-	answer->rdlength = htons(((struct txt *)rrp->rdata)->txtlen);
+		p = (char *)&answer->rdata;
 
-	/* check if we can even fit */
-	if (outlen > replysize) {
-		NTOHS(odh->query);
-		SET_DNS_TRUNCATION(odh);
-		HTONS(odh->query);
-		odh->answer = 0;
-		odh->nsrr = 0; 
-		odh->additional = 0;
-		outlen = rollback;
-		goto out;
-	}
+		memcpy(p, ((struct txt *)rrp->rdata)->txt, ((struct txt *)rrp->rdata)->txtlen);
+		outlen += (((struct txt *)rrp->rdata)->txtlen);
+
+		txt_count++;
+
+		/* can we afford to write more, if no truncate */
+		if (outlen > replysize) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
+			goto out;
+		}
+
+
+		/* set new offset for answer */
+		answer = (struct answer *)&reply[outlen];
+	} 
+
+	odh->answer = htons(txt_count);
 
 	/* Add RRSIG reply_txt */
 	if (dnssec && q->dnssecok && (rbt->flags & RBT_DNSSEC)) {
@@ -5549,6 +5562,7 @@ u_int16_t
 create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int soa)
 {
 	int a_count, aaaa_count, ns_count, mx_count, srv_count, sshfp_count;
+	int txt_count;
 	int tlsa_count, typelen;
 	int ds_count, dnskey_count;
 	int naptr_count, rrsig_count;
@@ -6185,43 +6199,50 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != 0) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == 0)
-			return -1;
+		txt_count = 0;
+		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 
-		NTOHS(odh->answer);
-		odh->answer++;
-		HTONS(odh->answer);
+			if ((offset + q->hdr->namelen) > rlen) {
+				goto truncate;
+			}
 
-		if ((offset + q->hdr->namelen) > rlen) {
-			goto truncate;
+			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
+			offset += q->hdr->namelen;
+
+			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+				offset = tmplen;
+			} 
+
+			answer = (struct answer *)&reply[offset];
+
+
+			if (offset + 10 > rlen)
+				goto truncate;
+
+			answer->type = htons(DNS_TYPE_TXT);
+			answer->class = htons(DNS_CLASS_IN);
+			answer->ttl = htonl(((struct txt *)rrp->rdata)->ttl);
+
+			offset += 10;		/* up to rdata length */
+
+			if (offset + ((struct txt *)rrp->rdata)->txtlen > rlen)
+				goto truncate;
+
+			p = (char *)&answer->rdata;
+			memcpy(p, ((struct txt *)rrp->rdata)->txt, ((struct txt *)rrp->rdata)->txtlen);
+			offset += (((struct txt *)rrp->rdata)->txtlen);
+
+			answer->rdlength = htons(((struct txt *)rrp->rdata)->txtlen);
+
+			txt_count++;
+
 		}
 
-		memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
-		offset += q->hdr->namelen;
-
-		if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-			offset = tmplen;
-		} 
-
-		answer = (struct answer *)&reply[offset];
-
-		answer->type = htons(DNS_TYPE_TXT);
-		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(((struct txt *)rrp->rdata)->ttl);
-
-		offset += 10;		/* up to rdata length */
-
-		if (offset + ((struct txt *)rrp->rdata)->txtlen > rlen)
-			goto truncate;
-
-		p = (char *)&answer->rdata;
-		memcpy(p, ((struct txt *)rrp->rdata)->txt, ((struct txt *)rrp->rdata)->txtlen);
-		offset += (((struct txt *)rrp->rdata)->txtlen);
-
-		answer->rdlength = htons(((struct txt *)rrp->rdata)->txtlen);
-
+		NTOHS(odh->answer);
+		odh->answer += txt_count;
+		HTONS(odh->answer);
 	}
+
 	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != 0) {
 
 		tlsa_count = 0;

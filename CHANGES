@@ -23,6 +23,8 @@ Changes in RELEASE_1_4 from RELEASE_1_3
   which it did not do before.
 - fixed referrer NS code with plain subzones incorporating some DNSSEC elements
 - remote logging (which was added in BETA_7) has been removed
+- last minute change:  teach delphinusdnsd and dddctl to answer multiple TXT's
+  per domain name.
 
 
 Changes in RELEASE_1_3 from RELEASE_1_2
