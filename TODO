@@ -9,7 +9,6 @@ For 1.5.0 release
 - an OpenBSD port/package starting with 1.4 release
 - fix the DNSSEC and delphinusdnsd(?) code so that an algorithm rollover
   works
-- allow multiple TXT records, currently we support only one
 
 For 1.4.0 release
 - a github mirrored copy
