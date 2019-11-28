@@ -15,9 +15,6 @@ dddctl:  dddctl.o util.o dnssec.o parse.o base64.o ent.o raxfr.o tsig.o region.o
 	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o $(LDADD)
 	
 
-raxfr.o: raxfr.c
-	$(CC) $(CFLAGS) -c raxfr.c
-
 imsg-buffer.o: imsg-buffer.c
 	$(CC) $(CFLAGS) -c imsg-buffer.c
 
