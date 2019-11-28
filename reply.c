@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.94 2019/11/27 09:29:37 pjp Exp $
+ * $Id: reply.c,v 1.95 2019/11/28 07:55:20 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -3339,8 +3339,11 @@ reply_txt(struct sreply *sreply, ddDB *db)
 
 		outlen = tmplen;
 
-		if (outlen > origlen)
-			odh->answer = htons(2);	
+		if (outlen > origlen) {
+			NTOHS(odh->answer);
+			odh->answer++;
+			HTONS(odh->answer);
+		}
 
 	}
 
