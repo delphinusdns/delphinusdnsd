@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.36 2019/11/19 07:13:04 pjp Exp $
+ * $Id: axfr.c,v 1.37 2019/12/03 18:21:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -92,6 +92,14 @@ int	insert_notifyslave(char *, char *);
 void	notifypacket(int, void *, void *, int);
 void    notifyslaves(int *);
 void	reap(int);
+
+extern void 	pack(char *, char *, int);
+extern void 	pack32(char *, u_int32_t);
+extern void 	pack16(char *, u_int16_t);
+extern void 	pack8(char *, u_int8_t);
+extern uint32_t unpack32(char *);
+extern uint16_t unpack16(char *);
+extern void 	unpack(char *, char *, int);
 
 extern int 		get_record_size(ddDB *, char *, int);
 extern in_addr_t 	getmask(int);
@@ -837,8 +845,6 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 	int rs;
 	int tsigkeylen;
 
-	u_int16_t *tmp;
-	
 	struct node *n, *nx;
 	struct dns_header *dh, *odh;
 	struct sreply sreply;
@@ -875,8 +881,8 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		 * input is fragmented or not...
 		 */
 		if (offset + len >= 2) {	
-			tmp = (u_int16_t *)p;
-			dnslen = ntohs(*tmp);	
+			dnslen = unpack16(p);
+			NTOHS(dnslen);
 		} else {
 			offset += len;
 			continue;
@@ -991,9 +997,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				HTONS(odh->additional);
 			}
 
-			tmp = (u_int16_t *)reply;
-			*tmp = htons(outlen);
-		
+			pack16(reply, htons(outlen));
 			len = send(so, reply, outlen + 2, 0);
 			if (len <= 0) {
 				goto drop;
@@ -1087,8 +1091,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			 */
 			/* XXX */
 			if (outlen > 60000) {
-				tmp = (u_int16_t *)reply;
-				*tmp = htons(outlen);
+				pack16(reply, htons(outlen));
 			
 				/* set the rrcount in there */
 
@@ -1112,8 +1115,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 					envelopcount++;
 
-					tmp = (u_int16_t *)reply; 
-					*tmp = htons(outlen);
+					pack16(reply, htons(outlen));
 				}
 
 				len = send(so, reply, outlen + 2, 0);
@@ -1140,8 +1142,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		outlen = build_soa(db, (reply + 2), outlen, soa, question);
 		rrcount++;
 
-		tmp = (u_int16_t *)reply;
-		*tmp = htons(outlen);
+		pack16(reply, htons(outlen));
 
 		/* set the rrcount in there */
 
@@ -1158,8 +1159,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			outlen = additional_tsig(question, (reply + 2), 65000, outlen, 0, envelopcount, tsigctx);
 			odh->additional = htons(1);
 
-			tmp = (u_int16_t *)reply; 
-			*tmp = htons(outlen);
+			pack16(reply, htons(outlen));
 
 			HMAC_CTX_free(tsigctx);
 		}
@@ -1239,7 +1239,8 @@ build_header(ddDB *db, char *reply, char *buf, struct question *q, int answercou
 	SET_DNS_REPLY(odh);
 	SET_DNS_AUTHORITATIVE(odh);
 	
-	NTOHS(odh->query);
+	/* XXX */
+	HTONS(odh->query);
 
 	odh->question = htons(1);
 	odh->answer = htons(answercount);
@@ -1264,7 +1265,6 @@ build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question
 		
 	int labellen;
 	int tmplen;
-	u_int32_t *soa_val;
 
         struct answer {
                 char name[2];
@@ -1339,36 +1339,31 @@ build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question
 		/* XXX server error reply? */
 		return (offset);
 	}
-	soa_val = (u_int32_t *)&reply[offset];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->serial);
+	pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->serial));
 	offset += sizeof(u_int32_t);
 	
 	if ((offset + sizeof(u_int32_t)) >= 65535 ) {
 		return (offset);
 	}
-	soa_val = (u_int32_t *)&reply[offset];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->refresh);
+	pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->refresh));
 	offset += sizeof(u_int32_t);
 
 	if ((offset + sizeof(u_int32_t)) >= 65535 ) {
 		return (offset);
 	}
-	soa_val = (u_int32_t *)&reply[offset];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->retry);
+	pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->retry));
 	offset += sizeof(u_int32_t);
 
 	if ((offset + sizeof(u_int32_t)) >= 65535 ) {
 		return (offset);
 	}
-	soa_val = (u_int32_t *)&reply[offset];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->expire);
+	pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->expire));
 	offset += sizeof(u_int32_t);
 
 	if ((offset + sizeof(u_int32_t)) > 65535 ) {
 		return (offset);
 	}
-	soa_val = (u_int32_t *)&reply[offset];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->minttl);
+	pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->minttl));
 	offset += sizeof(u_int32_t);
 
 	answer->rdlength = htons(&reply[offset] - &answer->rdata);

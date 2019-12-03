@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.95 2019/11/28 07:55:20 pjp Exp $
+ * $Id: reply.c,v 1.96 2019/12/03 18:21:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -69,6 +69,14 @@
 #include "ddd-db.h"
 
 /* prototypes */
+
+extern void 	pack(char *, char *, int);
+extern void 	pack32(char *, u_int32_t);
+extern void 	pack16(char *, u_int16_t);
+extern void 	pack8(char *, u_int8_t);
+extern uint32_t unpack32(char *);
+extern uint16_t unpack16(char *);
+extern void 	unpack(char *, char *, int);
 
 extern int     		checklabel(ddDB *, struct rbtree *, struct rbtree *, struct question *);
 extern int 		additional_nsec3(char *, int, int, struct rbtree *, char *, int, int);
@@ -310,15 +318,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -521,15 +526,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -745,15 +747,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -940,15 +939,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -1137,15 +1133,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -1348,15 +1341,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -1500,15 +1490,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -1673,15 +1660,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-	
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -1710,7 +1694,6 @@ reply_mx(struct sreply *sreply, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	int mx_count;
-	u_int16_t *plen;
 	char *name;
 	u_int16_t outlen = 0;
 	u_int16_t namelen;
@@ -2014,9 +1997,7 @@ out:
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-			
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
 			dolog(LOG_INFO, "send: %s\n", strerror(errno));
@@ -2043,7 +2024,6 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	struct dns_header *odh;
 	int tmplen = 0;
 	int ns_count;
-	u_int16_t *plen;
 	char *name;
 	u_int16_t outlen = 0;
 	u_int16_t namelen;
@@ -2409,9 +2389,7 @@ out:
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
 			dolog(LOG_INFO, "send: %s\n", strerror(errno));
@@ -2446,7 +2424,6 @@ reply_cname(struct sreply *sreply, ddDB *db)
 	int labellen;
 	char *label, *plabel;
 	int addcount;
-	u_int16_t *plen;
 
 	struct answer {
 		char name[2];
@@ -2725,9 +2702,7 @@ out:
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-			
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -2909,15 +2884,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -3168,15 +3140,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -3368,15 +3337,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -3497,15 +3463,12 @@ reply_version(struct sreply *sreply, ddDB *db)
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -3533,7 +3496,6 @@ reply_tlsa(struct sreply *sreply, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	int tlsa_count;
-	u_int16_t *plen;
 	u_int16_t outlen;
 
 	struct answer {
@@ -3693,9 +3655,7 @@ out:
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-			
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
 			dolog(LOG_INFO, "send: %s\n", strerror(errno));
@@ -3723,7 +3683,6 @@ reply_sshfp(struct sreply *sreply, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	int sshfp_count;
-	u_int16_t *plen;
 	u_int16_t outlen;
 
 	struct answer {
@@ -3881,9 +3840,7 @@ out:
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-			
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
 			dolog(LOG_INFO, "send: %s\n", strerror(errno));
@@ -3911,7 +3868,6 @@ reply_naptr(struct sreply *sreply, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	int naptr_count;
-	u_int16_t *plen;
 	char *name;
 	u_int16_t outlen;
 	u_int16_t namelen;
@@ -4104,9 +4060,7 @@ out:
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-			
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
 			dolog(LOG_INFO, "send: %s\n", strerror(errno));
@@ -4134,7 +4088,6 @@ reply_srv(struct sreply *sreply, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	int srv_count;
-	u_int16_t *plen;
 	char *name;
 	u_int16_t outlen;
 	u_int16_t namelen;
@@ -4298,9 +4251,7 @@ out:
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-			
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
 			dolog(LOG_INFO, "send: %s\n", strerror(errno));
@@ -4363,15 +4314,12 @@ reply_notimpl(struct sreply  *sreply, ddDB *db)
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -4471,15 +4419,12 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 		HTONS(odh->query);		
 		if (istcp) {
 			char *tmpbuf;
-			u_int16_t *plen;
 
 			tmpbuf = malloc(len + 2);
 			if (tmpbuf == 0) {
 				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(len);
-			
+			pack16(tmpbuf, htons(len));
 			memcpy(&tmpbuf[2], reply, len);
 
 			if ((retlen = send(so, tmpbuf, len + 2, 0)) < 0) {
@@ -4768,15 +4713,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -4849,15 +4791,12 @@ reply_refused(struct sreply *sreply, ddDB *db)
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -4932,15 +4871,12 @@ reply_notauth(struct sreply *sreply, ddDB *db)
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -5016,15 +4952,12 @@ reply_notify(struct sreply *sreply, ddDB *db)
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -5084,15 +5017,12 @@ reply_fmterror(struct sreply *sreply, ddDB *db)
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -5121,7 +5051,6 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 	struct dns_header *odh;
 	u_int16_t outlen;
 	char *p;
-	u_int32_t *soa_val;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
@@ -5192,15 +5121,12 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 
 		if (istcp) {
 			char *tmpbuf;
-			u_int16_t *plen;
 
 			tmpbuf = malloc(len + 2);
 			if (tmpbuf == 0) {
 				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 			}
-			plen = (u_int16_t *)tmpbuf;
-			*plen = htons(len);
-			
+			pack16(tmpbuf, htons(len));
 			memcpy(&tmpbuf[2], reply, len);
 
 			if ((retlen = send(so, tmpbuf, len + 2, 0)) < 0) {
@@ -5310,36 +5236,31 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 		/* XXX server error reply? */
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->serial);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->serial));
 	outlen += sizeof(u_int32_t);
 	
 	if ((outlen + sizeof(u_int32_t)) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->refresh);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->refresh));
 	outlen += sizeof(u_int32_t);
 
 	if ((outlen + sizeof(u_int32_t)) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->retry);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->retry));
 	outlen += sizeof(u_int32_t);
 
 	if ((outlen + sizeof(u_int32_t)) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->expire);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->expire));
 	outlen += sizeof(u_int32_t);
 
 	if ((outlen + sizeof(u_int32_t)) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->minttl);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->minttl));
 	outlen += sizeof(u_int32_t);
 
 	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
@@ -5422,15 +5343,12 @@ out:
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-	
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -5532,15 +5450,12 @@ reply_any(struct sreply *sreply, ddDB *db)
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
@@ -6705,15 +6620,12 @@ reply_badvers(struct sreply *sreply, ddDB *db)
 
 	if (istcp) {
 		char *tmpbuf;
-		u_int16_t *plen;
 
 		tmpbuf = malloc(outlen + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		}
-		plen = (u_int16_t *)tmpbuf;
-		*plen = htons(outlen);
-		
+		pack16(tmpbuf, htons(outlen));
 		memcpy(&tmpbuf[2], reply, outlen);
 
 		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {

@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.40 2019/11/27 12:50:25 pjp Exp $
+ * $Id: raxfr.c,v 1.41 2019/12/03 18:21:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -146,6 +146,10 @@ extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u
 extern int     find_tsig_key(char *, int, char *, int);
 extern int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 
+extern uint32_t unpack32(char *);
+extern uint16_t unpack16(char *);
+extern void 	unpack(char *, char *, int);
+
 
 /* The following alias helps with bounds checking all input, needed! */
 
@@ -186,8 +190,8 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 	char *humanname;
 	u_char expand[256];
 	u_char *q = p;
-	u_int16_t *rtype, *rclass, *rdtmp;
-	u_int32_t *rttl;
+	u_int16_t rtype, rclass, rdtmp;
+	u_int32_t rttl;
 	int elen = 0;
 	int max = sizeof(expand);
 	char *hightype;
@@ -205,29 +209,29 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 	if ((q + 2) > end)
 		return -1;
 
-	rtype = (u_int16_t *)q;
+	rtype = unpack16(q);
 	q += 2;
 
 	if ((q + 2) > end)
 		return -1;
 
-	rclass = (u_int16_t *)q;
+	rclass = unpack16(q);
 	q += 2;
 
 	if ((q + 4) > end)
 		return -1;
 
-	rttl = (u_int32_t *)q;
+	rttl = unpack32(q);
 	q += 4;
 
 	if ((q + 2) > end)
 		return -1;
 
-	rdtmp = (u_int16_t *)q;
-	*rdlen = ntohs(*rdtmp);
+	rdtmp = unpack16(q);	
+	*rdlen = ntohs(rdtmp);
 	q += 2;
 
-	*rrtype = ntohs(*rtype);
+	*rrtype = ntohs(rtype);
 
 	if (ctx != NULL) {
 		if (*rrtype != DNS_TYPE_TSIG) {
@@ -243,7 +247,7 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 		return -1;
 	}
 
-	hightype = get_dns_type(ntohs(*rtype), 0);
+	hightype = get_dns_type(ntohs(rtype), 0);
 
 	for (i = 0; i < strlen(hightype); i++)
 		hightype[i] = tolower(hightype[i]);
@@ -252,20 +256,20 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 
 		if (soacount < 1) {
 			if ((format & INDENT_FORMAT))
-				fprintf(f, "  %s,%s,%d,",  (*humanname == '\0' ? "." : humanname), hightype , ntohl(*rttl));
+				fprintf(f, "  %s,%s,%d,",  (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
 			else if ((format & ZONE_FORMAT)) {
-				fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(*rttl));
+				fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
 			} else
-				fprintf(f, "%s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(*rttl));
+				fprintf(f, "%s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
 		} else {
 			if ((format & INDENT_FORMAT))
-				fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(*rttl));
+				fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
 			else if ((format & ZONE_FORMAT)) {
 				if (*rrtype != DNS_TYPE_SOA) {
-					fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(*rttl));
+					fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
 				}
 			} else {
-				fprintf(f, "%s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(*rttl));
+				fprintf(f, "%s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
 			}
 		}
 	}
@@ -283,20 +287,20 @@ u_int16_t
 raxfr_skip(FILE *f, u_char *p, u_char *estart)
 {
 	u_char *q;
-	u_int16_t *rdlen;
+	u_int16_t rdlen;
 
 	if ((q = p - 2) <= estart)
 		return 0;
 	
-	rdlen = (u_int16_t *)q;
+	rdlen = unpack16(q);
 	
-	return ((u_int16_t)ntohs(*rdlen));
+	return ((u_int16_t)ntohs(rdlen));
 }
 
 int
 raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, int soacount, u_int32_t format, u_int16_t rdlen, HMAC_CTX *ctx)
 {
-	u_int32_t *rvalue;
+	u_int32_t rvalue;
 	char *save, *humanname;
 	u_char *q = p;
 	u_char expand[256];
@@ -367,24 +371,24 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	free(humanname);
 
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	rvalue = (u_int32_t *)q;
-	mysoa->serial = *rvalue;
+	rvalue = unpack32(q);
+	mysoa->serial = rvalue;
 	q += sizeof(u_int32_t);
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	rvalue = (u_int32_t *)q;
-	mysoa->refresh = *rvalue;
+	rvalue = unpack32(q);
+	mysoa->refresh = rvalue;
 	q += sizeof(u_int32_t);
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	rvalue = (u_int32_t *)q;
-	mysoa->retry = *rvalue;
+	rvalue = unpack32(q);
+	mysoa->retry = rvalue;
 	q += sizeof(u_int32_t);
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	rvalue = (u_int32_t *)q;
-	mysoa->expire = *rvalue;
+	rvalue = unpack32(q);
+	mysoa->expire = rvalue;
 	q += sizeof(u_int32_t);
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	rvalue = (u_int32_t *)q;
-	mysoa->minttl = *rvalue;
+	rvalue = unpack32(q);
+	mysoa->minttl = rvalue;
 	q += sizeof(u_int32_t);
 	
 	if (soacount < soalimit) {
@@ -410,34 +414,34 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	u_char expand[256];
 	int max = sizeof(expand);
 	int elen = 0;
-	u_int16_t *tmp;
-	u_int32_t *tmp4;
+	u_int16_t tmp;
+	u_int32_t tmp4;
 	int len;
 	u_char *b;
 
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp = (u_int16_t *)q;
-	rs.type_covered = ntohs(*tmp);
+	tmp = unpack16(q);
+	rs.type_covered = ntohs(tmp);
 	q += 2;
 	BOUNDS_CHECK((q + 1), p, rdlen, end);
 	rs.algorithm = *q++;
 	BOUNDS_CHECK((q + 1), p, rdlen, end);
 	rs.labels = *q++;
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	tmp4 = (u_int32_t *)q;
-	rs.original_ttl = ntohl(*tmp4);
+	tmp4 = unpack32(q);
+	rs.original_ttl = ntohl(tmp4);
 	q += 4;
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	tmp4 = (u_int32_t *)q;
-	rs.signature_expiration = ntohl(*tmp4);
+	tmp4 = unpack32(q);
+	rs.signature_expiration = ntohl(tmp4);
 	q += 4;
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	tmp4 = (u_int32_t *)q;
-	rs.signature_inception = ntohl(*tmp4);
+	tmp4 = unpack32(q);
+	rs.signature_inception = ntohl(tmp4);
 	q += 4;
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp = (u_int16_t *)q;
-	rs.key_tag = ntohs(*tmp);
+	tmp = unpack16(q);
+	rs.key_tag = ntohs(tmp);
 	q += 2;
 	
 	memset(&expand, 0, sizeof(expand));
@@ -499,12 +503,12 @@ int
 raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct ds d;
-	u_int16_t *tmpshort;
+	u_int16_t tmpshort;
 	u_char *q = p;
 
 	BOUNDS_CHECK((p + 2), q, rdlen, end);
-	tmpshort = (u_int16_t *)p;
-	d.key_tag = ntohs(*tmpshort);
+	tmpshort = unpack16(p);
+	d.key_tag = ntohs(tmpshort);
 	p += 2;
 	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	d.algorithm = *p++;
@@ -569,14 +573,14 @@ int
 raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct dnskey dk;
-	u_int16_t *tmpshort;
+	u_int16_t tmpshort;
 	char *b;
 	u_char *q = p;
 	int len;
 
 	BOUNDS_CHECK((p + 2), q, rdlen, end);
-	tmpshort = (u_int16_t *)p;
-	dk.flags = ntohs(*tmpshort);
+	tmpshort = unpack16(p);
+	dk.flags = ntohs(tmpshort);
 	p += 2;
 	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	dk.protocol = *p++;
@@ -622,7 +626,7 @@ raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 int 
 raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
-	u_int16_t *mxpriority;
+	u_int16_t mxpriority;
 	char *save, *humanname;
 	u_char *q = p;
 	u_char expand[256];
@@ -630,10 +634,10 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 	int elen = 0;
 
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	mxpriority = (u_int16_t *)q;
+	mxpriority = unpack16(q);
 
 	if (f != NULL)
-		fprintf(f, "%u,", ntohs(*mxpriority));
+		fprintf(f, "%u,", ntohs(mxpriority));
 
 	q += 2;
 
@@ -676,7 +680,7 @@ int
 raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct nsec3 n;
-	u_int16_t *iter;
+	u_int16_t iter;
 	u_char *brr = p;	/* begin of rd record :-) */
 
 	BOUNDS_CHECK((p + 1), brr, rdlen, end);
@@ -685,8 +689,8 @@ raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	n.flags = *p++;
 
 	BOUNDS_CHECK((p + 2), brr, rdlen, end);
-	iter = (u_int16_t *)p;
-	n.iterations = ntohs(*iter);
+	iter = unpack16(p);
+	n.iterations = ntohs(iter);
 	p += 2;
 
 	BOUNDS_CHECK((p + 1), brr, rdlen, end);
@@ -732,7 +736,7 @@ int
 raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct nsec3param np;
-	u_int16_t *iter;
+	u_int16_t iter;
 	char *hex;
 	u_char *q = p;
 
@@ -741,8 +745,8 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	np.flags = *p++;
 	BOUNDS_CHECK((p + 2), q, rdlen, end);
-	iter = (u_int16_t *)p;
-	np.iterations = ntohs(*iter);
+	iter = unpack16(p);
+	np.iterations = ntohs(iter);
 	p += 2;
 	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	np.saltlen = *p++;
@@ -846,17 +850,17 @@ int
 raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	char buf[INET6_ADDRSTRLEN];
-	struct in6_addr *ia;
+	struct in6_addr ia;
 	u_char *q = p;
 
-	BOUNDS_CHECK((p + sizeof(*ia)), q, rdlen, end);
-	ia = (struct in6_addr *)p;
-	inet_ntop(AF_INET6, ia, buf, sizeof(buf));
+	BOUNDS_CHECK((p + sizeof(ia)), q, rdlen, end);
+	unpack((char *)&ia, p, sizeof(struct in6_addr));
+	inet_ntop(AF_INET6, &ia, buf, sizeof(buf));
 
 	if (f != NULL) 
 		fprintf(f, "%s\n", buf);
 
-	p += sizeof(*ia);
+	p += sizeof(ia);
 
 	if (ctx != NULL)
 		HMAC_Update(ctx, q, p - q);
@@ -868,18 +872,18 @@ int
 raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	char buf[INET_ADDRSTRLEN];
-	struct in_addr *ia;
+	struct in_addr ia;
 	u_char *q = p;
 
-	BOUNDS_CHECK((p + sizeof(*ia)), q, rdlen, end);
-	ia = (struct in_addr *)p;
+	BOUNDS_CHECK((p + sizeof(ia)), q, rdlen, end);
+	ia.s_addr = unpack32(p);
 
-	inet_ntop(AF_INET, ia, buf, sizeof(buf));
+	inet_ntop(AF_INET, &ia, buf, sizeof(buf));
 	
 	if (f != NULL)
 		fprintf(f, "%s\n", buf);
 
-	p += sizeof(*ia);
+	p += sizeof(ia);
 
 	if (ctx != NULL)
 		HMAC_Update(ctx, q, p - q);
@@ -925,7 +929,7 @@ raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 int 
 raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
-	u_int16_t *tmp16;
+	u_int16_t tmp16;
 	struct srv s;
 	char *save, *humanname;
 	u_char *q = p;
@@ -934,16 +938,16 @@ raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 	int elen = 0;
 
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp16 = (u_int16_t *)q;
-	s.priority = ntohs(*tmp16);
+	tmp16 = unpack16(q);
+	s.priority = ntohs(tmp16);
 	q += 2;
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp16 = (u_int16_t *)q;
-	s.weight = ntohs(*tmp16);
+	tmp16 = unpack16(q);
+	s.weight = ntohs(tmp16);
 	q += 2;
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp16 = (u_int16_t *)q;
-	s.port = ntohs(*tmp16);
+	tmp16 = unpack16(q);
+	s.port = ntohs(tmp16);
 	q += 2;
 
 	memset(&expand, 0, sizeof(expand));
@@ -979,7 +983,7 @@ raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 int 
 raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
-	u_int16_t *tmp16;
+	u_int16_t tmp16;
 	struct naptr n;
 	char *save, *humanname;
 	u_char *q = p;
@@ -989,12 +993,12 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	int len, i;
 
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp16 = (u_int16_t *)q;
-	n.order = ntohs(*tmp16);
+	tmp16 = unpack16(q);
+	n.order = ntohs(tmp16);
 	q += 2;
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp16 = (u_int16_t *)q;
-	n.preference = ntohs(*tmp16);
+	tmp16 = unpack16(q);
+	n.preference = ntohs(tmp16);
 	q += 2;
 
 	if (f != NULL) {
@@ -1081,8 +1085,8 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	char *otherdata;
 	u_char expand[256];
 	u_char *q = p;
-	u_int16_t *rtype, *rclass, *origid, *tsigerror, *otherlen;
-	u_int32_t *rttl;
+	u_int16_t rtype, rclass, origid, tsigerror, otherlen;
+	u_int32_t rttl;
 	int rlen, rrlen = -1;
 	int elen = 0;
 	int max = sizeof(expand);
@@ -1112,28 +1116,28 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	if ((q + 2) > end)
 		goto out;
 
-	rtype = (u_int16_t *)q;
+	rtype = unpack16(q);
 	q += 2;
 
-	if (ntohs(*rtype) != DNS_TYPE_TSIG)	
+	if (ntohs(rtype) != DNS_TYPE_TSIG)	
 		goto out;
 	
 	if ((q + 2) > end)
 		goto out;
 
-	rclass = (u_int16_t *)q;
+	rclass = unpack16(q);
 	q += 2;
 
-	if (ntohs(*rclass) != DNS_CLASS_ANY)
+	if (ntohs(rclass) != DNS_CLASS_ANY)
 		goto out;
 
 	if ((q + 4) > end)
 		goto out;
 
-	rttl = (u_int32_t *)q;
+	rttl = unpack32(q);
 	q += 4;
 
-	if (*rttl != 0)
+	if (rttl != 0)
 		goto out;
 
 	/* skip rdlen because raxfr_peek already got it */
@@ -1178,23 +1182,23 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	if ((q + 2) > end)
 		goto out;
 
-	origid = (uint16_t *)q;
+	origid = unpack16(q);
 	q += 2;
 
 	if ((q + 2) > end)
 		goto out;
 
-	tsigerror = (uint16_t *)q;
+	tsigerror = unpack16(q);
 	q += 2;
 		
 	if ((q + 2) > end)
 		goto out;
 
-	otherlen = (uint16_t *)q;
+	otherlen = unpack16(q);
 	q += 2;
 
 	otherdata = q;
-	q += ntohs(*otherlen);
+	q += ntohs(otherlen);
 
 	if ((q - estart) != (rdlen + rlen)) {
 		goto out;
@@ -1205,14 +1209,14 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	if (standardanswer) {
 		/* dns message */
 		HMAC_Update(ctx, rawkeyname, rawkeynamelen);
-		HMAC_Update(ctx, (char *)rclass, 2);
-		HMAC_Update(ctx, (char *)rttl, 4);
+		HMAC_Update(ctx, (char *)&rclass, 2);
+		HMAC_Update(ctx, (char *)&rttl, 4);
 		HMAC_Update(ctx, rawalgname, rawalgnamelen);
 		HMAC_Update(ctx, (char *)&sdt->timefudge, 8);
-		HMAC_Update(ctx, (char *)tsigerror, 2);
-		HMAC_Update(ctx, (char *)otherlen, 2);
-		if (ntohs(*otherlen))
-			HMAC_Update(ctx, otherdata, ntohs(*otherlen));
+		HMAC_Update(ctx, (char *)&tsigerror, 2);
+		HMAC_Update(ctx, (char *)&otherlen, 2);
+		if (ntohs(otherlen))
+			HMAC_Update(ctx, otherdata, ntohs(otherlen));
 
 	} else {
 		HMAC_Update(ctx, (char *)&sdt->timefudge, 8);

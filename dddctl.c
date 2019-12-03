@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.90 2019/11/27 09:29:37 pjp Exp $
+ * $Id: dddctl.c,v 1.91 2019/12/03 18:21:40 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -178,10 +178,6 @@ int	sign_ds(ddDB *, char *, struct keysentry *, int, struct rbtree *);
 int 	sign(int, char *, int, struct keysentry *, char *, int *);
 int 	create_ds(ddDB *, char *, struct keysentry *);
 u_int 	keytag(u_char *key, u_int keysize);
-void 	pack(char *, char *, int);
-void 	pack32(char *, u_int32_t);
-void 	pack16(char *, u_int16_t);
-void 	pack8(char *, u_int8_t);
 void	free_private_key(struct keysentry *);
 RSA * 	get_private_key_rsa(struct keysentry *);
 EC_KEY *get_private_key_ec(struct keysentry *);
@@ -305,6 +301,14 @@ u_int64_t expiredon, signedon;
 
 /* externs */
 
+extern uint32_t unpack32(char *);
+extern uint16_t unpack16(char *);
+extern void 	unpack(char *, char *, int);
+
+extern void 	pack(char *, char *, int);
+extern void 	pack32(char *, u_int32_t);
+extern void 	pack16(char *, u_int16_t);
+extern void 	pack8(char *, u_int8_t);
 extern int fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
 extern int fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
 extern int fill_nsec3param(char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
@@ -5464,40 +5468,6 @@ keytag(u_char *key, u_int keysize)
 }
 
 
-/* pack functions */
-
-void
-pack32(char *buf, u_int32_t value)
-{
-	u_int32_t *p;
-
-	p = (u_int32_t *)buf;
-	*p = value;
-}	
-
-void
-pack16(char *buf, u_int16_t value)
-{
-	u_int16_t *p;
-
-	p = (u_int16_t *)buf;
-	*p = value;
-}
-
-void
-pack8(char *buf, u_int8_t value)
-{
-	u_int8_t *p;
-
-	p = (u_int8_t *)buf;
-	*p = value;
-}
-
-void
-pack(char *buf, char *input, int len)
-{
-	memcpy(buf, input, len);
-}	
 
 void
 free_private_key(struct keysentry *kn)
@@ -6623,8 +6593,8 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	u_char *end, *estart;
 	int totallen, zonelen, rrlen;
 	int replysize = 0;
-	u_int16_t *class, *type, *tcpsize;
-	u_int16_t *plen;
+	u_int16_t class = 0, type = 0, tcpsize;
+	u_int16_t plen;
 	u_int16_t tcplen;
 
 	if (format & TCP_FORMAT)
@@ -6636,7 +6606,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	memset(&query, 0, sizeof(query));
 	
 	if (format & TCP_FORMAT) {
-		tcpsize = (u_int16_t *)&query[0];
+		tcpsize = unpack16(&query[0]);
 		wh = (struct whole_header *)&query[2];
 	} else
 		wh = (struct whole_header *)&query[0];
@@ -6671,12 +6641,12 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	memcpy(p, name, len);
 	totallen += len;
 
-	type = (u_int16_t *)&query[totallen];
-	*type = htons(myrrtype);
+	type = htons(myrrtype);
+	pack16(&query[totallen], type);
 	totallen += sizeof(u_int16_t);
 	
-	class = (u_int16_t *)&query[totallen];
-	*class = htons(DNS_CLASS_IN);
+	class = htons(DNS_CLASS_IN);
+	pack16(&query[totallen], class);
 	totallen += sizeof(u_int16_t);
 
 	/* attach EDNS0 */
@@ -6696,7 +6666,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	totallen += (sizeof(struct dns_optrr));
 
 	if (format & TCP_FORMAT)
-		*tcpsize = htons(totallen - 2);
+		tcpsize = htons(totallen - 2);
 
 	if (send(so, query, totallen, 0) < 0) {
 		return -1;
@@ -6716,8 +6686,8 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 			return -1;
 		}
 
-		plen = (u_int16_t *)reply;
-		tcplen = ntohs(*plen);
+		plen = unpack16(reply);
+		tcplen = ntohs(plen);
 
 		if ((len = recv(so, reply, tcplen + 2, MSG_WAITALL)) < 0) {
 			perror("recv");
@@ -6787,7 +6757,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 		return -1;
 	}
 
-	if (q->hdr->qclass != *class || q->hdr->qtype != *type) {
+	if (q->hdr->qclass != class || q->hdr->qtype != type) {
 		fprintf(stderr, "wrong class or type\n");
 		return -1;
 	}

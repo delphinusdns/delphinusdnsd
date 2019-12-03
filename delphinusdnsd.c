@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.87 2019/11/25 15:22:11 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.88 2019/12/03 18:21:40 pjp Exp $
  */
 
 
@@ -94,6 +94,14 @@
 #include "ddd-config.h"
 
 /* prototypes */
+
+extern void 	pack(char *, char *, int);
+extern void 	pack32(char *, u_int32_t);
+extern void 	pack16(char *, u_int16_t);
+extern void 	pack8(char *, u_int8_t);
+extern uint32_t unpack32(char *);
+extern uint16_t unpack16(char *);
+extern void 	unpack(char *, char *, int);
 
 extern void 	add_rrlimit(int, u_int16_t *, int, char *);
 extern void 	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *);
@@ -1125,7 +1133,6 @@ compress_label(u_char *buf, u_int16_t offset, int labellen)
 
 	u_int i, j;
 	u_int checklen;
-	u_int16_t *compressor;
 
 	u_char *p, *e;
 	u_char *compressmark;
@@ -1350,13 +1357,7 @@ out:
 	/* take off our compress length */
 	offset -= checklen;
 	/* write compressed label */
-	compressor = (u_int16_t *)&buf[offset];	
-
-	*compressor = (compressmark - &buf[0]);
-	*compressor |= 0xc000;
-
-	/* network byte order */
-	HTONS(*compressor);
+	pack16(&buf[offset], htons((compressmark - &buf[0]) | 0xc000));
 
 	offset += sizeof(u_int16_t);	
 

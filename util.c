@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.54 2019/11/19 16:58:41 pjp Exp $
+ * $Id: util.c,v 1.55 2019/12/03 18:21:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -82,6 +82,14 @@
 #include "ddd-config.h"
 
 /* prototypes */
+
+void 	pack(char *, char *, int);
+void 	pack32(char *, u_int32_t);
+void 	pack16(char *, u_int16_t);
+void 	pack8(char *, u_int8_t);
+uint32_t unpack32(char *);
+uint16_t unpack16(char *);
+void 	unpack(char *, char *, int);
 
 int label_count(char *);
 char * dns_label(char *, int *);
@@ -914,12 +922,13 @@ build_question(char *buf, int len, int additional, char *mac)
 	char pseudo_packet[4096];		/* for tsig */
 	u_int rollback, i;
 	u_int namelen = 0;
-	u_int16_t *qtype, *qclass;
+	u_int16_t qtype, qclass;
 	u_int32_t ttl;
 	u_int64_t timefudge;
 	int num_label;
 
 	char *p, *end_name = NULL;
+	char *o;
 
 	struct dns_tsigrr *tsigrr = NULL;
 	struct dns_optrr *opt = NULL;
@@ -1064,8 +1073,8 @@ build_question(char *buf, int len, int additional, char *mac)
 
 	/* in IXFR an additional SOA entry is tacked on, we want to skip this */
 	do {
-		u_int16_t *val16;
-		u_int32_t *val32;
+		u_int16_t val16;
+		u_int32_t val32;
 		char *pb = NULL;
 		char expand[DNS_MAXNAME + 1];
 		int elen;
@@ -1087,31 +1096,36 @@ build_question(char *buf, int len, int additional, char *mac)
 		}
 
 		/* type */
-		val16 = (u_int16_t *)&buf[i];
-		if (ntohs(*val16) != DNS_TYPE_SOA) {
+		o = &buf[i];
+		val16 = unpack16(o);
+		if (ntohs(val16) != DNS_TYPE_SOA) {
 			i = rollback;
 			break;
 		}
 		i += 2;
+		o += 2;
 		/* class */
-		val16 = (u_int16_t *)&buf[i];
-		if (ntohs(*val16) != DNS_CLASS_IN) {
+		val16 = unpack16(o);
+		if (ntohs(val16) != DNS_CLASS_IN) {
 			i = rollback;
 			break;
 		}
 		i += 2;
+		o += 2;
 		/* ttl */
-		val32 = (u_int32_t *)&buf[i];
+		val32 = unpack32(o);
 		i += 4;
-		val16 = (u_int16_t *)&buf[i];
+		o += 4;
+		val16 = unpack16(o);
 		i += 2;
 
-		if (i + ntohs(*val16) > len) {	/* rdlen of SOA */
+		if (i + ntohs(val16) > len) {	/* rdlen of SOA */
 			i = rollback;
 			break;
 		}
 
-		i += ntohs(*val16);	
+		i += ntohs(val16);	
+		o += ntohs(val16);
 	} while (0);
 
 	/* check for edns0 opt rr */
@@ -1158,9 +1172,9 @@ build_question(char *buf, int len, int additional, char *mac)
 	} while (0);
 	/* check for TSIG rr */
 	do {
-		u_int16_t *val16, *tsigerror, *tsigotherlen;
+		u_int16_t val16, tsigerror, tsigotherlen;
 		u_int16_t fudge;
-		u_int32_t *val32;
+		u_int32_t val32;
 		int elen, tsignamelen;
 		char *pb;
 		char expand[DNS_MAXNAME + 1];
@@ -1207,12 +1221,14 @@ build_question(char *buf, int len, int additional, char *mac)
 		}
 
 		/* type */
-		val16 = (u_int16_t *)&buf[i];
-		if (ntohs(*val16) != DNS_TYPE_TSIG) {
+		o = &buf[i];
+		val16 = unpack16(o);
+		if (ntohs(val16) != DNS_TYPE_TSIG) {
 			i = rollback;
 			break;
 		}
 		i += 2;
+		o += 2;
 		pseudolen2 = i;
 
 		q->tsig.have_tsig = 1;
@@ -1229,28 +1245,31 @@ build_question(char *buf, int len, int additional, char *mac)
 		q->tsig.tsigerrorcode = DNS_BADKEY;
 
 		/* class */
-		val16 = (u_int16_t *)&buf[i];
-		if (ntohs(*val16) != DNS_CLASS_ANY) {
+		val16 = unpack16(o);
+		if (ntohs(val16) != DNS_CLASS_ANY) {
 			i = rollback;
 			break;
 		}
 		i += 2;
+		o += 2;
 	
 		/* ttl */
-		val32 = (u_int32_t *)&buf[i];	
-		if (ntohl(*val32) != 0) {
+		val32 = unpack32(o);
+		if (ntohl(val32) != 0) {
 			i = rollback;
 			break;
 		}
 		i += 4;	
+		o += 4;
 			
 		/* rdlen */
-		val16 = (u_int16_t *)&buf[i];
-		if (ntohs(*val16) != (len - (i + 2))) {
+		val16 = unpack16(o);
+		if (ntohs(val16) != (len - (i + 2))) {
 			i = rollback;
 			break;
 		}
 		i += 2;
+		o += 2;
 		pseudolen3 = i;
 
 		/* the algorithm name is parsed here */
@@ -1333,26 +1352,30 @@ build_question(char *buf, int len, int additional, char *mac)
 		HTONS(hdr->additional);
 
 		/* origid */
-		val16 = (u_int16_t *)&buf[i];
+		o = &buf[i];
+		val16 = unpack16(o);
 		i += 2;
-		if (hdr->id != *val16)
-			hdr->id = *val16;
-		q->tsig.tsigorigid = *val16;
+		o += 2;
+		if (hdr->id != val16)
+			hdr->id = val16;
+		q->tsig.tsigorigid = val16;
 
 		/* error */
-		tsigerror = (u_int16_t *)&buf[i];
+		tsigerror = unpack16(o);
 		i += 2;
+		o += 2;
 
 		/* other len */
-		tsigotherlen = (u_int16_t *)&buf[i];
+		tsigotherlen = unpack16(o);
 		i += 2;
+		o += 2;
 
 		ppoffset = 0;
 
 		/* check if we have a request mac, this means it's an answer */
 		if (mac) {
-			val16 = (u_int16_t *)&pseudo_packet[ppoffset];
-			*val16 = htons(32);	 /* XXX magic number */
+			o = &pseudo_packet[ppoffset];
+			pack16(o, htons(32));
 			ppoffset += 2;
 
 			memcpy(&pseudo_packet[ppoffset], mac, 32);
@@ -1370,13 +1393,15 @@ build_question(char *buf, int len, int additional, char *mac)
 		memcpy((char *)&pseudo_packet[ppoffset], (char *)&tsigrr->timefudge, 8); 
 		ppoffset += 8;
 
-		val16 = (u_int16_t *)&pseudo_packet[ppoffset];
-		*val16 = *tsigerror;
+		o = &pseudo_packet[ppoffset];
+		pack16(o, tsigerror);
 		ppoffset += 2;
+		o += 2;
 
-		val16 = (u_int16_t *)&pseudo_packet[ppoffset];
-		*val16 = *tsigotherlen;
+		o = &pseudo_packet[ppoffset];
+		pack16(o, tsigotherlen);
 		ppoffset += 2;
+		o += 2;
 
 		memcpy(&pseudo_packet[ppoffset], &buf[i], len - i);
 		ppoffset += (len - i);
@@ -1433,17 +1458,19 @@ build_question(char *buf, int len, int additional, char *mac)
 
 	/* parse type and class from the question */
 
-	qtype = (u_int16_t *)(end_name + 1);
-	qclass = (u_int16_t *)(end_name + sizeof(u_int16_t) + 1);		
+	o = (end_name + 1);
+	qtype = unpack16(o);
+	o = (end_name + sizeof(uint16_t) + 1);
+	qclass = unpack16(o);
 
-	memcpy((char *)&q->hdr->qtype, (char *)qtype, sizeof(u_int16_t));
-	memcpy((char *)&q->hdr->qclass, (char *)qclass, sizeof(u_int16_t));
+	memcpy((char *)&q->hdr->qtype, (char *)&qtype, sizeof(u_int16_t));
+	memcpy((char *)&q->hdr->qclass, (char *)&qclass, sizeof(u_int16_t));
 
 	/* make note of whether recursion is desired */
 	q->rd = ((ntohs(hdr->query) & DNS_RECURSE) == DNS_RECURSE);
 
 	/* are we a notify packet? */
-	if ((ntohs(*qtype) == DNS_TYPE_SOA) && (ntohs(*qclass) == DNS_CLASS_IN))
+	if ((ntohs(qtype) == DNS_TYPE_SOA) && (ntohs(qclass) == DNS_CLASS_IN))
 		q->notify = ((ntohs(hdr->query) & (DNS_NOTIFY | DNS_AUTH)) \
 			== (DNS_NOTIFY | DNS_AUTH));
 	else
@@ -1498,7 +1525,7 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 {
 	u_short tlen;
 	u_char *save = NULL;
-	u_int16_t *offset;
+	u_int16_t offset;
 
 	/* expand name */
 	while ((u_char)*p && p <= end) {
@@ -1508,13 +1535,13 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 			if (! save) {
 				save = p + 2;
 			}
-			offset = (u_int16_t *)p;
+			offset = unpack16(p);
 			/* do not allow forwards jumping */
-			if ((p - estart) <= (ntohs(*offset) & (~0xc000))) {
+			if ((p - estart) <= (ntohs(offset) & (~0xc000))) {
 				return NULL;
 			}
 
-			p = (estart + (ntohs(*offset) & (~0xc000)));
+			p = (estart + (ntohs(offset) & (~0xc000)));
 		} else {
 			if (*elen + 1 >= max) {
 				return NULL;
@@ -1589,8 +1616,7 @@ tsig_pseudoheader(char *tsigkeyname, uint16_t fudge, time_t now, HMAC_CTX *ctx)
 	int ppoffset = 0I;
 	int len;
 
-	uint16_t *type;
-	uint32_t *ttl;
+	char *p;
 
 	keyname = dns_label(tsigkeyname, &len);
 	if (keyname == NULL) {
@@ -1600,18 +1626,19 @@ tsig_pseudoheader(char *tsigkeyname, uint16_t fudge, time_t now, HMAC_CTX *ctx)
 	/* name of key */
 	memcpy(&pseudo_packet, keyname, len);
 	ppoffset += len;	
+	p = &pseudo_packet[len];
 
 	free(keyname);
 
 	/* class */
-	type = (u_int16_t *) &pseudo_packet[ppoffset];
-	*type = htons(DNS_CLASS_ANY);
+	pack16(p, htons(DNS_CLASS_ANY));
 	ppoffset += 2;
+	p += 2;
 
 	/* TTL */
-	ttl = (u_int32_t *) &pseudo_packet[ppoffset];
-	*ttl = htonl(0);
+	pack32(p, 0);
 	ppoffset += 4;
+	p += 4;
 		
 	keyname = dns_label("hmac-sha256", &len);
 	if (keyname == NULL) {
@@ -1621,35 +1648,36 @@ tsig_pseudoheader(char *tsigkeyname, uint16_t fudge, time_t now, HMAC_CTX *ctx)
 	/* alg name */	
 	memcpy(&pseudo_packet[ppoffset], keyname, len);
 	ppoffset += len;
+	p += len;
 
 	free(keyname);
 
 	/* time 1 and 2 */
 	now = time(NULL);
-	type = (u_int16_t *)&pseudo_packet[ppoffset];	
-	*type = htons((now >> 32) & 0xffff);
+	pack16(p, htons((now >> 32) & 0xffff));
 	ppoffset += 2;
+	p += 2;
 
-	ttl = (u_int32_t *)&pseudo_packet[ppoffset];
-	*ttl = htonl((now & 0xffffffff));
+	pack32(p, htonl((now & 0xffffffff)));
 	ppoffset += 4;
+	p += 4;
 	
 	/* fudge */
-	type = (u_int16_t *)&pseudo_packet[ppoffset];	
-	*type = htons(fudge);
+	pack16(p, htons(fudge));
 	ppoffset += 2;
+	p += 2;
 
 	/* error */
 
-	type = (u_int16_t *)&pseudo_packet[ppoffset];	
-	*type = htons(0);
+	pack16(p, 0);
 	ppoffset += 2;
+	p += 2;
 
 	/* other len */
 	
-	type = (u_int16_t *)&pseudo_packet[ppoffset];	
-	*type = htons(0);
+	pack16(p, 0);
 	ppoffset += 2;
+	p += 2;
 
 	HMAC_Update(ctx, pseudo_packet, ppoffset);
 
@@ -1796,8 +1824,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	int elen = 0;
 	int segmentcount = 0;
 	int count = 0;
-	u_int32_t *ttl;
-	u_int16_t *class, *type, rdlen, *plen;
+	u_int16_t rdlen, *plen;
 	u_int16_t tcplen;
 	
 	HMAC_CTX *ctx;
@@ -1837,14 +1864,15 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	
 	memcpy(p, name, len);
 	totallen += len;
+	p += len;
 
-	type = (u_int16_t *)&query[totallen];
-	*type = htons(DNS_TYPE_AXFR);
+	pack16(p, htons(DNS_TYPE_AXFR));
 	totallen += sizeof(u_int16_t);
+	p += sizeof(u_int16_t);
 	
-	class = (u_int16_t *)&query[totallen];
-	*class = htons(DNS_CLASS_IN);
+	pack16(p, htons(DNS_CLASS_IN));
 	totallen += sizeof(u_int16_t);
+	p += sizeof(u_int16_t);
 
 	/* we have a key, attach a TSIG payload */
 	if (tsigkey) {
@@ -1881,17 +1909,18 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		memcpy(&query[totallen], keyname, len);
 		totallen += len;
 		
-		type = (u_int16_t *)&query[totallen];
-		*type = htons(DNS_TYPE_TSIG);
+		p = &query[totallen];
+		pack16(p, htons(DNS_TYPE_TSIG));
 		totallen += 2;
+		p += 2;
 
-		class = (u_int16_t *)&query[totallen];
-		*class = htons(DNS_CLASS_ANY);
+		pack16(p, htons(DNS_CLASS_ANY));
 		totallen += 2;
+		p += 2;
 
-		ttl = (u_int32_t *)&query[totallen];
-		*ttl = htonl(0);
+		pack32(p, htonl(0));
 		totallen += 4;
+		p += 4;
 
 		keyname = dns_label("hmac-sha256", &len);
 		if (keyname == NULL) {
@@ -1899,52 +1928,54 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		}
 
 		/* rdlen */
-		type = (u_int16_t *)&query[totallen];
-		*type = htons(len + 2 + 4 + 2 + 2 + 32 + 2 + 2 + 2);
+		pack16(p, htons(len + 2 + 4 + 2 + 2 + 32 + 2 + 2 + 2));
 		totallen += 2;
+		p += 2;
 
 		/* algorithm name */
 		memcpy(&query[totallen], keyname, len);
 		totallen += len;
+		p += len;
 
 		/* time 1 */
-		type = (u_int16_t *)&query[totallen];	
-		*type = htons((now >> 32) & 0xffff);
+		pack16(p, htons((now >> 32) & 0xffff)); 
 		totallen += 2;
+		p += 2;
 
 		/* time 2 */
-		ttl = (u_int32_t *)&query[totallen];
-		*ttl = htonl((now & 0xffffffff));
+		pack32(p, htonl(now & 0xffffffff));
 		totallen += 4;
+		p += 4;
 
 		/* fudge */
-		type = (u_int16_t *)&query[totallen];	
-		*type = htons(300);
+		pack16(p, htons(300));
 		totallen += 2;
+		p += 2;
 	
 		/* hmac size */
-		type = (u_int16_t *)&query[totallen];	
-		*type = htons(sizeof(shabuf));
+		pack16(p, htons(sizeof(shabuf)));
 		totallen += 2;
+		p += 2;
 
 		/* hmac */
 		memcpy(&query[totallen], shabuf, sizeof(shabuf));
 		totallen += sizeof(shabuf);
+		p += sizeof(shabuf);
 
 		/* original id */
-		type = (u_int16_t *)&query[totallen];	
-		*type = wh->dh.id;
+		pack16(p, wh->dh.id);
 		totallen += 2;
+		p += 2;
 
 		/* error */
-		type = (u_int16_t *)&query[totallen];	
-		*type = 0;
+		pack16(p, 0);
 		totallen += 2;
+		p += 2;
 		
 		/* other len */
-		type = (u_int16_t *)&query[totallen];	
-		*type = 0;
+		pack16(p, 0);
 		totallen += 2;
+		p += 2;
 
 		wh->dh.additional = htons(1);
 	}
@@ -2206,4 +2237,59 @@ dn_contains(char *name, int len, char *anchorname, int alen)
 	}
 
 	return 0;
+}
+
+/* pack functions */
+
+void
+pack32(char *buf, u_int32_t value)
+{
+	pack(buf, (char *)&value, sizeof(uint32_t));
+}	
+
+void
+pack16(char *buf, u_int16_t value)
+{
+	pack(buf, (char *)&value, sizeof(uint16_t));
+}
+
+void
+pack8(char *buf, u_int8_t value)
+{
+	u_int8_t *p;
+
+	p = (u_int8_t *)buf;
+	*p = value;
+}
+
+void
+pack(char *buf, char *input, int len)
+{
+	memcpy(buf, input, len);
+}	
+
+uint32_t
+unpack32(char *buf)
+{
+	uint32_t ret = 0;
+	
+	unpack((char *)&ret, buf, sizeof(uint32_t));
+
+	return (ret);
+}
+
+uint16_t
+unpack16(char *buf)
+{
+	uint16_t ret = 0;
+	
+	unpack((char *)&ret, buf, sizeof(uint16_t));
+
+	return (ret);
+}
+
+void
+unpack(char *buf, char *input, int len)
+{
+	memcpy(buf, input, len);
 }
