@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.91 2019/11/25 15:14:42 pjp Exp $
+ * $Id: parse.y,v 1.92 2019/12/03 19:32:45 pjp Exp $
  */
 
 %{
@@ -71,6 +71,14 @@
 
 void 		yyerror(const char *);
 int		yylex(void);
+
+extern void 	pack(char *, char *, int);
+extern void 	pack32(char *, u_int32_t);
+extern void 	pack16(char *, u_int16_t);
+extern void 	pack8(char *, u_int8_t);
+extern uint32_t unpack32(char *);
+extern uint16_t unpack16(char *);
+extern void 	unpack(char *, char *, int);
 
 extern int	memcasecmp(u_char *, u_char *, int);
 extern struct rrtab 	*rrlookup(char *);
@@ -3462,7 +3470,7 @@ create_nsec_bitmap(char *rrlist, char *bitmap, int *len)
 
 	/* short circuit for 0 len bitmaps (ENTS) */
 	if (*rrlist == '\0') {
-		*len = 0;
+		pack32((char *)len, 0);
 		return;
 	}
 
@@ -3526,7 +3534,7 @@ create_nsec_bitmap(char *rrlist, char *bitmap, int *len)
 		
 	}
 
-	*len = outlen;
+	pack32((char *)len, outlen);
 
 	return;
 }
