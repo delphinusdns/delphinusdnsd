@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.41 2019/12/03 18:21:40 pjp Exp $
+ * $Id: raxfr.c,v 1.42 2019/12/03 19:03:49 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -146,6 +146,10 @@ extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u
 extern int     find_tsig_key(char *, int, char *, int);
 extern int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 
+extern void 	pack(char *, char *, int);
+extern void 	pack32(char *, u_int32_t);
+extern void 	pack16(char *, u_int16_t);
+extern void 	pack8(char *, u_int8_t);
 extern uint32_t unpack32(char *);
 extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
@@ -1669,7 +1673,7 @@ get_remote_soa(struct rzone *rzone)
 	u_char *end, *estart;
 	int totallen, zonelen, rrlen;
 	int replysize = 0;
-	u_int16_t *tsigclass, *tsigtype, *class, *type, *tcpsize;
+	u_int16_t *tcpsize;
 	u_int16_t *plen;
 	u_int16_t tcplen;
 
@@ -1681,7 +1685,6 @@ get_remote_soa(struct rzone *rzone)
 	char shabuf[32];
 	char *algname = NULL;
 
-	uint32_t *ttl;
 	HMAC_CTX *ctx;
 	uint16_t hmaclen;
 	int sacount = 0;
@@ -1773,12 +1776,10 @@ get_remote_soa(struct rzone *rzone)
 	memcpy(p, name, len);
 	totallen += len;
 
-	type = (u_int16_t *)&query[totallen];
-	*type = htons(DNS_TYPE_SOA);
+	pack16(&query[totallen], htons(DNS_TYPE_SOA));
 	totallen += sizeof(u_int16_t);
 	
-	class = (u_int16_t *)&query[totallen];
-	*class = htons(DNS_CLASS_IN);
+	pack16(&query[totallen], htons(DNS_CLASS_IN));
 	totallen += sizeof(u_int16_t);
 
 	/* we have a key, attach a TSIG payload */
@@ -1805,16 +1806,13 @@ get_remote_soa(struct rzone *rzone)
 		memcpy(&query[totallen], keyname, keynamelen);
 		totallen += keynamelen;
 		
-		tsigtype = (u_int16_t *)&query[totallen];
-		*tsigtype = htons(DNS_TYPE_TSIG);
+		pack16(&query[totallen], htons(DNS_TYPE_TSIG));
 		totallen += 2;
 
-		tsigclass = (u_int16_t *)&query[totallen];
-		*tsigclass = htons(DNS_CLASS_ANY);
+		pack16(&query[totallen], htons(DNS_CLASS_ANY));
 		totallen += 2;
 
-		ttl = (u_int32_t *)&query[totallen];
-		*ttl = htonl(0);
+		pack32(&query[totallen], 0);
 		totallen += 4;
 
 		algname = dns_label("hmac-sha256", &len);
@@ -1823,8 +1821,7 @@ get_remote_soa(struct rzone *rzone)
 		}
 
 		/* rdlen */
-		type = (u_int16_t *)&query[totallen];
-		*type = htons(len + 2 + 4 + 2 + 2 + 32 + 2 + 2 + 2);
+		pack16(&query[totallen], htons(len + 2 + 4 + 2 + 2 + 32 + 2 + 2 + 2));
 		totallen += 2;
 
 		/* algorithm name */
@@ -1834,23 +1831,19 @@ get_remote_soa(struct rzone *rzone)
 		free(algname);
 
 		/* time 1 */
-		type = (u_int16_t *)&query[totallen];	
-		*type = htons((now >> 32) & 0xffff);
+		pack16(&query[totallen], htons((now >> 32) & 0xffff));
 		totallen += 2;
 
 		/* time 2 */
-		ttl = (u_int32_t *)&query[totallen];
-		*ttl = htonl((now & 0xffffffff));
+		pack32(&query[totallen], htonl((now & 0xffffffff)));
 		totallen += 4;
 
 		/* fudge */
-		type = (u_int16_t *)&query[totallen];	
-		*type = htons(300);
+		pack16(&query[totallen], htons(300));
 		totallen += 2;
 	
 		/* hmac size */
-		type = (u_int16_t *)&query[totallen];	
-		*type = htons(sizeof(shabuf));
+		pack16(&query[totallen], htons(sizeof(shabuf)));
 		totallen += 2;
 
 		/* hmac */
@@ -1858,18 +1851,15 @@ get_remote_soa(struct rzone *rzone)
 		totallen += sizeof(shabuf);
 
 		/* original id */
-		type = (u_int16_t *)&query[totallen];	
-		*type = wh->dh.id;
+		pack16(&query[totallen], wh->dh.id);
 		totallen += 2;
 
 		/* error */
-		type = (u_int16_t *)&query[totallen];	
-		*type = 0;
+		pack16(&query[totallen], 0);
 		totallen += 2;
 		
 		/* other len */
-		type = (u_int16_t *)&query[totallen];	
-		*type = 0;
+		pack16(&query[totallen], 0);
 		totallen += 2;
 
 		wh->dh.additional = htons(1);
