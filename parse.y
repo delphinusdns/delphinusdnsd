@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.92 2019/12/03 19:32:45 pjp Exp $
+ * $Id: parse.y,v 1.93 2019/12/03 19:46:27 pjp Exp $
  */
 
 %{
@@ -2406,6 +2406,7 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 	struct nsec3 *nsec3;
 	struct rbtree *rbt;
 	int i;
+	int tmpbitmap;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2450,7 +2451,9 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 	}
 
 	/* XXX create/manage bitmap */
-	create_nsec_bitmap(bitmap, nsec3->bitmap, (int *)&nsec3->bitmap_len);
+	create_nsec_bitmap(bitmap, nsec3->bitmap, &tmpbitmap);
+		
+	nsec3->bitmap_len = (uint16_t)tmpbitmap;
 
 #if 0
 	/* we had a bug and this found it */
