@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.96 2019/12/03 18:21:40 pjp Exp $
+ * $Id: reply.c,v 1.97 2019/12/04 16:58:47 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -2918,7 +2918,6 @@ reply_soa(struct sreply *sreply, ddDB *db)
 	struct dns_header *odh;
 	u_int16_t outlen;
 	char *p;
-	u_int32_t *soa_val;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
@@ -3058,36 +3057,31 @@ reply_soa(struct sreply *sreply, ddDB *db)
 	if (outlen + sizeof(u_int32_t) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->serial);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->serial));
 	outlen += sizeof(u_int32_t);
 	
 	if ((outlen + sizeof(u_int32_t)) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->refresh);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->refresh));
 	outlen += sizeof(u_int32_t);
 
 	if ((outlen + sizeof(u_int32_t)) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->retry);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->retry));
 	outlen += sizeof(u_int32_t);
 
 	if ((outlen + sizeof(u_int32_t)) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->expire);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->expire));
 	outlen += sizeof(u_int32_t);
 
 	if ((outlen + sizeof(u_int32_t)) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->minttl);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->minttl));
 	outlen += sizeof(u_int32_t);
 
 	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
@@ -4347,7 +4341,6 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 	struct dns_header *odh;
 	u_int16_t outlen;
 	char *p;
-	u_int32_t *soa_val;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
@@ -4535,36 +4528,31 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 		/* XXX server error reply? */
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->serial);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->serial));
 	outlen += sizeof(u_int32_t);
 	
 	if ((outlen + sizeof(u_int32_t)) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->refresh);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->refresh));
 	outlen += sizeof(u_int32_t);
 
 	if ((outlen + sizeof(u_int32_t)) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->retry);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->retry));
 	outlen += sizeof(u_int32_t);
 
 	if ((outlen + sizeof(u_int32_t)) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->expire);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->expire));
 	outlen += sizeof(u_int32_t);
 
 	if ((outlen + sizeof(u_int32_t)) > replysize) {
 		return (retlen);
 	}
-	soa_val = (u_int32_t *)&reply[outlen];
-	*soa_val = htonl(((struct soa *)rrp->rdata)->minttl);
+	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->minttl));
 	outlen += sizeof(u_int32_t);
 
 	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
@@ -5501,11 +5489,9 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	struct dns_header *odh = (struct dns_header *)reply;
 	int labellen;
 	char *label, *plabel;
-	u_int32_t *soa_val;
 	u_int16_t namelen = 0;
-	u_int16_t *mx_priority, *srv_priority, *srv_port, *srv_weight;
-	u_int16_t *naptr_order, *naptr_preference, *ds_keytag;
-	u_int16_t *dnskey_flags, *nsec3param_iterations;
+	u_int16_t *dnskey_flags;
+	u_int16_t *ds_keytag;
 	u_int16_t *nsec3_iterations;
 	u_int8_t *sshfp_alg, *sshfp_fptype, *ds_alg, *ds_digesttype;
 	u_int8_t *dnskey_protocol, *dnskey_alg, *tlsa_usage, *tlsa_selector;
@@ -5595,40 +5581,35 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			goto truncate;
         	}
 
-		soa_val = (u_int32_t *)&reply[offset];
-		*soa_val = htonl(((struct soa *)rrp->rdata)->serial);
+		pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->serial));
 		offset += sizeof(u_int32_t);      
         
         	if ((offset + sizeof(u_int32_t)) > rlen) {
 			goto truncate;
         	}
 	
-		soa_val = (u_int32_t *)&reply[offset];
-		*soa_val = htonl(((struct soa *)rrp->rdata)->refresh);
+		pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->refresh));
 		offset += sizeof(u_int32_t);    
 
 		if ((offset + sizeof(u_int32_t)) > rlen) {
 			goto truncate;
         	}
 
-		soa_val = (u_int32_t *)&reply[offset];
-		*soa_val = htonl(((struct soa *)rrp->rdata)->retry);
+		pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->retry));
 		offset += sizeof(u_int32_t);       
 
 		if ((offset + sizeof(u_int32_t)) > rlen) {
 			goto truncate;
 		}
 
-		soa_val = (u_int32_t *)&reply[offset];
-		*soa_val = htonl(((struct soa *)rrp->rdata)->expire);
+		pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->expire));
 		offset += sizeof(u_int32_t);
 
 		if ((offset + sizeof(u_int32_t)) > rlen) {
 			goto truncate;
         	}
 
-		soa_val = (u_int32_t *)&reply[offset];
-		*soa_val = htonl(((struct soa *)rrp->rdata)->minttl);
+		pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->minttl));
 		offset += sizeof(u_int32_t);
 
 		answer->rdlength = htons(&reply[offset] - answer->rdata);
@@ -5684,9 +5665,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			if (offset + sizeof(*dnskey_flags) + sizeof(*dnskey_protocol) + sizeof(*dnskey_alg) > rlen)
 				goto truncate;
 
-			dnskey_flags = (u_int16_t *)&reply[offset];
-			*dnskey_flags = htons(((struct dnskey *)rrp->rdata)->flags);
-
+			pack16(&reply[offset], htons(((struct dnskey *)rrp->rdata)->flags));
 			offset += sizeof(u_int16_t);
 			
 			dnskey_protocol = (u_int8_t *)&reply[offset];
@@ -5742,9 +5721,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			if (offset + sizeof(*ds_keytag) + sizeof(*ds_alg) + sizeof(*ds_digesttype) > rlen)
 				goto truncate;
 
-			ds_keytag = (u_int16_t *)&reply[offset];
-			*ds_keytag = htons(((struct ds *)rrp->rdata)->key_tag);
-
+			pack16(&reply[offset], htons(((struct ds *)rrp->rdata)->key_tag));
 			offset += sizeof(u_int16_t);
 			
 			ds_alg = (u_int8_t *)&reply[offset];
@@ -5815,8 +5792,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		offset++;
 
-		nsec3_iterations = (u_int16_t *)&reply[offset];
-		*nsec3_iterations = htons(((struct nsec3 *)rrp->rdata)->iterations);
+		pack16(&reply[offset], htons(((struct nsec3 *)rrp->rdata)->iterations));
 		offset += sizeof(u_int16_t);
 
 		nsec3_saltlen = (u_int8_t *)&reply[offset];
@@ -5890,8 +5866,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		offset++;
 
-		nsec3param_iterations = (u_int16_t *)&reply[offset];
-		*nsec3param_iterations = htons(((struct nsec3param *)rrp->rdata)->iterations);
+		pack16(&reply[offset], htons(((struct nsec3param *)rrp->rdata)->iterations));
 		offset += sizeof(u_int16_t);
 
 		nsec3param_saltlen = (u_int8_t *)&reply[offset];
@@ -6091,9 +6066,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += 10;		/* up to rdata length */
 			
-			mx_priority = (u_int16_t *)&reply[offset];
-			*mx_priority = htons(((struct smx *)rrp->rdata)->preference);
-
+			pack16(&reply[offset], htons(((struct smx *)rrp->rdata)->preference));
 			offset += sizeof(u_int16_t);
 
 			if (offset + ((struct smx *)rrp->rdata)->exchangelen > rlen)
@@ -6303,14 +6276,10 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += 10;		/* up to rdata length */
 			
-			naptr_order = (u_int16_t *)&reply[offset];
-			*naptr_order = htons(((struct naptr *)rrp->rdata)->order);
-
+			pack16(&reply[offset], htons(((struct naptr *)rrp->rdata)->order));
 			offset += sizeof(u_int16_t);
 
-			naptr_preference = (u_int16_t *)&reply[offset];
-			*naptr_preference = htons(((struct naptr *)rrp->rdata)->preference);
-
+			pack16(&reply[offset], htons(((struct naptr *)rrp->rdata)->preference));
 			offset += sizeof(u_int16_t);
 
 			/* flags */
@@ -6391,19 +6360,13 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += 10;		/* up to rdata length */
 			
-			srv_priority = (u_int16_t *)&reply[offset];
-			*srv_priority = htons(((struct srv *)rrp->rdata)->priority);
-
+			pack16(&reply[offset], htons(((struct srv *)rrp->rdata)->priority));
 			offset += sizeof(u_int16_t);
 
-			srv_weight = (u_int16_t *)&reply[offset];
-			*srv_weight = htons(((struct srv *)rrp->rdata)->weight);
-
+			pack16(&reply[offset], htons(((struct srv *)rrp->rdata)->weight));
 			offset += sizeof(u_int16_t);
 
-			srv_port = (u_int16_t *)&reply[offset];
-			*srv_port = htons(((struct srv *)rrp->rdata)->port);
-
+			pack16(&reply[offset], htons(((struct srv *)rrp->rdata)->port));
 			offset += sizeof(u_int16_t);
 
 			if (offset + ((struct srv *)rrp->rdata)->targetlen > rlen)
