@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.30 2019/12/03 18:21:40 pjp Exp $
+ * $Id: additional.c,v 1.31 2019/12/04 06:52:55 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -117,8 +117,9 @@ additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int reply
 	struct answer *answer;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+	int tmpcount = 0;
 
-	*retcount = 0;
+	pack32((char *)retcount, 0);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == NULL)
 		return 0;
@@ -150,11 +151,12 @@ additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int reply
 
 		memcpy((char *)&answer->rdata, (char *)&((struct a *)rrp->rdata)->a, sizeof(in_addr_t));
 		offset += sizeof(struct answer);
-		(*retcount)++;
+		tmpcount++;
 
 		a_count++;
 	}
 
+	pack32((char *)retcount, tmpcount);
 
 out:
 	return (offset);
@@ -183,8 +185,9 @@ additional_aaaa(char *name, int namelen, struct rbtree *rbt, char *reply, int re
 	struct answer *answer;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+	int tmpcount = 0;
 
-	*retcount = 0;
+	pack32((char *)retcount, 0);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) == NULL)
 		return 0;
@@ -217,11 +220,12 @@ additional_aaaa(char *name, int namelen, struct rbtree *rbt, char *reply, int re
 
 		memcpy((char *)&answer->rdata, (char *)&((struct aaaa *)rrp->rdata)->aaaa, sizeof(struct in6_addr));
 		offset += sizeof(struct answer);
-		(*retcount)++;
+		tmpcount++;
 
 		aaaa_count++;
 	}
 
+	pack32((char *)retcount, tmpcount);
 out:
 	return (offset);
 
@@ -250,8 +254,9 @@ additional_mx(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 	struct answer *answer;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+	int tmpcount = 0;
 
-	*retcount = 0;
+	pack32((char *)retcount, 0);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) == NULL)
 		return 0;
@@ -302,10 +307,12 @@ additional_mx(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 			answer->rdlength = htons(((struct smx *)rrp->rdata)->exchangelen + sizeof(u_int16_t));
 
 
-		(*retcount)++;
+		tmpcount++;
 
 		mx_count++;
 	}
+	
+	pack32((char *)retcount, tmpcount);
 
 	return (offset);
 
@@ -333,8 +340,9 @@ additional_ptr(char *name, int namelen, struct rbtree *rbt, char *reply, int rep
 	struct answer *answer;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+	int tmpcount = 0;
 
-	*retcount = 0;
+	pack32((char *)retcount, 0);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) == NULL)
 		return 0;
@@ -384,7 +392,8 @@ additional_ptr(char *name, int namelen, struct rbtree *rbt, char *reply, int rep
 		answer->rdlength = htons(((struct ptr *)rrp->rdata)->ptrlen);
 
 
-	(*retcount)++;
+	tmpcount++;
+	pack32((char *)retcount, tmpcount);
 
 out:
 	return (offset);
@@ -954,8 +963,9 @@ additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 	struct answer *answer;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+	int tmpcount = 0;
 
-	*retcount = 0;
+	pack32((char *)retcount, 0);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) == NULL)
 		return 0;
@@ -1004,10 +1014,12 @@ additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 		answer->rdlength = htons(((struct ds *)rrp->rdata)->digestlen + sizeof(u_int16_t) + sizeof(u_int8_t) + sizeof(u_int8_t));
 
 
-		(*retcount)++;
+		tmpcount++;
 
 		ds_count++;
 	}
+
+	pack32((char *)retcount, tmpcount);
 
 	return (offset);
 }

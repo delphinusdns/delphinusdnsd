@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.55 2019/12/03 18:21:40 pjp Exp $
+ * $Id: util.c,v 1.56 2019/12/04 06:52:55 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -290,7 +290,7 @@ dns_label(char *name, int *returnlen)
 		return NULL;
 	}
 
-	*returnlen = newlen + 1;
+	pack32((char *)returnlen, (newlen + 1));
 	dnslabel[newlen] = '\0';	/* trailing NULL */
 
 	for (i = 0, p = dnslabel; i < lc; i++) {
@@ -526,9 +526,9 @@ get_ns(ddDB *db, struct rbtree *rbt, int *delegation)
 	int len;
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
-		*delegation = 1;
+		pack32((char *)delegation, 1);
 	} else {
-		*delegation = 0;
+		pack32((char *)delegation, 0);
 		return (rbt);
 	}
 
@@ -547,7 +547,7 @@ get_ns(ddDB *db, struct rbtree *rbt, int *delegation)
 	}
 		
 	if ((rrset = find_rr(rbt0, DNS_TYPE_SOA)) != NULL) {
-		*delegation = 0;
+		pack32((char *)delegation, 0);
 		free(rbt0);
 		return (rbt);
 	}

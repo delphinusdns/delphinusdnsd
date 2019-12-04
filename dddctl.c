@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.91 2019/12/03 18:21:40 pjp Exp $
+ * $Id: dddctl.c,v 1.92 2019/12/04 06:52:55 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -1012,7 +1012,7 @@ parse_keyfile(int fd, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t
 				if (q == NULL) 
 					return NULL;
 				*q = '\0';
-				*keyid = atoi(p);
+				pack32((char *)keyid, atoi(p));
 			}
 
 			continue;
@@ -6574,7 +6574,7 @@ connect_server(char *nameserver, int port, u_int32_t format)
 int
 lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mysoa, u_int32_t format, char *nameserver, u_int16_t port, int *answers, int *additionalcount)
 {
-	int len, i;
+	int len, i, tmp32;
 	int numansw, numaddi, numauth;
 	int printansw = 1, printauth = 1, printaddi = 1;
 	int rrtype, soacount = 0;
@@ -6738,9 +6738,10 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	numansw = ntohs(rwh->dh.answer);
 	numauth = ntohs(rwh->dh.nsrr);
 	numaddi = ntohs(rwh->dh.additional);
-	*answers = numansw + numauth + numaddi;
+	tmp32 = (numansw + numauth + numaddi);
+	pack32((char *)answers, tmp32);
 
-	if (*answers < 1) {	
+	if (tmp32 < 1) {	
 		fprintf(stderr, "NO ANSWER provided\n");
 		return -1;
 	}
@@ -7671,11 +7672,11 @@ bindfile(int argc, char *argv[])
 char *
 get_key(struct keysentry *kn, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t *algorithm, char *key, int keylen, int *keyid)
 {
-	*ttl = kn->ttl;
-	*flags = kn->flags;
+	pack32((char *)ttl, kn->ttl);
+	pack16((char *)flags, kn->flags);
 	*protocol = kn->protocol;
 	*algorithm = kn->algorithm;
-	*keyid = kn->keyid;
+	pack32((char *)keyid, kn->keyid);
 	
 	strlcpy(key, kn->key, keylen);
 	

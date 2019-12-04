@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.42 2019/12/03 19:03:49 pjp Exp $
+ * $Id: raxfr.c,v 1.43 2019/12/04 06:52:55 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -232,10 +232,11 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 		return -1;
 
 	rdtmp = unpack16(q);	
-	*rdlen = ntohs(rdtmp);
+	pack16((char *)rdlen, ntohs(rdtmp));
+	
 	q += 2;
 
-	*rrtype = ntohs(rtype);
+	pack32((char *)rrtype, ntohs(rtype));
 
 	if (ctx != NULL) {
 		if (*rrtype != DNS_TYPE_TSIG) {
@@ -1865,7 +1866,7 @@ get_remote_soa(struct rzone *rzone)
 		wh->dh.additional = htons(1);
 	}
 
-	*tcpsize = htons(totallen - 2);
+	pack16((char *)tcpsize, htons(totallen - 2));
 
 	if (send(so, query, totallen, 0) < 0) {
 		close(so);
