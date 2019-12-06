@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.56 2019/12/04 06:52:55 pjp Exp $
+ * $Id: util.c,v 1.57 2019/12/06 16:28:35 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1654,7 +1654,10 @@ tsig_pseudoheader(char *tsigkeyname, uint16_t fudge, time_t now, HMAC_CTX *ctx)
 
 	/* time 1 and 2 */
 	now = time(NULL);
-	pack16(p, htons((now >> 32) & 0xffff));
+	if (sizeof(time_t) == 4)	/* 32-bit time_t */
+		pack16(p, 0);
+	else
+		pack16(p, htons((now >> 32) & 0xffff));
 	ppoffset += 2;
 	p += 2;
 
@@ -1938,7 +1941,10 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		p += len;
 
 		/* time 1 */
-		pack16(p, htons((now >> 32) & 0xffff)); 
+		if (sizeof(time_t) == 4)		/* 32-bit time-t */
+			pack16(p, 0);
+		else
+			pack16(p, htons((now >> 32) & 0xffff)); 
 		totallen += 2;
 		p += 2;
 

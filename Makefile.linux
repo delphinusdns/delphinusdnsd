@@ -1,6 +1,6 @@
 CC=gcc
 #CFLAGS=-DDEBUG
-CFLAGS=-D_XOPEN_SOURCE -D_DEFAULT_SOURCE
+CFLAGS=-D_XOPEN_SOURCE -D_DEFAULT_SOURCE -Wno-shift-count-overflow
 LDADD= -lresolv -lcrypto -lrt -lbsd 
 YACC=bison
 AR=ar
@@ -69,12 +69,14 @@ dnssec.o: dnssec.c
 	$(CC) $(CFLAGS) -c dnssec.c
 
 util.o:  util.c
+	CFLAGS+=-Wno-shift-count-overflow
 	$(CC) $(CFLAGS) -c util.c
 
 ent.o:  ent.c
 	$(CC) $(CFLAGS) -c ent.c
 
 raxfr.o:  raxfr.c
+	CFLAGS+=-Wno-shift-count-overflow
 	$(CC) $(CFLAGS) -c raxfr.c
 
 

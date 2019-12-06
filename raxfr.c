@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.43 2019/12/04 06:52:55 pjp Exp $
+ * $Id: raxfr.c,v 1.44 2019/12/06 16:28:35 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1832,7 +1832,10 @@ get_remote_soa(struct rzone *rzone)
 		free(algname);
 
 		/* time 1 */
-		pack16(&query[totallen], htons((now >> 32) & 0xffff));
+		if (sizeof(time_t) == 4)	/* 32-bit time_t */
+			pack16(&query[totallen], 0);
+		else
+			pack16(&query[totallen], htons((now >> 32) & 0xffff));
 		totallen += 2;
 
 		/* time 2 */
