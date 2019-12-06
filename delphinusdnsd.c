@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.89 2019/12/06 17:49:16 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.90 2019/12/06 17:53:02 pjp Exp $
  */
 
 
@@ -276,7 +276,7 @@ u_int32_t cachesize = 0;
 char *bind_list[255];
 char *interface_list[255];
 #ifndef DD_VERSION
-char *versionstring = "delphinusdnsd-1.3";
+char *versionstring = "delphinusdnsd-1.4";
 uint8_t vslen = 17;
 #else
 char *versionstring = DD_VERSION;
