@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.88 2019/12/03 18:21:40 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.89 2019/12/06 17:49:16 pjp Exp $
  */
 
 
@@ -2583,7 +2583,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				}
 				
 				tcpflags |= O_NONBLOCK;
-				if (fcntl(so, F_SETFL, &tcpflags, sizeof(tcpflags)) < 0) {
+				if (fcntl(so, F_SETFL, tcpflags) < 0) {
 					dolog(LOG_INFO, "tcp fcntl can't set nonblocking\n");
 					close(so);
 					continue;
