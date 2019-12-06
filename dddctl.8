@@ -1,4 +1,4 @@
-.\" $Id: dddctl.8,v 1.7 2019/11/19 08:51:26 pjp Exp $
+.\" $Id: dddctl.8,v 1.8 2019/12/06 16:38:44 pjp Exp $
 .\" In parts copyright (template) by:
 .\"
 .\"	$OpenBSD: vmctl.8,v 1.39 2018/02/24 13:14:09 jmc Exp $
@@ -18,7 +18,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: November 19 2019 $
+.Dd $Mdocdate: December 6 2019 $
 .Dt DDDCTL 8
 .Os
 .Sh NAME
@@ -141,6 +141,12 @@ default
 .Nm
 control socket
 .El
+.Sh BUGS
+On Linux, with a replicant zone set up in the configfile, a 
+.Nm
+configtest will error out (at least on the Raspberry Pi), the first time.
+Subsequent configtests should state OK, so check for this.  I haven't found
+the bug for this yet.
 .Sh AUTHORS
 .An -nosplit
 .An Peter J. Philipp Aq Mt petphi@delphinusdns.org
