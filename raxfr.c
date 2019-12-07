@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.44 2019/12/06 16:28:35 pjp Exp $
+ * $Id: raxfr.c,v 1.45 2019/12/07 08:02:59 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -2193,7 +2193,11 @@ pull_rzone(struct rzone *rzone, time_t now)
 		return -1;
 	}
 
+#if __linux__
+	fprintf(f, "; REPLICANT file for zone %s gotten on %ld\n\n", rzone->zonename, now);
+#else
 	fprintf(f, "; REPLICANT file for zone %s gotten on %lld\n\n", rzone->zonename, now);
+#endif
 	
 	if (do_raxfr(f, rzone) < 0) {
 		dolog(LOG_INFO, "do_raxfr failed\n");
