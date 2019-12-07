@@ -69,14 +69,12 @@ dnssec.o: dnssec.c
 	$(CC) $(CFLAGS) -c dnssec.c
 
 util.o:  util.c
-	CFLAGS+=-Wno-shift-count-overflow
 	$(CC) $(CFLAGS) -c util.c
 
 ent.o:  ent.c
 	$(CC) $(CFLAGS) -c ent.c
 
 raxfr.o:  raxfr.c
-	CFLAGS+=-Wno-shift-count-overflow
 	$(CC) $(CFLAGS) -c raxfr.c
 
 
