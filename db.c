@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.15 2019/11/11 05:22:50 pjp Exp $
+ * $Id: db.c,v 1.16 2019/12/07 08:01:48 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -356,10 +356,11 @@ display_rr(struct rrset *rrset)
 
 #ifdef __linux__
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		printf("%ld:%u:%s\n", rrp->changed, rrp->ttl, (char *)rrp->rdata);
 #else
 	TAILQ_FOREACH_SAFE(rrp, &rrset->rr_head, entries, rrp0) {
-#endif
 		printf("%lld:%u:%s\n", rrp->changed, rrp->ttl, (char *)rrp->rdata);
+#endif
 	}
 
 	return 0;
