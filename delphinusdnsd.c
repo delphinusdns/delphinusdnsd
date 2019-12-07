@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.90 2019/12/06 17:53:02 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.91 2019/12/07 08:08:44 pjp Exp $
  */
 
 
@@ -2246,6 +2246,9 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 				dolog(LOG_INFO, "restarting on SIGHUP or command\n");
 
 				closelog();
+#if __linux__
+				setproctitle(NULL);
+#endif
 				if (execvp("/usr/local/sbin/delphinusdnsd", av) < 0) {
 					dolog(LOG_ERR, "execvp: %s\n", strerror(errno));
 				}
