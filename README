@@ -1,4 +1,4 @@
-$Id: README,v 1.40 2019/12/09 17:51:04 pjp Exp $
+$Id: README,v 1.41 2019/12/09 17:53:54 pjp Exp $
 
 1. README
  1.1 AUTHOR(S)
@@ -101,7 +101,7 @@ $ ./configure
 ## add a privsep user (_ddd) with a chroot directory (as root)
 $ vipw
 ## or
-$ pw user add _ddd
+$ pw user add _ddd -m
 ## make the program
 $ make
 ## install the binary (as root)
