@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.37 2019/12/03 18:21:40 pjp Exp $
+ * $Id: axfr.c,v 1.38 2019/12/09 18:14:24 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -933,7 +933,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		}
 
 		if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0) {
-			dolog(LOG_INFO, "AXFR question had TSIG errors, code %02x, drop\n", question->tsig.tsigerrorcode);
+			dolog(LOG_INFO, "AXFR question had TSIG errors, code 0x%02x, drop\n", question->tsig.tsigerrorcode);
 			goto drop;
 		}
 
