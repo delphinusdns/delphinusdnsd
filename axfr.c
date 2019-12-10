@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.38 2019/12/09 18:14:24 pjp Exp $
+ * $Id: axfr.c,v 1.39 2019/12/10 12:44:10 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -43,6 +43,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <syslog.h>
 #include <errno.h>
 #include <signal.h>
@@ -313,6 +314,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 	int is_ipv6, axfr_acl;
 	int notifyfd[2];
 	int packetlen;
+	int tcpflags;
 
 	socklen_t fromlen;
 	char buf[512];
@@ -557,6 +559,23 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 						memcpy(packet, imsg.data, packetlen);
 						so = imsg.fd;
 
+						if ((tcpflags = fcntl(so, F_GETFL, 0)) < 0) {
+							dolog(LOG_INFO, "can't query fcntl flags\n");
+							close(so);
+							free(packet);
+							break;
+						}
+
+						/* turn off nonblocking */	
+						tcpflags &= ~O_NONBLOCK;
+
+						if (fcntl(so, F_SETFL, tcpflags) < 0) {
+							dolog(LOG_INFO, "can't turn off non-blocking\n");
+							close(so);
+							free(packet);
+							break;
+						}
+						
 						memset((char *)&from, 0, sizeof(from));
 						fromlen = sizeof(struct sockaddr_storage);
 						if (getpeername(so, (struct sockaddr *)&from, &fromlen) < 0) {
