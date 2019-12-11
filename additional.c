@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.31 2019/12/04 06:52:55 pjp Exp $
+ * $Id: additional.c,v 1.32 2019/12/11 16:22:26 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -522,12 +522,12 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 
 	answer = (struct dns_tsigrr *)&reply[offset];
 	if (envelope > 1 || envelope < -1) {
-		answer->timefudge = htobe64(((u_int64_t)now << 16) | (300 & 0xffff));
+		answer->timefudge = htobe64(((u_int64_t)now << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
 	} else {
 		if (request == 0 || envelope == 1) {
 			answer->timefudge = question->tsig.tsig_timefudge;
 		} else {
-			answer->timefudge = htobe64((now << 16) | (300 & 0xffff));
+			answer->timefudge = htobe64((now << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
 		}
 	}
 
@@ -562,7 +562,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	if (request == 0 || envelope == 1) 
 		ppanswer->timefudge = question->tsig.tsig_timefudge;
 	else
-		ppanswer->timefudge = htobe64(((u_int64_t)now << 16) | (300 & 0xffff));
+		ppanswer->timefudge = htobe64(((u_int64_t)now << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
 	ppoffset += 8;
 
 
@@ -590,7 +590,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 		if (envelope % 89 == 0 || envelope == -2)  {
 			ttlen = 0;
 			timers = (struct dns_tsigrr *)&tsig_timers[ttlen];
-			timers->timefudge = htobe64(((u_int64_t)now << 16) | (300 & 0xffff));
+			timers->timefudge = htobe64(((u_int64_t)now << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
 			ttlen += 8;
 			HMAC_Update(tsigctx, (const unsigned char *)tsig_timers, ttlen);
 		}

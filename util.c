@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.57 2019/12/06 16:28:35 pjp Exp $
+ * $Id: util.c,v 1.58 2019/12/11 16:22:26 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1613,7 +1613,7 @@ tsig_pseudoheader(char *tsigkeyname, uint16_t fudge, time_t now, HMAC_CTX *ctx)
 	char pseudo_packet[512];
 	char *keyname = NULL;
 
-	int ppoffset = 0I;
+	int ppoffset = 0;
 	int len;
 
 	char *p;
@@ -1890,7 +1890,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		HMAC_Update(ctx, &query[2], totallen - 2);
 
 		now = time(NULL);
-		if (tsig_pseudoheader(tsigkey, 300, now, ctx) < 0) {
+		if (tsig_pseudoheader(tsigkey, DEFAULT_TSIG_FUDGE, now, ctx) < 0) {
 			fprintf(stderr, "tsig_pseudoheader failed\n");
 			return -1;
 		}
@@ -1954,7 +1954,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		p += 4;
 
 		/* fudge */
-		pack16(p, htons(300));
+		pack16(p, htons(DEFAULT_TSIG_FUDGE));
 		totallen += 2;
 		p += 2;
 	

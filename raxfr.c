@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.45 2019/12/07 08:02:59 pjp Exp $
+ * $Id: raxfr.c,v 1.46 2019/12/11 16:22:26 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1790,7 +1790,7 @@ get_remote_soa(struct rzone *rzone)
 		HMAC_Update(ctx, &query[2], totallen - 2);
 
 		now = time(NULL);
-		if (tsig_pseudoheader(rzone->tsigkey, 300, now, ctx) < 0) {
+		if (tsig_pseudoheader(rzone->tsigkey, DEFAULT_TSIG_FUDGE, now, ctx) < 0) {
 			fprintf(stderr, "tsig_pseudoheader failed\n");
 			return(MY_SOCK_TIMEOUT);
 		}
@@ -1843,7 +1843,7 @@ get_remote_soa(struct rzone *rzone)
 		totallen += 4;
 
 		/* fudge */
-		pack16(&query[totallen], htons(300));
+		pack16(&query[totallen], htons(DEFAULT_TSIG_FUDGE));
 		totallen += 2;
 	
 		/* hmac size */

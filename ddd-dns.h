@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.9 2019/10/25 10:24:49 pjp Exp $
+ * $Id: ddd-dns.h,v 1.10 2019/12/11 16:22:26 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -249,6 +249,8 @@ struct tsig {
 	u_int64_t tsig_timefudge;
 	u_int16_t tsigorigid;
 };
+
+#define DEFAULT_TSIG_FUDGE	300
 
 struct question {
 	struct dns_question_hdr *hdr;
