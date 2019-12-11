@@ -1,7 +1,7 @@
 #!/bin/sh
 
 
-VERSION="1.3"
+VERSION="1.4"
 DD_VERSION="delphinusdnsd-$VERSION"
 DD_VERSION_LEN=`echo -n $DD_VERSION | wc -c`
 NP=0
@@ -14,6 +14,13 @@ do
 		--user=*)
 			user=`echo $1 | sed -e 's/--user=//g'`
 			echo "#define DEFAULT_PRIVILEGE \"$user\"" >> ddd-config.h
+			;;
+		--location=*)
+			location=`echo $1 | sed -e 's/--location=//g'`
+			echo "#define DEFAULT_LOCATION \"$location\"" >> ddd-config.h
+			echo "#define DEFAULT_CONFFILE \"${location}/etc/delphinusdns.conf\"" >> ddd-config.h
+			echo "#define DEFAULT_RZONE_DIR \"${location}/replicant\"" >> ddd-config.h
+
 			;;
 		*)
 			echo "usage: configure [--needpledge] [--user=USERNAME]"

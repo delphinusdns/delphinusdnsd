@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.30 2019/11/25 15:14:42 pjp Exp $
+ * $Id: ddd-db.h,v 1.31 2019/12/11 16:55:01 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -37,8 +37,14 @@
 #include <limits.h>
 
 #include <openssl/hmac.h>
+#include "ddd-config.h"
 
+#ifndef DEFAULT_CONFFILE
 #define CONFFILE "/etc/delphinusdns/delphinusdns.conf"
+#else
+#define CONFFILE DEFAULT_CONFFILE
+#endif
+
 #define DEFAULT_SOCKET 64
 
 #define PARSEFILE_FLAG_NOSOCKET 0x1
@@ -399,7 +405,11 @@ struct mzone {
 	SLIST_HEAD(,mzone_dest)	dest;
 } *mz, *mz0;
 
+#ifndef DEFAULT_RZONE_DIR
 #define DELPHINUS_RZONE_PATH	"/etc/delphinusdns/replicant"
+#else
+#define DELPHINUS_RZONE_PATH	DEFAULT_RZONE_DIR
+#endif
 
 struct rzone {
 	SLIST_ENTRY(rzone)	rzone_entry;

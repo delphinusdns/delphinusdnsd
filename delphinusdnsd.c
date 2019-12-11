@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.91 2019/12/07 08:08:44 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.92 2019/12/11 16:55:01 pjp Exp $
  */
 
 
@@ -894,7 +894,11 @@ main(int argc, char *argv[], char *environ[])
 			exit(1);
 		case 0:
 			/* chroot to the drop priv user home directory */
+#ifdef DEFAULT_LOCATION
+			if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
+#else
 			if (drop_privs(pw->pw_dir, pw) < 0) {
+#endif
 				dolog(LOG_INFO, "axfr dropping privileges\n", strerror(errno));
 				slave_shutdown();
 				exit(1);
@@ -1008,7 +1012,11 @@ main(int argc, char *argv[], char *environ[])
 	} /* raxfrflag */
 
 	/* the rest of the daemon goes on in TCP and UDP loops */
+#ifdef DEFAULT_LOCATION
+	if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
+#else
 	if (drop_privs(pw->pw_dir, pw) < 0) {
+#endif
 		dolog(LOG_INFO, "dropping privileges failed\n");
 		slave_shutdown();
 		exit(1);
@@ -3415,7 +3423,11 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 		exit(1);
 	}
 
+#ifdef DEFAULT_LOCATION
+	if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
+#else
 	if (drop_privs(pw->pw_dir, pw) < 0) {
+#endif
 		dolog(LOG_INFO, "dropping privileges failed in unix socket\n");
 		slave_shutdown();
 		exit(1);
