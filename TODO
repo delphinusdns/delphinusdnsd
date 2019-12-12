@@ -7,8 +7,8 @@ For 1.5.0 release
 - CAA RR support
 - a github mirrored copy
 - an OpenBSD port/package starting with 1.4 release
-- fix the DNSSEC and delphinusdnsd(?) code so that an algorithm rollover
-  works
+- fix the DNSSEC and delphinusdnsd(?) code so that an algorithm rollover works
+- filter input to dddctl query for escape codes.
 
 For 1.4.0 release
 - a github mirrored copy
