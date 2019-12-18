@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.92 2019/12/11 16:55:01 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.93 2019/12/18 13:15:15 pjp Exp $
  */
 
 
@@ -3507,7 +3507,34 @@ determine_glue(ddDB *db)
 	int rs;
 	struct node *n, *nx;
 	int len;
+	int have_soa = 0, have_ns = 0;
 	char *p;
+
+        RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
+                rs = n->datalen;
+                if ((rbt = calloc(1, rs)) == NULL) {
+                        dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+                        exit(1);
+                }
+
+                memcpy((char *)rbt, (char *)n->data, n->datalen);
+
+		rrset = find_rr(rbt, DNS_TYPE_SOA);
+		if (rrset != NULL) {
+			have_soa = 1;
+		}
+		rrset = find_rr(rbt, DNS_TYPE_NS);
+		if (rrset != NULL) {
+			have_ns = 1;
+		}
+		
+		free(rbt);
+	}
+
+	if (! have_soa || ! have_ns) {
+		dolog(LOG_INFO, "did not detect NS and SOA entries, they must be present!\n");
+		return -1;
+	}
 
 	/* mark SOA's */
         RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
