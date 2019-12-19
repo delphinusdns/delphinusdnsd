@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.93 2019/12/18 13:15:15 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.94 2019/12/19 15:35:13 pjp Exp $
  */
 
 
@@ -329,8 +329,11 @@ main(int argc, char *argv[], char *environ[])
 	}
 
 	av = argv;
+
+#ifndef NO_SETPROCTITLE
 #if __linux__
 	setproctitle_init(argc, av, environ);
+#endif
 #endif
 
 
@@ -2202,7 +2205,9 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 	}
 #endif
 	
+#ifndef NO_SETPROCTITLE
 	setproctitle("master");
+#endif
 
 	pid = getpid();
 
@@ -2254,8 +2259,10 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 				dolog(LOG_INFO, "restarting on SIGHUP or command\n");
 
 				closelog();
+#ifndef NO_SETPROCTITLE
 #if __linux__
 				setproctitle(NULL);
+#endif
 #endif
 				if (execvp("/usr/local/sbin/delphinusdnsd", av) < 0) {
 					dolog(LOG_ERR, "execvp: %s\n", strerror(errno));
