@@ -50,6 +50,19 @@ netbsd() {
 	cp Makefile.netbsd Makefile
 	cp delphinusdnsd/Makefile.netbsd delphinusdnsd/Makefile
 	cp dddctl/Makefile.netbsd dddctl/Makefile
+	
+	if [ ! -d /usr/local/bin ] ; then
+		echo WARN: before installing make sure /usr/local/bin exists!
+	fi
+	if [ ! -d /usr/local/sbin ] ; then
+		echo WARN: before installing make sure /usr/local/sbin exists!
+	fi
+	if [ ! -d /usr/local/man/man/man8 ] ; then
+		echo WARN: before installing make sure /usr/local/man/man/man8 exists!
+	fi
+	if [ ! -d /usr/local/man/man/man5 ] ; then
+		echo WARN: before installing make sure /usr/local/man/man/man5 exists!
+	fi
 }
 
 freebsd() {
