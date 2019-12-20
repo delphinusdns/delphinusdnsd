@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.94 2019/12/19 15:35:13 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.95 2019/12/20 11:18:51 pjp Exp $
  */
 
 
@@ -330,10 +330,8 @@ main(int argc, char *argv[], char *environ[])
 
 	av = argv;
 
-#ifndef NO_SETPROCTITLE
 #if __linux__
 	setproctitle_init(argc, av, environ);
-#endif
 #endif
 
 
