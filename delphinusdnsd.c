@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.95 2019/12/20 11:18:51 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.96 2019/12/26 15:51:04 pjp Exp $
  */
 
 
@@ -237,8 +237,10 @@ TAILQ_HEAD(, tcpentry) tcphead;
 
 struct tcpentry {
 	int intidx;
-	int bytes_read;
+	uint bytes_read;
 	int bytes_expected;
+	uint bytes_limit;
+	int seen;		/* seen heading bytes */
 	int so;
 	time_t last_used;
 	char buf[65537];	
@@ -2613,6 +2615,8 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				}
 				tcpn1->bytes_read = 0;
 				tcpn1->bytes_expected = 0;
+				tcpn1->bytes_limit = 0;
+				tcpn1->seen = 0;
 				tcpn1->so = so;
 				tcpn1->last_used = time(NULL);
 				tcpn1->intidx = i;
@@ -2650,13 +2654,18 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				} /* if len */
 	
 				tcpnp->bytes_read += len;
-				if (tcpnp->bytes_read >= 2) {
+				tcpnp->bytes_expected -= len;
+
+				if (tcpnp->bytes_expected < 0)
+					tcpnp->bytes_expected = 0;
+
+				if (tcpnp->seen == 0 && tcpnp->bytes_read >= 2) {
 						tcpnp->bytes_expected = ntohs(*((u_int16_t *)&tcpnp->buf[0]));
-				} else {
-					continue;
+						tcpnp->bytes_limit = tcpnp->bytes_expected;
+						tcpnp->seen = 1;
 				}
 
-				if ((tcpnp->bytes_read - 2) != tcpnp->bytes_expected) 
+				if ((tcpnp->bytes_read - 2) != tcpnp->bytes_limit) 
 					continue;
 
 				len = tcpnp->bytes_read - 2;
@@ -3105,6 +3114,8 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				memset(pbuf, 0, length);
 				tcpnp->bytes_read = 0;
 				tcpnp->bytes_expected = 0;
+				tcpnp->bytes_limit = 0;
+				tcpnp->seen = 0;
 				tcpnp->last_used = time(NULL);
 			}	/* END ISSET */
 			continue;
