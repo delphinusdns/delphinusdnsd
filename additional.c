@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.32 2019/12/11 16:22:26 pjp Exp $
+ * $Id: additional.c,v 1.33 2019/12/27 07:57:33 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -926,7 +926,7 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, rbt, reply, replylen, offset, 0);
 
 	if (tmplen == 0) {
-		goto out;
+		return 0;
 	}
 
 	offset = tmplen;

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.97 2019/12/04 16:58:47 pjp Exp $
+ * $Id: reply.c,v 1.98 2019/12/27 07:57:33 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -4683,6 +4683,17 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 		} /* if (find_rr(... DNS_TYPE_NSEC3PARAM) */
 	}
 
+	if (replysize < outlen) {
+		NTOHS(odh->query);
+		SET_DNS_TRUNCATION(odh);
+		HTONS(odh->query);
+		odh->answer = 0;
+		odh->nsrr = 0; 
+		odh->additional = 0;
+		outlen = rollback;
+		goto out;
+	}
+
 out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -5309,6 +5320,17 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 
 		if (outlen > origlen)
 			odh->nsrr = htons(4);
+	}
+
+	if (replysize < outlen) {
+		NTOHS(odh->query);
+		SET_DNS_TRUNCATION(odh);
+		HTONS(odh->query);
+		odh->answer = 0;
+		odh->nsrr = 0; 
+		odh->additional = 0;
+		outlen = rollback;
+		goto out;
 	}
 
 out:
