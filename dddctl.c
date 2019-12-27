@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.92 2019/12/04 06:52:55 pjp Exp $
+ * $Id: dddctl.c,v 1.93 2019/12/27 15:09:56 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -6665,8 +6665,10 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 
 	totallen += (sizeof(struct dns_optrr));
 
-	if (format & TCP_FORMAT)
+	if (format & TCP_FORMAT) {
 		tcpsize = htons(totallen - 2);
+		pack16(&query[0], tcpsize);
+	}
 
 	if (send(so, query, totallen, 0) < 0) {
 		return -1;
