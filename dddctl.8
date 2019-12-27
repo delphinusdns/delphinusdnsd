@@ -1,4 +1,4 @@
-.\" $Id: dddctl.8,v 1.10 2019/12/27 15:18:40 pjp Exp $
+.\" $Id: dddctl.8,v 1.11 2019/12/27 16:16:49 pjp Exp $
 .\" In parts copyright (template) by:
 .\"
 .\"	$OpenBSD: vmctl.8,v 1.39 2018/02/24 13:14:09 jmc Exp $
@@ -66,11 +66,11 @@ help sign.
 performs rudamentary query operations on a DNS server.
 .Bl -tag -width "-I iterations"
 .It Fl D
-output in DNSSEC-style format
+use the DO bit, to get DNSSEC answers.
 .It Fl I
 indent output.
 .It Fl T
-TCP format.
+use TCP instead of UDP.
 .It Fl Z
 output in delphinusdnsd zonefile format.
 .It Fl @ Ar server
