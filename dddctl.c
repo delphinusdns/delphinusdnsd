@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.93 2019/12/27 15:09:56 pjp Exp $
+ * $Id: dddctl.c,v 1.94 2019/12/27 15:16:52 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -6314,9 +6314,8 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\t-z ZSK\t\tuse provided ZSK zone-signing keyname\n");	
 		return 0;
 	} else if (argc == 2 && strcmp(argv[1], "query") == 0) {
-		fprintf(stderr, "usage: dddctl query [-BDITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
+		fprintf(stderr, "usage: dddctl query [-DITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
 		fprintf(stderr, "\t-@ server\t\tUse server ip.\n");
-		fprintf(stderr, "\t-B\t\t\tOutput as a BIND file.\n");
 		fprintf(stderr, "\t-D\t\t\tUse DNSSEC (DO bit) lookup.\n");
 		fprintf(stderr, "\t-I\t\t\tIndent output.\n");
 		fprintf(stderr, "\t-T\t\t\tUse TCP.\n");
@@ -6333,7 +6332,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "usage: command [arg ...]\n");
 		fprintf(stderr, "\tbindfile zonename zonefile\n");
 		fprintf(stderr, "\tconfigtest [-cn] [configfile]\n");
-		fprintf(stderr, "\tquery [-BDITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
+		fprintf(stderr, "\tquery [-DITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-x serial] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
@@ -6366,14 +6365,11 @@ dig(int argc, char *argv[])
 	int answers = 0;
 	int additionalcount = 0;
 
-	while ((ch = getopt(argc, argv, "@:BDIP:TZp:Q:y:")) != -1) {
+	while ((ch = getopt(argc, argv, "@:DIP:TZp:Q:y:")) != -1) {
 		switch (ch) {
 		case '@':
 		case 'Q':
 			nameserver = optarg;
-			break;
-		case 'B':
-			format |= BIND_FORMAT;
 			break;
 		case 'D':
 			format |= DNSSEC_FORMAT;

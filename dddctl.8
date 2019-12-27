@@ -1,4 +1,4 @@
-.\" $Id: dddctl.8,v 1.8 2019/12/06 16:38:44 pjp Exp $
+.\" $Id: dddctl.8,v 1.9 2019/12/27 15:16:52 pjp Exp $
 .\" In parts copyright (template) by:
 .\"
 .\"	$OpenBSD: vmctl.8,v 1.39 2018/02/24 13:14:09 jmc Exp $
@@ -18,7 +18,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: December 6 2019 $
+.Dd $Mdocdate: December 27 2019 $
 .Dt DDDCTL 8
 .Os
 .Sh NAME
@@ -55,6 +55,37 @@ provides an in-binary help.  Alternatively you can specify a subcommand
 to provide help for.  Ie. 
 .Nm
 help sign.
+.It Xo Cm query
+.Op Fl DITZ
+.Op Fl @ Ar server
+.Op Fl P Ar port
+.Op Fl p Ar file
+.Op Fl Q Ar server
+.Op Fl y Ar keyname:password
+.Xc
+performs rudamentary query operations on a DNS server.
+.Bl -tag -width "-I iterations"
+.It Fl D
+output in DNSSEC-style format
+.It Fl I
+indent output.
+.It Fl T
+TCP format.
+.It Fl Z
+output in delphinusdnsd zonefile format.
+.It Fl @ Ar server
+queries the specified server (in IPv4 IP).
+.It Fl P Ar port
+query on the specified port.
+.It Fl p Ar file
+output/pipe to the specified file.
+.It Fl Q Ar server
+queries the specified server (is synonymous with -@).
+.It Fl y Ar keyname:password
+Use a TSIG keyname and password.  The keyname is plaintext in a DNS name format
+, the password is in BASE64.  This differs from dig in that the leading HMAC 
+type is omitted because it's always type 'hmac-sha256'.
+.El
 .It Xo Cm sign 
 .Op Fl KXZ
 .Op Fl a Ar algorithm
