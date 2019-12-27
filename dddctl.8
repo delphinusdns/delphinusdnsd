@@ -1,4 +1,4 @@
-.\" $Id: dddctl.8,v 1.9 2019/12/27 15:16:52 pjp Exp $
+.\" $Id: dddctl.8,v 1.10 2019/12/27 15:18:40 pjp Exp $
 .\" In parts copyright (template) by:
 .\"
 .\"	$OpenBSD: vmctl.8,v 1.39 2018/02/24 13:14:09 jmc Exp $
@@ -177,7 +177,9 @@ On Linux, with a replicant zone set up in the configfile, a
 .Nm
 configtest will error out (at least on the Raspberry Pi), the first time.
 Subsequent configtests should state OK, so check for this.  I haven't found
-the bug for this yet.
+the bug for this yet.  Another bug is that dddctl query will not sanitize
+input from the net.  This could be used to change characteristics of the
+terminal with means of escape codes.
 .Sh AUTHORS
 .An -nosplit
 .An Peter J. Philipp Aq Mt petphi@delphinusdns.org
