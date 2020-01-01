@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.96 2019/12/26 15:51:04 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.97 2020/01/01 14:55:22 pjp Exp $
  */
 
 
@@ -243,7 +243,7 @@ struct tcpentry {
 	int seen;		/* seen heading bytes */
 	int so;
 	time_t last_used;
-	char buf[65537];	
+	char buf[0xffff + 2];	
 	char *address;
 	TAILQ_ENTRY(tcpentry) tcpentries;
 } *tcpn1, *tcpn2, *tcpnp;
@@ -2574,9 +2574,11 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 
 
 				if (filter && require_tsig == 0) {
-					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, filter policy\n", so, cfg->ident[i], address);
+					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, filter policy, drop\n", so, cfg->ident[i], address);
+#if 0
 					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 					slen = reply_refused(&sreply, NULL);
+#endif
 					close(so);
 					continue;
 				}
@@ -2663,7 +2665,15 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						tcpnp->bytes_expected = ntohs(*((u_int16_t *)&tcpnp->buf[0]));
 						tcpnp->bytes_limit = tcpnp->bytes_expected;
 						tcpnp->seen = 1;
-				}
+				} 
+
+				/*
+				 * disallow continuing if we only have the
+				 * length and nothing else
+				 */
+
+				if (tcpnp->bytes_read <= 2)
+					continue;
 
 				if ((tcpnp->bytes_read - 2) != tcpnp->bytes_limit) 
 					continue;
@@ -3111,7 +3121,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				 * everything
 				 */
 
-				memset(pbuf, 0, length);
+				memset(tcpnp->buf, 0, sizeof(tcpnp->buf));
 				tcpnp->bytes_read = 0;
 				tcpnp->bytes_expected = 0;
 				tcpnp->bytes_limit = 0;
