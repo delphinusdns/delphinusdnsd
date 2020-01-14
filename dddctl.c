@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.94 2019/12/27 15:16:52 pjp Exp $
+ * $Id: dddctl.c,v 1.95 2020/01/14 12:42:04 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -2236,11 +2236,7 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
                 }
 	}
 
-#ifdef __linux__
-	TAILQ_FOREACH(c2, &head, entries) {
-#else
 	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -2450,11 +2446,7 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
                 }
 	}
 
-#ifdef __linux__
-	TAILQ_FOREACH(c2, &head, entries) {
-#else
 	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -3331,11 +3323,7 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
                 }
 	}
 
-#ifdef __linux__
-        TAILQ_FOREACH(c2, &head, entries) {
-#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -3551,11 +3539,7 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 
 	}
 
-#ifdef __linux__
-        TAILQ_FOREACH(c2, &head, entries) {
-#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -3770,11 +3754,7 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
                 }
 	}
 
-#ifdef __linux__
-        TAILQ_FOREACH(c2, &head, entries) {
-#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -3991,11 +3971,7 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
                 }
 	}
 
-#ifdef __linux__
-        TAILQ_FOREACH(c2, &head, entries) {
-#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -4211,11 +4187,7 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
                 }
 	}
 
-#ifdef __linux__
-        TAILQ_FOREACH(c2, &head, entries) {
-#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -4423,11 +4395,7 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
                 }
 	}
 
-#ifdef __linux__
-        TAILQ_FOREACH(c2, &head, entries) {
-#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -4637,11 +4605,7 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
                 }
 	}
 
-#ifdef __linux__
-        TAILQ_FOREACH(c2, &head, entries) {
-#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -4850,11 +4814,7 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct r
                 }
 	}
 
-#ifdef __linux__
-        TAILQ_FOREACH(c2, &head, entries) {
-#else
         TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-#endif
                 pack(p, c2->data, c2->len);
                 p += c2->len;
 
@@ -5257,11 +5217,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 
 			}
 
-		#ifdef __linux__
-			TAILQ_FOREACH(c2, &head, entries) {
-		#else
 			TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-		#endif
 				pack(p, c2->data, c2->len);
 				p += c2->len;
 
@@ -5416,11 +5372,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 		}
 	}
 
-#ifdef __linux__
-	TAILQ_FOREACH(c2, &head, entries) {
-#else
 	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-#endif
 		pack(p, c2->data, c2->len);
 		p += c2->len;
 

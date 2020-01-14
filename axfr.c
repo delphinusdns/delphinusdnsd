@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.39 2019/12/10 12:44:10 pjp Exp $
+ * $Id: axfr.c,v 1.40 2020/01/14 12:42:04 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -403,11 +403,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 			 * go through every zone, removing those with all
 			 * IP's notified...
 		 	 */
-#if __linux__
-			SLIST_FOREACH(notnp, &notifyhead, notify_entry) {
-#else
 			SLIST_FOREACH_SAFE(notnp, &notifyhead, notify_entry, notn2) {
-#endif
 				count = 0;
 				SLIST_FOREACH(md, &notnp->mzone->dest, entries) {
 					if (md->notified == 0)
@@ -707,11 +703,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 				}
 
 
-#ifdef __linux__
-				SLIST_FOREACH(notnp, &notifyhead, notify_entry) {
-#else
 				SLIST_FOREACH_SAFE(notnp, &notifyhead, notify_entry, notn2) {
-#endif
 					for (i = 0; i < notify; i++) {
 						if (check_notifyreply(dh, question, 
 							(struct sockaddr_storage *) sin, AF_INET, notnp, i) < 0) {
@@ -804,11 +796,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 				}
 
 
-#ifdef __linux
-				SLIST_FOREACH(notnp, &notifyhead, notify_entry) {
-#else
 				SLIST_FOREACH_SAFE(notnp, &notifyhead, notify_entry, notn2) {
-#endif
 					for (i = 0; i < notify; i++) {
 						if (check_notifyreply(dh, question, 
 							(struct sockaddr_storage *) sin6, AF_INET6, notnp, i) < 0) {
@@ -1561,11 +1549,7 @@ notifyslaves(int *notifyfd)
 
 	i = 0;
 
-#ifdef __linux__
-	SLIST_FOREACH(notnp, &notifyhead, notify_entry) {
-#else
 	SLIST_FOREACH_SAFE(notnp, &notifyhead, notify_entry, notn2) {
-#endif
 		remove = 0;
 		SLIST_FOREACH(md, &notnp->mzone->dest, entries) {
 			if (md->notifydest.ss_family == AF_INET) 
@@ -1786,11 +1770,7 @@ check_notifyreply(struct dns_header *dh, struct question *question, struct socka
 			return -1;
 		}
 
-#if __linux__
-		SLIST_FOREACH(md, &notnp->mzone->dest, entries) {
-#else
 		SLIST_FOREACH_SAFE(md, &notnp->mzone->dest, entries, md2) {
-#endif
 
 			if (md->notifydest.ss_family != af)
 				continue;

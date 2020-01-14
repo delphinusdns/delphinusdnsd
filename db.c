@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.16 2019/12/07 08:01:48 pjp Exp $
+ * $Id: db.c,v 1.17 2020/01/14 12:42:04 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -288,11 +288,7 @@ add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata)
 	struct rrset *rp0, *rp;
 	struct rr *rt;
 
-#ifdef __linux__
-	TAILQ_FOREACH(rp, &rbt->rrset_head, entries) {
-#else
 	TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
-#endif
 		if (rrtype == rp->rrtype)
 			break;
 	}
@@ -331,11 +327,7 @@ find_rr(struct rbtree *rbt, u_int16_t rrtype)
 {
 	struct rrset *rp = NULL, *rp0 = NULL;
 
-#ifdef __linux__
-	TAILQ_FOREACH(rp, &rbt->rrset_head, entries) {
-#else
 	TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
-#endif
 		if (rrtype == rp->rrtype)
 			break;
 	}
@@ -354,11 +346,10 @@ display_rr(struct rrset *rrset)
 {
 	struct rr *rrp, *rrp0;
 
-#ifdef __linux__
-	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+	TAILQ_FOREACH_SAFE(rrp, &rrset->rr_head, entries, rrp0) {
+#if __linux__
 		printf("%ld:%u:%s\n", rrp->changed, rrp->ttl, (char *)rrp->rdata);
 #else
-	TAILQ_FOREACH_SAFE(rrp, &rrset->rr_head, entries, rrp0) {
 		printf("%lld:%u:%s\n", rrp->changed, rrp->ttl, (char *)rrp->rdata);
 #endif
 	}

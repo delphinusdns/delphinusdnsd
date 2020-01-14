@@ -26,13 +26,12 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.46 2019/12/11 16:22:26 pjp Exp $
+ * $Id: raxfr.c,v 1.47 2020/01/14 12:42:05 pjp Exp $
  */
 
 #include <sys/types.h>
 #include <sys/select.h>
 #include <sys/socket.h>
-#include <sys/queue.h>
 #include <sys/uio.h>
 #include <sys/stat.h>
 
@@ -1297,11 +1296,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 
 	lastnow = time(NULL);
 
-#ifdef __linux__
-	SLIST_FOREACH(lrz, &rzones, rzone_entry) {
-#else
 	SLIST_FOREACH_SAFE(lrz, &rzones, rzone_entry, lrz0) {
-#endif
 		if (lrz->zonename == NULL)
 			continue;
 
@@ -1346,11 +1341,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 	period = (tot_refresh / zonecount) / zonecount;
 	add_period = period;
 
-#ifdef __linux__
-	SLIST_FOREACH(lrz, &rzones, rzone_entry) {
-#else
 	SLIST_FOREACH_SAFE(lrz, &rzones, rzone_entry, lrz0) {
-#endif
 		if (lrz->zonename == NULL)
 			continue;
 
@@ -1483,11 +1474,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 			continue;
 		}
 
-#ifdef __linux__
-		LIST_FOREACH(sp0, &myschedules, myschedule_entry) {
-#else
 		LIST_FOREACH_SAFE(sp0, &myschedules, myschedule_entry, sp1) {
-#endif
 			if (sp0->when <= now) {
 				/* we hit a timeout on refresh */
 				if (sp0->action == SCHEDULE_ACTION_REFRESH) {

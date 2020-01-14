@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.97 2020/01/01 14:55:22 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.98 2020/01/14 12:42:04 pjp Exp $
  */
 
 
@@ -36,7 +36,6 @@
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
-#include <sys/queue.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <sys/un.h>
@@ -243,7 +242,7 @@ struct tcpentry {
 	int seen;		/* seen heading bytes */
 	int so;
 	time_t last_used;
-	char buf[0xffff + 2];	
+	char buf[0xffff + 3];	
 	char *address;
 	TAILQ_ENTRY(tcpentry) tcpentries;
 } *tcpn1, *tcpn2, *tcpnp;
@@ -2360,7 +2359,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 {
 	fd_set rset;
 	int sel;
-	int len, slen = 0, length = 0;
+	int len, slen = 0;
 	int is_ipv6;
 	int i;
 	int istcp = 1;
@@ -2502,12 +2501,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 		}
 
 		if (sel == 0) {
-#ifndef __linux__
 			TAILQ_FOREACH_SAFE(tcpnp, &tcphead, tcpentries, tcpn1) {
-#else
-			TAILQ_FOREACH(tcpnp, &tcphead, tcpentries) {
-#endif
-			
 				if ((tcpnp->last_used + 3) < time(NULL)) {
 					dolog(LOG_INFO, "tcp timeout on interface \"%s\" for address %s\n", cfg->ident[tcpnp->intidx], tcpnp->address);
 					TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
@@ -2630,11 +2624,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 			} /* FD_ISSET */
 		}
 
-#ifndef __linux__
 		TAILQ_FOREACH_SAFE(tcpnp, &tcphead, tcpentries, tcpn1) {
-#else
-		TAILQ_FOREACH(tcpnp, &tcphead, tcpentries) {
-#endif
 			if (FD_ISSET(tcpnp->so, &rset)) {
 
 				if (tcpnp->bytes_read < 2)
@@ -2662,7 +2652,10 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					tcpnp->bytes_expected = 0;
 
 				if (tcpnp->seen == 0 && tcpnp->bytes_read >= 2) {
-						tcpnp->bytes_expected = ntohs(*((u_int16_t *)&tcpnp->buf[0]));
+						uint16_t u16tmp;
+
+						u16tmp = unpack16(&tcpnp->buf[0]);
+						tcpnp->bytes_expected = ntohs(u16tmp);
 						tcpnp->bytes_limit = tcpnp->bytes_expected;
 						tcpnp->seen = 1;
 				} 
@@ -3155,11 +3148,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 		 * kick off the idlers 
 		 */
 
-#ifndef __linux__
 		TAILQ_FOREACH_SAFE(tcpnp, &tcphead, tcpentries, tcpn1) {
-#else
-		TAILQ_FOREACH(tcpnp, &tcphead, tcpentries) {
-#endif
 			if ((tcpnp->last_used + 3) < time(NULL)) {
 					dolog(LOG_INFO, "tcp timeout on interface \"%s\" for address %s\n", cfg->ident[tcpnp->intidx], tcpnp->address);
 					TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
