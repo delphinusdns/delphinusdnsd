@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.98 2020/01/14 12:42:04 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.99 2020/01/16 13:29:03 pjp Exp $
  */
 
 
@@ -123,7 +123,7 @@ extern void 	init_filter(void);
 extern void 	init_whitelist(void);
 extern void 	init_tsig(void);
 extern void 	init_notifyslave(void);
-extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
+extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
 extern struct rbtree *  Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 extern int 	memcasecmp(u_char *, u_char *, int);
 extern int 	reply_a(struct sreply *, ddDB *);
@@ -1898,7 +1898,7 @@ axfrentry:
 
 				fakequestion = NULL;
 
-				rbt0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring);
+				rbt0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring, sizeof(replystring));
 				if (type0 < 0) {
 					switch (lzerrno) {
 					default:
@@ -2020,7 +2020,7 @@ axfrentry:
 						break;
 					}
 
-					rbt1 = lookup_zone(cfg->db, fakequestion, &type1, &lzerrno, (char *)&fakereplystring);
+					rbt1 = lookup_zone(cfg->db, fakequestion, &type1, &lzerrno, (char *)&fakereplystring, sizeof(fakereplystring));
 					/* break CNAMES pointing to CNAMES */
 					if (type1 == DNS_TYPE_CNAME)
 						type1 = 0;
@@ -2866,7 +2866,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						goto tcpout;
 				}
 
-				rbt0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring);
+				rbt0 = lookup_zone(cfg->db, question, &type0, &lzerrno, (char *)&replystring, sizeof(replystring));
 				if (type0 < 0) {
 	
 					switch (lzerrno) {
@@ -2988,7 +2988,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						break;
 					}
 
-					rbt1 = lookup_zone(cfg->db, fakequestion, &type1, &lzerrno, (char *)&fakereplystring);
+					rbt1 = lookup_zone(cfg->db, fakequestion, &type1, &lzerrno, (char *)&fakereplystring, sizeof(fakereplystring));
 					/* break CNAMES pointing to CNAMES */
 					if (type1 == DNS_TYPE_CNAME)
 						type1 = 0;

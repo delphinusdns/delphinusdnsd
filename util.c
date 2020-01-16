@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.58 2019/12/11 16:22:26 pjp Exp $
+ * $Id: util.c,v 1.59 2020/01/16 13:29:03 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -97,7 +97,7 @@ void slave_shutdown(void);
 int get_record_size(ddDB *, char *, int);
 struct rbtree * 	get_soa(ddDB *, struct question *);
 struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
-struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *);
+struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
 struct rbtree *		Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 u_int16_t check_qtype(struct rbtree *, u_int16_t, int, int *);
 struct question		*build_fake_question(char *, int, u_int16_t, char *, int);
@@ -344,7 +344,7 @@ slave_shutdown(void)
 
 
 struct rbtree *
-lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, char *replystring)
+lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, char *replystring, int replystringsize)
 {
 
 	struct rbtree *rbt = NULL;
@@ -394,7 +394,7 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 				} else {
 					free(rbt0);
 					/* answer the delegation */
-					snprintf(replystring, DNS_MAXNAME, "%s", rbt->humanname);
+					snprintf(replystring, replystringsize, "%s", rbt->humanname);
 					*lzerrno = ERR_DELEGATE;
 					*returnval = -1;
 					return (rbt);
@@ -435,7 +435,7 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 				}
 
 				if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
-					snprintf(replystring, DNS_MAXNAME, "%s", rbt->humanname);
+					snprintf(replystring, replystringsize, "%s", rbt->humanname);
 					*lzerrno = ERR_DELEGATE;
 					*returnval = -1;
 					return (rbt);
@@ -449,7 +449,7 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 		return (NULL);
 	}
 	
-	snprintf(replystring, DNS_MAXNAME, "%s", rbt->humanname);
+	snprintf(replystring, replystringsize, "%s", rbt->humanname);
 
 	if ((ntohs(question->hdr->qtype) != DNS_TYPE_DS) && 
 		(rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL &&
