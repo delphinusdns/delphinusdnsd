@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.48 2020/01/31 18:27:03 pjp Exp $
+ * $Id: raxfr.c,v 1.49 2020/02/01 07:38:04 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1446,7 +1446,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 										dolog(LOG_INFO, "timeout upon notify, dropping\n");
 								} else if (serial > lrz->soa.serial) {
 										/* initiate AXFR and update zone */
-										dolog(LOG_INFO, "zone %s new higher serial detected (%ld vs. %ld)\n", lrz->zonename, serial, lrz->soa.serial);
+										dolog(LOG_INFO, "zone %s new higher serial detected (%lld vs. %d)\n", lrz->zonename, serial, lrz->soa.serial);
 
 										if (pull_rzone(lrz, now) < 0) {
 											dolog(LOG_INFO, "AXFR failed\n");
@@ -1537,7 +1537,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 						} else if (serial > lrz->soa.serial) {
 							/* initiate AXFR and update zone */
 
-							dolog(LOG_INFO, "zone %s new higher serial detected (%ld vs. %ld)\n", lrz->zonename, serial, lrz->soa.serial);
+							dolog(LOG_INFO, "zone %s new higher serial detected (%lld vs. %d)\n", lrz->zonename, serial, lrz->soa.serial);
 
 							if (pull_rzone(lrz, now) < 0) {
 								dolog(LOG_ERR, "AXFR for zone %s failed\n", lrz->zonename);
