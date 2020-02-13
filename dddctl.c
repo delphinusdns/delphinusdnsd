@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.95 2020/01/14 12:42:04 pjp Exp $
+ * $Id: dddctl.c,v 1.96 2020/02/13 11:30:05 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -235,6 +235,8 @@ struct _mycmdtab {
 	{ NULL, NULL }
 };
 
+#define ROLLOVER_METHOD_PRE_PUBLICATION		0
+#define ROLLOVER_METHOD_DOUBLE_SIGNATURE	1
 
 #define KEYTYPE_NONE	0
 #define KEYTYPE_KSK 	1
@@ -423,6 +425,7 @@ signmain(int argc, char *argv[])
 	int ttl = DEFAULT_TTL;
 	int create_zsk = 0;
 	int create_ksk = 0;
+	int rollmethod = ROLLOVER_METHOD_PRE_PUBLICATION;
 	int algorithm = ALGORITHM_RSASHA256;
 	int expiry = DEFAULT_EXPIRYTIME;
 	int iterations = 10;
@@ -463,7 +466,7 @@ signmain(int argc, char *argv[])
 #endif
 
 
-	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:m:n:o:S:s:t:vXx:Zz:")) != -1) {
+	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:m:n:o:R:S:s:t:vXx:Zz:")) != -1) {
 		switch (ch) {
 		case 'a':
 			/* algorithm */
@@ -582,6 +585,18 @@ signmain(int argc, char *argv[])
 			}
 
 			break;
+		case 'R':
+			/* rollover method see RFC 7583 section 2.1 */
+			if (strcmp(optarg, "prep") == 0) {
+				rollmethod = ROLLOVER_METHOD_PRE_PUBLICATION;
+			} else if (strcmp(optarg, "double") == 0) {
+				rollmethod = ROLLOVER_METHOD_DOUBLE_SIGNATURE;
+				dolog(LOG_INFO, "rollover method double-signature is not supported yet.\n");
+				exit(1);
+			}
+			
+			break;
+
 		case 'S':
 			pid = atoi(optarg);
 
@@ -796,16 +811,27 @@ signmain(int argc, char *argv[])
 
 
 	/* check what keys we sign or not */
-	if (numkeys > 3) {
-		dolog(LOG_INFO, "can't roll-over more than 1 key at a time! numkeys > 3\n");
+	if ((rollmethod == ROLLOVER_METHOD_PRE_PUBLICATION && numkeys > 3) ||
+		(rollmethod == ROLLOVER_METHOD_DOUBLE_SIGNATURE && numkeys > 4)) {
+		switch (rollmethod) {
+		case ROLLOVER_METHOD_PRE_PUBLICATION:
+			dolog(LOG_INFO, "rollover pre-publication method: can't roll-over more than 1 key at a time! numkeys > 3\n");
+			break;
+		case ROLLOVER_METHOD_DOUBLE_SIGNATURE:
+			dolog(LOG_INFO, "rollover double-signature method: can't roll-over more than 2 keys at a time!  numkeys > 4\n");
+			break;
+		}
+
 		exit(1);
-	} else if (numkeys == 2) {
+	} else if ((numkeys > 2 && rollmethod == ROLLOVER_METHOD_DOUBLE_SIGNATURE) || numkeys == 2) {
+		/* sign them all */
 		SLIST_FOREACH(knp, &keyshead, keys_entry) {
 			knp->sign = 1;
 		}
 	} else {
+		/* we can only be pre-publication method and have 3 keys now */
 		if (pid == -1) {
-			fprintf(stderr, "you specified three keys, please select one for signing (with -S pid)!\n");
+			fprintf(stderr, "pre-publication rollover: you specified three keys, please select one for signing (with -S pid)!\n");
 			exit(1);
 		}
 
