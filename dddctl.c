@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.97 2020/02/14 13:30:54 pjp Exp $
+ * $Id: dddctl.c,v 1.98 2020/02/14 13:43:20 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -158,23 +158,23 @@ int	dump_db_bind(ddDB*, FILE *, char *);
 char * 	alg_to_name(int);
 int 	alg_to_rsa(int);
 int 	construct_nsec3(ddDB *, char *, int, char *);
-int 	calculate_rrsigs(ddDB *, char *, int);
-int	sign_dnskey(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int 	sign_a(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int 	sign_mx(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int 	sign_ns(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int 	sign_srv(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int 	sign_cname(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int 	sign_soa(ddDB *, char *, struct keysentry  *, int, struct rbtree *);
-int	sign_txt(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int	sign_aaaa(ddDB *, char *, struct keysentry  *, int, struct rbtree *);
-int	sign_ptr(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int	sign_nsec3(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int	sign_nsec3param(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int	sign_naptr(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int	sign_sshfp(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int	sign_tlsa(ddDB *, char *, struct keysentry *, int, struct rbtree *);
-int	sign_ds(ddDB *, char *, struct keysentry *, int, struct rbtree *);
+int 	calculate_rrsigs(ddDB *, char *, int, int);
+int	sign_dnskey(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int 	sign_a(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int 	sign_mx(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int 	sign_ns(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int 	sign_srv(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int 	sign_cname(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int 	sign_soa(ddDB *, char *, struct keysentry  *, int, struct rbtree *, int);
+int	sign_txt(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int	sign_aaaa(ddDB *, char *, struct keysentry  *, int, struct rbtree *, int);
+int	sign_ptr(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int	sign_nsec3(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int	sign_nsec3param(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int	sign_naptr(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int	sign_sshfp(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int	sign_tlsa(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int	sign_ds(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
 int 	sign(int, char *, int, struct keysentry *, char *, int *);
 int 	create_ds(ddDB *, char *, struct keysentry *);
 u_int 	keytag(u_char *key, u_int keysize);
@@ -900,7 +900,7 @@ signmain(int argc, char *argv[])
 
 	/* third  pass calculate RRSIG's for every RR set */
 
-	if ((mask & MASK_CALCULATE_RRSIGS) && calculate_rrsigs(db, zonename, expiry) < 0) {
+	if ((mask & MASK_CALCULATE_RRSIGS) && calculate_rrsigs(db, zonename, expiry, rollmethod) < 0) {
 		dolog(LOG_INFO, "calculate rrsigs failed\n");
 		exit(1);
 	}
@@ -1760,7 +1760,7 @@ alg_to_rsa(int algorithm)
 }
 
 int
-calculate_rrsigs(ddDB *db, char *zonename, int expiry)
+calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 {
 	struct keysentry *zsk_key = NULL;
 	struct node *n, *nx;
@@ -1808,38 +1808,38 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 		memcpy((char *)rbt, (char *)n->data, n->datalen);
 		
 		if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
-			if (sign_dnskey(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_dnskey(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_dnskey error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
 			if (notglue(db, rbt, zonename) && 
-				sign_a(db, zonename, zsk_key, expiry, rbt) < 0) {
+				sign_a(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_a error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
-			if (sign_mx(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_mx(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_mx error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
-			if (sign_ns(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_ns(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_ns error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
-			if (sign_soa(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_soa(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_soa error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
-			if (sign_txt(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_txt(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_txt error\n");
 				return -1;
 			}
@@ -1847,61 +1847,61 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
 		if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
 			/* find out if we're glue, if not sign */
 			if (notglue(db, rbt, zonename) && 
-				sign_aaaa(db, zonename, zsk_key, expiry, rbt) < 0) {
+				sign_aaaa(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_aaaa error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
-			if (sign_nsec3(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_nsec3(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_nsec3 error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
-			if (sign_nsec3param(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_nsec3param(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_nsec3param error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
-			if (sign_cname(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_cname(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_cname error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
-			if (sign_ptr(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_ptr(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_ptr error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
-			if (sign_naptr(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_naptr(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_naptr error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
-			if (sign_srv(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_srv(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_srv error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
-			if (sign_sshfp(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_sshfp(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_sshfp error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
-			if (sign_tlsa(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_tlsa(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_tlsa error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
-			if (sign_ds(db, zonename, zsk_key, expiry, rbt) < 0) {
+			if (sign_ds(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_ds error\n");
 				return -1;
 			}
@@ -1921,7 +1921,7 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry)
  */
 
 int
-sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -2086,7 +2086,7 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
  */
 
 int
-sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL, *rrp2 = NULL;
@@ -2296,7 +2296,7 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
  * create a RRSIG for an AAAA record
  */
 int
-sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -2506,7 +2506,7 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
  */
 
 int
-sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -2682,7 +2682,7 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
  */
 
 int
-sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -2847,7 +2847,7 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
  */
 
 int
-sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -3000,7 +3000,7 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
  */
 
 int
-sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -3153,7 +3153,7 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
  */
 
 int
-sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -3382,7 +3382,7 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
  */
 
 int
-sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -3599,7 +3599,7 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
  */
 
 int
-sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -3813,7 +3813,7 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
  */
 
 int
-sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -4031,7 +4031,7 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
  */
 
 int
-sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct rbtree *rbt)
+sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -4245,7 +4245,7 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
  * create a RRSIG for an NS record
  */
 int
-sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -4453,7 +4453,7 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
  */
 
 int
-sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -4664,7 +4664,7 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
  */
 
 int
-sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -5057,7 +5057,7 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
  */
 
 int
-sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt)
+sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
