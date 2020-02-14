@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2016-2019 Peter J. Philipp
+ * Copyright (c) 2016-2020 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.96 2020/02/13 11:30:05 pjp Exp $
+ * $Id: dddctl.c,v 1.97 2020/02/14 13:30:54 pjp Exp $
  */
 
 #include <sys/param.h>
