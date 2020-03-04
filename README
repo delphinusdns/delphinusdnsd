@@ -1,4 +1,4 @@
-$Id: README,v 1.42 2020/01/01 16:45:42 pjp Exp $
+$Id: README,v 1.43 2020/03/04 17:39:18 pjp Exp $
 
 1. README
  1.1 AUTHOR(S)
@@ -257,9 +257,9 @@ Here is an example zone entry for ip6.centroid.eu:
 --------------------------------------------------
 
 Currently only 4 algorithms are supported.   There is RSASHA1-NSEC3-SHA1 
-which has algorithm 7, there is RSASHA256 which has algorithm 8 (the default), 
+which has algorithm 7, there is RSASHA256 which has algorithm 8, 
 and there is RSASHA512 which has algorithm 10.  Finally the ECDSAP256SHA256
-algorithm (alg 13), is supported.
+algorithm (alg 13) (is now default), is supported.
 
 6.6 What happened to dd-convert
 -------------------------------

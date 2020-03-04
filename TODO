@@ -6,8 +6,9 @@ For 1.5.0 release
   the set requires per RFC 2181 section 5.2 to be the same in the RRset.
 - CAA RR support
 - a github mirrored copy
-- an OpenBSD port/package starting with 1.4 release
+- an OpenBSD port/package starting with 1.4.1 release	[IN THE WORKS]
 - fix the DNSSEC and delphinusdnsd(?) code so that an algorithm rollover works
+	[POSSIBLY DONE]
 - filter input to dddctl query for escape codes.
 
 For 1.4.0 release

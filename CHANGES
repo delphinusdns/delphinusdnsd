@@ -1,6 +1,8 @@
 Changes in RELEASE_1_5 from RELEASE_1_4
 
-- none yet
+- implement a double-signature rollover method
+- allow ZSK and KSK keys to be created without signing
+- switch default algorithm to alg 13 (elliptic curve) instead of alg 8 (RSA)
 
 Changes in RELEASE_1_4 from RELEASE_1_3
 

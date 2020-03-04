@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.101 2020/03/04 17:27:35 pjp Exp $
+ * $Id: dddctl.c,v 1.102 2020/03/04 17:39:18 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -428,7 +428,7 @@ signmain(int argc, char *argv[])
 	int create_zsk = 0;
 	int create_ksk = 0;
 	int rollmethod = ROLLOVER_METHOD_PRE_PUBLICATION;
-	int algorithm = ALGORITHM_RSASHA256;
+	int algorithm = ALGORITHM_ECDSAP256SHA256;
 	int expiry = DEFAULT_EXPIRYTIME;
 	int iterations = 10;
 	u_int32_t mask = (MASK_PARSE_FILE | MASK_ADD_DNSKEY | MASK_CONSTRUCT_NSEC3 | MASK_CALCULATE_RRSIGS | MASK_CREATE_DS | MASK_DUMP_DB);
