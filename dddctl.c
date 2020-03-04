@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.99 2020/03/04 17:09:14 pjp Exp $
+ * $Id: dddctl.c,v 1.100 2020/03/04 17:15:33 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -204,7 +204,7 @@ int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *
 int	count_db(ddDB *);
 void	update_soa_serial(ddDB *, char *, time_t);
 int	notglue(ddDB *, struct rbtree *, char *);
-char * wire_dnskey_rdata(struct rr *, int *);
+char * dnskey_wire_rdata(struct rr *, int *);
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 
@@ -5526,7 +5526,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 			
 				memcpy(c1->data, tmpkey, c1->len);
 
-				c1->rdata = wire_dnskey_rdata(rrp2, &c1->rdatalen);
+				c1->rdata = dnskey_wire_rdata(rrp2, &c1->rdatalen);
 				if (c1->rdata == NULL) {
 					dolog(LOG_INFO, "c1->rdata out of memory\n");
 					return -1;
@@ -5716,7 +5716,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 
 			memcpy(c1->data, tmpkey, c1->len);
 
-			c1->rdata = wire_dnskey_rdata(rrp2, &c1->rdatalen);
+			c1->rdata = dnskey_wire_rdata(rrp2, &c1->rdatalen);
 			if (c1->rdata == NULL) {
 				dolog(LOG_INFO, "c1->rdata out of memory\n");
 				return -1;
@@ -8455,11 +8455,11 @@ notglue(ddDB *db, struct rbtree *rbt, char *zonename)
 }
 
 /*
- * WIRE_RDATA - create a wire representation of the RDATA portion of an RR
+ * DNSKEY_WIRE_RDATA - create wire representation of the RDATA portion of an RR
  */
 
 char *
-wire_dnskey_rdata(struct rr *rr, int *outlen)
+dnskey_wire_rdata(struct rr *rr, int *outlen)
 {
 	char *tmp = NULL, *p;
 
