@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.100 2020/03/04 17:15:33 pjp Exp $
+ * $Id: dddctl.c,v 1.101 2020/03/04 17:27:35 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -693,11 +693,11 @@ signmain(int argc, char *argv[])
 	
 	}
 
-	if (zonefile == NULL || zonename == NULL) {
-		fprintf(stderr, "must provide a zonefile and a zonename!\n");
+
+	if (zonename == NULL) {
+		fprintf(stderr, "must provide a zonename with the -n flag\n");
 		exit(1);
 	}
-
 
 	if (create_ksk) {
 		kn = malloc(sizeof(struct keysentry));
@@ -803,6 +803,15 @@ signmain(int argc, char *argv[])
 		numzsk++;
 	}
 
+	if (zonefile == NULL || zonename == NULL) {
+		if (create_zsk || create_ksk) {
+			fprintf(stderr, "key(s) created\n");
+			exit(0);
+		}
+
+		fprintf(stderr, "must provide a zonefile and a zonename!\n");
+		exit(1);
+	} 
 
 	if (ksk_key == 0 || zsk_key == 0) {
 		dolog(LOG_INFO, "must specify both a ksk and a zsk key! or -z -k\n");
