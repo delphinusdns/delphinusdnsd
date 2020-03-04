@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.98 2020/02/14 13:43:20 pjp Exp $
+ * $Id: dddctl.c,v 1.99 2020/03/04 17:09:14 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -159,25 +159,26 @@ char * 	alg_to_name(int);
 int 	alg_to_rsa(int);
 int 	construct_nsec3(ddDB *, char *, int, char *);
 int 	calculate_rrsigs(ddDB *, char *, int, int);
-int	sign_dnskey(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int 	sign_a(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int 	sign_mx(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int 	sign_ns(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int 	sign_srv(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int 	sign_cname(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int 	sign_soa(ddDB *, char *, struct keysentry  *, int, struct rbtree *, int);
-int	sign_txt(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int	sign_aaaa(ddDB *, char *, struct keysentry  *, int, struct rbtree *, int);
-int	sign_ptr(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int	sign_nsec3(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int	sign_nsec3param(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int	sign_naptr(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int	sign_sshfp(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int	sign_tlsa(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
-int	sign_ds(ddDB *, char *, struct keysentry *, int, struct rbtree *, int);
+int	sign_dnskey(ddDB *, char *, int, struct rbtree *, int);
+int 	sign_a(ddDB *, char *, int, struct rbtree *, int);
+int 	sign_mx(ddDB *, char *, int, struct rbtree *, int);
+int 	sign_ns(ddDB *, char *, int, struct rbtree *, int);
+int 	sign_srv(ddDB *, char *, int, struct rbtree *, int);
+int 	sign_cname(ddDB *, char *, int, struct rbtree *, int);
+int 	sign_soa(ddDB *, char *, int, struct rbtree *, int);
+int	sign_txt(ddDB *, char *, int, struct rbtree *, int);
+int	sign_aaaa(ddDB *, char *, int, struct rbtree *, int);
+int	sign_ptr(ddDB *, char *, int, struct rbtree *, int);
+int	sign_nsec3(ddDB *, char *, int, struct rbtree *, int);
+int	sign_nsec3param(ddDB *, char *, int, struct rbtree *, int);
+int	sign_naptr(ddDB *, char *, int, struct rbtree *, int);
+int	sign_sshfp(ddDB *, char *, int, struct rbtree *, int);
+int	sign_tlsa(ddDB *, char *, int, struct rbtree *, int);
+int	sign_ds(ddDB *, char *, int, struct rbtree *, int);
 int 	sign(int, char *, int, struct keysentry *, char *, int *);
 int 	create_ds(ddDB *, char *, struct keysentry *);
 u_int 	keytag(u_char *key, u_int keysize);
+u_int 	dnskey_keytag(struct dnskey *dnskey);
 void	free_private_key(struct keysentry *);
 RSA * 	get_private_key_rsa(struct keysentry *);
 EC_KEY *get_private_key_ec(struct keysentry *);
@@ -203,6 +204,7 @@ int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *
 int	count_db(ddDB *);
 void	update_soa_serial(ddDB *, char *, time_t);
 int	notglue(ddDB *, struct rbtree *, char *);
+char * wire_dnskey_rdata(struct rr *, int *);
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 
@@ -591,8 +593,6 @@ signmain(int argc, char *argv[])
 				rollmethod = ROLLOVER_METHOD_PRE_PUBLICATION;
 			} else if (strcmp(optarg, "double") == 0) {
 				rollmethod = ROLLOVER_METHOD_DOUBLE_SIGNATURE;
-				dolog(LOG_INFO, "rollover method double-signature is not supported yet.\n");
-				exit(1);
 			}
 			
 			break;
@@ -824,6 +824,9 @@ signmain(int argc, char *argv[])
 
 		exit(1);
 	} else if ((numkeys > 2 && rollmethod == ROLLOVER_METHOD_DOUBLE_SIGNATURE) || numkeys == 2) {
+#if 0
+	} else if (numkeys == 2) {
+#endif
 		/* sign them all */
 		SLIST_FOREACH(knp, &keyshead, keys_entry) {
 			knp->sign = 1;
@@ -1762,7 +1765,6 @@ alg_to_rsa(int algorithm)
 int
 calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 {
-	struct keysentry *zsk_key = NULL;
 	struct node *n, *nx;
 	struct rbtree *rbt;
 	struct rrset *rrset = NULL;
@@ -1771,13 +1773,6 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 	time_t now, twoweeksago; 
 	char timebuf[32];
 	struct tm *tm;
-
-	/* set ZSK key, there can be only two set max */
-	
-	SLIST_FOREACH(knp, &keyshead, keys_entry) {
-		if (knp->sign == 1 && knp->type == KEYTYPE_ZSK)
-			zsk_key = knp;
-	}
 
 	/* set expiredon and signedon */
 
@@ -1808,38 +1803,38 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 		memcpy((char *)rbt, (char *)n->data, n->datalen);
 		
 		if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
-			if (sign_dnskey(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_dnskey(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_dnskey error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
 			if (notglue(db, rbt, zonename) && 
-				sign_a(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+				sign_a(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_a error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
-			if (sign_mx(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_mx(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_mx error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
-			if (sign_ns(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_ns(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_ns error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
-			if (sign_soa(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_soa(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_soa error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
-			if (sign_txt(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_txt(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_txt error\n");
 				return -1;
 			}
@@ -1847,61 +1842,61 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 		if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
 			/* find out if we're glue, if not sign */
 			if (notglue(db, rbt, zonename) && 
-				sign_aaaa(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+				sign_aaaa(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_aaaa error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
-			if (sign_nsec3(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_nsec3(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_nsec3 error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
-			if (sign_nsec3param(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_nsec3param(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_nsec3param error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
-			if (sign_cname(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_cname(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_cname error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
-			if (sign_ptr(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_ptr(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_ptr error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
-			if (sign_naptr(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_naptr(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_naptr error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
-			if (sign_srv(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_srv(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_srv error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
-			if (sign_sshfp(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_sshfp(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_sshfp error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
-			if (sign_tlsa(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_tlsa(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_tlsa error\n");
 				return -1;
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
-			if (sign_ds(db, zonename, zsk_key, expiry, rbt, rollmethod) < 0) {
+			if (sign_ds(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_ds error\n");
 				return -1;
 			}
@@ -1921,10 +1916,11 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
  */
 
 int
-sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_soa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -1946,7 +1942,7 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -1960,123 +1956,143 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		return -1;
 	}
 
-	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
 		return -1;
 	}
 
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no SOA records but have rrset entry!\n");
-                        return -1;
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
 		}
-	} else  {
-		dolog(LOG_INFO, "no SOA records\n");
-		return -1;
 	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_SOA));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct soa *)rrp->rdata)->ttl));
-	p += 4;
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
-	
-	pack(p, rbt->zone, rbt->zonelen);
-	p += rbt->zonelen;
-	pack16(p, htons(DNS_TYPE_SOA));
-	p += 2;
-	pack16(p, htons(DNS_CLASS_IN));
-	p += 2;
-	pack32(p, htonl(((struct soa *)rrp->rdata)->ttl));
-	p += 4;
-	pack16(p, htons(((struct soa *)rrp->rdata)->nsserver_len + ((struct soa *)rrp->rdata)->rp_len + 4 + 4 + 4 + 4 + 4));
-	p += 2;
-	pack(p, ((struct soa *)rrp->rdata)->nsserver, ((struct soa *)rrp->rdata)->nsserver_len);
-	p += ((struct soa *)rrp->rdata)->nsserver_len;
-	pack(p, ((struct soa *)rrp->rdata)->responsible_person, ((struct soa *)rrp->rdata)->rp_len);
-	p += ((struct soa *)rrp->rdata)->rp_len;
-	pack32(p, htonl(((struct soa *)rrp->rdata)->serial));
-	p += sizeof(u_int32_t);
-	pack32(p, htonl(((struct soa *)rrp->rdata)->refresh));
-	p += sizeof(u_int32_t);
-	pack32(p, htonl(((struct soa *)rrp->rdata)->retry));
-	p += sizeof(u_int32_t);
-	pack32(p, htonl(((struct soa *)rrp->rdata)->expire));
-	p += sizeof(u_int32_t);
-	pack32(p, htonl(((struct soa *)rrp->rdata)->minttl));
-	p += sizeof(u_int32_t);
+		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no SOA records but have rrset entry!\n");
+				return -1;
+			}
+		} else  {
+			dolog(LOG_INFO, "no SOA records\n");
+			return -1;
+		}
+		
+		p = key;
 
-	keylen = (p - key);	
+		pack16(p, htons(DNS_TYPE_SOA));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct soa *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-#if 0
-	debug_bindump(key, keylen);
-	
-#endif
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		pack(p, rbt->zone, rbt->zonelen);
+		p += rbt->zonelen;
+		pack16(p, htons(DNS_TYPE_SOA));
+		p += 2;
+		pack16(p, htons(DNS_CLASS_IN));
+		p += 2;
+		pack32(p, htonl(((struct soa *)rrp->rdata)->ttl));
+		p += 4;
+		pack16(p, htons(((struct soa *)rrp->rdata)->nsserver_len + ((struct soa *)rrp->rdata)->rp_len + 4 + 4 + 4 + 4 + 4));
+		p += 2;
+		pack(p, ((struct soa *)rrp->rdata)->nsserver, ((struct soa *)rrp->rdata)->nsserver_len);
+		p += ((struct soa *)rrp->rdata)->nsserver_len;
+		pack(p, ((struct soa *)rrp->rdata)->responsible_person, ((struct soa *)rrp->rdata)->rp_len);
+		p += ((struct soa *)rrp->rdata)->rp_len;
+		pack32(p, htonl(((struct soa *)rrp->rdata)->serial));
+		p += sizeof(u_int32_t);
+		pack32(p, htonl(((struct soa *)rrp->rdata)->refresh));
+		p += sizeof(u_int32_t);
+		pack32(p, htonl(((struct soa *)rrp->rdata)->retry));
+		p += sizeof(u_int32_t);
+		pack32(p, htonl(((struct soa *)rrp->rdata)->expire));
+		p += sizeof(u_int32_t);
+		pack32(p, htonl(((struct soa *)rrp->rdata)->minttl));
+		p += sizeof(u_int32_t);
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct soa *)rrp->rdata)->ttl, "SOA", algorithm, labels, ((struct soa *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+		keylen = (p - key);	
+
+	#if 0
+		debug_bindump(key, keylen);
+		
+	#endif
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct soa *)rrp->rdata)->ttl, "SOA", algorithm, labels, ((struct soa *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -2086,10 +2102,11 @@ sign_soa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
  */
 
 int
-sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL, *rrp2 = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2111,7 +2128,7 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -2119,14 +2136,14 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 
 	TAILQ_HEAD(listhead, canonical) head;
 
-	struct canonical {
-		char *data;
-		int len;
-		TAILQ_ENTRY(canonical) entries;
-	} *c1, *c2, *cp;
+ 	struct canonical {
+  		char *data;
+  		int len;
+  		TAILQ_ENTRY(canonical) entries;
+ 	} *c1, *c2, *cp;
 
-	TAILQ_INIT(&head);
 
+ 	TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -2141,153 +2158,166 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		return -1;
 	}
 
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
+		return -1;
+	}
+
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
+		}
+	}
+
+	zsk_key[nzk] = NULL;
 
 	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
-		return -1;
-	}
-
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no TXT records but have rrset entry!\n");
-                        return -1;
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
 		}
-	} else {
-		dolog(LOG_INFO, "no TXT records\n");
-		return -1;
-	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_TXT));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct txt *)rrp->rdata)->ttl));
-	p += sizeof(u_int32_t);
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-		q = tmpkey;
-		pack(q, rbt->zone, rbt->zonelen);
-		q += rbt->zonelen;
-		pack16(q, htons(DNS_TYPE_TXT));
-		q += 2;
-		pack16(q, htons(DNS_CLASS_IN));
-		q += 2;
-		/* the below uses rrp! because we can't have an rrsig differ */
-		pack32(q, htonl(((struct txt *)rrp->rdata)->ttl));
-		q += 4;
-		pack16(q, htons(((struct txt *)rrp2->rdata)->txtlen));
-		q += 2;
-		pack(q, (char *)((struct txt *)rrp2->rdata)->txt, ((struct txt *)rrp2->rdata)->txtlen);
-		q += ((struct txt *)rrp2->rdata)->txtlen;
+		if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no TXT records but have rrset entry!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no TXT records\n");
+			return -1;
+		}
+		
+		p = key;
 
-	        c1 = malloc(sizeof(struct canonical));
-                if (c1 == NULL) {
-                        dolog(LOG_INFO, "c1 out of memory\n");
-                        return -1;
-                }
+		pack16(p, htons(DNS_TYPE_TXT));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct txt *)rrp->rdata)->ttl));
+		p += sizeof(u_int32_t);
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-                c1->len = (q - tmpkey);
-                c1->data = malloc(c1->len);
-                if (c1->data == NULL) {
-                        dolog(LOG_INFO, "c1->data out of memory\n");
-                        return -1;
-                }
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-                memcpy(c1->data, tmpkey, c1->len);
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+  			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_TXT));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			/* the below uses rrp! because we can't have an rrsig differ */
+			pack32(q, htonl(((struct txt *)rrp->rdata)->ttl));
+			q += 4;
+			pack16(q, htons(((struct txt *)rrp2->rdata)->txtlen));
+			q += 2;
+			pack(q, (char *)((struct txt *)rrp2->rdata)->txt, ((struct txt *)rrp2->rdata)->txtlen);
+			q += ((struct txt *)rrp2->rdata)->txtlen;
 
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
+			c1 = malloc(sizeof(struct canonical));
+			if (c1 == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
 
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
-	}
+			c1->len = (q - tmpkey);
+			c1->data = malloc(c1->len);
+			if (c1->data == NULL) {
+				dolog(LOG_INFO, "c1->data out of memory\n");
+				return -1;
+			}
 
-	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
+			memcpy(c1->data, tmpkey, c1->len);
 
-                TAILQ_REMOVE(&head, c2, entries);
-        }
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			else {
+				TAILQ_FOREACH(c2, &head, entries) {
+					if (c1->len < c2->len)
+						break;
+					else if (c2->len == c1->len &&
+						 memcmp(c1->data, c2->data, c1->len) < 0)
+						break;
+			}
 
+			if (c2 != NULL)
+				TAILQ_INSERT_BEFORE(c2, c1, entries);
+			else
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			}
+		}
 
-	keylen = (p - key);	
+		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+			pack(p, c2->data, c2->len);
+			p += c2->len;
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
+			TAILQ_REMOVE(&head, c2, entries);
+		}
 
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+		keylen = (p - key);	
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct txt *)rrp->rdata)->ttl, "TXT", algorithm, labels, ((struct txt *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct txt *)rrp->rdata)->ttl, "TXT", algorithm, labels, ((struct txt *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -2296,11 +2326,12 @@ sign_txt(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
  * create a RRSIG for an AAAA record
  */
 int
-sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2322,7 +2353,7 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -2349,154 +2380,174 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 		dolog(LOG_INFO, "tmpkey out of memory\n");
 		return -1;
 	}
+	
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
+		return -1;
+	}
+
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
+		}
+	}
+
+	zsk_key[nzk] = NULL;
 
 	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
-		return -1;
-	}
-
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no AAAA records but have flags!\n");
-                        return -1;
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
 		}
-	} else {
-		dolog(LOG_INFO, "no AAAA records\n");
-		return -1;
-	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_AAAA));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct aaaa *)rrp->rdata)->ttl));
-	p += 4;
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	
-	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-		q = tmpkey;
-		pack(q, rbt->zone, rbt->zonelen);
-		q += rbt->zonelen;
-		pack16(q, htons(DNS_TYPE_AAAA));
-		q += 2;
-		pack16(q, htons(DNS_CLASS_IN));
-		q += 2;
-		/* the below uses rrp! because we can't have an rrsig differ */
-		pack32(q, htonl(((struct aaaa *)rrp->rdata)->ttl));
-		q += 4;
-		pack16(q, htons(sizeof(struct in6_addr)));
-		q += 2;
-		pack(q, (char *)&((struct aaaa *)rrp2->rdata)->aaaa, sizeof(struct in6_addr));
-		q += sizeof(struct in6_addr);
+		if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no AAAA records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no AAAA records\n");
+			return -1;
+		}
+		
+		p = key;
 
-	        c1 = malloc(sizeof(struct canonical));
-                if (c1 == NULL) {
-                        dolog(LOG_INFO, "c1 out of memory\n");
-                        return -1;
-                }
+		pack16(p, htons(DNS_TYPE_AAAA));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct aaaa *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-                c1->len = (q - tmpkey);
-                c1->data = malloc(c1->len);
-                if (c1->data == NULL) {
-                        dolog(LOG_INFO, "c1->data out of memory\n");
-                        return -1;
-                }
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-                memcpy(c1->data, tmpkey, c1->len);
+		/* no signature here */	
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_AAAA));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			/* the below uses rrp! because we can't have an rrsig differ */
+			pack32(q, htonl(((struct aaaa *)rrp->rdata)->ttl));
+			q += 4;
+			pack16(q, htons(sizeof(struct in6_addr)));
+			q += 2;
+			pack(q, (char *)&((struct aaaa *)rrp2->rdata)->aaaa, sizeof(struct in6_addr));
+			q += sizeof(struct in6_addr);
 
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
+			c1 = malloc(sizeof(struct canonical));
+			if (c1 == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
 
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
-	}
+			c1->len = (q - tmpkey);
+			c1->data = malloc(c1->len);
+			if (c1->data == NULL) {
+				dolog(LOG_INFO, "c1->data out of memory\n");
+				return -1;
+			}
 
-	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
+			memcpy(c1->data, tmpkey, c1->len);
 
-                TAILQ_REMOVE(&head, c2, entries);
-        }
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			else {
+				TAILQ_FOREACH(c2, &head, entries) {
+					if (c1->len < c2->len)
+						break;
+					else if (c2->len == c1->len &&
+						memcmp(c1->data, c2->data, c1->len) < 0)
+						break;
+				}
 
-	keylen = (p - key);	
+				if (c2 != NULL)
+					TAILQ_INSERT_BEFORE(c2, c1, entries);
+				else
+					TAILQ_INSERT_TAIL(&head, c1, entries);
+			}
+		}
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
+		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+			pack(p, c2->data, c2->len);
+			p += c2->len;
 
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+			TAILQ_REMOVE(&head, c2, entries);
+		}
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+		keylen = (p - key);	
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct aaaa *)rrp->rdata)->ttl, "AAAA", algorithm, labels, ((struct aaaa *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+	#if 0
+		debug_bindump(key, keylen);
+	#endif
+
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct aaaa *)rrp->rdata)->ttl, "AAAA", algorithm, labels, ((struct aaaa *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -2506,10 +2557,11 @@ sign_aaaa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
  */
 
 int
-sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_nsec3(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2531,7 +2583,7 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -2545,133 +2597,152 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		return -1;
 	}
 
-	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
 		return -1;
 	}
 
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no NSEC3 records but have flags!\n");
-                        return -1;
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
 		}
-	} else {
-		dolog(LOG_INFO, "no NSEC3 records\n");
-                return -1;
 	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_NSEC3));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct nsec3 *)rrp->rdata)->ttl));
-	p += 4;
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do { 
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
-	
-	pack(p, rbt->zone, rbt->zonelen);
-	p += rbt->zonelen;
-
-	pack16(p, htons(DNS_TYPE_NSEC3));
-	p += 2;
-	pack16(p, htons(DNS_CLASS_IN));
-	p += 2;
-	pack32(p, htonl(((struct nsec3 *)rrp->rdata)->ttl));
-	p += 4;
-	pack16(p, htons(1 + 1 + 2 + 1 + ((struct nsec3 *)rrp->rdata)->saltlen + 1 + ((struct nsec3 *)rrp->rdata)->nextlen + ((struct nsec3 *)rrp->rdata)->bitmap_len));
-	p += 2;
-	pack8(p, ((struct nsec3 *)rrp->rdata)->algorithm);
-	p++;
-	pack8(p, ((struct nsec3 *)rrp->rdata)->flags);
-	p++;
-	pack16(p, htons(((struct nsec3 *)rrp->rdata)->iterations));
-	p += 2;
-	
-	pack8(p, ((struct nsec3 *)rrp->rdata)->saltlen);
-	p++;
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no NSEC3 records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no NSEC3 records\n");
+			return -1;
+		}
 		
-	if (((struct nsec3 *)rrp->rdata)->saltlen) {
-		pack(p, ((struct nsec3 *)rrp->rdata)->salt, ((struct nsec3 *)rrp->rdata)->saltlen);
-		p += ((struct nsec3 *)rrp->rdata)->saltlen;
-	} 
-	
-	pack8(p, ((struct nsec3 *)rrp->rdata)->nextlen);
-	p++;
-	pack(p, ((struct nsec3 *)rrp->rdata)->next, ((struct nsec3 *)rrp->rdata)->nextlen);
-	p += ((struct nsec3 *)rrp->rdata)->nextlen;
-	if (((struct nsec3 *)rrp->rdata)->bitmap_len) {
-		pack(p, ((struct nsec3 *)rrp->rdata)->bitmap, ((struct nsec3 *)rrp->rdata)->bitmap_len);
-		p += ((struct nsec3 *)rrp->rdata)->bitmap_len;
-	}
-	
-	keylen = (p - key);	
+		p = key;
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
+		pack16(p, htons(DNS_TYPE_NSEC3));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct nsec3 *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		pack(p, rbt->zone, rbt->zonelen);
+		p += rbt->zonelen;
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct nsec3 *)rrp->rdata)->ttl, "NSEC3", algorithm, labels, ((struct nsec3 *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+		pack16(p, htons(DNS_TYPE_NSEC3));
+		p += 2;
+		pack16(p, htons(DNS_CLASS_IN));
+		p += 2;
+		pack32(p, htonl(((struct nsec3 *)rrp->rdata)->ttl));
+		p += 4;
+		pack16(p, htons(1 + 1 + 2 + 1 + ((struct nsec3 *)rrp->rdata)->saltlen + 1 + ((struct nsec3 *)rrp->rdata)->nextlen + ((struct nsec3 *)rrp->rdata)->bitmap_len));
+		p += 2;
+		pack8(p, ((struct nsec3 *)rrp->rdata)->algorithm);
+		p++;
+		pack8(p, ((struct nsec3 *)rrp->rdata)->flags);
+		p++;
+		pack16(p, htons(((struct nsec3 *)rrp->rdata)->iterations));
+		p += 2;
+		
+		pack8(p, ((struct nsec3 *)rrp->rdata)->saltlen);
+		p++;
+			
+		if (((struct nsec3 *)rrp->rdata)->saltlen) {
+			pack(p, ((struct nsec3 *)rrp->rdata)->salt, ((struct nsec3 *)rrp->rdata)->saltlen);
+			p += ((struct nsec3 *)rrp->rdata)->saltlen;
+		} 
+		
+		pack8(p, ((struct nsec3 *)rrp->rdata)->nextlen);
+		p++;
+		pack(p, ((struct nsec3 *)rrp->rdata)->next, ((struct nsec3 *)rrp->rdata)->nextlen);
+		p += ((struct nsec3 *)rrp->rdata)->nextlen;
+		if (((struct nsec3 *)rrp->rdata)->bitmap_len) {
+			pack(p, ((struct nsec3 *)rrp->rdata)->bitmap, ((struct nsec3 *)rrp->rdata)->bitmap_len);
+			p += ((struct nsec3 *)rrp->rdata)->bitmap_len;
+		}
+		
+		keylen = (p - key);	
+
+	#if 0
+		debug_bindump(key, keylen);
+	#endif
+
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct nsec3 *)rrp->rdata)->ttl, "NSEC3", algorithm, labels, ((struct nsec3 *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -2682,10 +2753,11 @@ sign_nsec3(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
  */
 
 int
-sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_nsec3param(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2707,7 +2779,7 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -2721,123 +2793,142 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
 		return -1;
 	}
 
-	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
 		return -1;
 	}
 
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no NSEC3PARAM records but have flags!\n");
-                        return -1;
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
 		}
-	} else {
-		dolog(LOG_INFO, "no NSEC3PARAM records\n");
-                return -1;
 	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_NSEC3PARAM));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct nsec3param *)rrp->rdata)->ttl));
-	p += 4;
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
-	
-	pack(p, rbt->zone, rbt->zonelen);
-	p += rbt->zonelen;
-	pack16(p, htons(DNS_TYPE_NSEC3PARAM));
-	p += 2;
-	pack16(p, htons(DNS_CLASS_IN));
-	p += 2;
-	pack32(p, htonl(((struct nsec3param *)rrp->rdata)->ttl));
-	p += 4;
-	pack16(p, htons(1 + 1 + 2 + 1 + ((struct nsec3param *)rrp->rdata)->saltlen));
-	p += 2;
-	pack8(p, ((struct nsec3param *)rrp->rdata)->algorithm);
-	p++;
-	pack8(p, ((struct nsec3param *)rrp->rdata)->flags);
-	p++;
-	pack16(p, htons(((struct nsec3param *)rrp->rdata)->iterations));
-	p += 2;
-
-	pack8(p, ((struct nsec3param *)rrp->rdata)->saltlen);
-	p++;
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no NSEC3PARAM records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no NSEC3PARAM records\n");
+			return -1;
+		}
 		
-	if (((struct nsec3param *)rrp->rdata)->saltlen) {
-		pack(p, ((struct nsec3param *)rrp->rdata)->salt, ((struct nsec3param *)rrp->rdata)->saltlen);
-		p += ((struct nsec3param *)rrp->rdata)->saltlen;
-	} 
+		p = key;
 
-	keylen = (p - key);	
+		pack16(p, htons(DNS_TYPE_NSEC3PARAM));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct nsec3param *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		pack(p, rbt->zone, rbt->zonelen);
+		p += rbt->zonelen;
+		pack16(p, htons(DNS_TYPE_NSEC3PARAM));
+		p += 2;
+		pack16(p, htons(DNS_CLASS_IN));
+		p += 2;
+		pack32(p, htonl(((struct nsec3param *)rrp->rdata)->ttl));
+		p += 4;
+		pack16(p, htons(1 + 1 + 2 + 1 + ((struct nsec3param *)rrp->rdata)->saltlen));
+		p += 2;
+		pack8(p, ((struct nsec3param *)rrp->rdata)->algorithm);
+		p++;
+		pack8(p, ((struct nsec3param *)rrp->rdata)->flags);
+		p++;
+		pack16(p, htons(((struct nsec3param *)rrp->rdata)->iterations));
+		p += 2;
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+		pack8(p, ((struct nsec3param *)rrp->rdata)->saltlen);
+		p++;
+			
+		if (((struct nsec3param *)rrp->rdata)->saltlen) {
+			pack(p, ((struct nsec3param *)rrp->rdata)->salt, ((struct nsec3param *)rrp->rdata)->saltlen);
+			p += ((struct nsec3param *)rrp->rdata)->saltlen;
+		} 
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", 0, "NSEC3PARAM", algorithm, labels, 0, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+		keylen = (p - key);	
+
+	#if 0
+		debug_bindump(key, keylen);
+	#endif
+
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", 0, "NSEC3PARAM", algorithm, labels, 0, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -2847,10 +2938,11 @@ sign_nsec3param(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry,
  */
 
 int
-sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_cname(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -2872,7 +2964,7 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -2886,111 +2978,130 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		return -1;
 	}
 
-	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
 		return -1;
 	}
 
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no CNAME records but have flags!\n");
-                        return -1;
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
 		}
-	} else {
-		dolog(LOG_INFO, "no CNAME records\n");
-                return -1;
-
 	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_CNAME));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct cname *)rrp->rdata)->ttl));
-	p += 4;
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
-	
-	pack(p, rbt->zone, rbt->zonelen);
-	p += rbt->zonelen;
-	pack16(p, htons(DNS_TYPE_CNAME));
-	p += 2;
-	pack16(p, htons(DNS_CLASS_IN));
-	p += 2;
-	pack32(p, htonl(((struct cname *)rrp->rdata)->ttl));
-	p += 4;
-	pack16(p, htons(((struct cname *)rrp->rdata)->cnamelen));
-	p += 2;
-	pack(p, ((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen);
-	p += ((struct cname *)rrp->rdata)->cnamelen;
+		if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no CNAME records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no CNAME records\n");
+			return -1;
 
-	keylen = (p - key);	
+		}
+		
+		p = key;
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+		pack16(p, htons(DNS_TYPE_CNAME));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct cname *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct cname *)rrp->rdata)->ttl, "CNAME", algorithm, labels, ((struct cname *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		pack(p, rbt->zone, rbt->zonelen);
+		p += rbt->zonelen;
+		pack16(p, htons(DNS_TYPE_CNAME));
+		p += 2;
+		pack16(p, htons(DNS_CLASS_IN));
+		p += 2;
+		pack32(p, htonl(((struct cname *)rrp->rdata)->ttl));
+		p += 4;
+		pack16(p, htons(((struct cname *)rrp->rdata)->cnamelen));
+		p += 2;
+		pack(p, ((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen);
+		p += ((struct cname *)rrp->rdata)->cnamelen;
+
+		keylen = (p - key);	
+
+	#if 0
+		debug_bindump(key, keylen);
+	#endif
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct cname *)rrp->rdata)->ttl, "CNAME", algorithm, labels, ((struct cname *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -3000,10 +3111,11 @@ sign_cname(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
  */
 
 int
-sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_ptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -3025,7 +3137,7 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -3039,112 +3151,131 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		return -1;
 	}
 
-	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
 		return -1;
 	}
 
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no PTR records but have flags!\n");
-                        return -1;
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
 		}
-	} else {
-		dolog(LOG_INFO, "no PTR records\n");
-                return -1;
 	}
+
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	
-	p = key;
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack16(p, htons(DNS_TYPE_PTR));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct ptr *)rrp->rdata)->ttl));
-	p += 4;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
+
+		if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no PTR records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no PTR records\n");
+			return -1;
+		}
+			
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		p = key;
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		pack16(p, htons(DNS_TYPE_PTR));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct ptr *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
-	
-	pack(p, rbt->zone, rbt->zonelen);
-	p += rbt->zonelen;
-	pack16(p, htons(DNS_TYPE_PTR));
-	p += 2;
-	pack16(p, htons(DNS_CLASS_IN));
-	p += 2;
-	pack32(p, htonl(((struct ptr *)rrp->rdata)->ttl));
-	p += 4;
-	pack16(p, htons(((struct ptr *)rrp->rdata)->ptrlen));
-	p += 2;
-	pack(p, ((struct ptr *)rrp->rdata)->ptr, ((struct ptr *)rrp->rdata)->ptrlen);
-	p += ((struct ptr *)rrp->rdata)->ptrlen;
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-	keylen = (p - key);	
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		pack(p, rbt->zone, rbt->zonelen);
+		p += rbt->zonelen;
+		pack16(p, htons(DNS_TYPE_PTR));
+		p += 2;
+		pack16(p, htons(DNS_CLASS_IN));
+		p += 2;
+		pack32(p, htonl(((struct ptr *)rrp->rdata)->ttl));
+		p += 4;
+		pack16(p, htons(((struct ptr *)rrp->rdata)->ptrlen));
+		p += 2;
+		pack(p, ((struct ptr *)rrp->rdata)->ptr, ((struct ptr *)rrp->rdata)->ptrlen);
+		p += ((struct ptr *)rrp->rdata)->ptrlen;
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+		keylen = (p - key);	
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+	#if 0
+		debug_bindump(key, keylen);
+	#endif
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct ptr *)rrp->rdata)->ttl, "PTR", algorithm, labels, ((struct ptr *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
-	
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct ptr *)rrp->rdata)->ttl, "PTR", algorithm, labels, ((struct ptr *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
+
 	return 0;
 }
 
@@ -3153,11 +3284,12 @@ sign_ptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
  */
 
 int
-sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -3179,7 +3311,7 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -3207,172 +3339,192 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		return -1;
 	}
 
-	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
 		return -1;
 	}
 
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no NAPTR records but have flags!\n");
-                        return -1;
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
 		}
-	} else {
-			dolog(LOG_INFO, "no NAPTR records\n");
-                        return -1;
 	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_NAPTR));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct naptr *)rrp->rdata)->ttl));
-	p += 4;
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
+		if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no NAPTR records but have flags!\n");
+				return -1;
+			}
+		} else {
+				dolog(LOG_INFO, "no NAPTR records\n");
+				return -1;
+		}
+		
+		p = key;
+
+		pack16(p, htons(DNS_TYPE_NAPTR));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct naptr *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
+
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_NAPTR));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(((struct naptr *)rrp->rdata)->ttl));
+			q += 4;
+			pack16(q, htons(2 + 2 + 1 + ((struct naptr *)rrp2->rdata)->flagslen + 1 + ((struct naptr *)rrp2->rdata)->serviceslen + 1 + ((struct naptr *)rrp2->rdata)->regexplen + ((struct naptr *)rrp2->rdata)->replacementlen));
+			q += 2;
+			pack16(q, htons(((struct naptr *)rrp2->rdata)->order));
+			q += 2;
+			pack16(q, htons(((struct naptr *)rrp2->rdata)->preference));
+			q += 2;
+
+			pack8(q, ((struct naptr *)rrp2->rdata)->flagslen);
+			q++;
+			pack(q, ((struct naptr *)rrp2->rdata)->flags, ((struct naptr *)rrp2->rdata)->flagslen);
+			q += ((struct naptr *)rrp2->rdata)->flagslen;
+
+			pack8(q, ((struct naptr *)rrp2->rdata)->serviceslen);
+			q++;
+			pack(q, ((struct naptr *)rrp2->rdata)->services, ((struct naptr *)rrp2->rdata)->serviceslen);
+			q += ((struct naptr *)rrp2->rdata)->serviceslen;
+
+			pack8(q, ((struct naptr *)rrp2->rdata)->regexplen);
+			q++;
+			pack(q, ((struct naptr *)rrp2->rdata)->regexp, ((struct naptr *)rrp2->rdata)->regexplen);
+			q += ((struct naptr *)rrp2->rdata)->regexplen;
+
+			pack(q, ((struct naptr *)rrp2->rdata)->replacement, ((struct naptr *)rrp2->rdata)->replacementlen);
+			q += ((struct naptr *)rrp2->rdata)->replacementlen;
+
+			c1 = malloc(sizeof(struct canonical));
+			if (c1 == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
+
+			c1->len = (q - tmpkey);
+			c1->data = malloc(c1->len);
+			if (c1->data == NULL) {
+				dolog(LOG_INFO, "c1->data out of memory\n");
+				return -1;
+			}
+
+			memcpy(c1->data, tmpkey, c1->len);
+
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			else {
+				TAILQ_FOREACH(c2, &head, entries) {
+					if (c1->len < c2->len)
+						break;
+					else if (c2->len == c1->len &&
+						memcmp(c1->data, c2->data, c1->len) < 0)
+						break;
+				}
+
+				if (c2 != NULL)
+					TAILQ_INSERT_BEFORE(c2, c1, entries);
+				else
+					TAILQ_INSERT_TAIL(&head, c1, entries);
+			}
+		}
+
+		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+			pack(p, c2->data, c2->len);
+			p += c2->len;
+
+			TAILQ_REMOVE(&head, c2, entries);
+		}
+
+		keylen = (p - key);	
+
+	#if 0
+		debug_bindump(key, keylen);
+	#endif
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct naptr *)rrp->rdata)->ttl, "NAPTR", algorithm, labels, ((struct naptr *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
 	
-	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-		q = tmpkey;
-		pack(q, rbt->zone, rbt->zonelen);
-		q += rbt->zonelen;
-		pack16(q, htons(DNS_TYPE_NAPTR));
-		q += 2;
-		pack16(q, htons(DNS_CLASS_IN));
-		q += 2;
-		pack32(q, htonl(((struct naptr *)rrp->rdata)->ttl));
-		q += 4;
-		pack16(q, htons(2 + 2 + 1 + ((struct naptr *)rrp2->rdata)->flagslen + 1 + ((struct naptr *)rrp2->rdata)->serviceslen + 1 + ((struct naptr *)rrp2->rdata)->regexplen + ((struct naptr *)rrp2->rdata)->replacementlen));
-		q += 2;
-		pack16(q, htons(((struct naptr *)rrp2->rdata)->order));
-		q += 2;
-		pack16(q, htons(((struct naptr *)rrp2->rdata)->preference));
-		q += 2;
-
-		pack8(q, ((struct naptr *)rrp2->rdata)->flagslen);
-		q++;
-		pack(q, ((struct naptr *)rrp2->rdata)->flags, ((struct naptr *)rrp2->rdata)->flagslen);
-		q += ((struct naptr *)rrp2->rdata)->flagslen;
-
-		pack8(q, ((struct naptr *)rrp2->rdata)->serviceslen);
-		q++;
-		pack(q, ((struct naptr *)rrp2->rdata)->services, ((struct naptr *)rrp2->rdata)->serviceslen);
-		q += ((struct naptr *)rrp2->rdata)->serviceslen;
-
-		pack8(q, ((struct naptr *)rrp2->rdata)->regexplen);
-		q++;
-		pack(q, ((struct naptr *)rrp2->rdata)->regexp, ((struct naptr *)rrp2->rdata)->regexplen);
-		q += ((struct naptr *)rrp2->rdata)->regexplen;
-
-		pack(q, ((struct naptr *)rrp2->rdata)->replacement, ((struct naptr *)rrp2->rdata)->replacementlen);
-		q += ((struct naptr *)rrp2->rdata)->replacementlen;
-
-		c1 = malloc(sizeof(struct canonical));
-                if (c1 == NULL) {
-                        dolog(LOG_INFO, "c1 out of memory\n");
-                        return -1;
-                }
-
-                c1->len = (q - tmpkey);
-                c1->data = malloc(c1->len);
-                if (c1->data == NULL) {
-                        dolog(LOG_INFO, "c1->data out of memory\n");
-                        return -1;
-                }
-
-                memcpy(c1->data, tmpkey, c1->len);
-
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
-
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
-	}
-
-        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
-
-                TAILQ_REMOVE(&head, c2, entries);
-        }
-
-	keylen = (p - key);	
-
-#if 0
-	debug_bindump(key, keylen);
-#endif
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
-
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
-
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct naptr *)rrp->rdata)->ttl, "NAPTR", algorithm, labels, ((struct naptr *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -3382,11 +3534,12 @@ sign_naptr(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
  */
 
 int
-sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -3408,7 +3561,7 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -3435,160 +3588,179 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
 		dolog(LOG_INFO, "tmpkey out of memory\n");
 		return -1;
 	}
+	
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
+		return -1;
+	}
+
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
+		}
+	}
+
+	zsk_key[nzk] = NULL;
 
 	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
-		return -1;
-	}
-
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no SRV records but have flags!\n");
-                        return -1;
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
 		}
-	} else {
-		dolog(LOG_INFO, "no SRV records\n");
-                return -1;
-	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_SRV));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct srv *)rrp->rdata)->ttl));
-	p += 4;
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
-	
-	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-		q = tmpkey;
-		pack(q, rbt->zone, rbt->zonelen);
-		q += rbt->zonelen;
-		pack16(q, htons(DNS_TYPE_SRV));
-		q += 2;
-		pack16(q, htons(DNS_CLASS_IN));
-		q += 2;
-		pack32(q, htonl(((struct srv *)rrp->rdata)->ttl));
-		q += 4;
-		pack16(q, htons(2 + 2 + 2 + ((struct srv *)rrp2->rdata)->targetlen));
-		q += 2;
-		pack16(q, htons(((struct srv *)rrp2->rdata)->priority));
-		q += 2;
-		pack16(q, htons(((struct srv *)rrp2->rdata)->weight));
-		q += 2;
-		pack16(q, htons(((struct srv *)rrp2->rdata)->port));
-		q += 2;
-		pack(q, ((struct srv *)rrp2->rdata)->target, ((struct srv *)rrp2->rdata)->targetlen);
-		q += ((struct srv *)rrp2->rdata)->targetlen;
+		if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no SRV records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no SRV records\n");
+			return -1;
+		}
 		
-		c1 = malloc(sizeof(struct canonical));
-                if (c1 == NULL) {
-                        dolog(LOG_INFO, "c1 out of memory\n");
-                        return -1;
-                }
+		p = key;
 
-                c1->len = (q - tmpkey);
-                c1->data = malloc(c1->len);
-                if (c1->data == NULL) {
-                        dolog(LOG_INFO, "c1->data out of memory\n");
-                        return -1;
-                }
+		pack16(p, htons(DNS_TYPE_SRV));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct srv *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-                memcpy(c1->data, tmpkey, c1->len);
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_SRV));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(((struct srv *)rrp->rdata)->ttl));
+			q += 4;
+			pack16(q, htons(2 + 2 + 2 + ((struct srv *)rrp2->rdata)->targetlen));
+			q += 2;
+			pack16(q, htons(((struct srv *)rrp2->rdata)->priority));
+			q += 2;
+			pack16(q, htons(((struct srv *)rrp2->rdata)->weight));
+			q += 2;
+			pack16(q, htons(((struct srv *)rrp2->rdata)->port));
+			q += 2;
+			pack(q, ((struct srv *)rrp2->rdata)->target, ((struct srv *)rrp2->rdata)->targetlen);
+			q += ((struct srv *)rrp2->rdata)->targetlen;
+			
+			c1 = malloc(sizeof(struct canonical));
+			if (c1 == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
 
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
+			c1->len = (q - tmpkey);
+			c1->data = malloc(c1->len);
+			if (c1->data == NULL) {
+				dolog(LOG_INFO, "c1->data out of memory\n");
+				return -1;
+			}
 
-	}
+			memcpy(c1->data, tmpkey, c1->len);
 
-        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			else {
+				TAILQ_FOREACH(c2, &head, entries) {
+					if (c1->len < c2->len)
+						break;
+					else if (c2->len == c1->len &&
+						memcmp(c1->data, c2->data, c1->len) < 0)
+						break;
+				}
 
-                TAILQ_REMOVE(&head, c2, entries);
-        }
+				if (c2 != NULL)
+					TAILQ_INSERT_BEFORE(c2, c1, entries);
+				else
+					TAILQ_INSERT_TAIL(&head, c1, entries);
+			}
 
-	keylen = (p - key);	
+		}
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+			pack(p, c2->data, c2->len);
+			p += c2->len;
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+			TAILQ_REMOVE(&head, c2, entries);
+		}
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct srv *)rrp->rdata)->ttl, "SRV", algorithm, labels, ((struct srv *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+		keylen = (p - key);	
+
+	#if 0
+		debug_bindump(key, keylen);
+	#endif
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct srv *)rrp->rdata)->ttl, "SRV", algorithm, labels, ((struct srv *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -3599,11 +3771,12 @@ sign_srv(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct
  */
 
 int
-sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -3625,7 +3798,7 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -3653,157 +3826,176 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
 		return -1;
 	}
 
-	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
 		return -1;
 	}
 
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no SSHFP records but have flags!\n");
-                        return -1;
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
 		}
-	} else {
-		dolog(LOG_INFO, "no SSHFP records\n");
-                return -1;
 	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_SSHFP));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct sshfp *)rrp->rdata)->ttl));
-	p += 4;
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
-	
-	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-		q = tmpkey;
-		pack(q, rbt->zone, rbt->zonelen);
-		q += rbt->zonelen;
-		pack16(q, htons(DNS_TYPE_SSHFP));
-		q += 2;
-		pack16(q, htons(DNS_CLASS_IN));
-		q += 2;
-		pack32(q, htonl(((struct sshfp *)rrp->rdata)->ttl));
-		q += 4;
-		pack16(q, htons(1 + 1 + ((struct sshfp *)rrp2->rdata)->fplen));
-		q += 2;
-		pack8(q, ((struct sshfp *)rrp2->rdata)->algorithm);
-		q++;
-		pack8(q, ((struct sshfp *)rrp2->rdata)->fptype);
-		q++;
-		pack(q, ((struct sshfp *)rrp2->rdata)->fingerprint, ((struct sshfp *)rrp2->rdata)->fplen);
-		q += ((struct sshfp *)rrp2->rdata)->fplen;
+		if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no SSHFP records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no SSHFP records\n");
+			return -1;
+		}
+		
+		p = key;
 
-		c1 = malloc(sizeof(struct canonical));
-                if (c1 == NULL) {
-                        dolog(LOG_INFO, "c1 out of memory\n");
-                        return -1;
-                }
+		pack16(p, htons(DNS_TYPE_SSHFP));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct sshfp *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-                c1->len = (q - tmpkey);
-                c1->data = malloc(c1->len);
-                if (c1->data == NULL) {
-                        dolog(LOG_INFO, "c1->data out of memory\n");
-                        return -1;
-                }
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-                memcpy(c1->data, tmpkey, c1->len);
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_SSHFP));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(((struct sshfp *)rrp->rdata)->ttl));
+			q += 4;
+			pack16(q, htons(1 + 1 + ((struct sshfp *)rrp2->rdata)->fplen));
+			q += 2;
+			pack8(q, ((struct sshfp *)rrp2->rdata)->algorithm);
+			q++;
+			pack8(q, ((struct sshfp *)rrp2->rdata)->fptype);
+			q++;
+			pack(q, ((struct sshfp *)rrp2->rdata)->fingerprint, ((struct sshfp *)rrp2->rdata)->fplen);
+			q += ((struct sshfp *)rrp2->rdata)->fplen;
 
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len &&
-					memcmp(c1->data, c2->data, c1->len) > 0)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
+			c1 = malloc(sizeof(struct canonical));
+			if (c1 == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
 
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
-	}
+			c1->len = (q - tmpkey);
+			c1->data = malloc(c1->len);
+			if (c1->data == NULL) {
+				dolog(LOG_INFO, "c1->data out of memory\n");
+				return -1;
+			}
 
-        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
+			memcpy(c1->data, tmpkey, c1->len);
 
-                TAILQ_REMOVE(&head, c2, entries);
-        }
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			else {
+				TAILQ_FOREACH(c2, &head, entries) {
+					if (c1->len < c2->len &&
+						memcmp(c1->data, c2->data, c1->len) > 0)
+						break;
+					else if (c2->len == c1->len &&
+						memcmp(c1->data, c2->data, c1->len) < 0)
+						break;
+				}
 
-	keylen = (p - key);	
+				if (c2 != NULL)
+					TAILQ_INSERT_BEFORE(c2, c1, entries);
+				else
+					TAILQ_INSERT_TAIL(&head, c1, entries);
+			}
+		}
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+			pack(p, c2->data, c2->len);
+			p += c2->len;
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+			TAILQ_REMOVE(&head, c2, entries);
+		}
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct sshfp *)rrp->rdata)->ttl, "SSHFP", algorithm, labels, ((struct sshfp *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+		keylen = (p - key);	
+
+	#if 0
+		debug_bindump(key, keylen);
+	#endif
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct sshfp *)rrp->rdata)->ttl, "SSHFP", algorithm, labels, ((struct sshfp *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -3813,11 +4005,12 @@ sign_sshfp(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, stru
  */
 
 int
-sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -3839,7 +4032,7 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -3867,162 +4060,181 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
 		return -1;
 	}
 
-	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
 		return -1;
 	}
 
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no TLSA records but have flags!\n");
-                        return -1;
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
 		}
-	} else {
-		dolog(LOG_INFO, "no TLSA records\n");
-                return -1;
-
 	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_TLSA));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct tlsa *)rrp->rdata)->ttl));
-	p += 4;
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
+		if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no TLSA records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no TLSA records\n");
+			return -1;
+
+		}
+		
+		p = key;
+
+		pack16(p, htons(DNS_TYPE_TLSA));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct tlsa *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
+
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_TLSA));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(((struct tlsa *)rrp->rdata)->ttl));
+			q += 4;
+			pack16(q, htons(1 + 1 + 1 + ((struct tlsa *)rrp2->rdata)->datalen));
+			q += 2;
+			pack8(q, ((struct tlsa *)rrp2->rdata)->usage);
+			q++;
+			pack8(q, ((struct tlsa *)rrp2->rdata)->selector);
+			q++;
+			pack8(q, ((struct tlsa *)rrp2->rdata)->matchtype);
+			q++;
+			pack(q, ((struct tlsa *)rrp2->rdata)->data, ((struct tlsa *)rrp2->rdata)->datalen);
+			q += ((struct tlsa *)rrp2->rdata)->datalen;
+
+			c1 = malloc(sizeof(struct canonical));
+			if (c1 == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
+
+			c1->len = (q - tmpkey);
+			c1->data = malloc(c1->len);
+			if (c1->data == NULL) {
+				dolog(LOG_INFO, "c1->data out of memory\n");
+				return -1;
+			}
+
+			memcpy(c1->data, tmpkey, c1->len);
+
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			else {
+				TAILQ_FOREACH(c2, &head, entries) {
+					if (c1->len < c2->len)
+						break;
+					else if (c2->len == c1->len &&
+						memcmp(c1->data, c2->data, c1->len) < 0)
+						break;
+				}
+
+				if (c2 != NULL)
+					TAILQ_INSERT_BEFORE(c2, c1, entries);
+				else
+					TAILQ_INSERT_TAIL(&head, c1, entries);
+			}
+		}
+
+		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+			pack(p, c2->data, c2->len);
+			p += c2->len;
+
+			TAILQ_REMOVE(&head, c2, entries);
+		}
+
+		keylen = (p - key);	
+
+	#if 0
+		debug_bindump(key, keylen);
+	#endif
+
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct tlsa *)rrp->rdata)->ttl, "TLSA", algorithm, labels, ((struct tlsa *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
 	
-	
-	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-		q = tmpkey;
-		pack(q, rbt->zone, rbt->zonelen);
-		q += rbt->zonelen;
-		pack16(q, htons(DNS_TYPE_TLSA));
-		q += 2;
-		pack16(q, htons(DNS_CLASS_IN));
-		q += 2;
-		pack32(q, htonl(((struct tlsa *)rrp->rdata)->ttl));
-		q += 4;
-		pack16(q, htons(1 + 1 + 1 + ((struct tlsa *)rrp2->rdata)->datalen));
-		q += 2;
-		pack8(q, ((struct tlsa *)rrp2->rdata)->usage);
-		q++;
-		pack8(q, ((struct tlsa *)rrp2->rdata)->selector);
-		q++;
-		pack8(q, ((struct tlsa *)rrp2->rdata)->matchtype);
-		q++;
-		pack(q, ((struct tlsa *)rrp2->rdata)->data, ((struct tlsa *)rrp2->rdata)->datalen);
-		q += ((struct tlsa *)rrp2->rdata)->datalen;
-
-                c1 = malloc(sizeof(struct canonical));
-                if (c1 == NULL) {
-                        dolog(LOG_INFO, "c1 out of memory\n");
-                        return -1;
-                }
-
-                c1->len = (q - tmpkey);
-                c1->data = malloc(c1->len);
-                if (c1->data == NULL) {
-                        dolog(LOG_INFO, "c1->data out of memory\n");
-                        return -1;
-                }
-
-                memcpy(c1->data, tmpkey, c1->len);
-
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
-
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
-	}
-
-        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
-
-                TAILQ_REMOVE(&head, c2, entries);
-        }
-
-	keylen = (p - key);	
-
-#if 0
-	debug_bindump(key, keylen);
-#endif
-
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
-
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
-
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct tlsa *)rrp->rdata)->ttl, "TLSA", algorithm, labels, ((struct tlsa *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
-	
+	} while ((*++zsk_key) != NULL);
 	return 0;
 }
 
@@ -4031,11 +4243,12 @@ sign_tlsa(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struc
  */
 
 int
-sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -4057,7 +4270,7 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -4084,113 +4297,131 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 		dolog(LOG_INFO, "tmpkey out of memory\n");
 		return -1;
 	}
+	
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
+		return -1;
+	}
+
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
+		}
+	}
+
+	zsk_key[nzk] = NULL;
 
 	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
-		return -1;
-	}
-
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no DS records but have flags!\n");
-                        return -1;
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
 		}
-	} else {
-		dolog(LOG_INFO, "no DS records\n");
-                return -1;
-	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_DS));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct ds *)rrp->rdata)->ttl));
-	p += 4;
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
-	
-	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-		q = tmpkey;
-		pack(q, rbt->zone, rbt->zonelen);
-		q += rbt->zonelen;
-		pack16(q, htons(DNS_TYPE_DS));
-		q += 2;
-		pack16(q, htons(DNS_CLASS_IN));
-		q += 2;
-		pack32(q, htonl(((struct ds *)rrp->rdata)->ttl));
-		q += 4;
-		pack16(q, htons(2 + 1 + 1 + ((struct ds *)rrp2->rdata)->digestlen));
-		q += 2;
-		pack16(q, htons(((struct ds *)rrp2->rdata)->key_tag));
-		q += 2;
-		pack8(q, ((struct ds *)rrp2->rdata)->algorithm);
-		q++;
-		pack8(q, ((struct ds *)rrp2->rdata)->digest_type);
-		q++;
-		pack(q, ((struct ds *)rrp2->rdata)->digest, ((struct ds *)rrp2->rdata)->digestlen);
-		q += ((struct ds *)rrp2->rdata)->digestlen;
+		if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no DS records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no DS records\n");
+			return -1;
+		}
+		
+		p = key;
 
-               c1 = malloc(sizeof(struct canonical));
-                if (c1 == NULL) {
-                        dolog(LOG_INFO, "c1 out of memory\n");
-                        return -1;
-                }
+		pack16(p, htons(DNS_TYPE_DS));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct ds *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-                c1->len = (q - tmpkey);
-                c1->data = malloc(c1->len);
-                if (c1->data == NULL) {
-                        dolog(LOG_INFO, "c1->data out of memory\n");
-                        return -1;
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
+
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_DS));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(((struct ds *)rrp->rdata)->ttl));
+			q += 4;
+			pack16(q, htons(2 + 1 + 1 + ((struct ds *)rrp2->rdata)->digestlen));
+			q += 2;
+			pack16(q, htons(((struct ds *)rrp2->rdata)->key_tag));
+			q += 2;
+			pack8(q, ((struct ds *)rrp2->rdata)->algorithm);
+			q++;
+			pack8(q, ((struct ds *)rrp2->rdata)->digest_type);
+			q++;
+			pack(q, ((struct ds *)rrp2->rdata)->digest, ((struct ds *)rrp2->rdata)->digestlen);
+			q += ((struct ds *)rrp2->rdata)->digestlen;
+
+		       c1 = malloc(sizeof(struct canonical));
+			if (c1 == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
+
+			c1->len = (q - tmpkey);
+			c1->data = malloc(c1->len);
+			if (c1->data == NULL) {
+				dolog(LOG_INFO, "c1->data out of memory\n");
+				return -1;
                 }
 
                 memcpy(c1->data, tmpkey, c1->len);
@@ -4224,7 +4455,7 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 #if 0
 	debug_bindump(key, keylen);
 #endif
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
+	if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 		dolog(LOG_INFO, "signing failed\n");
 		return -1;
 	}
@@ -4237,6 +4468,8 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
 		return -1;
 	}
 	
+	} while ((*++zsk_key) != NULL);
+
 	return 0;
 }
 
@@ -4245,11 +4478,12 @@ sign_ds(ddDB *db, char *zonename, struct keysentry  *zsk_key, int expiry, struct
  * create a RRSIG for an NS record
  */
 int
-sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -4270,7 +4504,7 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -4298,152 +4532,171 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 		return -1;
 	}
 
-	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
 		return -1;
 	}
 
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no NS records but have flags!\n");
-                        return -1;
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
 		}
-	} else {
-		dolog(LOG_INFO, "no NS records\n");
-                return -1;
-
 	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_NS));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct ns *)rrp->rdata)->ttl));
-	p += 4;
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
-	
-	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-		q = tmpkey;
-		pack(q, rbt->zone, rbt->zonelen);
-		q += rbt->zonelen;
-		pack16(q, htons(DNS_TYPE_NS));
-		q += 2;
-		pack16(q, htons(DNS_CLASS_IN));
-		q += 2;
-		pack32(q, htonl(((struct ns *)rrp->rdata)->ttl));
-		q += 4;
-		pack16(q, htons(((struct ns *)rrp2->rdata)->nslen));
-		q += 2;
-		memcpy(q, ((struct ns *)rrp2->rdata)->nsserver, ((struct ns *)rrp2->rdata)->nslen);
-		q += ((struct ns *)rrp2->rdata)->nslen;
+		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no NS records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no NS records\n");
+			return -1;
 
-               c1 = malloc(sizeof(struct canonical));
-                if (c1 == NULL) {
-                        dolog(LOG_INFO, "c1 out of memory\n");
-                        return -1;
-                }
+		}
+		
+		p = key;
 
-                c1->len = (q - tmpkey);
-                c1->data = malloc(c1->len);
-                if (c1->data == NULL) {
-                        dolog(LOG_INFO, "c1->data out of memory\n");
-                        return -1;
-                }
+		pack16(p, htons(DNS_TYPE_NS));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct ns *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-                memcpy(c1->data, tmpkey, c1->len);
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_NS));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(((struct ns *)rrp->rdata)->ttl));
+			q += 4;
+			pack16(q, htons(((struct ns *)rrp2->rdata)->nslen));
+			q += 2;
+			memcpy(q, ((struct ns *)rrp2->rdata)->nsserver, ((struct ns *)rrp2->rdata)->nslen);
+			q += ((struct ns *)rrp2->rdata)->nslen;
 
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
-	}
+		       c1 = malloc(sizeof(struct canonical));
+			if (c1 == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
 
-        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
+			c1->len = (q - tmpkey);
+			c1->data = malloc(c1->len);
+			if (c1->data == NULL) {
+				dolog(LOG_INFO, "c1->data out of memory\n");
+				return -1;
+			}
 
-                TAILQ_REMOVE(&head, c2, entries);
-        }
-	keylen = (p - key);	
+			memcpy(c1->data, tmpkey, c1->len);
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			else {
+				TAILQ_FOREACH(c2, &head, entries) {
+					if (c1->len < c2->len)
+						break;
+					else if (c2->len == c1->len &&
+						memcmp(c1->data, c2->data, c1->len) < 0)
+						break;
+				}
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+				if (c2 != NULL)
+					TAILQ_INSERT_BEFORE(c2, c1, entries);
+				else
+					TAILQ_INSERT_TAIL(&head, c1, entries);
+			}
+		}
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct ns *)rrp->rdata)->ttl, "NS", algorithm, labels, ((struct ns *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+			pack(p, c2->data, c2->len);
+			p += c2->len;
+
+			TAILQ_REMOVE(&head, c2, entries);
+		}
+		keylen = (p - key);	
+
+	#if 0
+		debug_bindump(key, keylen);
+	#endif
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct ns *)rrp->rdata)->ttl, "NS", algorithm, labels, ((struct ns *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -4453,11 +4706,12 @@ sign_ns(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
  */
 
 int
-sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -4479,7 +4733,7 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -4507,153 +4761,172 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
 		return -1;
 	}
 
-	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
 		return -1;
 	}
 
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no MX records but have flags!\n");
-                        return -1;
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
 		}
-	} else {
-		dolog(LOG_INFO, "no MX records\n");
-                return -1;
 	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_MX));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct smx *)rrp->rdata)->ttl));
-	p += 4;
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
-	
-	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-		q = tmpkey;
-		pack(q, rbt->zone, rbt->zonelen);
-		q += rbt->zonelen;
-		pack16(q, htons(DNS_TYPE_MX));
-		q += 2;
-		pack16(q, htons(DNS_CLASS_IN));
-		q += 2;
-		pack32(q, htonl(((struct smx *)rrp->rdata)->ttl));
-		q += 4;
-		pack16(q, htons(2 + ((struct smx *)rrp2->rdata)->exchangelen));
-		q += 2;
-		pack16(q, htons(((struct smx *)rrp2->rdata)->preference));
-		q += 2;
-		memcpy(q, ((struct smx *)rrp2->rdata)->exchange, ((struct smx *)rrp2->rdata)->exchangelen);
-		q += ((struct smx *)rrp2->rdata)->exchangelen;
+		if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no MX records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no MX records\n");
+			return -1;
+		}
+		
+		p = key;
 
-                c1 = malloc(sizeof(struct canonical));
-                if (c1 == NULL) {
-                        dolog(LOG_INFO, "c1 out of memory\n");
-                        return -1;
-                }
+		pack16(p, htons(DNS_TYPE_MX));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct smx *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-                c1->len = (q - tmpkey);
-                c1->data = malloc(c1->len);
-                if (c1->data == NULL) {
-                        dolog(LOG_INFO, "c1->data out of memory\n");
-                        return -1;
-                }
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-                memcpy(c1->data, tmpkey, c1->len);
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_MX));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(((struct smx *)rrp->rdata)->ttl));
+			q += 4;
+			pack16(q, htons(2 + ((struct smx *)rrp2->rdata)->exchangelen));
+			q += 2;
+			pack16(q, htons(((struct smx *)rrp2->rdata)->preference));
+			q += 2;
+			memcpy(q, ((struct smx *)rrp2->rdata)->exchange, ((struct smx *)rrp2->rdata)->exchangelen);
+			q += ((struct smx *)rrp2->rdata)->exchangelen;
 
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
+			c1 = malloc(sizeof(struct canonical));
+			if (c1 == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
 
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
-	}
+			c1->len = (q - tmpkey);
+			c1->data = malloc(c1->len);
+			if (c1->data == NULL) {
+				dolog(LOG_INFO, "c1->data out of memory\n");
+				return -1;
+			}
 
-        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
+			memcpy(c1->data, tmpkey, c1->len);
 
-                TAILQ_REMOVE(&head, c2, entries);
-        }
-	keylen = (p - key);	
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			else {
+				TAILQ_FOREACH(c2, &head, entries) {
+					if (c1->len < c2->len)
+						break;
+					else if (c2->len == c1->len &&
+						memcmp(c1->data, c2->data, c1->len) < 0)
+						break;
+				}
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+				if (c2 != NULL)
+					TAILQ_INSERT_BEFORE(c2, c1, entries);
+				else
+					TAILQ_INSERT_TAIL(&head, c1, entries);
+			}
+		}
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+			pack(p, c2->data, c2->len);
+			p += c2->len;
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct smx *)rrp->rdata)->ttl, "MX", algorithm, labels, ((struct smx *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+			TAILQ_REMOVE(&head, c2, entries);
+		}
+		keylen = (p - key);	
+
+	#if 0
+		debug_bindump(key, keylen);
+	#endif
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct smx *)rrp->rdata)->ttl, "MX", algorithm, labels, ((struct smx *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -4664,11 +4937,12 @@ sign_mx(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct 
  */
 
 int
-sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
@@ -4690,7 +4964,7 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct r
 	int len;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-
+	int nzk = 0;
 
 	char timebuf[32];
 	struct tm tm;
@@ -4718,151 +4992,170 @@ sign_a(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct r
 		return -1;
 	}
 
-	/* get the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
 		return -1;
 	}
 
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no A records but have flags!\n");
-                        return -1;
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
 		}
-	} else {
-		dolog(LOG_INFO, "no A records\n");
-                return -1;
 	}
-	
-	p = key;
 
-	pack16(p, htons(DNS_TYPE_A));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct a *)rrp->rdata)->ttl));
-	p += 4;
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
 
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
 
-	/* no signature here */	
-	/* XXX this should probably be done on a canonical sorted records */
-	
-	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-		q = tmpkey;
-		pack(q, rbt->zone, rbt->zonelen);
-		q += rbt->zonelen;
-		pack16(q, htons(DNS_TYPE_A));
-		q += 2;
-		pack16(q, htons(DNS_CLASS_IN));
-		q += 2;
-		pack32(q, htonl(((struct a *)rrp->rdata)->ttl));
-		q += 4;
-		pack16(q, htons(sizeof(in_addr_t)));
-		q += 2;
-		pack32(q, ((struct a *)rrp2->rdata)->a);
-		q += 4;
+		if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no A records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no A records\n");
+			return -1;
+		}
+		
+		p = key;
 
-                c1 = malloc(sizeof(struct canonical));
-                if (c1 == NULL) {
-                        dolog(LOG_INFO, "c1 out of memory\n");
-                        return -1;
-                }
+		pack16(p, htons(DNS_TYPE_A));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct a *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-                c1->len = (q - tmpkey);
-                c1->data = malloc(c1->len);
-                if (c1->data == NULL) {
-                        dolog(LOG_INFO, "c1->data out of memory\n");
-                        return -1;
-                }
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-                memcpy(c1->data, tmpkey, c1->len);
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_A));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(((struct a *)rrp->rdata)->ttl));
+			q += 4;
+			pack16(q, htons(sizeof(in_addr_t)));
+			q += 2;
+			pack32(q, ((struct a *)rrp2->rdata)->a);
+			q += 4;
 
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
+			c1 = malloc(sizeof(struct canonical));
+			if (c1 == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
 
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
-	}
+			c1->len = (q - tmpkey);
+			c1->data = malloc(c1->len);
+			if (c1->data == NULL) {
+				dolog(LOG_INFO, "c1->data out of memory\n");
+				return -1;
+			}
 
-        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
+			memcpy(c1->data, tmpkey, c1->len);
 
-                TAILQ_REMOVE(&head, c2, entries);
-        }
-	keylen = (p - key);	
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			else {
+				TAILQ_FOREACH(c2, &head, entries) {
+					if (c1->len < c2->len)
+						break;
+					else if (c2->len == c1->len &&
+						memcmp(c1->data, c2->data, c1->len) < 0)
+						break;
+				}
 
-#if 0
-	debug_bindump(key, keylen);	
-#endif
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+				if (c2 != NULL)
+					TAILQ_INSERT_BEFORE(c2, c1, entries);
+				else
+					TAILQ_INSERT_TAIL(&head, c1, entries);
+			}
+		}
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+			pack(p, c2->data, c2->len);
+			p += c2->len;
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct a *)rrp->rdata)->ttl, "A", algorithm, labels, ((struct a *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+			TAILQ_REMOVE(&head, c2, entries);
+		}
+		keylen = (p - key);	
+
+	#if 0
+		debug_bindump(key, keylen);	
+	#endif
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct a *)rrp->rdata)->ttl, "A", algorithm, labels, ((struct a *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -5057,17 +5350,17 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
  */
 
 int
-sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, struct rbtree *rbt, int rollmethod)
+sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
 
 	char tmp[4096];
 	char signature[4096];
 	char shabuf[64];
 	
-
 	char *dnsname;
 	char *p, *q;
 	char *key, *tmpkey;
@@ -5078,6 +5371,7 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 	uint8_t protocol;
 	uint8_t algorithm;
 
+	int nzk = 0;
 	int labellen;
 	int keyid;
 	int len;
@@ -5094,9 +5388,18 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 	struct canonical {
 		char *data;
 		int len;
+		char *rdata;
+		int rdatalen;
+		int pid;
 		TAILQ_ENTRY(canonical) entries;
 	} *c1, *c2, *cp;
 		
+
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
+		return -1;
+	}
 		
 	TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
@@ -5208,7 +5511,6 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 				pack(q, ((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len);
 				q += ((struct dnskey *)rrp2->rdata)->publickey_len;
 
-
 				c1 = malloc(sizeof(struct canonical));
 				if (c1 == NULL) {
 					dolog(LOG_INFO, "c1 out of memory\n");
@@ -5224,14 +5526,24 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 			
 				memcpy(c1->data, tmpkey, c1->len);
 
+				c1->rdata = wire_dnskey_rdata(rrp2, &c1->rdatalen);
+				if (c1->rdata == NULL) {
+					dolog(LOG_INFO, "c1->rdata out of memory\n");
+					return -1;
+				}
+
 				if (TAILQ_EMPTY(&head))
 					TAILQ_INSERT_TAIL(&head, c1, entries);
 				else {
 					TAILQ_FOREACH(c2, &head, entries) {
-						if (c1->len < c2->len)
+						if (c1->rdatalen < c2->rdatalen && 	
+							memcmp(c1->rdata, c2->rdata, c1->rdatalen) <= 0)
 							break;
-						else if (c2->len == c1->len && 
-							memcmp(c1->data, c2->data, c1->len) < 0)
+						else if (c1->rdatalen > c2->rdatalen &&
+							memcmp(c1->rdata, c2->rdata, c2->rdatalen) <= 0)
+							break;
+						else if (c2->rdatalen == c1->rdatalen &&
+							memcmp(c1->rdata, c2->rdata, c1->rdatalen) <= 0)
 							break;
 					}
 
@@ -5246,6 +5558,9 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 			TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
 				pack(p, c2->data, c2->len);
 				p += c2->len;
+
+				free(c2->rdata);
+				free(c2->data);
 
 				TAILQ_REMOVE(&head, c2, entries);
 			}
@@ -5271,159 +5586,194 @@ sign_dnskey(ddDB *db, char *zonename, struct keysentry *zsk_key, int expiry, str
 		} /* if KSK */
 	} /* SLIST_FOREACH */
 
+
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
+		}
+	}
+
+	zsk_key[nzk] = NULL;
+
 	/* now work out the ZSK */
-	if ((zone = get_key(zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
-		dolog(LOG_INFO, "get_key %s\n", zsk_key->keyname);
-		return -1;
-	}
-	/* check the keytag supplied */
-	p = key;
-	pack16(p, htons(flags));
-	p += 2;
-	pack8(p, protocol);
-	p++;
-	pack8(p, algorithm);
-	p++;
-	keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
-	pack(p, signature, keylen);
-	p += keylen;
-	keylen = (p - key);
-	if (keyid != keytag(key, keylen)) {
-		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
-		return -1;
-	}
-	
-	labels = label_count(rbt->zone);
-	if (labels < 0) {
-		dolog(LOG_INFO, "label_count");
-		return -1;
-	}
-
-	dnsname = dns_label(zonename, &labellen);
-	if (dnsname == NULL)
-		return -1;
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
-		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == NULL) {
-			dolog(LOG_INFO, "no dnskeys in apex!\n");
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
 			return -1;
 		}
-	} else {
-		dolog(LOG_INFO, "no dnskeys\n");
-		return -1;
-	}
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
 		
-	
-	p = key;
-
-	pack16(p, htons(DNS_TYPE_DNSKEY));
-	p += 2;
-	pack8(p, algorithm);
-	p++;
-	pack8(p, labels);
-	p++;
-	pack32(p, htonl(((struct dnskey *)rrp->rdata)->ttl));
-	p += 4;
-		
-	snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	expiredon2 = timegm(&tm);
-	snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
-	strptime(timebuf, "%Y%m%d%H%M%S", &tm);
-	signedon2 = timegm(&tm);
-
-	pack32(p, htonl(expiredon2));
-	p += 4;
-	pack32(p, htonl(signedon2));	
-	p += 4;
-	pack16(p, htons(keyid));
-	p += 2;
-	pack(p, dnsname, labellen);
-	p += labellen;
-
-	/* no signature here */	
-	
-	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-		q = tmpkey;
-		pack(q, dnsname, labellen);
-		q += labellen;
-		pack16(q, htons(DNS_TYPE_DNSKEY));
-		q += 2;
-		pack16(q, htons(DNS_CLASS_IN));
-		q += 2;
-		pack32(q, htonl(((struct dnskey *)rrp->rdata)->ttl));
-		q += 4;
-		pack16(q, htons(2 + 1 + 1 + ((struct dnskey *)rrp2->rdata)->publickey_len));
-		q += 2;
-		pack16(q, htons(((struct dnskey *)rrp2->rdata)->flags));
-		q += 2;
-		pack8(q, ((struct dnskey *)rrp2->rdata)->protocol);
-		q++;
-		pack8(q, ((struct dnskey *)rrp2->rdata)->algorithm);
-		q++;
-		pack(q, ((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len);
-		q += ((struct dnskey *)rrp2->rdata)->publickey_len;
-
-		c1 = malloc(sizeof(struct canonical));
-		if (c1 == NULL) {
-			dolog(LOG_INFO, "c1 out of memory\n");
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
 			return -1;
 		}
 
-		c1->len = (q - tmpkey);
-		c1->data = malloc(c1->len);
-		if (c1->data == NULL) {
-			dolog(LOG_INFO, "c1->data out of memory\n");
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
 			return -1;
-		}
 
-		memcpy(c1->data, tmpkey, c1->len);
-
-		if (TAILQ_EMPTY(&head))
-			TAILQ_INSERT_TAIL(&head, c1, entries);
-		else {
-			TAILQ_FOREACH(c2, &head, entries) {
-				if (c1->len < c2->len)
-					break;
-				else if (c2->len == c1->len &&
-					memcmp(c1->data, c2->data, c1->len) < 0)
-					break;
+		if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no dnskeys in apex!\n");
+				return -1;
 			}
-
-			if (c2 != NULL)
-				TAILQ_INSERT_BEFORE(c2, c1, entries);
-			else
-				TAILQ_INSERT_TAIL(&head, c1, entries);
+		} else {
+			dolog(LOG_INFO, "no dnskeys\n");
+			return -1;
 		}
-	}
+			
+		
+		p = key;
 
-	TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-		pack(p, c2->data, c2->len);
-		p += c2->len;
+		pack16(p, htons(DNS_TYPE_DNSKEY));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(((struct dnskey *)rrp->rdata)->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
 
-		TAILQ_REMOVE(&head, c2, entries);
-	}
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
 
-	keylen = (p - key);	
-
+		/* no signature here */	
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 #if 0
-	debug_bindump(key, keylen);
+			/* if we're a zone key (zsk) and the keytag doesn't match exlude it */
+			if ((((struct dnskey *)rrp2->rdata)->flags == 256) && keyid != dnskey_keytag((struct dnskey *)rrp2->rdata)) {
+					dolog(LOG_INFO, "skipping key %u\n", dnskey_keytag((struct dnskey *)rrp2->rdata));
+					continue;
+			}
 #endif
 
-	siglen = sizeof(signature);
-	if (sign(algorithm, key, keylen, zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+			q = tmpkey;
+			pack(q, dnsname, labellen);
+			q += labellen;
+			pack16(q, htons(DNS_TYPE_DNSKEY));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(((struct dnskey *)rrp->rdata)->ttl));
+			q += 4;
+			pack16(q, htons(2 + 1 + 1 + ((struct dnskey *)rrp2->rdata)->publickey_len));
+			q += 2;
+			pack16(q, htons(((struct dnskey *)rrp2->rdata)->flags));
+			q += 2;
+			pack8(q, ((struct dnskey *)rrp2->rdata)->protocol);
+			q++;
+			pack8(q, ((struct dnskey *)rrp2->rdata)->algorithm);
+			q++;
+			pack(q, ((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len);
+			q += ((struct dnskey *)rrp2->rdata)->publickey_len;
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+			c1 = malloc(sizeof(struct canonical));
+			if (c1 == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ttl, "DNSKEY", algorithm, labels, 			ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+			c1->len = (q - tmpkey);
+			c1->data = malloc(c1->len);
+			if (c1->data == NULL) {
+				dolog(LOG_INFO, "c1->data out of memory\n");
+				return -1;
+			}
+
+			c1->pid = dnskey_keytag((struct dnskey *)rrp2->rdata);
+
+			memcpy(c1->data, tmpkey, c1->len);
+
+			c1->rdata = wire_dnskey_rdata(rrp2, &c1->rdatalen);
+			if (c1->rdata == NULL) {
+				dolog(LOG_INFO, "c1->rdata out of memory\n");
+				return -1;
+			}
+
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			else {
+				TAILQ_FOREACH(c2, &head, entries) {
+					if (c1->rdatalen < c2->rdatalen && 	
+						memcmp(c1->rdata, c2->rdata, c1->rdatalen) <= 0)
+						break;
+					else if (c1->rdatalen > c2->rdatalen &&
+						memcmp(c1->rdata, c2->rdata, c2->rdatalen) <= 0)
+						break;
+					else if (c2->rdatalen == c1->rdatalen &&
+						memcmp(c1->rdata, c2->rdata, c1->rdatalen) <= 0)
+						break;
+				}
+
+				if (c2 != NULL)
+					TAILQ_INSERT_BEFORE(c2, c1, entries);
+				else
+					TAILQ_INSERT_TAIL(&head, c1, entries);
+			}
+		}
+
+		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+			pack(p, c2->data, c2->len);
+			p += c2->len;
+
+			free(c2->rdata);
+			free(c2->data);
+
+			TAILQ_REMOVE(&head, c2, entries);
+		}
+
+		keylen = (p - key);	
+
+	#if 0
+		debug_bindump(key, keylen);
+	#endif
+
+		siglen = sizeof(signature);
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(rbt->humanname, "RRSIG", ttl, "DNSKEY", algorithm, labels, 			ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
 	
 	return 0;
 }
@@ -5445,6 +5795,36 @@ keytag(u_char *key, u_int keysize)
 	return ac & 0xffff;
 }
 
+
+u_int
+dnskey_keytag(struct dnskey *dnskey)
+{
+	char *key;
+	int keylen;
+	char *p;
+	u_int ret;
+	
+	key = calloc(10 * 4096, 1);
+	if (key == NULL)
+		return 0;
+
+	/* check the keytag supplied */
+	p = key;
+	pack16(p, htons(dnskey->flags));
+	p += 2;
+	pack8(p, dnskey->protocol);
+	p++;
+	pack8(p, dnskey->algorithm);
+	p++;
+	pack(p, dnskey->public_key, dnskey->publickey_len);
+	p += dnskey->publickey_len;
+	keylen = (p - key);
+
+	ret = keytag(key, keylen);
+	free(key);
+	
+	return (ret);
+}
 
 
 void
@@ -8072,4 +8452,36 @@ notglue(ddDB *db, struct rbtree *rbt, char *zonename)
 	free(zoneapex);
 	/* let's pretend we're not glue here */
 	return 1;
+}
+
+/*
+ * WIRE_RDATA - create a wire representation of the RDATA portion of an RR
+ */
+
+char *
+wire_dnskey_rdata(struct rr *rr, int *outlen)
+{
+	char *tmp = NULL, *p;
+
+	*outlen = sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t) \
+		+ ((struct dnskey *)rr->rdata)->publickey_len;
+
+	tmp = malloc(*outlen);
+	if (tmp == NULL)
+		return NULL;
+		
+	p = tmp;
+	pack16(p, htons(((struct dnskey *)rr->rdata)->flags));
+	p += 2;
+	
+	pack8(p, ((struct dnskey *)rr->rdata)->protocol);
+	p++;
+
+	pack8(p, ((struct dnskey *)rr->rdata)->algorithm);
+	p++;
+
+	pack(p, ((struct dnskey *)rr->rdata)->public_key,
+		((struct dnskey *)rr->rdata)->publickey_len);
+
+	return (tmp);
 }
