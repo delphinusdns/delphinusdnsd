@@ -7,7 +7,8 @@ options "cool stuff" {
 
 
 zone "centroid.eu" {
-  centroid.eu,soa,3600,uranus.centroid.eu.,pjp.solarscale.de.,2014051701,3600,1800,7200,3600
+  centroid.eu,soa,3600,uranus.centroid.eu.,hostmaster.centroid.eu.,2014051701,3600,1800,7200,3600
+  centroid.eu.,ns,3600,nameserver.example.com.
   centroid.eu.,sshfp,3600,3,2,"b330fd2288cf9e13c9ef68b1b0c0b20a10c16cc55f03cd3869cf1a49f06bed43"
   centroid.eu.,sshfp,3600,3,1,"0ca455de4800c0f6c681e805e7bd86e511efb1fc"
   centroid.eu.,sshfp,3600,2,2,"bbd96ff7e7f629377d655d7fa9662502837b66cf9a2d24590df77acef66fe405"

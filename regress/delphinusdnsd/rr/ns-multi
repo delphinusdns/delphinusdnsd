@@ -8,10 +8,10 @@ options "cool stuff" {
 
 zone "centroid.eu" {
   centroid.eu,soa,3600,uranus.centroid.eu.,nospam.centroid.eu.,2014051701,3600,1800,7200,3600
-  dione.centroid.eu.,a,3600,127.0.0.1
-  uranus.centroid.eu.,a,3600,127.0.0.2
-  proteus.centroid.eu.,a,3600,127.0.0.4
   centroid.eu.,ns,3600,dione.centroid.eu.
   centroid.eu.,ns,3600,uranus.centroid.eu.
   centroid.eu.,ns,3600,proteus.centroid.eu.
+  dione.centroid.eu.,a,3600,127.0.0.1
+  uranus.centroid.eu.,a,3600,127.0.0.2
+  proteus.centroid.eu.,a,3600,127.0.0.4
 }

@@ -7,7 +7,8 @@ options "cool stuff" {
 
 
 zone "centroid.eu" {
-  centroid.eu.,soa,3600,uranus.centroid.eu.,pjp.solarscale.de.,2019021601,3600,1800,7200,3600
+  centroid.eu.,soa,3600,uranus.centroid.eu.,hostmaster.centroid.eu.,2019021601,3600,1800,7200,3600
+  centroid.eu.,ns,3600,nameserver.example.com.
   centroid.eu.,a,3600,127.0.0.1
   centroid.eu.,naptr,3600,10,20,"u","E2U+sip","!^.*$!sip:1234@sip.example.com!",.
 }

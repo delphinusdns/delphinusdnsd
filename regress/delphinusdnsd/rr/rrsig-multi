@@ -11,7 +11,7 @@ zone "centroid.eu" {
   centroid.eu.,soa,86400,omega.virgostar.net.,hostmaster.centroid.eu.,2019020601,3600,1800,1209600,86400
   centroid.eu.,ns,86400,omega.virgostar.net.
   centroid.eu.,ns,86400,tau.virgostar.net.
-  centroid.eu.,mx,86400,10,mail.solarscale.de.
+  centroid.eu.,mx,86400,10,mail.centroid.eu.
   centroid.eu.,txt,86400,"v=spf1 ip4:108.61.211.139 ip6:2001:19f0:6c00:9041:5400:ff:fe11:3332 ~all"
   centroid.eu.,a,86400,116.202.31.129
   centroid.eu.,aaaa,86400,2a01:4f8:c010:1dd1::1
