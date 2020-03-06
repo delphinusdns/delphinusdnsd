@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.93 2019/12/03 19:46:27 pjp Exp $
+ * $Id: parse.y,v 1.94 2020/03/06 12:03:51 pjp Exp $
  */
 
 %{
@@ -822,7 +822,7 @@ zonestatements 	:
 
 zonestatement:
 
-		/* centroid.eu,soa,3600,uranus.centroid.eu.,pjp.solarscale.de.,1258740680,3600,1800,7200,3600 */
+		/* centroid.eu,soa,3600,uranus.centroid.eu.,hostmaster.centroid.eu.,1258740680,3600,1800,7200,3600 */
 
 		STRING COMMA STRING COMMA NUMBER COMMA STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER CRLF 
 		{
