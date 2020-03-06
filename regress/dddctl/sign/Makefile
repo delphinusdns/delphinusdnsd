@@ -2,7 +2,7 @@ DELPHINUSDNSDSRC =      ${.CURDIR}/../../../delphinusdnsd
 
 .PATH:  ${DELPHINUSDNSDSRC}
 
-ZONES= solarscale.de centroid.eu delphinusdns.org
+ZONES= centroid.eu delphinusdns.org
 
 REGRESS_TARGETS=        test-sign kfiles
 
