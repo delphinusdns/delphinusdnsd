@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.102 2020/03/04 17:39:18 pjp Exp $
+ * $Id: dddctl.c,v 1.103 2020/03/06 14:12:34 pjp Exp $
  */
 
 #include <sys/param.h>
@@ -6661,7 +6661,7 @@ usage(int argc, char *argv[])
 	int retval = 0;
 
 	if (argc == 2 && strcmp(argv[1], "sign") == 0) {
-		fprintf(stderr, "usage: dddctl sign [-KXZ] [-a algorithm] [-B bits] [-e seconds] [-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename] [-o output] [-S pid] [-s salt] [-t ttl] [-x serial] [-z ZSK]\n");
+		fprintf(stderr, "usage: dddctl sign [-KXZ] [-a algorithm] [-B bits] [-e seconds] [-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename] [-o output] [-R keyword] [-S pid] [-s salt] [-t ttl] [-x serial] [-z ZSK]\n");
 		fprintf(stderr, "\t-K\t\tcreate a new KSK key.\n");
 		fprintf(stderr, "\t-X\t\tupdate the serial to YYYYMMDD01.\n");
 		fprintf(stderr, "\t-Z\t\tcreate a new ZSK key.\n");
@@ -6674,6 +6674,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\t-m mask\t\trun the following masked functions\n");
 		fprintf(stderr, "\t-n zonename\trun for zonename zone\n");
 		fprintf(stderr, "\t-o output\toutput to file, may be '-' for stdout\n");
+		fprintf(stderr, "\t-R keyword\tSpecify key roll-over method (prep or double)\n");
 		fprintf(stderr, "\t-S pid\t\tsign with this pid ('KSK' or 'ZSK' if used in\n\t\t\tconjunction with [-ZK])\n");
 		fprintf(stderr, "\t-s salt\t\tsalt for NSEC3 (in hexadecimal)\n");
 		fprintf(stderr, "\t-t ttl\t\ttime-to-live for dnskey's\n");
@@ -6701,7 +6702,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\tconfigtest [-cn] [configfile]\n");
 		fprintf(stderr, "\tquery [-DITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
-		fprintf(stderr, "\tsign [-KXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename]\n\t\t[-o output] [-S pid] [-s salt] [-t ttl] [-x serial] [-z ZSK]\n");
+		fprintf(stderr, "\tsign [-KXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask]\n\t\t[-n zonename] [-o output] [-R keyword] [-S pid] [-s salt]\n\t\t[-t ttl] [-x serial] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
 		fprintf(stderr, "\tstart [-f configfile] [-s socket]\n");
 		fprintf(stderr, "\tstop [-s socket]\n");

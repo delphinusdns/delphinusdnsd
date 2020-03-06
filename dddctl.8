@@ -1,9 +1,9 @@
-.\" $Id: dddctl.8,v 1.11 2019/12/27 16:16:49 pjp Exp $
+.\" $Id: dddctl.8,v 1.12 2020/03/06 14:12:33 pjp Exp $
 .\" In parts copyright (template) by:
 .\"
 .\"	$OpenBSD: vmctl.8,v 1.39 2018/02/24 13:14:09 jmc Exp $
 .\"
-.\" Copyright (c) 2018-2019 Peter J. Philipp
+.\" Copyright (c) 2018-2020 Peter J. Philipp
 .\" Copyright (c) 2015 Mike Larkin <mlarkin@openbsd.org>
 .\"
 .\" Permission to use, copy, modify, and distribute this software for any
@@ -18,7 +18,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: December 27 2019 $
+.Dd $Mdocdate: March 6 2020 $
 .Dt DDDCTL 8
 .Os
 .Sh NAME
@@ -97,6 +97,7 @@ type is omitted because it's always type 'hmac-sha256'.
 .Op Fl m Ar mask
 .Op Fl n Ar zonename
 .Op Fl o Ar output
+.Op Fl R Ar keyword
 .Op Fl S Ar pid
 .Op Fl s Ar salt
 .Op Fl t Ar ttl
@@ -129,6 +130,10 @@ run the following masked functions (used for debug).
 run for zonename zone.
 .It Fl o Ar output
 output to file, may be '-' for stdout.
+.It Fl R Ar keyword
+chooses a roll-over method.  Current keywords are 'prep' and 'double' for
+Pre Publication Rollover Method or Double-Signature Rollover method
+respectively.  Default is 'prep'.
 .It Fl S Ar pid
 sign with this pid ('KSK' or 'ZSK' if used in conjunction with [-ZK]).
 .It Fl s Ar salt
