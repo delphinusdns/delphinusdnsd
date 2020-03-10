@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.49 2020/02/01 07:38:04 pjp Exp $
+ * $Id: raxfr.c,v 1.50 2020/03/10 10:04:46 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1701,7 +1701,7 @@ get_remote_soa(struct rzone *rzone)
 		sa = (struct sockaddr *)&sin;
 	}
 
-	if (strcmp(rzone->tsigkey, "NOKEY") != 0) {
+	if (rzone->tsigkey != NULL && strcmp(rzone->tsigkey, "NOKEY") != 0) {
 
 		keyname = dns_label(rzone->tsigkey, &keynamelen);
 		if (keyname == NULL) {
@@ -2103,7 +2103,7 @@ do_raxfr(FILE *f, struct rzone *rzone)
 		return -1;
         }
 
-	if (strcmp(rzone->tsigkey, "NOKEY") != 0) {
+	if (rzone->tsigkey != NULL && strcmp(rzone->tsigkey, "NOKEY") != 0) {
 		keyname = dns_label(rzone->tsigkey, &keynamelen);
 		if (keyname == NULL) {
 			dolog(LOG_ERR, "dns_label failed\n");
