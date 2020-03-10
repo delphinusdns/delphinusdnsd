@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.40 2020/01/14 12:42:04 pjp Exp $
+ * $Id: axfr.c,v 1.41 2020/03/10 07:42:53 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -131,6 +131,7 @@ int notify = 0;				/* do not notify when set to 0 */
 extern int debug, verbose;
 extern time_t time_changed;
 extern int tsig;
+extern long glob_time_offset;
 
 SLIST_HEAD(, axfrentry) axfrhead;
 
@@ -1454,6 +1455,10 @@ gather_notifydomains(ddDB *db)
 	
 	now = time(NULL);
 	tm = localtime(&now);
+
+	/* adjust for offset taken before chroot */
+	tm->tm_gmtoff = glob_time_offset;
+
 	if (tm != NULL)
 		strftime(timestring, sizeof(timestring), "%Y%m%d", tm);
 	else

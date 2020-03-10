@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.99 2020/01/16 13:29:03 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.100 2020/03/10 07:42:53 pjp Exp $
  */
 
 
@@ -284,6 +284,7 @@ char *versionstring = DD_VERSION;
 uint8_t vslen = DD_VERSION_LEN;
 #endif
 int *ptr = NULL;
+long glob_time_offset = 0;
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -322,12 +323,20 @@ main(int argc, char *argv[], char *environ[])
 	struct imsgbuf  **parent_ibuf, **child_ibuf;
 
 	static ddDB *db;
+	
+	time_t now;
+	struct tm *ltm;
 
 	
 	if (geteuid() != 0) {
 		fprintf(stderr, "must be started as root\n");
 		exit(1);
 	}
+
+	
+	now = time(NULL);
+	ltm = localtime(&now);
+	glob_time_offset = ltm->tm_gmtoff;
 
 	av = argv;
 
