@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.33 2019/12/27 07:57:33 pjp Exp $
+ * $Id: additional.c,v 1.34 2020/04/01 11:42:01 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -72,9 +72,9 @@ int additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_ds(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_opt(struct question *, char *, int, int);
 int additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
-int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int);
-int additional_nsec(char *, int, int, struct rbtree *, char *, int, int);
-int additional_nsec3(char *, int, int, struct rbtree *, char *, int, int);
+int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *);
+int additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int *);
+int additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *);
 int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *);
 
 extern void 	pack(char *, char *, int);
@@ -671,7 +671,7 @@ out:
  */
 
 int 
-additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int count)
+additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count)
 {
 	struct answer {
 		u_int16_t type;
@@ -697,32 +697,28 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) == NULL)
 		return 0;
 
-	rroffset = offset;
 
-	/* check if we go over our return length */
-	if ((offset + namelen) > replylen)
-		return 0;
-
-	memcpy(&reply[offset], name, namelen);
-	offset += namelen;
-	tmplen = compress_label((u_char*)reply, offset, namelen);
-
-	if (tmplen != 0) {
-		offset = tmplen;
-	}
-
-	if ((offset + sizeof(struct answer)) > replylen) {
-		return 0;
-	}
-
-	rrsig_count = 0;
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-		if (inttype != ((struct rrsig *)rrp->rdata)->type_covered)
+		if (inttype != -1 && inttype != ((struct rrsig *)rrp->rdata)->type_covered)
 			continue;
 
-		if (rrsig_count++ != count)
-			continue;
+		/* check if we go over our return length */
+		if ((offset + namelen) > replylen)
+			return 0;
+
+		memcpy(&reply[offset], name, namelen);
+		offset += namelen;
+		tmplen = compress_label((u_char*)reply, offset, namelen);
+
+		if (tmplen != 0) {
+			offset = tmplen;
+		}
+
+		if ((offset + sizeof(struct answer)) > replylen) {
+			return 0;
+		}
 			
+		rroffset = offset;
 		answer = (struct answer *)&reply[offset];
 		answer->type = htons(DNS_TYPE_RRSIG);
 		answer->class = htons(DNS_CLASS_IN);
@@ -751,15 +747,14 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 		memcpy(&reply[offset], ((struct rrsig *)rrp->rdata)->signature, ((struct rrsig *)rrp->rdata)->signature_len);
 		offset += ((struct rrsig *)rrp->rdata)->signature_len;
 
-		break;
+		answer->rdlength = htons((offset - rroffset) + 18);
+
+		rrsig_count++;
 	}
 
-	if (rrp == NULL)
-		return 0;
+	*count = rrsig_count;
 
-	answer->rdlength = htons((offset - rroffset) + 18);
 	return (offset);
-
 }
 
 /*
@@ -768,7 +763,7 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
  */
 
 int 
-additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset)
+additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count)
 {
 	struct answer {
 		u_int16_t type;
@@ -781,6 +776,7 @@ additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int tmplen, rroffset;
+	int retcount;
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) == NULL)
 		goto out;
@@ -825,13 +821,15 @@ additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *
 			((struct nsec *)rrp->rdata)->bitmap_len);
 	offset += ((struct nsec *)rrp->rdata)->bitmap_len;
 
-	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC, rbt, reply, replylen, offset, 0);
+	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC, rbt, reply, replylen, offset, &retcount);
 
 	if (tmplen == 0) {
 		goto out;
 	}
 
 	offset = tmplen;
+	
+	*count = retcount + 1;
 
 out:
 	return (offset);
@@ -844,7 +842,7 @@ out:
  */
 
 int 
-additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset)
+additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count)
 {
 	struct answer {
 		u_int16_t type;
@@ -863,6 +861,7 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 
 	int tmplen, rroffset;
 	u_int8_t *somelen;
+	int retcount;
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) == NULL)
 		goto out;
@@ -923,13 +922,14 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 			((struct nsec3 *)rrp->rdata)->bitmap_len);
 	offset += ((struct nsec3 *)rrp->rdata)->bitmap_len;
 
-	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, rbt, reply, replylen, offset, 0);
+	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, rbt, reply, replylen, offset, &retcount);
 
 	if (tmplen == 0) {
 		return 0;
 	}
 
 	offset = tmplen;
+	*count = retcount + 1;
 
 out:
 	return (offset);
