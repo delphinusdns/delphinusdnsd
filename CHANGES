@@ -5,6 +5,8 @@ Changes in RELEASE_1_5 from RELEASE_1_4
 - switch default algorithm to alg 13 (elliptic curve) instead of alg 8 (RSA)
 - not specifying a tsigkey in rzone should now imply NOKEY
 - multiple RRSIG's are now working without bugs
+- fixed the random time restart algorithm to restart at only 1 desired time
+  which increases the odds that replicants won't do it at the same time.
 
 Changes in RELEASE_1_4 from RELEASE_1_3
 

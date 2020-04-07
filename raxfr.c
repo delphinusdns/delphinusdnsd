@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.50 2020/03/10 10:04:46 pjp Exp $
+ * $Id: raxfr.c,v 1.51 2020/04/07 16:31:31 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1606,6 +1606,17 @@ schedule_retry(char *zonename, time_t seconds)
 static void
 schedule_restart(char *zonename, time_t seconds)
 {
+
+	LIST_FOREACH(sp0, &myschedules, myschedule_entry) {
+		if (sp0->action == SCHEDULE_ACTION_RESTART)
+			break;
+	}
+
+	if (sp0 != NULL) {
+		dolog(LOG_INFO, "found an existing restart entry, scheduling restart at %s", ctime(&sp0->when));
+		return;
+	}
+
 	sp0 = calloc(1, sizeof(struct myschedule));
 	if (sp0 == NULL)
 		return;
