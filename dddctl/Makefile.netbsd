@@ -2,7 +2,7 @@
 
 PROG=dddctl
 
-SRCS=dddctl.c parse.y base64.c dnssec.c util.c ent.c db.c raxfr.c tsig.c region.c imsg-buffer.c imsg.c
+SRCS=dddctl.c parse.y base64.c dnssec.c util.c ent.c db.c raxfr.c tsig.c region.c imsg-buffer.c imsg.c sign.c query.c
 
 CFLAGS= -g 
 CFLAGS+= -I${.CURDIR}/..  -I/usr/pkg/libressl/include
