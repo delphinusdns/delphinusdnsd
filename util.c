@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.59 2020/01/16 13:29:03 pjp Exp $
+ * $Id: util.c,v 1.60 2020/04/11 07:15:22 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -116,11 +116,10 @@ char * 	bitmap2human(char *, int);
 int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *);
 int dn_contains(char *name, int len, char *anchorname, int alen);
 
+
 int bytes_received;
 
-
 /* externs */
-
 extern int debug;
 extern int *ptr;
 extern int tsig;

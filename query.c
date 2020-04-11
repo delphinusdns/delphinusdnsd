@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: query.c,v 1.2 2020/04/11 06:00:07 pjp Exp $
+ * $Id: query.c,v 1.3 2020/04/11 07:15:22 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -78,6 +78,9 @@
 
 static struct timeval tv0;
 static time_t current_time;
+u_int16_t port = 53;
+int bytes_received;
+
 
 /* prototypes */
 
@@ -88,38 +91,21 @@ int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *
 int	notglue(ddDB *, struct rbtree *, char *);
 
 
+
+extern int debug;
+extern int verbose;
+
+extern int dnssec;
+extern int tsig;
+
+/* externs */
+
 extern int insert_axfr(char *, char *);
 extern int insert_filter(char *, char *);
 extern int insert_whitelist(char *, char *);
 extern int insert_notifyslave(char *, char *);
 extern int	usage(int argc, char *argv[]);
 extern void	dolog(int pri, char *fmt, ...);
-extern int debug;
-extern int verbose;
-extern int bytes_received;
-
-
-extern int illdestination;
-extern int *ptr;
-
-extern int notify;
-extern int whitelist;
-extern int bcount;
-extern char *bind_list[255];
-extern char *interface_list[255];
-extern int bflag;
-extern int ratelimit_packets_per_second;
-extern int ratelimit;
-u_int16_t port = 53;
-extern int nflag;
-extern int iflag;
-extern int lflag;
-extern int icount;
-extern int vslen;
-extern char *versionstring;
-u_int64_t expiredon, signedon;
-
-/* externs */
 
 extern uint32_t unpack32(char *);
 extern uint16_t unpack16(char *);
@@ -186,8 +172,7 @@ extern int  			insert_tsig_key(char *, int, char *);
 extern int 			insert_region(char *, char *);
 
 
-extern int dnssec;
-extern int tsig;
+/* this struct must be under externs */
 
 static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_A, 0, raxfr_a },

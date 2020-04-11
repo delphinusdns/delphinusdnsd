@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: sign.c,v 1.1 2020/04/10 17:08:14 pjp Exp $
+ * $Id: sign.c,v 1.2 2020/04/11 07:15:22 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -126,6 +126,7 @@ static struct keysentry {
         SLIST_ENTRY(keysentry) keys_entry;
 } *kn, *knp;
 
+u_int64_t expiredon, signedon;
 
 /* prototypes */
 
@@ -212,7 +213,6 @@ extern int lflag;
 extern int icount;
 extern int vslen;
 extern char *versionstring;
-u_int64_t expiredon, signedon;
 
 /* externs */
 

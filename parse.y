@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.94 2020/03/06 12:03:51 pjp Exp $
+ * $Id: parse.y,v 1.95 2020/04/11 07:15:22 pjp Exp $
  */
 
 %{
@@ -3482,7 +3482,7 @@ create_nsec_bitmap(char *rrlist, char *bitmap, int *len)
 	for (ap = argv; ap < &argv[255] && 
 		(*ap = strsep(&rrlist, " ")) != NULL; argc++) {
 		
-		if (*ap != '\0') {
+		if (**ap != '\0') {
 			ap++;
 		} 
 	}

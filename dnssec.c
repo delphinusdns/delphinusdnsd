@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dnssec.c,v 1.25 2019/07/05 08:14:50 pjp Exp $
+ * $Id: dnssec.c,v 1.26 2020/04/11 07:15:22 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -962,14 +962,18 @@ find_nsec3_match_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 struct rbtree *
 find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
-	char *hashname;
-	char *backname;
-	char *dname;
-	char wildcard[DNS_MAXNAME + 1];
-	int backnamelen;
 	struct rbtree *rbt0 = NULL;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+
+	char *hashname;
+	char *backname;
+	char *dname;
+	char *p;
+	char wildcard[DNS_MAXNAME + 1];
+
+	int backnamelen;
+	int ret;
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL) {
 		return NULL;
@@ -987,8 +991,14 @@ find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *rbt, ddDB *d
 #if DEBUG
 	dolog(LOG_INFO, "next closer = %s\n", rbt0->humanname);
 #endif
+	p = rbt0->humanname;
+	ret = snprintf(wildcard, sizeof(wildcard), "*.%s", p);
+	if (ret >= sizeof(wildcard)) {
+		dolog(LOG_INFO, "result was truncated\n");
+		free(rbt0);
+		return NULL;
+	}
 
-	snprintf(wildcard, sizeof(wildcard), "*.%s", rbt0->humanname);
 	backname = dns_label(wildcard, &backnamelen);
 
 	hashname = hash_name(backname, backnamelen, (struct nsec3param *)rrp->rdata);
