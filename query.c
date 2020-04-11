@@ -27,12 +27,13 @@
  */
 
 /*
- * $Id: query.c,v 1.1 2020/04/10 17:08:14 pjp Exp $
+ * $Id: query.c,v 1.2 2020/04/11 06:00:07 pjp Exp $
  */
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>

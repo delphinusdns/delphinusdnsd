@@ -43,11 +43,10 @@
  */
 
 /*
- * $Id: base64.c,v 1.2 2017/10/26 15:49:29 pjp Exp $
+ * $Id: base64.c,v 1.3 2020/04/11 06:00:07 pjp Exp $
  */
 
 #include <sys/types.h>
-#include <sys/param.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>

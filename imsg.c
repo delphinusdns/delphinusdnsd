@@ -17,12 +17,10 @@
  */
 
 /* 
- * $Id: imsg.c,v 1.2 2017/10/26 15:49:29 pjp Exp $
+ * $Id: imsg.c,v 1.3 2020/04/11 06:00:07 pjp Exp $
  */
 
-
-
-#include <sys/param.h>
+#include <sys/types.h>
 #include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
