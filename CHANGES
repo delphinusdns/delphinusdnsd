@@ -7,6 +7,8 @@ Changes in RELEASE_1_5 from RELEASE_1_4
 - multiple RRSIG's are now working without bugs
 - fixed the random time restart algorithm to restart at only 1 desired time
   which increases the odds that replicants won't do it at the same time.
+- ANY replies have the option now to be forced to TCP only with the
+  tcp-on-any-only option.
 
 Changes in RELEASE_1_4 from RELEASE_1_3
 

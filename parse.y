@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2019 Peter J. Philipp.  All rights reserved.
+ * Copyright (c) 2014-2020 Peter J. Philipp.  All rights reserved.
  * Copyright (c) 2008 Gilles Chehade <gilles@poolp.org>
  * Copyright (c) 2008 Pierre-Yves Ritschard <pyr@openbsd.org>
  * Copyright (c) 2002, 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.95 2020/04/11 07:15:22 pjp Exp $
+ * $Id: parse.y,v 1.96 2020/04/23 06:28:28 pjp Exp $
  */
 
 %{
@@ -197,6 +197,7 @@ int axfrport = 0;
 time_t time_changed;
 int dnssec = 0;
 int raxfrflag = 0;
+int tcpanyonly = 0;
 
 char 		*check_rr(char *, char *, int, int *);
 int 		fill_a(char *, char *, int, char *);
@@ -1216,6 +1217,9 @@ optionsstatement:
 			} else if (strcasecmp($1, "log") == 0) {
 				dolog(LOG_DEBUG, "logging on\n");
 				lflag = 1;
+			} else if (strcasecmp($1, "tcp-on-any-only") == 0) {
+				dolog(LOG_DEBUG, "TCP on ANY only\n");
+				tcpanyonly = 1;
 			}
 		}
 	}

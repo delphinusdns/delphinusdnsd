@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2005-2019 Peter J. Philipp
+ * Copyright (c) 2005-2020 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.99 2020/04/01 11:42:01 pjp Exp $
+ * $Id: reply.c,v 1.100 2020/04/23 06:28:28 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -147,7 +147,7 @@ char * 		convert_name(char *name, int namelen);
 int 		count_dots(char *name);
 char * 		base32hex_encode(u_char *input, int len);
 
-extern int debug, verbose, dnssec;
+extern int debug, verbose, dnssec, tcpanyonly;
 extern char *versionstring;
 extern uint8_t vslen;
 
@@ -5436,6 +5436,21 @@ reply_any(struct sreply *sreply, ddDB *db)
 	odh->nsrr = 0;
 	odh->additional = 0;
 
+	
+	/*
+	 * Check if we're UDP and have the tcp-on-any-only option set
+	 */
+	if (!istcp && tcpanyonly == 1) {
+		NTOHS(odh->query);
+		SET_DNS_TRUNCATION(odh);
+		HTONS(odh->query);
+		odh->answer = 0;
+		odh->nsrr = 0; 
+		odh->additional = 0;
+		outlen = rollback;
+		goto skip;	
+	}
+
 	outlen = create_anyreply(sreply, (char *)reply, replysize, outlen, 1);
 	if (outlen == 0) {
 		return (retlen);
@@ -5446,6 +5461,7 @@ reply_any(struct sreply *sreply, ddDB *db)
 		outlen = rollback;
 	}
 
+skip:
 
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
