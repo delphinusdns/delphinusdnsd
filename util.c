@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.60 2020/04/11 07:15:22 pjp Exp $
+ * $Id: util.c,v 1.61 2020/04/27 19:07:22 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1507,6 +1507,10 @@ struct rrtab *
 rrlookup(char *keyword)
 {
 	static struct rrtab *p; 
+
+	/* safety */
+	if (keyword == NULL)
+		return NULL;
 
 	p = bsearch(keyword, myrrtab, sizeof(myrrtab)/sizeof(myrrtab[0]), 
 		sizeof(myrrtab[0]), kw_cmp);
