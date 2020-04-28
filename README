@@ -1,4 +1,4 @@
-$Id: README,v 1.43 2020/03/04 17:39:18 pjp Exp $
+$Id: README,v 1.44 2020/04/28 16:40:48 pjp Exp $
 
 1. README
  1.1 AUTHOR(S)
@@ -26,7 +26,7 @@ $Id: README,v 1.43 2020/03/04 17:39:18 pjp Exp $
 Delphinusdns is a small authoritative nameserver.  It does not recurse nor 
 search.  This program is written to a BSD Style License.  BSD's tree(3)
 Red Black btree macros are used for the main in-memory database.  A project
-website exists at http://delphinusdns.org.  It may happen that in 
+website exists at https://delphinusdns.org.  It may happen that in 
 documentation other domains such as "centroid.eu" are used.  These belong 
 to the author and shouldn't cause confusion, with this notice.
 
