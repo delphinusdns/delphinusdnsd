@@ -15,6 +15,7 @@ For 1.5.0 release
   add the timeinfo as a variable before chroot'ing.
 - Shape up the NSEC code as it seems NSEC is having a renaissance, at least
 to have replicant compatibility for NSEC
+- get rid of zincludes and incorporate them into mzone blocks (for masters)
 
 For 1.4.0 release
 - a github mirrored copy
