@@ -9,6 +9,7 @@ Changes in RELEASE_1_5 from RELEASE_1_4
   which increases the odds that replicants won't do it at the same time.
 - ANY replies have the option now to be forced to TCP only with the
   tcp-on-any-only option.
+- conform to RFC 2181 section 5.2, but keep exception for RRSIG per RFC 4034
 
 Changes in RELEASE_1_4 from RELEASE_1_3
 

@@ -3,7 +3,7 @@ Please see https://delphinusdns.org for updates/news.
 
 For 1.5.0 release
 - make sure an RRset has the same TTL, we don't need TTL in a single RR because
-  the set requires per RFC 2181 section 5.2 to be the same in the RRset.
+  the set requires per RFC 2181 section 5.2 to be the same in the RRset. [DONE]
 - CAA RR support
 - a github mirrored copy	[DONE]
 - an OpenBSD port/package starting with 1.4.1 release	[IN THE WORKS]
