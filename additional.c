@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.34 2020/04/01 11:42:01 pjp Exp $
+ * $Id: additional.c,v 1.35 2020/05/07 12:17:35 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -145,7 +145,7 @@ additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int reply
 		
 		answer->type = htons(DNS_TYPE_A);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(((struct a *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		answer->rdlength = htons(sizeof(in_addr_t));
 
@@ -214,7 +214,7 @@ additional_aaaa(char *name, int namelen, struct rbtree *rbt, char *reply, int re
 		
 		answer->type = htons(DNS_TYPE_AAAA);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(((struct aaaa *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		answer->rdlength = htons(sizeof(struct in6_addr));
 
@@ -285,7 +285,7 @@ additional_mx(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 		
 		answer->type = htons(DNS_TYPE_MX);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(((struct smx *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 		answer->mx_priority = htons(((struct smx *)rrp->rdata)->preference);
 
 		offset += sizeof(struct answer);
@@ -371,7 +371,7 @@ additional_ptr(char *name, int namelen, struct rbtree *rbt, char *reply, int rep
 	
 	answer->type = htons(DNS_TYPE_PTR);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(((struct ptr *)rrp->rdata)->ttl);
+	answer->ttl = htonl(rrset->ttl);
 
 	offset += sizeof(struct answer);
 
@@ -806,7 +806,7 @@ additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *
 	answer = (struct answer *)&reply[offset];
 	answer->type = htons(DNS_TYPE_NSEC);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(((struct nsec *)rrp->rdata)->ttl);
+	answer->ttl = htonl(rrset->ttl);
 	answer->rdlength = htons(((struct nsec *)rrp->rdata)->ndn_len + 
 			((struct nsec *)rrp->rdata)->bitmap_len);
 	
@@ -891,7 +891,7 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 	answer = (struct answer *)&reply[offset];
 	answer->type = htons(DNS_TYPE_NSEC3);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(((struct nsec3 *)rrp->rdata)->ttl);
+	answer->ttl = htonl(rrset->ttl);
 	answer->rdlength = htons(6 + ((struct nsec3 *)rrp->rdata)->saltlen + 
 			((struct nsec3 *)rrp->rdata)->nextlen + 
 			((struct nsec3 *)rrp->rdata)->bitmap_len);
@@ -994,7 +994,7 @@ additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 		
 		answer->type = htons(DNS_TYPE_DS);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(((struct ds *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 		answer->key_tag = htons(((struct ds *)rrp->rdata)->key_tag);
 		answer->algorithm = ((struct ds *)rrp->rdata)->algorithm;
 		answer->digest_type = ((struct ds *)rrp->rdata)->digest_type; 

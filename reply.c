@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.100 2020/04/23 06:28:28 pjp Exp $
+ * $Id: reply.c,v 1.101 2020/05/07 12:17:35 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -246,7 +246,7 @@ reply_a(struct sreply *sreply, ddDB *db)
 		answer->name[1] = 0x0c;				/* 2 bytes */
 		answer->type = q->hdr->qtype;			/* 4 bytes */	
 		answer->class = q->hdr->qclass;			/* 6 bytes */
-		answer->ttl = htonl(((struct a *)rrp->rdata)->ttl); /* 10 b */
+		answer->ttl = htonl(rrset->ttl); 		/* 10 b */
 
 		answer->rdlength = htons(sizeof(in_addr_t));	/* 12 bytes */
 
@@ -461,7 +461,7 @@ reply_nsec3param(struct sreply *sreply, ddDB *db)
 	answer->name[1] = 0x0c;				/* 2 bytes */
 	answer->type = q->hdr->qtype;			/* 4 bytes */	
 	answer->class = q->hdr->qclass;			/* 6 bytes */
-	answer->ttl = htonl(((struct nsec3param *)rrp->rdata)->ttl);
+	answer->ttl = htonl(rrset->ttl);
 
 	answer->rdlength = htons(((struct nsec3param *)rrp->rdata)->saltlen + 5);	/* 5 = rest */
 
@@ -672,7 +672,7 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 	answer->name[1] = 0x0c;				/* 2 bytes */
 	answer->type = q->hdr->qtype;			/* 4 bytes */	
 	answer->class = q->hdr->qclass;			/* 6 bytes */
-	answer->ttl = htonl(((struct nsec3 *)rrp->rdata)->ttl); /* 10 b */
+	answer->ttl = htonl(rrset->ttl); /* 10 b */
 	
 	answer->rdlength = htons(nextlen + bitmaplen + saltlen + 6);  /* 6 = rest */
 
@@ -880,7 +880,7 @@ reply_nsec(struct sreply *sreply, ddDB *db)
 	answer->name[1] = 0x0c;				/* 2 bytes */
 	answer->type = q->hdr->qtype;			/* 4 bytes */	
 	answer->class = q->hdr->qclass;			/* 6 bytes */
-	answer->ttl = htonl(((struct nsec *)rrp->rdata)->ttl); /* 10 b */
+	answer->ttl = htonl(rrset->ttl); /* 10 b */
 
 	answer->rdlength = htons(ndnlen + bitmaplen);	
 
@@ -1070,7 +1070,7 @@ reply_ds(struct sreply *sreply, ddDB *db)
 		answer->name[1] = 0x0c;				/* 2 bytes */
 		answer->type = q->hdr->qtype;			/* 4 bytes */	
 		answer->class = q->hdr->qclass;			/* 6 bytes */
-		answer->ttl = htonl(((struct ds *)rrp->rdata)->ttl); /* 10 */
+		answer->ttl = htonl(rrset->ttl); /* 10 */
 
 		answer->rdlength = htons(((struct ds *)rrp->rdata)->digestlen + 4);	/* 12 bytes */
 
@@ -1267,7 +1267,7 @@ reply_dnskey(struct sreply *sreply, ddDB *db)
 		answer->name[1] = 0x0c;				/* 2 bytes */
 		answer->type = q->hdr->qtype;			/* 4 bytes */	
 		answer->class = q->hdr->qclass;			/* 6 bytes */
-		answer->ttl = htonl(((struct dnskey *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		answer->rdlength = htons(((struct dnskey *)rrp->rdata)->publickey_len + 4);	/* 12 bytes */
 
@@ -1569,7 +1569,7 @@ reply_aaaa(struct sreply *sreply, ddDB *db)
 		answer->name[1] = 0x0c;
 		answer->type = q->hdr->qtype;
 		answer->class = q->hdr->qclass;
-		answer->ttl = htonl(((struct aaaa *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		answer->rdlength = htons(sizeof(struct in6_addr));
 
@@ -1757,7 +1757,7 @@ reply_mx(struct sreply *sreply, ddDB *db)
 		answer->name[1] = 0x0c;
 		answer->type = q->hdr->qtype;
 		answer->class = q->hdr->qclass;
-		answer->ttl = htonl(((struct smx *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		answer->rdlength = htons(sizeof(u_int16_t) + ((struct smx *)rrp->rdata)->exchangelen);
 
@@ -2094,7 +2094,7 @@ reply_ns(struct sreply *sreply, ddDB *db)
 		answer = (struct answer *)(&reply[outlen] + rbt1->zonelen);
 		answer->type = htons(DNS_TYPE_NS);
 		answer->class = q->hdr->qclass;
-		answer->ttl = htonl(((struct ns *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		name = ((struct ns *)rrp->rdata)->nsserver;
 		namelen = ((struct ns *)rrp->rdata)->nslen;
@@ -2479,7 +2479,7 @@ reply_cname(struct sreply *sreply, ddDB *db)
 	answer->name[1] = 0x0c;
 	answer->type = htons(DNS_TYPE_CNAME);
 	answer->class = q->hdr->qclass;
-	answer->ttl = htonl(((struct cname *)rrp->rdata)->ttl);
+	answer->ttl = htonl(rrset->ttl);
 
 	outlen += 12;			/* up to rdata length */
 
@@ -2798,7 +2798,7 @@ reply_ptr(struct sreply *sreply, ddDB *db)
 	answer->name[1] = 0x0c;
 	answer->type = q->hdr->qtype;
 	answer->class = q->hdr->qclass;
-	answer->ttl = htonl(((struct ptr *)rrp->rdata)->ttl);
+	answer->ttl = htonl(rrset->ttl);
 
 	outlen += 12;			/* up to rdata length */
 
@@ -2988,7 +2988,7 @@ reply_soa(struct sreply *sreply, ddDB *db)
 	answer->name[1] = 0x0c;
 	answer->type = q->hdr->qtype;
 	answer->class = q->hdr->qclass;
-	answer->ttl = htonl(((struct soa *)rrp->rdata)->ttl);
+	answer->ttl = htonl(rrset->ttl);
 
 	outlen += 12;			/* up to rdata length */
 
@@ -3240,7 +3240,7 @@ reply_txt(struct sreply *sreply, ddDB *db)
 		answer->name[1] = 0x0c;				/* 2 bytes */
 		answer->type = q->hdr->qtype;			/* 4 bytes */	
 		answer->class = q->hdr->qclass;			/* 6 bytes */
-		answer->ttl = htonl(((struct txt *)rrp->rdata)->ttl); /* 10 b */
+		answer->ttl = htonl(rrset->ttl); /* 10 b */
 
 		/* 12 bytes */
 		answer->rdlength = htons(((struct txt *)rrp->rdata)->txtlen);
@@ -3561,7 +3561,7 @@ reply_tlsa(struct sreply *sreply, ddDB *db)
 		answer->name[1] = 0x0c;
 		answer->type = q->hdr->qtype;
 		answer->class = q->hdr->qclass;
-		answer->ttl = htonl(((struct tlsa *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		switch (((struct tlsa *)rrp->rdata)->matchtype) {
 		case 1:
@@ -3748,7 +3748,7 @@ reply_sshfp(struct sreply *sreply, ddDB *db)
 		answer->name[1] = 0x0c;
 		answer->type = q->hdr->qtype;
 		answer->class = q->hdr->qclass;
-		answer->ttl = htonl(((struct sshfp *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		switch (((struct sshfp *)rrp->rdata)->fptype) {
 		case 1:
@@ -3938,7 +3938,7 @@ reply_naptr(struct sreply *sreply, ddDB *db)
 		answer->name[1] = 0x0c;
 		answer->type = q->hdr->qtype;
 		answer->class = q->hdr->qclass;
-		answer->ttl = htonl(((struct naptr *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		answer->naptr_order = htons(((struct naptr *)rrp->rdata)->order);
 		answer->naptr_preference = htons(((struct naptr *)rrp->rdata)->preference);
@@ -4157,7 +4157,7 @@ reply_srv(struct sreply *sreply, ddDB *db)
 		answer->name[1] = 0x0c;
 		answer->type = q->hdr->qtype;
 		answer->class = q->hdr->qclass;
-		answer->ttl = htonl(((struct srv *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		answer->rdlength = htons((3 * sizeof(u_int16_t)) + ((struct srv *)rrp->rdata)->targetlen);
 
@@ -4464,7 +4464,7 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 
 	answer->type = htons(DNS_TYPE_SOA);
 	answer->class = q->hdr->qclass;
-	answer->ttl = htonl(((struct soa *)rrp->rdata)->ttl);
+	answer->ttl = htonl(rrset->ttl);
 
 	outlen += 10;   /* sizeof(struct answer)  up to rdata length */
 
@@ -5178,7 +5178,7 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 	answer->type = htons(DNS_TYPE_SOA);
 	answer->class = q->hdr->qclass;
 
-	answer->ttl = htonl(((struct soa *)rrp->rdata)->ttl);
+	answer->ttl = htonl(rrset->ttl);
 
 	outlen += 10;			/* up to rdata length */
 
@@ -5569,7 +5569,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		answer->type = htons(DNS_TYPE_SOA);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(((struct soa *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		offset += 10;		/* up to rdata length */
 
@@ -5689,7 +5689,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->type = htons(DNS_TYPE_DNSKEY);
 			answer->class = htons(DNS_CLASS_IN);
-			answer->ttl = htonl(((struct dnskey *)rrp->rdata)->ttl);
+			answer->ttl = htonl(rrset->ttl);
 
 			answer->rdlength = htons(namelen);
 
@@ -5745,7 +5745,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->type = htons(DNS_TYPE_DS);
 			answer->class = htons(DNS_CLASS_IN);
-			answer->ttl = htonl(((struct ds *)rrp->rdata)->ttl);
+			answer->ttl = htonl(rrset->ttl);
 
 			answer->rdlength = htons(namelen);
 
@@ -5800,7 +5800,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		answer->type = htons(DNS_TYPE_NSEC3);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(((struct nsec3 *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		answer->rdlength = htons(namelen);
 
@@ -5877,7 +5877,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		answer->type = htons(DNS_TYPE_NSEC3PARAM);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(((struct nsec3param *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		answer->rdlength = htons(namelen);
 
@@ -5939,7 +5939,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		answer->type = htons(DNS_TYPE_NSEC);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(((struct nsec *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		answer->rdlength = htons(namelen);
 
@@ -5985,7 +5985,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->type = htons(DNS_TYPE_NS);
 			answer->class = htons(DNS_CLASS_IN);
-			answer->ttl = htonl(((struct ns *)rrp->rdata)->ttl);
+			answer->ttl = htonl(rrset->ttl);
 
 			answer->rdlength = htons(namelen);
 
@@ -6041,7 +6041,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		answer->type = htons(DNS_TYPE_PTR);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(((struct ptr *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		offset += 10;		/* up to rdata length */
 
@@ -6094,7 +6094,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->type = htons(DNS_TYPE_MX);
 			answer->class = htons(DNS_CLASS_IN);
-			answer->ttl = htonl(((struct smx *)rrp->rdata)->ttl);
+			answer->ttl = htonl(rrset->ttl);
 			answer->rdlength = htons(sizeof(u_int16_t) + ((struct smx *)rrp->rdata)->exchangelen);
 
 			offset += 10;		/* up to rdata length */
@@ -6145,7 +6145,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->type = htons(DNS_TYPE_TXT);
 			answer->class = htons(DNS_CLASS_IN);
-			answer->ttl = htonl(((struct txt *)rrp->rdata)->ttl);
+			answer->ttl = htonl(rrset->ttl);
 
 			offset += 10;		/* up to rdata length */
 
@@ -6190,7 +6190,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->type = htons(DNS_TYPE_TLSA);
 			answer->class = htons(DNS_CLASS_IN);
-			answer->ttl = htonl(((struct tlsa *)rrp->rdata)->ttl);
+			answer->ttl = htonl(rrset->ttl);
 
 			typelen = ((struct tlsa *)rrp->rdata)->matchtype == 1 ? DNS_TLSA_SIZE_SHA256 : DNS_TLSA_SIZE_SHA512;
 			answer->rdlength = htons((3 * sizeof(u_int8_t)) + typelen);
@@ -6251,7 +6251,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->type = htons(DNS_TYPE_SSHFP);
 			answer->class = htons(DNS_CLASS_IN);
-			answer->ttl = htonl(((struct sshfp *)rrp->rdata)->ttl);
+			answer->ttl = htonl(rrset->ttl);
 			answer->rdlength = htons((2 * sizeof(u_int8_t)) + ((struct sshfp *)rrp->rdata)->fplen);
 
 			offset += 10;		/* up to rdata length */
@@ -6304,7 +6304,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->type = htons(DNS_TYPE_NAPTR);
 			answer->class = htons(DNS_CLASS_IN);
-			answer->ttl = htonl(((struct naptr *)rrp->rdata)->ttl);
+			answer->ttl = htonl(rrset->ttl);
 			answer->rdlength = htons((2 * sizeof(u_int16_t)) + ((struct naptr *)rrp->rdata)->flagslen + 1 + ((struct naptr *)rrp->rdata)->serviceslen + 1 + ((struct naptr *)rrp->rdata)->regexplen + 1 + ((struct naptr *)rrp->rdata)->replacementlen);
 
 			offset += 10;		/* up to rdata length */
@@ -6388,7 +6388,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->type = htons(DNS_TYPE_SRV);
 			answer->class = htons(DNS_CLASS_IN);
-			answer->ttl = htonl(((struct srv *)rrp->rdata)->ttl);
+			answer->ttl = htonl(rrset->ttl);
 			answer->rdlength = htons((3 * sizeof(u_int16_t)) + ((struct srv *)rrp->rdata)->targetlen);
 
 			offset += 10;		/* up to rdata length */
@@ -6447,7 +6447,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		answer->type = htons(DNS_TYPE_CNAME);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(((struct cname *)rrp->rdata)->ttl);
+		answer->ttl = htonl(rrset->ttl);
 
 		offset += 10;		/* up to rdata length */
 
@@ -6495,7 +6495,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->type = htons(DNS_TYPE_A);
 			answer->class = htons(DNS_CLASS_IN);
-			answer->ttl = htonl(((struct a *)rrp->rdata)->ttl);
+			answer->ttl = htonl(rrset->ttl);
 			answer->rdlength = htons(sizeof(in_addr_t));
 
 			memcpy((char *)&answer->rdata, (char *)&((struct a *)rrp->rdata)->a, 
@@ -6530,7 +6530,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->type = htons(DNS_TYPE_AAAA);
 			answer->class = htons(DNS_CLASS_IN);
-			answer->ttl = htonl(((struct aaaa *)rrp->rdata)->ttl);
+			answer->ttl = htonl(rrset->ttl);
 			answer->rdlength = htons(sizeof(struct in6_addr));
 			offset += 10;
 

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.17 2020/01/14 12:42:04 pjp Exp $
+ * $Id: db.c,v 1.18 2020/05/07 12:17:35 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -62,7 +62,7 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
+struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl);
 struct rbtree * find_rrset(ddDB *db, char *name, int len);
 struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
@@ -178,7 +178,7 @@ dddbclose(ddDB *db)
 }
 
 struct rbtree *
-create_rr(ddDB *db, char *name, int len, int type, void *rdata)
+create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl)
 {
 	struct rbtree *rbt = NULL;
 	struct rrset *rrset = NULL;
@@ -214,6 +214,11 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata)
 		}
 
 		rrset->rrtype = type;
+		if (type != DNS_TYPE_RRSIG) 
+			rrset->ttl = ttl;
+		else
+			rrset->ttl = 0;		/* fill in later */
+
 		TAILQ_INIT(&rrset->rr_head);
 
 		TAILQ_INSERT_TAIL(&rbt->rrset_head, rrset, entries);
@@ -243,9 +248,13 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata)
 		return NULL;
 	}
 
-	myrr->ttl = 86400;
 	myrr->rdata = rdata;
 	myrr->changed = time(NULL);
+
+	if (type == DNS_TYPE_RRSIG) {
+		struct rrsig *rrsig = (struct rrsig *)rdata;
+		rrsig->ttl = ttl;
+	}
 
 	TAILQ_INSERT_TAIL(&rrset->rr_head, myrr, entries);
 
@@ -302,6 +311,7 @@ add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata)
 		}
 
 		rp->rrtype = rrtype;
+		rp->ttl = 86400;
 		TAILQ_INIT(&rp->rr_head);
 
 		TAILQ_INSERT_TAIL(&rbt->rrset_head, rp, entries);
@@ -313,7 +323,6 @@ add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata)
 		return -1;
 	}
 
-	rt->ttl = 86400;
 	rt->changed = time(NULL);
 	rt->rdata = rdata;
 
@@ -348,9 +357,9 @@ display_rr(struct rrset *rrset)
 
 	TAILQ_FOREACH_SAFE(rrp, &rrset->rr_head, entries, rrp0) {
 #if __linux__
-		printf("%ld:%u:%s\n", rrp->changed, rrp->ttl, (char *)rrp->rdata);
+		printf("%ld:%u:%s\n", rrp->changed, rrset->ttl, (char *)rrp->rdata);
 #else
-		printf("%lld:%u:%s\n", rrp->changed, rrp->ttl, (char *)rrp->rdata);
+		printf("%lld:%u:%s\n", rrp->changed, rrset->ttl, (char *)rrp->rdata);
 #endif
 	}
 

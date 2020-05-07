@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: sign.c,v 1.2 2020/04/11 07:15:22 pjp Exp $
+ * $Id: sign.c,v 1.3 2020/05/07 12:17:36 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1875,7 +1875,7 @@ sign_soa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct soa *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -1903,7 +1903,7 @@ sign_soa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		p += 2;
 		pack16(p, htons(DNS_CLASS_IN));
 		p += 2;
-		pack32(p, htonl(((struct soa *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 		pack16(p, htons(((struct soa *)rrp->rdata)->nsserver_len + ((struct soa *)rrp->rdata)->rp_len + 4 + 4 + 4 + 4 + 4));
 		p += 2;
@@ -1936,7 +1936,7 @@ sign_soa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct soa *)rrp->rdata)->ttl, "SOA", algorithm, labels, ((struct soa *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "SOA", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -2077,7 +2077,7 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct txt *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += sizeof(u_int32_t);
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -2105,7 +2105,7 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			pack16(q, htons(DNS_CLASS_IN));
 			q += 2;
 			/* the below uses rrp! because we can't have an rrsig differ */
-			pack32(q, htonl(((struct txt *)rrp->rdata)->ttl));
+			pack32(q, htonl(rrset->ttl));
 			q += 4;
 			pack16(q, htons(((struct txt *)rrp2->rdata)->txtlen));
 			q += 2;
@@ -2162,7 +2162,7 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct txt *)rrp->rdata)->ttl, "TXT", algorithm, labels, ((struct txt *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "TXT", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -2300,7 +2300,7 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct aaaa *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -2330,7 +2330,7 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 			pack16(q, htons(DNS_CLASS_IN));
 			q += 2;
 			/* the below uses rrp! because we can't have an rrsig differ */
-			pack32(q, htonl(((struct aaaa *)rrp->rdata)->ttl));
+			pack32(q, htonl(rrset->ttl));
 			q += 4;
 			pack16(q, htons(sizeof(struct in6_addr)));
 			q += 2;
@@ -2391,7 +2391,7 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct aaaa *)rrp->rdata)->ttl, "AAAA", algorithm, labels, ((struct aaaa *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "AAAA", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -2516,7 +2516,7 @@ sign_nsec3(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct nsec3 *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -2545,7 +2545,7 @@ sign_nsec3(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		p += 2;
 		pack16(p, htons(DNS_CLASS_IN));
 		p += 2;
-		pack32(p, htonl(((struct nsec3 *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 		pack16(p, htons(1 + 1 + 2 + 1 + ((struct nsec3 *)rrp->rdata)->saltlen + 1 + ((struct nsec3 *)rrp->rdata)->nextlen + ((struct nsec3 *)rrp->rdata)->bitmap_len));
 		p += 2;
@@ -2587,7 +2587,7 @@ sign_nsec3(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct nsec3 *)rrp->rdata)->ttl, "NSEC3", algorithm, labels, ((struct nsec3 *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "NSEC3", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -2712,7 +2712,7 @@ sign_nsec3param(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int ro
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct nsec3param *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -2740,7 +2740,7 @@ sign_nsec3param(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int ro
 		p += 2;
 		pack16(p, htons(DNS_CLASS_IN));
 		p += 2;
-		pack32(p, htonl(((struct nsec3param *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 		pack16(p, htons(1 + 1 + 2 + 1 + ((struct nsec3param *)rrp->rdata)->saltlen));
 		p += 2;
@@ -2898,7 +2898,7 @@ sign_cname(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct cname *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -2926,7 +2926,7 @@ sign_cname(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		p += 2;
 		pack16(p, htons(DNS_CLASS_IN));
 		p += 2;
-		pack32(p, htonl(((struct cname *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 		pack16(p, htons(((struct cname *)rrp->rdata)->cnamelen));
 		p += 2;
@@ -2946,7 +2946,7 @@ sign_cname(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct cname *)rrp->rdata)->ttl, "CNAME", algorithm, labels, ((struct cname *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "CNAME", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -3071,7 +3071,7 @@ sign_ptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct ptr *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -3099,7 +3099,7 @@ sign_ptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		p += 2;
 		pack16(p, htons(DNS_CLASS_IN));
 		p += 2;
-		pack32(p, htonl(((struct ptr *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 		pack16(p, htons(((struct ptr *)rrp->rdata)->ptrlen));
 		p += 2;
@@ -3119,7 +3119,7 @@ sign_ptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct ptr *)rrp->rdata)->ttl, "PTR", algorithm, labels, ((struct ptr *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "PTR", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -3258,7 +3258,7 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct naptr *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -3288,7 +3288,7 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 			q += 2;
 			pack16(q, htons(DNS_CLASS_IN));
 			q += 2;
-			pack32(q, htonl(((struct naptr *)rrp->rdata)->ttl));
+			pack32(q, htonl(rrset->ttl));
 			q += 4;
 			pack16(q, htons(2 + 2 + 1 + ((struct naptr *)rrp2->rdata)->flagslen + 1 + ((struct naptr *)rrp2->rdata)->serviceslen + 1 + ((struct naptr *)rrp2->rdata)->regexplen + ((struct naptr *)rrp2->rdata)->replacementlen));
 			q += 2;
@@ -3368,7 +3368,7 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct naptr *)rrp->rdata)->ttl, "NAPTR", algorithm, labels, ((struct naptr *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "NAPTR", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -3508,7 +3508,7 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct srv *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -3538,7 +3538,7 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			q += 2;
 			pack16(q, htons(DNS_CLASS_IN));
 			q += 2;
-			pack32(q, htonl(((struct srv *)rrp->rdata)->ttl));
+			pack32(q, htonl(rrset->ttl));
 			q += 4;
 			pack16(q, htons(2 + 2 + 2 + ((struct srv *)rrp2->rdata)->targetlen));
 			q += 2;
@@ -3605,7 +3605,7 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct srv *)rrp->rdata)->ttl, "SRV", algorithm, labels, ((struct srv *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "SRV", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -3745,7 +3745,7 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct sshfp *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -3775,7 +3775,7 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 			q += 2;
 			pack16(q, htons(DNS_CLASS_IN));
 			q += 2;
-			pack32(q, htonl(((struct sshfp *)rrp->rdata)->ttl));
+			pack32(q, htonl(rrset->ttl));
 			q += 4;
 			pack16(q, htons(1 + 1 + ((struct sshfp *)rrp2->rdata)->fplen));
 			q += 2;
@@ -3840,7 +3840,7 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct sshfp *)rrp->rdata)->ttl, "SSHFP", algorithm, labels, ((struct sshfp *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "SSHFP", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -3980,7 +3980,7 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct tlsa *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -4011,7 +4011,7 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 			q += 2;
 			pack16(q, htons(DNS_CLASS_IN));
 			q += 2;
-			pack32(q, htonl(((struct tlsa *)rrp->rdata)->ttl));
+			pack32(q, htonl(rrset->ttl));
 			q += 4;
 			pack16(q, htons(1 + 1 + 1 + ((struct tlsa *)rrp2->rdata)->datalen));
 			q += 2;
@@ -4078,7 +4078,7 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct tlsa *)rrp->rdata)->ttl, "TLSA", algorithm, labels, ((struct tlsa *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "TLSA", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -4217,7 +4217,7 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct ds *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -4247,7 +4247,7 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 			q += 2;
 			pack16(q, htons(DNS_CLASS_IN));
 			q += 2;
-			pack32(q, htonl(((struct ds *)rrp->rdata)->ttl));
+			pack32(q, htonl(rrset->ttl));
 			q += 4;
 			pack16(q, htons(2 + 1 + 1 + ((struct ds *)rrp2->rdata)->digestlen));
 			q += 2;
@@ -4312,7 +4312,7 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", ((struct ds *)rrp->rdata)->ttl, "DS", algorithm, labels, ((struct ds *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "DS", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -4452,7 +4452,7 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct ns *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -4482,7 +4482,7 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 			q += 2;
 			pack16(q, htons(DNS_CLASS_IN));
 			q += 2;
-			pack32(q, htonl(((struct ns *)rrp->rdata)->ttl));
+			pack32(q, htonl(rrset->ttl));
 			q += 4;
 			pack16(q, htons(((struct ns *)rrp2->rdata)->nslen));
 			q += 2;
@@ -4541,7 +4541,7 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct ns *)rrp->rdata)->ttl, "NS", algorithm, labels, ((struct ns *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "NS", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -4680,7 +4680,7 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct smx *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -4710,7 +4710,7 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 			q += 2;
 			pack16(q, htons(DNS_CLASS_IN));
 			q += 2;
-			pack32(q, htonl(((struct smx *)rrp->rdata)->ttl));
+			pack32(q, htonl(rrset->ttl));
 			q += 4;
 			pack16(q, htons(2 + ((struct smx *)rrp2->rdata)->exchangelen));
 			q += 2;
@@ -4771,7 +4771,7 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct smx *)rrp->rdata)->ttl, "MX", algorithm, labels, ((struct smx *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "MX", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -4911,7 +4911,7 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct a *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -4941,7 +4941,7 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 			q += 2;
 			pack16(q, htons(DNS_CLASS_IN));
 			q += 2;
-			pack32(q, htonl(((struct a *)rrp->rdata)->ttl));
+			pack32(q, htonl(rrset->ttl));
 			q += 4;
 			pack16(q, htons(sizeof(in_addr_t)));
 			q += 2;
@@ -5000,7 +5000,7 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ((struct a *)rrp->rdata)->ttl, "A", algorithm, labels, ((struct a *)rrp->rdata)->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "A", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -5318,7 +5318,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 			p++;
 			pack8(p, labels);
 			p++;
-			pack32(p, htonl(((struct dnskey *)rrp->rdata)->ttl));
+			pack32(p, htonl(rrset->ttl));
 			p += 4;
 				
 			snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -5347,7 +5347,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 				q += 2;
 				pack16(q, htons(DNS_CLASS_IN));
 				q += 2;
-				pack32(q, htonl(((struct dnskey *)rrp->rdata)->ttl));
+				pack32(q, htonl(rrset->ttl));
 				q += 4;
 				pack16(q, htons(2 + 1 + 1 + ((struct dnskey *)rrp2->rdata)->publickey_len));
 				q += 2;
@@ -5498,7 +5498,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 		p++;
 		pack8(p, labels);
 		p++;
-		pack32(p, htonl(((struct dnskey *)rrp->rdata)->ttl));
+		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
 		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
@@ -5535,7 +5535,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 			q += 2;
 			pack16(q, htons(DNS_CLASS_IN));
 			q += 2;
-			pack32(q, htonl(((struct dnskey *)rrp->rdata)->ttl));
+			pack32(q, htonl(rrset->ttl));
 			q += 4;
 			pack16(q, htons(2 + 1 + 1 + ((struct dnskey *)rrp2->rdata)->publickey_len));
 			q += 2;
@@ -6005,7 +6005,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		return -1;
 
 	/* RFC 5155 page 3 */
-	ttl = ((struct soa *)rrp->rdata)->ttl;
+	ttl = rrset->ttl;
 
 	
 	rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM);
@@ -6231,7 +6231,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		}
 		fprintf(of, "  %s,soa,%d,%s,%s,%u,%d,%d,%d,%d\n", 
 			convert_name(rbt->zone, rbt->zonelen),
-			((struct soa *)rrp->rdata)->ttl, 
+			rrset->ttl, 
 			convert_name(((struct soa *)rrp->rdata)->nsserver, ((struct soa *)rrp->rdata)->nsserver_len),
 			convert_name(((struct soa *)rrp->rdata)->responsible_person, ((struct soa *)rrp->rdata)->rp_len),
 			((struct soa *)rrp->rdata)->serial, 
@@ -6248,7 +6248,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,ns,%d,%s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct ns *)rrp->rdata)->ttl, 
+				rrset->ttl, 
 				convert_name(((struct ns *)rrp2->rdata)->nsserver, ((struct ns *)rrp2->rdata)->nslen));
 		}
 	}
@@ -6260,7 +6260,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,mx,%d,%d,%s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct smx *)rrp->rdata)->ttl, 
+				rrset->ttl, 
 				((struct smx *)rrp2->rdata)->preference,
 				convert_name(((struct smx *)rrp2->rdata)->exchange, ((struct smx *)rrp2->rdata)->exchangelen));
 		}
@@ -6273,7 +6273,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,ds,%d,%d,%d,%d,\"%s\"\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct ds *)rrp->rdata)->ttl, 
+				rrset->ttl, 
 				((struct ds *)rrp2->rdata)->key_tag,
 				((struct ds *)rrp2->rdata)->algorithm,
 				((struct ds *)rrp2->rdata)->digest_type,
@@ -6287,7 +6287,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		}
 		fprintf(of, "  %s,cname,%d,%s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct cname *)rrp->rdata)->ttl, 
+				rrset->ttl, 
 				convert_name(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen));
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
@@ -6298,7 +6298,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,naptr,%d,%d,%d,\"", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct naptr *)rrp->rdata)->ttl, 
+				rrset->ttl, 
 				((struct naptr *)rrp2->rdata)->order,
 				((struct naptr *)rrp2->rdata)->preference);
 			
@@ -6324,7 +6324,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,txt,%d,\"", 
 					convert_name(rbt->zone, rbt->zonelen),
-					((struct txt *)rrp->rdata)->ttl);
+					rrset->ttl);
 
 			for (i = 0; i < ((struct txt *)rrp2->rdata)->txtlen; i++) {
 				if (i % 256 == 0)
@@ -6342,7 +6342,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		}
 		fprintf(of, "  %s,ptr,%d,%s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct ptr *)rrp->rdata)->ttl,
+				rrset->ttl,
 				convert_name(((struct ptr *)rrp->rdata)->ptr, ((struct ptr *)rrp->rdata)->ptrlen));
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
@@ -6353,7 +6353,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,srv,%d,%d,%d,%d,%s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct srv *)rrp->rdata)->ttl,
+				rrset->ttl,
 				((struct srv *)rrp2->rdata)->priority,
 				((struct srv *)rrp2->rdata)->weight,
 				((struct srv *)rrp2->rdata)->port,
@@ -6368,7 +6368,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,tlsa,%d,%d,%d,%d,\"%s\"\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct tlsa *)rrp->rdata)->ttl,
+				rrset->ttl,
 				((struct tlsa *)rrp2->rdata)->usage,
 				((struct tlsa *)rrp2->rdata)->selector,
 				((struct tlsa *)rrp2->rdata)->matchtype,
@@ -6383,7 +6383,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "  %s,sshfp,%d,%d,%d,\"%s\"\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct sshfp *)rrp->rdata)->ttl,
+				rrset->ttl,
 				((struct sshfp *)rrp2->rdata)->algorithm,
 				((struct sshfp *)rrp2->rdata)->fptype,
 				bin2hex(((struct sshfp *)rrp2->rdata)->fingerprint, ((struct sshfp *)rrp2->rdata)->fplen));
@@ -6398,7 +6398,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 			inet_ntop(AF_INET, &((struct a *)rrp2->rdata)->a, buf, sizeof(buf));
 			fprintf(of, "  %s,a,%d,%s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct a *)rrp->rdata)->ttl,
+				rrset->ttl,
 				buf);
 		}
 	}
@@ -6411,7 +6411,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 			inet_ntop(AF_INET6, &((struct aaaa *)rrp2->rdata)->aaaa, buf, sizeof(buf));
 			fprintf(of, "  %s,aaaa,%d,%s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct aaaa *)rrp->rdata)->ttl,
+				rrset->ttl,
 				buf);
 		}
 	}
@@ -6425,7 +6425,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 			buf[len] = '\0';
 			fprintf(of, "  %s,dnskey,%d,%d,%d,%d,\"%s\"\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct dnskey *)rrp->rdata)->ttl,
+				rrset->ttl,
 				((struct dnskey *)rrp2->rdata)->flags,
 				((struct dnskey *)rrp2->rdata)->protocol,
 				((struct dnskey *)rrp2->rdata)->algorithm,
@@ -6453,7 +6453,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 		
 		fprintf(of, "  %s,nsec3,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\"\n",
 			convert_name(rbt->zone, rbt->zonelen),
-			((struct nsec3 *)rrp->rdata)->ttl,
+			rrset->ttl,
 			((struct nsec3 *)rrp->rdata)->algorithm, 
 			((struct nsec3 *)rrp->rdata)->flags,
 			((struct nsec3 *)rrp->rdata)->iterations,
@@ -6468,17 +6468,12 @@ print_rbt(FILE *of, struct rbtree *rbt)
 			return -1;
 		}
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-#if 0
-			if (((struct rrsig *)rrp2->rdata)->type_covered != DNS_TYPE_DNSKEY)
-				continue;
-#endif 
-
 			len = mybase64_encode(((struct rrsig *)rrp2->rdata)->signature, ((struct rrsig *)rrp2->rdata)->signature_len, buf, sizeof(buf));
 			buf[len] = '\0';
 
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct rrsig *)rrp2->rdata)->ttl,
+				((struct rrsig *)rrp2->rdata)->ttl, 
 				
 				get_dns_type(((struct rrsig *)rrp2->rdata)->type_covered, 0), 
 				((struct rrsig *)rrp2->rdata)->algorithm, 

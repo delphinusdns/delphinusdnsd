@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.104 2020/04/10 17:08:14 pjp Exp $
+ * $Id: dddctl.c,v 1.105 2020/05/07 12:17:35 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -748,7 +748,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		}
 		fprintf(of, "%s %d IN SOA %s %s (\n\t\t\t\t%u\t; Serial\n\t\t\t\t%d\t; Refresh\n\t\t\t\t%d\t; Retry\n\t\t\t\t%d\t; Expire\n\t\t\t\t%d )\t; Minimum TTL\n\n", 
 			convert_name(rbt->zone, rbt->zonelen),
-			((struct soa *)rrp->rdata)->ttl, 
+			rrset->ttl, 
 			convert_name(((struct soa *)rrp->rdata)->nsserver, ((struct soa *)rrp->rdata)->nsserver_len),
 			convert_name(((struct soa *)rrp->rdata)->responsible_person, ((struct soa *)rrp->rdata)->rp_len),
 			((struct soa *)rrp->rdata)->serial, 
@@ -765,7 +765,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN NS %s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct ns *)rrp2->rdata)->ttl, 
+				rrset->ttl, 
 				convert_name(((struct ns *)rrp2->rdata)->nsserver, ((struct ns *)rrp2->rdata)->nslen));
 		}
 	}
@@ -777,7 +777,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN MX %d %s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct smx *)rrp2->rdata)->ttl, 
+				rrset->ttl, 
 				((struct smx *)rrp2->rdata)->preference, 
 				convert_name(((struct smx *)rrp2->rdata)->exchange, ((struct smx *)rrp2->rdata)->exchangelen));
 		}
@@ -790,7 +790,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN DS %d %d %d (%s)\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct ds *)rrp2->rdata)->ttl, 
+				rrset->ttl, 
 				((struct ds *)rrp2->rdata)->key_tag, 
 				((struct ds *)rrp2->rdata)->algorithm, 
 				((struct ds *)rrp2->rdata)->digest_type, 
@@ -804,7 +804,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		}
 		fprintf(of, "%s %d IN CNAME %s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct cname *)rrp->rdata)->ttl, 
+				rrset->ttl, 
 				convert_name(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen));
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
@@ -815,7 +815,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN NAPTR %d\t%d\t\"", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct naptr *)rrp2->rdata)->ttl, 
+				rrset->ttl, 
 				((struct naptr *)rrp2->rdata)->order, 
 				((struct naptr *)rrp2->rdata)->preference);
 			
@@ -841,7 +841,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN TXT \"", 
 					convert_name(rbt->zone, rbt->zonelen),
-					((struct txt *)rrp->rdata)->ttl);
+					rrset->ttl);
 					
 			for (i = 0; i < ((struct txt *)rrp2->rdata)->txtlen; i++) {
 				if (i % 256 == 0)
@@ -859,7 +859,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		}
 		fprintf(of, "%s %d IN PTR %s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct ptr *)rrp->rdata)->ttl,
+				rrset->ttl,
 				convert_name(((struct ptr *)rrp->rdata)->ptr, ((struct ptr *)rrp->rdata)->ptrlen));
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
@@ -870,7 +870,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN SRV %d %d %d %s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct srv *)rrp2->rdata)->ttl, 
+				rrset->ttl, 
 				((struct srv *)rrp2->rdata)->priority, 
 				((struct srv *)rrp2->rdata)->weight, 
 				((struct srv *)rrp2->rdata)->port, 
@@ -885,7 +885,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN TLSA %d %d %d (%s)\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct tlsa *)rrp2->rdata)->ttl, 
+				rrset->ttl, 
 				((struct tlsa *)rrp2->rdata)->usage, 
 				((struct tlsa *)rrp2->rdata)->selector, 
 				((struct tlsa *)rrp2->rdata)->matchtype, 
@@ -900,7 +900,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			fprintf(of, "%s %d IN SSHFP %d %d (%s)\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct sshfp *)rrp2->rdata)->ttl, 
+				rrset->ttl, 
 				((struct sshfp *)rrp2->rdata)->algorithm, 
 				((struct sshfp *)rrp2->rdata)->fptype, 
 				bin2hex(((struct sshfp *)rrp2->rdata)->fingerprint, ((struct sshfp *)rrp2->rdata)->fplen));
@@ -915,7 +915,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			inet_ntop(AF_INET, &((struct a *)rrp2->rdata)->a, buf, sizeof(buf));
 			fprintf(of, "%s %d IN A %s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct a *)rrp2->rdata)->ttl,
+				rrset->ttl,
 				buf);
 		}
 	}
@@ -928,7 +928,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			inet_ntop(AF_INET6, &((struct aaaa *)rrp2->rdata)->aaaa , buf, sizeof(buf));
 			fprintf(of, "%s %d IN AAAA %s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct aaaa *)rrp2->rdata)->ttl,
+				rrset->ttl,
 				buf);
 		}
 	}
@@ -942,7 +942,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			buf[len] = '\0';
 			fprintf(of, "%s %d IN DNSKEY %d %d %d (%s)\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct dnskey *)rrp2->rdata)->ttl, 
+				rrset->ttl, 
 				((struct dnskey *)rrp2->rdata)->flags, 
 				((struct dnskey *)rrp2->rdata)->protocol,
 				((struct dnskey *)rrp2->rdata)->algorithm,
@@ -970,7 +970,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		
 		fprintf(of, "%s %d IN NSEC3 %d %d %d %s %s %s\n",
 			convert_name(rbt->zone, rbt->zonelen),
-			((struct nsec3 *)rrp->rdata)->ttl,
+			rrset->ttl,
 			((struct nsec3 *)rrp->rdata)->algorithm,
 			((struct nsec3 *)rrp->rdata)->flags,
 			((struct nsec3 *)rrp->rdata)->iterations,
@@ -990,7 +990,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
 				convert_name(rbt->zone, rbt->zonelen),
-				((struct rrsig *)rrp2->rdata)->ttl,
+				rrset->ttl,
 				get_dns_type(((struct rrsig *)rrp2->rdata)->type_covered, 0), 
 				((struct rrsig *)rrp2->rdata)->algorithm,
 				((struct rrsig *)rrp2->rdata)->labels,

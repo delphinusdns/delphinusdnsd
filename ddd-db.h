@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2005-2019 Peter J. Philipp
+ * Copyright (c) 2005-2020 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.31 2019/12/11 16:55:01 pjp Exp $
+ * $Id: ddd-db.h,v 1.32 2020/05/07 12:17:35 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -85,7 +85,6 @@ struct dnskey {
 	u_int8_t algorithm;		/* would be 5, RFC 3110 */
 	char public_key[4096];
 	u_int16_t publickey_len;
-	u_int32_t ttl;
 } __attribute__((packed)); 
 
 struct rrsig {
@@ -100,7 +99,7 @@ struct rrsig {
 	u_int8_t signame_len;
 	char signature[4096];
 	u_int16_t signature_len;
-	u_int32_t ttl;
+	uint32_t ttl;		/* RFC 4034 section 3, the TTL value of ... */
 	int used;		/* if this RRSIG is used at all */
 } __attribute__((packed)); 
 
@@ -118,7 +117,6 @@ struct nsec {
 	u_int8_t ndn_len;	/* next domain name length */
 	char bitmap[8192];
 	u_int16_t bitmap_len;
-	u_int32_t ttl;
 } __attribute__((packed));
 
 struct nsec3 {
@@ -131,7 +129,6 @@ struct nsec3 {
 	u_int8_t nextlen;	/* next domain name length */
 	char bitmap[8192];
 	u_int16_t bitmap_len;
-	u_int32_t ttl;
 } __attribute__((packed));
 
 struct nsec3param {
@@ -140,7 +137,6 @@ struct nsec3param {
 	u_int16_t iterations;
 	u_int8_t saltlen;
 	char salt[256];
-	u_int32_t ttl;
 } __attribute__((packed));
 
 struct ds {
@@ -149,7 +145,6 @@ struct ds {
 	u_int8_t digest_type;
 	char digest[4096];
 	u_int16_t digestlen;
-	u_int32_t ttl;
 } __attribute__((packed)); 
 
 
@@ -163,14 +158,12 @@ struct soa {
 	u_int32_t retry;
 	u_int32_t expire;
 	u_int32_t minttl;
-	u_int32_t ttl;
 } __attribute__((packed)); 
 
 struct smx {
 	u_int16_t preference;		/* MX preference */
 	char exchange[DNS_MAXNAME];	/* name of exchange server */
 	int exchangelen;		/* length of exchange server name */
-	u_int32_t ttl;
 } __attribute__((packed));
 
 struct ns {
@@ -179,7 +172,6 @@ struct ns {
         int ns_type;                    /* set if it's a delegation */
 #define NS_TYPE_DELEGATE        0x1
 #define NS_TYPE_HINT            0x2
-	u_int32_t ttl;
 
 } __attribute__((packed));
 
@@ -189,7 +181,6 @@ struct srv {
 	u_int16_t port;			/* 16 bit port */
 	char target[DNS_MAXNAME];	/* SRV target name */
 	int targetlen;			/* SRV target name length */
-	u_int32_t ttl;
 } __attribute__((packed));
 
 struct sshfp {
@@ -197,7 +188,6 @@ struct sshfp {
 	u_int8_t fptype;		/* SSHFP fingerprint type */
 	char fingerprint[DNS_MAXNAME];  /* fingerprint */
 	int fplen;			/* fingerprint length */
-	u_int32_t ttl;
 } __attribute__((packed));
 
 struct tlsa {
@@ -206,7 +196,6 @@ struct tlsa {
 	u_int8_t matchtype;		/* TLSA matching type */
 	char data[DNS_MAXNAME];  	/* TLSA data */
 	int datalen;			/* data length */
-	u_int32_t ttl;
 } __attribute__((packed));
 
 struct naptr {
@@ -220,35 +209,29 @@ struct naptr {
 	int regexplen;			/* regexp len */
 	char replacement[DNS_MAXNAME];	/* replacement this is a domain */
 	int replacementlen;
-	u_int32_t ttl;
 } __attribute__((packed));
 
 struct cname {
         char cname[DNS_MAXNAME];                /* CNAME RR */
         int cnamelen;                           /* len of CNAME */
-	u_int32_t ttl;
 } __attribute__((packed));
 
 struct ptr {
         char ptr[DNS_MAXNAME];                  /* PTR RR */
         int ptrlen;                             /* len of PTR */
-	u_int32_t ttl;
 } __attribute__((packed));
 
 struct txt {
         char txt[1024];                  	/* TXT string */
         int txtlen;                             /* len of TXT */
-	u_int32_t ttl;
 } __attribute__((packed));
 
 struct a {
         in_addr_t a;      /* IP addresses */
-	u_int32_t ttl;
 } __attribute__((packed));
 
 struct aaaa {
         struct in6_addr aaaa;     /* IPv6 addresses */
-	u_int32_t ttl;
 } __attribute__((packed));
 
 
@@ -313,13 +296,13 @@ typedef struct __dddb {
 
 struct rr {
 	void *rdata;
-	u_int32_t ttl;
 	time_t changed;
 	TAILQ_ENTRY(rr) entries;
 };
 
 struct rrset {
 	u_int16_t rrtype;
+	u_int32_t ttl;
 	TAILQ_ENTRY(rrset) entries;
 	TAILQ_HEAD(rrh, rr) rr_head;
 };

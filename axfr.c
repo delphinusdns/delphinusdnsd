@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.41 2020/03/10 07:42:53 pjp Exp $
+ * $Id: axfr.c,v 1.42 2020/05/07 12:17:35 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1300,7 +1300,7 @@ build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question
 	answer->name[1] = 0x0c;
 	answer->type = htons(DNS_TYPE_SOA);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(((struct soa *)rrp->rdata)->ttl);
+	answer->ttl = htonl(rrset->ttl);
 
 	offset += 12;			/* up to rdata length */
 
