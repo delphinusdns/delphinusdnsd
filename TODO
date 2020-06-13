@@ -12,7 +12,7 @@ For 1.5.0 release
 - filter input to dddctl query for escape codes.
 - inside axfrloop the axfr child is chrooted, which gives it GMT timezone, this
   could have effects on sending notifies, noticed at 00:47 in a +1 timezone,
-  add the timeinfo as a variable before chroot'ing.
+  add the timeinfo as a variable before chroot'ing.	[DONE axfr.c 1.41]
 - Shape up the NSEC code as it seems NSEC is having a renaissance, at least
 to have replicant compatibility for NSEC
 - get rid of zincludes and incorporate them into mzone blocks (for masters)
