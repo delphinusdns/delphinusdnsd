@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.32 2020/05/07 12:17:35 pjp Exp $
+ * $Id: ddd-db.h,v 1.33 2020/06/25 10:01:10 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -53,13 +53,14 @@
 #define IMSG_HELLO_MESSAGE  0		/* hello the master process a few */
 #define IMSG_SPREAD_MESSAGE 1		/* spread a record to all childs */
 #define IMSG_XFR_MESSAGE    2		/* forward message to axfr proc */
-#define IMSG_XFRFD_MESSAGE  3		/* forward message fd to axfr proc */
 #define IMSG_PARSE_MESSAGE  4		/* pass message to pledge parser */
 #define IMSG_PARSEREPLY_MESSAGE 5	/* return message from pledge parser */
 #define IMSG_SHUTDOWN_MESSAGE 6		/* shut the server down */
 #define IMSG_RELOAD_MESSAGE 7		/* reload/restart the server */
 #define IMSG_PARSEAUTH_MESSAGE	8	/* parse message with auth required */
 #define	IMSG_NOTIFY_MESSAGE	9	/* notify our replicant engine */
+#define IMSG_SETUP_NEURON	10	/* set up a new imsg via fd passing */
+#define IMSG_CRIPPLE_NEURON	11	/* no new neurons are needed */
 
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2
@@ -337,12 +338,15 @@ struct cfg {
 	struct my_imsg {
 		int imsg_fds[2];
 	} my_imsg[100];
-#define MY_IMSG_MASTER	0
-#define MY_IMSG_AXFR 	1
-#define MY_IMSG_TCP	2
-#define MY_IMSG_PARSER	3
-#define MY_IMSG_RAXFR	4
-#define MY_IMSG_MAX	5
+#define MY_IMSG_CORTEX		0
+#define MY_IMSG_AXFR 		1
+#define MY_IMSG_TCP		2
+#define MY_IMSG_PARSER		3
+#define MY_IMSG_RAXFR		4
+#define MY_IMSG_MASTER		5
+#define MY_IMSG_UNIXCONTROL	6
+#define MY_IMSG_UDP		7
+#define MY_IMSG_MAX		8
 	int recurse;			/* recurse socket */
 	int sockcount;			/* set sockets */
 	int nth;

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: query.c,v 1.3 2020/04/11 07:15:22 pjp Exp $
+ * $Id: query.c,v 1.4 2020/06/25 10:01:11 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -103,7 +103,7 @@ extern int tsig;
 extern int insert_axfr(char *, char *);
 extern int insert_filter(char *, char *);
 extern int insert_whitelist(char *, char *);
-extern int insert_notifyslave(char *, char *);
+extern int insert_notifyddd(char *, char *);
 extern int	usage(int argc, char *argv[]);
 extern void	dolog(int pri, char *fmt, ...);
 

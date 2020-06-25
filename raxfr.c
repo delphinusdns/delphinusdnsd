@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.51 2020/04/07 16:31:31 pjp Exp $
+ * $Id: raxfr.c,v 1.52 2020/06/25 10:01:11 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -117,7 +117,7 @@ u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
 int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
 int raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *, int);
-void			replicantloop(ddDB *, struct imsgbuf *, struct imsgbuf *);
+void			replicantloop(ddDB *, struct imsgbuf *);
 static void		schedule_refresh(char *, time_t);
 static void		schedule_retry(char *, time_t);
 static void		schedule_restart(char *, time_t);
@@ -1264,7 +1264,7 @@ out:
 
 
 void
-replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
+replicantloop(ddDB *db, struct imsgbuf *ibuf)
 {
 	struct rzone *lrz, *lrz0;
 	time_t now, lastnow;
@@ -1559,10 +1559,11 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf, struct imsgbuf *master_ibuf)
 					dolog(LOG_INFO, "I'm supposed to restart now, RESTART\n");
 
 					idata = 1;
-					imsg_compose(master_ibuf, IMSG_RELOAD_MESSAGE, 
+					imsg_compose(ibuf, IMSG_RELOAD_MESSAGE, 
 						0, 0, -1, &idata, sizeof(idata));
-					msgbuf_write(&master_ibuf->w);
-					exit(0);
+					msgbuf_write(&ibuf->w);
+					for (;;)
+						sleep(1);
 				}
 		
 			} 

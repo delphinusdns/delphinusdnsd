@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.97 2020/05/07 12:17:35 pjp Exp $
+ * $Id: parse.y,v 1.98 2020/06/25 10:01:11 pjp Exp $
  */
 
 %{
@@ -90,12 +90,12 @@ extern int 	insert_apex(char *, char *, int);
 extern int 	insert_nsec3(char *, char *, char *, int);
 extern int 	insert_region(char *, char *, u_int8_t);
 extern int 	insert_axfr(char *, char *);
-extern int 	insert_notifyslave(char *, char *);
+extern int 	insert_notifyddd(char *, char *);
 extern int 	insert_filter(char *, char *);
 extern int 	insert_whitelist(char *, char *);
 extern int	insert_tsig(char *, char *);
 extern int	insert_tsig_key(char *, int, char *, int);
-extern void 	slave_shutdown(void);
+extern void 	ddd_shutdown(void);
 extern int 	mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int 	mybase64_decode(char const *, u_char *, size_t);
 extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t);
@@ -1606,7 +1606,7 @@ void
 yyerror(const char *str)
 {
 	dolog(LOG_ERR, "%s file: %s line: %d\n", str, file->name, file->lineno);
-	slave_shutdown();
+	ddd_shutdown();
 	exit (1);
 }
 
@@ -1710,7 +1710,7 @@ yylex(void)
 			yylval.v.string = strdup(buf);
 			if (yylval.v.string == NULL) {
 				dolog(LOG_ERR, "yylex: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
 #ifdef LEXDEBUG
@@ -1790,7 +1790,7 @@ yylex(void)
 			yylval.v.string = strdup(buf);
 			if (yylval.v.string == NULL) {
 				dolog(LOG_ERR, "yylex: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
 
@@ -1805,7 +1805,7 @@ yylex(void)
 			yylval.v.string = strdup("*");
 			if (yylval.v.string == NULL) {
 				dolog(LOG_ERR, "yylex: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
 #ifdef LEXDEBUG
@@ -1834,7 +1834,7 @@ yylex(void)
 				yylval.v.string = strdup(p->val);
 				if (yylval.v.string == NULL) {
 					dolog(LOG_ERR, "yylex: %s\n", strerror(errno));
-					slave_shutdown();
+					ddd_shutdown();
 					exit(1);
 				}
 				setupstate = p->state;
@@ -1844,7 +1844,7 @@ yylex(void)
 			yylval.v.string = strdup(buf);
 			if (yylval.v.string == NULL) {
 				dolog(LOG_ERR, "yylex: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
 
@@ -2018,7 +2018,7 @@ check_rr(char *domainname, char *mytype, int itype, int *converted_namelen)
 	
 	if ((rr = rrlookup(mytype)) == NULL) {
 		dolog(LOG_ERR, "error input line %d\n", file->lineno);
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 	
@@ -2029,7 +2029,7 @@ check_rr(char *domainname, char *mytype, int itype, int *converted_namelen)
 
 	if (strlen(domainname) > (DNS_MAXNAME - 2)) {
 		dolog(LOG_ERR, "domain name too long, line %d\n", file->lineno);
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
@@ -2042,7 +2042,7 @@ check_rr(char *domainname, char *mytype, int itype, int *converted_namelen)
 		converted_name = malloc(1);
 		if (converted_name == NULL) {
 			dolog(LOG_ERR, "malloc failed\n");
-			slave_shutdown();
+			ddd_shutdown();
 			exit(1);
 		}
 
@@ -2052,7 +2052,7 @@ check_rr(char *domainname, char *mytype, int itype, int *converted_namelen)
 		converted_name = malloc(1);
 		if (converted_name == NULL) {
 			dolog(LOG_ERR, "malloc failed\n");
-			slave_shutdown();
+			ddd_shutdown();
 			exit(1);
 		}
 
@@ -2063,7 +2063,7 @@ check_rr(char *domainname, char *mytype, int itype, int *converted_namelen)
 
 		if (converted_name == NULL) {
 			dolog(LOG_ERR, "error processing domain name line %d\n", file->lineno);
-			slave_shutdown();
+			ddd_shutdown();
 			exit(1);
 		}
 	}
@@ -3648,6 +3648,10 @@ add_mzone(void)
 	return (lmz);
 }
 
+/*
+ * NOTIFYSOURCE - XXX this could be improved 
+ */
+
 int
 notifysource(struct question *q, struct sockaddr_storage *from)
 {
@@ -3663,15 +3667,15 @@ notifysource(struct question *q, struct sockaddr_storage *from)
 		zone = dns_label(rz->zonename, &zoneretlen);
 		if (zone == NULL) {
 			dolog(LOG_ERR, "dns_label: %s\n", strerror(errno));
-			return 0;	/* I guess return 0 is error */
+			return 0;
 		}
 			
 
 		if (q->tsig.have_tsig && q->tsig.tsigverified) {
 				tsigkey = dns_label(rz->tsigkey, &tsigretlen);
 				if (tsigkey == NULL) {
-					dolog(LOG_ERR, "dns_label: %s\n", strerror(errno));
-					return 0;
+					free(zone);
+					continue;
 				}	
 				/* if we are the right zone, right tsigkey, and right master IP/IP6 */
 				if ((zoneretlen == q->hdr->namelen) &&

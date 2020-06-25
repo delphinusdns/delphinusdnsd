@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.105 2020/05/07 12:17:35 pjp Exp $
+ * $Id: dddctl.c,v 1.106 2020/06/25 10:01:10 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -103,7 +103,7 @@ int	count_db(ddDB *);
 int insert_axfr(char *, char *);
 int insert_filter(char *, char *);
 int insert_whitelist(char *, char *);
-int insert_notifyslave(char *, char *);
+int insert_notifyddd(char *, char *);
 
 
 int illdestination;
@@ -216,7 +216,7 @@ insert_whitelist(char *address, char *prefixlen)
 }
 
 int
-insert_notifyslave(char *address, char *prefixlen)
+insert_notifyddd(char *address, char *prefixlen)
 {
 	return 0;
 }

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.101 2020/05/07 12:17:35 pjp Exp $
+ * $Id: reply.c,v 1.102 2020/06/25 10:01:11 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -93,7 +93,6 @@ extern struct question 	*build_fake_question(char *, int, u_int16_t, char *, int
 extern int 		compress_label(u_char *, int, int);
 extern void 		dolog(int, char *, ...);
 extern int 		free_question(struct question *);
-extern void 		slave_shutdown(void);
 extern int 		get_record_size(ddDB *, char *, int);
 extern char *		dns_label(char *, int *);
 

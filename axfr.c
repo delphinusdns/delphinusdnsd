@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.42 2020/05/07 12:17:35 pjp Exp $
+ * $Id: axfr.c,v 1.43 2020/06/25 10:01:10 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -87,11 +87,11 @@ int	checklabel(ddDB *, struct rbtree *, struct rbtree *, struct question *);
 int	find_axfr(struct sockaddr_storage *, int);
 void	gather_notifydomains(ddDB *);
 void	init_axfr(void);
-void	init_notifyslave(void);
+void	init_notifyddd(void);
 int	insert_axfr(char *, char *);
-int	insert_notifyslave(char *, char *);
+int	insert_notifyddd(char *, char *);
 void	notifypacket(int, void *, void *, int);
-void    notifyslaves(int *);
+void    notifyddds(int *);
 void	reap(int);
 
 extern void 	pack(char *, char *, int);
@@ -379,7 +379,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 
 			memset((char *)&from, 0, sizeof(from));
 
-			notifyslaves((int *)&notifyfd);
+			notifyddds((int *)&notifyfd);
 		}
 	}
 
@@ -455,7 +455,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 		if (sel == 0) {
 			if (notify) {
 				if (notifyfd[0] > -1 || notifyfd[1] > -1) {
-					notifyslaves((int *)&notifyfd);
+					notifyddds((int *)&notifyfd);
 				}
 
 			}
@@ -627,7 +627,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 
 						break;
 					default:
-						dolog(LOG_ERR, "received bad message on AXFR imsg\n");
+						dolog(LOG_ERR, "received bad message %d on AXFR imsg\n", imsg.hdr.type);
 						break;
 					}
 					imsg_free(&imsg);
@@ -1546,7 +1546,7 @@ gather_notifydomains(ddDB *db)
 }
 
 void
-notifyslaves(int *notifyfd)
+notifyddds(int *notifyfd)
 {
 	struct mzone_dest *md;
 	int so;

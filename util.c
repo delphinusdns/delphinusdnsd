@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.61 2020/04/27 19:07:22 pjp Exp $
+ * $Id: util.c,v 1.62 2020/06/25 10:01:11 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -93,7 +93,7 @@ void 	unpack(char *, char *, int);
 
 int label_count(char *);
 char * dns_label(char *, int *);
-void slave_shutdown(void);
+void ddd_shutdown(void);
 int get_record_size(ddDB *, char *, int);
 struct rbtree * 	get_soa(ddDB *, struct question *);
 struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
@@ -321,12 +321,12 @@ dns_label(char *name, int *returnlen)
 	return dnslabel;
 }
 /*
- * slave_shutdown - a slave wishes to shutdown, enter its pid into the 
+ * ddd_shutdown - delphinusdnsd wishes to shutdown, enter its pid into the 
  *			shutdown shared memory and return.
  */
 
 void
-slave_shutdown(void)
+ddd_shutdown(void)
 {
 	pid_t pid;
 

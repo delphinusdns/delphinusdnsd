@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2002-2019 Peter J. Philipp
+ * Copyright (c) 2002-2020 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.100 2020/03/10 07:42:53 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.101 2020/06/25 10:01:10 pjp Exp $
  */
 
 
@@ -104,7 +104,7 @@ extern void 	unpack(char *, char *, int);
 
 extern void 	add_rrlimit(int, u_int16_t *, int, char *);
 extern void 	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *);
-extern void	replicantloop(ddDB *, struct imsgbuf *, struct imsgbuf *);
+extern void	replicantloop(ddDB *, struct imsgbuf *);
 extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
 extern int 	check_ent(char *, int);
 extern int 	check_rrlimit(int, u_int16_t *, int, char *);
@@ -122,7 +122,7 @@ extern int	init_entlist(ddDB *);
 extern void 	init_filter(void);
 extern void 	init_whitelist(void);
 extern void 	init_tsig(void);
-extern void 	init_notifyslave(void);
+extern void 	init_notifyddd(void);
 extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
 extern struct rbtree *  Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 extern int 	memcasecmp(u_char *, u_char *, int);
@@ -157,7 +157,7 @@ extern int	reply_nsec3(struct sreply *, ddDB *);
 extern int	reply_nsec3param(struct sreply *, ddDB *);
 extern char 	*rrlimit_setup(int);
 extern char 	*dns_label(char *, int *);
-extern void 	slave_shutdown(void);
+extern void 	ddd_shutdown(void);
 extern int 	get_record_size(ddDB *, char *, int);
 extern struct question		*build_question(char *, int, int, char *);
 extern int			free_question(struct question *);
@@ -176,14 +176,17 @@ struct question		*convert_question(struct parsequestion *);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, void *, char *);
 int 			compress_label(u_char *, u_int16_t, int);
 int			determine_glue(ddDB *db);
-void			mainloop(struct cfg *, struct imsgbuf **);
+void			mainloop(struct cfg *, struct imsgbuf *);
 void 			master_reload(int);
 void 			master_shutdown(int);
-void 			setup_master(ddDB *, char **, char *, struct imsgbuf *ibuf);
+void 			setup_master(ddDB *, char **, char *, struct imsgbuf *);
+void			setup_cortex(struct imsgbuf *);
 void 			setup_unixsocket(char *, struct imsgbuf *);
-void 			slave_signal(int);
-void 			tcploop(struct cfg *, struct imsgbuf **);
-void 			parseloop(struct cfg *, struct imsgbuf **);
+void 			ddd_signal(int);
+void 			tcploop(struct cfg *, struct imsgbuf *);
+void 			parseloop(struct cfg *, struct imsgbuf *);
+struct imsgbuf * 	register_cortex(struct imsgbuf *, int);
+void			nomore_neurons(struct imsgbuf *);
 
 /* aliases */
 
@@ -283,7 +286,7 @@ uint8_t vslen = 17;
 char *versionstring = DD_VERSION;
 uint8_t vslen = DD_VERSION_LEN;
 #endif
-int *ptr = NULL;
+pid_t *ptr = 0;
 long glob_time_offset = 0;
 
 /* 
@@ -320,7 +323,8 @@ main(int argc, char *argv[], char *environ[])
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
 	struct cfg *cfg;
-	struct imsgbuf  **parent_ibuf, **child_ibuf;
+	struct imsgbuf cortex_ibuf;
+	struct imsgbuf *ibuf;
 
 	static ddDB *db;
 	
@@ -333,7 +337,6 @@ main(int argc, char *argv[], char *environ[])
 		exit(1);
 	}
 
-	
 	now = time(NULL);
 	ltm = localtime(&now);
 	glob_time_offset = ltm->tm_gmtoff;
@@ -435,42 +438,14 @@ main(int argc, char *argv[], char *environ[])
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		exit(1);
 	}
-	/* imsg structs */
-	
-	parent_ibuf = calloc(MY_IMSG_MAX + nflag, sizeof(struct imsgbuf *));
-	if (parent_ibuf == NULL) {
-		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
-		exit(1);
-	}
 
-	child_ibuf = calloc(MY_IMSG_MAX + nflag, sizeof(struct imsgbuf *));
-	if (child_ibuf == NULL) {
-		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
-		exit(1);
-	}
-
-	for (i = 0; i < MY_IMSG_MAX + nflag; i++) {
-		child_ibuf[i] = calloc(1, sizeof(struct imsgbuf));
-		if (child_ibuf[i] == NULL) {
-			dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
-			exit(1);
-		}
-		parent_ibuf[i] = calloc(1, sizeof(struct imsgbuf));
-		if (parent_ibuf[i] == NULL) {
-			dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
-			exit(1);
-		}
-	}
-
-		
-		
 	/*
 	 * make a shared memory segment for signaling kills between 
 	 * processes...
 	 */
 
 	
-	ptr = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED |\
+	ptr = mmap(NULL, sizeof(pid_t), PROT_READ | PROT_WRITE, MAP_SHARED |\
 		MAP_ANON, -1, 0);
 
 	if (ptr == MAP_FAILED) {
@@ -485,13 +460,14 @@ main(int argc, char *argv[], char *environ[])
 	db = dddbopen();
 	if (db == NULL) {
 		dolog(LOG_INFO, "dddbopen() failed\n");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
-	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]) < 0) {
+
+	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_CORTEX].imsg_fds[0]) < 0) {
 		dolog(LOG_INFO, "socketpair() failed\n");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
@@ -501,16 +477,34 @@ main(int argc, char *argv[], char *environ[])
 		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
 		exit(1);
 	case 0:
-		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]);
-		imsg_init(child_ibuf[MY_IMSG_MASTER], cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
-		break;
-	default:
-		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
-		imsg_init(parent_ibuf[MY_IMSG_MASTER], cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[0]);
-
-		setup_master(db, av, socketpath, parent_ibuf[MY_IMSG_MASTER]);
+		close(cfg->my_imsg[MY_IMSG_CORTEX].imsg_fds[0]);
+		imsg_init(&cortex_ibuf, cfg->my_imsg[MY_IMSG_CORTEX].imsg_fds[1]);
+		setup_cortex(&cortex_ibuf);
 		/* NOTREACHED */
 		exit(1);
+
+		break;
+	default:
+		close(cfg->my_imsg[MY_IMSG_CORTEX].imsg_fds[1]);
+		imsg_init(&cortex_ibuf, cfg->my_imsg[MY_IMSG_CORTEX].imsg_fds[0]);
+	}
+
+	pid = fork();
+	switch (pid) {
+	case -1:
+		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
+		exit(1);
+	case 0:
+		ibuf = register_cortex(&cortex_ibuf, MY_IMSG_MASTER);
+		if (ibuf != NULL) {
+			setup_master(db, av, socketpath, ibuf);
+		}
+		/* NOTREACHED */
+		ddd_shutdown();
+		exit(1);
+		break;
+	default:
+		break;
 	}
 
 	if (! debug) {
@@ -525,12 +519,15 @@ main(int argc, char *argv[], char *environ[])
 
 			signal(SIGPIPE, SIG_IGN);
 
-			signal(SIGTERM, slave_signal);
-			signal(SIGINT, slave_signal);
-			signal(SIGQUIT, slave_signal);
+			signal(SIGTERM, ddd_signal);
+			signal(SIGINT, ddd_signal);
+			signal(SIGQUIT, ddd_signal);
 
-			setup_unixsocket(socketpath, child_ibuf[MY_IMSG_MASTER]);
-			slave_shutdown();	
+			ibuf = register_cortex(&cortex_ibuf, MY_IMSG_UNIXCONTROL);
+			if (ibuf != NULL) {
+				setup_unixsocket(socketpath, ibuf);
+			}
+			ddd_shutdown();	
 			exit(1);
 		default:
 			break;
@@ -549,19 +546,19 @@ main(int argc, char *argv[], char *environ[])
 
 	if (parse_file(db, conffile, 0) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
 	if (determine_glue(db) < 0) {
 		dolog(LOG_INFO, "determine_glue() failed\n");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
 	if (init_entlist(db) < 0) {
 		dolog(LOG_INFO, "creating entlist failed\n");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
@@ -571,7 +568,7 @@ main(int argc, char *argv[], char *environ[])
 		rptr = rrlimit_setup(ratelimit_backlog);
 		if (rptr == NULL) {
 			dolog(LOG_INFO, "ratelimiting error\n");
-			slave_shutdown();
+			ddd_shutdown();
 			exit(1);
 		}
 	}
@@ -580,13 +577,13 @@ main(int argc, char *argv[], char *environ[])
 	pw = getpwnam(DEFAULT_PRIVILEGE);
 	if (pw == NULL) {
 		dolog(LOG_INFO, "getpwnam: %s\n", strerror(errno));
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
 	if (bcount > DEFAULT_SOCKET) {
 		dolog(LOG_INFO, "not enough sockets available\n");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
@@ -608,7 +605,7 @@ main(int argc, char *argv[], char *environ[])
 
 			if ((gai_error = getaddrinfo(bind_list[i], buf, &hints, &res0)) != 0) {
 				dolog(LOG_INFO, "getaddrinfo: %s\n", gai_strerror(gai_error));
-				slave_shutdown();
+				ddd_shutdown();
 				exit (1);
         		}
 
@@ -616,13 +613,13 @@ main(int argc, char *argv[], char *environ[])
 
 			if ((udp[i] = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0) {
 				dolog(LOG_INFO, "socket: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
         
 			if (bind(udp[i], res->ai_addr, res->ai_addrlen) < 0) {
 				dolog(LOG_INFO, "bind: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
 
@@ -651,7 +648,7 @@ main(int argc, char *argv[], char *environ[])
 
 			if ((gai_error = getaddrinfo(bind_list[i], buf, &hints, &res0)) != 0) {
 				dolog(LOG_INFO, "getaddrinfo: %s\n", gai_strerror(gai_error));
-				slave_shutdown();
+				ddd_shutdown();
 				exit (1);
         		}
 
@@ -659,17 +656,17 @@ main(int argc, char *argv[], char *environ[])
 
 			if ((tcp[i] = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0) {
 				dolog(LOG_INFO, "tcp socket: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
        			if (setsockopt(tcp[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
 				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			} 
 			if (bind(tcp[i], res->ai_addr, res->ai_addrlen) < 0) {
 				dolog(LOG_INFO, "tcp bind: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
 
@@ -683,7 +680,7 @@ main(int argc, char *argv[], char *environ[])
 
 				if ((gai_error = getaddrinfo(bind_list[i], buf, &hints, &res0)) != 0) {
 					dolog(LOG_INFO, "getaddrinfo: %s\n", gai_strerror(gai_error));
-					slave_shutdown();
+					ddd_shutdown();
 					exit (1);
 				}
 
@@ -691,28 +688,28 @@ main(int argc, char *argv[], char *environ[])
 
 				if ((afd[i] = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0) {
 					dolog(LOG_INFO, "tcp socket: %s\n", strerror(errno));
-					slave_shutdown();
+					ddd_shutdown();
 					exit(1);
 				}
 				if (setsockopt(afd[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
 					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-					slave_shutdown();
+					ddd_shutdown();
 					exit(1);
 				} 
 				if (bind(afd[i], res->ai_addr, res->ai_addrlen) < 0) {
 					dolog(LOG_INFO, "tcp bind: %s\n", strerror(errno));
-					slave_shutdown();
+					ddd_shutdown();
 					exit(1);
 				}
 
 				if ((uafd[i] = socket(res->ai_family, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
 					dolog(LOG_INFO, "axfr udp socket: %s\n", strerror(errno));
-					slave_shutdown();
+					ddd_shutdown();
 					exit(1);
 				}
 				if (bind(uafd[i], res->ai_addr, res->ai_addrlen) < 0) {
 					dolog(LOG_INFO, "axfr udp socket bind: %s\n", strerror(errno));
-					slave_shutdown();
+					ddd_shutdown();
 					exit(1);
 				}
 			} else if (axfrport && axfrport == port) {
@@ -724,7 +721,7 @@ main(int argc, char *argv[], char *environ[])
 	} else {
 		if (getifaddrs(&ifap) < 0) {
 			dolog(LOG_INFO, "getifaddrs\n");
-			slave_shutdown();
+			ddd_shutdown();
 			exit(1);
 		}
 
@@ -776,13 +773,13 @@ main(int argc, char *argv[], char *environ[])
 
 			if ((udp[i] = socket(pifap->ifa_addr->sa_family, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
 				dolog(LOG_INFO, "socket: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
 			
 			if (bind(udp[i], (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
 				dolog(LOG_INFO, "bind: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
 
@@ -805,18 +802,18 @@ main(int argc, char *argv[], char *environ[])
 
 			if ((tcp[i] = socket(pifap->ifa_addr->sa_family, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 				dolog(LOG_INFO, "tcp socket: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
        			if (setsockopt(tcp[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
 				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			} 
 			
 			if (bind(tcp[i], (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
 				dolog(LOG_INFO, "tcp bind: %s\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}		
 
@@ -825,12 +822,12 @@ main(int argc, char *argv[], char *environ[])
 			if (axfrport && axfrport != port) {
 				if ((afd[i] = socket(pifap->ifa_addr->sa_family, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 					dolog(LOG_INFO, "tcp socket: %s\n", strerror(errno));
-					slave_shutdown();
+					ddd_shutdown();
 					exit(1);
 				}
 				if (setsockopt(afd[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
 					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-					slave_shutdown();
+					ddd_shutdown();
 					exit(1);
 				} 
 
@@ -838,17 +835,17 @@ main(int argc, char *argv[], char *environ[])
 				
 				if (bind(afd[i], (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
 					dolog(LOG_INFO, "tcp bind: %s\n", strerror(errno));
-					slave_shutdown();
+					ddd_shutdown();
 					exit(1);
 				}
 				if ((uafd[i] = socket(pifap->ifa_addr->sa_family, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
 					dolog(LOG_INFO, "axfr udp socket: %s\n", strerror(errno));
-					slave_shutdown();
+					ddd_shutdown();
 					exit(1);
 				}
 				if (bind(uafd[i], (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
 					dolog(LOG_INFO, "udp axfr bind: %s\n", strerror(errno));
-					slave_shutdown();
+					ddd_shutdown();
 					exit(1);
 				}
 			} else if (axfrport && axfrport == port) {
@@ -859,7 +856,7 @@ main(int argc, char *argv[], char *environ[])
 
 		if (i >= DEFAULT_SOCKET) {
 			dolog(LOG_INFO, "not enough sockets available\n");
-			slave_shutdown();
+			ddd_shutdown();
 			exit(1);
 		}
 	} /* if bflag? */
@@ -867,12 +864,12 @@ main(int argc, char *argv[], char *environ[])
 #if __OpenBSD__
 	if (unveil(DELPHINUS_RZONE_PATH, "rwc")  < 0) {
 		perror("unveil");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 	if (unveil(pw->pw_dir, "wc") < 0) {
 		perror("unveil");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
@@ -884,26 +881,27 @@ main(int argc, char *argv[], char *environ[])
 
 	signal(SIGPIPE, SIG_IGN);
 
-	signal(SIGTERM, slave_signal);
-	signal(SIGINT, slave_signal);
-	signal(SIGQUIT, slave_signal);
+	signal(SIGTERM, ddd_signal);
+	signal(SIGINT, ddd_signal);
+	signal(SIGQUIT, ddd_signal);
 
 	/* 
 	 * start our axfr process 
 	 */
 
 	if (axfrport) {	
-		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[0]) < 0) {
-			dolog(LOG_INFO, "socketpair() failed\n");
-			slave_shutdown();
-			exit(1);
-		}
 		switch (pid = fork()) {
 		case -1:
 			dolog(LOG_ERR, "fork() failed: %s\n", strerror(errno));
-			slave_shutdown();
+			ddd_shutdown();
 			exit(1);
 		case 0:
+			ibuf = register_cortex(&cortex_ibuf, MY_IMSG_AXFR);
+			if (ibuf == NULL) {
+				ddd_shutdown();
+				exit(1);
+			}
+
 			/* chroot to the drop priv user home directory */
 #ifdef DEFAULT_LOCATION
 			if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
@@ -911,7 +909,7 @@ main(int argc, char *argv[], char *environ[])
 			if (drop_privs(pw->pw_dir, pw) < 0) {
 #endif
 				dolog(LOG_INFO, "axfr dropping privileges\n", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
 #if __OpenBSD__
@@ -930,13 +928,7 @@ main(int argc, char *argv[], char *environ[])
 			}
 
 			setproctitle("AXFR engine on port %d", axfrport);
-
-			/* don't need master here */
-			close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
-			close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[1]);
-			imsg_init(parent_ibuf[MY_IMSG_AXFR], cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[0]);
-
-			axfrloop(afd, (axfrport == port) ? 0 : i, ident, db, parent_ibuf[MY_IMSG_AXFR]);
+			axfrloop(afd, (axfrport == port) ? 0 : i, ident, db, ibuf);
 			/* NOTREACHED */
 			exit(1);
 		default:
@@ -945,46 +937,41 @@ main(int argc, char *argv[], char *environ[])
 				if (axfrport && axfrport != port)
 					close(afd[j]);
 			}
-			/* XXX these are reversed because we need to use child_ibuf later */
-			close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[0]);
-			imsg_init(child_ibuf[MY_IMSG_AXFR], cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[1]);
-
 			break;
 		}
 	
 	} /* axfrport */
 
 	if (raxfrflag) {
-
-		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_RAXFR].imsg_fds[0]) < 0) {
-			dolog(LOG_INFO, "socketpair() failed\n");
-			slave_shutdown();
-			exit(1);
-		}
-
 		switch (pid = fork()) {
 		case -1:
 			dolog(LOG_ERR, "fork() failed: %s\n", strerror(errno));
-			slave_shutdown();
+			ddd_shutdown();
 			exit(1);
 		case 0:
+			ibuf = register_cortex(&cortex_ibuf, MY_IMSG_RAXFR);
+			if (ibuf == NULL) {
+				ddd_shutdown();
+				exit(1);
+			}
+
 			/* chroot to the drop priv user home directory */
 			if (drop_privs(DELPHINUS_RZONE_PATH, pw) < 0) {
 				dolog(LOG_INFO, "raxfr dropping privileges failed", strerror(errno));
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
 
 #if __OpenBSD__
 			if (unveil("/replicant", "rwc") < 0) {
 				perror("unveil");
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
 
 			if (pledge("stdio inet proc id sendfd recvfd unveil cpath wpath rpath", NULL) < 0) {
 				perror("pledge");
-				slave_shutdown();
+				ddd_shutdown();
 				exit(1);
 			}
 #endif
@@ -997,26 +984,12 @@ main(int argc, char *argv[], char *environ[])
 
 			setproctitle("Replicant engine");
 
-			/* don't need master here */
-#if 0
-			close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
-#endif
-			/* close any axfr's */
-			close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[0]);
-			/* close the replicant parent */
-			close(cfg->my_imsg[MY_IMSG_RAXFR].imsg_fds[1]);
-			imsg_init(parent_ibuf[MY_IMSG_RAXFR], cfg->my_imsg[MY_IMSG_RAXFR].imsg_fds[0]);
-
-			replicantloop(db, parent_ibuf[MY_IMSG_RAXFR], child_ibuf[MY_IMSG_MASTER]);
+			replicantloop(db, ibuf);
 
 			/* NOTREACHED */
 			exit(1);
 
 		default:
-
-			close(cfg->my_imsg[MY_IMSG_RAXFR].imsg_fds[0]);
-			imsg_init(child_ibuf[MY_IMSG_RAXFR], cfg->my_imsg[MY_IMSG_RAXFR].imsg_fds[1]);
-		
 			break;
 		}
 
@@ -1029,13 +1002,13 @@ main(int argc, char *argv[], char *environ[])
 	if (drop_privs(pw->pw_dir, pw) < 0) {
 #endif
 		dolog(LOG_INFO, "dropping privileges failed\n");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 #if __OpenBSD__
 	if (unveil(NULL, NULL) < 0) {
 		dolog(LOG_INFO, "unveil locking failed: %s\n", strerror(errno));
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 	if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
@@ -1063,12 +1036,6 @@ main(int argc, char *argv[], char *environ[])
 	cfg->nth = 0;
 
 	for (n = 0; n < nflag; n++) {
-		if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_MAX + n].imsg_fds[0]) < 0) {
-			dolog(LOG_INFO, "socketpair() failed\n");
-			slave_shutdown();
-			exit(1);
-		}
-
 		switch (pid = fork()) {
 		case 0:
 			cfg->pid = getpid();
@@ -1085,16 +1052,11 @@ main(int argc, char *argv[], char *environ[])
 				cfg->ident[i] = strdup(ident[i]);
 			}
 
-			close(cfg->my_imsg[MY_IMSG_MAX + n].imsg_fds[0]);
-			imsg_init(child_ibuf[MY_IMSG_MAX + n], cfg->my_imsg[MY_IMSG_MAX + n].imsg_fds[1]);
-			
 			setproctitle("child %d pid %d", n, cfg->pid);
-			(void)mainloop(cfg, child_ibuf);
+			(void)mainloop(cfg, &cortex_ibuf);
 
 			/* NOTREACHED */
 		default:	
-			close(cfg->my_imsg[MY_IMSG_MAX + n].imsg_fds[1]);
-			imsg_init(child_ibuf[MY_IMSG_MAX + n], cfg->my_imsg[MY_IMSG_MAX + n].imsg_fds[0]);
 			break;
 		} /* switch pid= fork */
 	} /* for (.. nflag */
@@ -1111,7 +1073,7 @@ main(int argc, char *argv[], char *environ[])
 		cfg->ident[i] = strdup(ident[i]);
 	}
 
-	(void)mainloop(cfg, child_ibuf);
+	(void)mainloop(cfg, &cortex_ibuf);
 
 	/* NOTREACHED */
 	return (0);
@@ -1392,7 +1354,7 @@ out:
  */
 		
 void
-mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
+mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 {
 	fd_set rset;
 	pid_t pid;
@@ -1400,7 +1362,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	int sel;
 	int len, slen = 0;
 	int is_ipv6;
-	int i;
+	int i, nomore = 0;
 	int istcp = 1;
 	int maxso;
 	int so;
@@ -1411,7 +1373,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	int blacklist = 1;
 	int require_tsig = 0;
 	int sp; 
-	int idata;
+	pid_t idata;
 
 	u_int32_t received_ttl;
 	u_int32_t imsg_type;
@@ -1451,7 +1413,7 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	struct msghdr msgh;
 	struct cmsghdr *cmsg = NULL;
 	struct iovec iov;
-	struct imsgbuf tcp_ibuf, parse_ibuf;
+	struct imsgbuf *tcp_ibuf, *udp_ibuf, parse_ibuf;
 	struct imsgbuf *pibuf;
 	struct imsg imsg;
 
@@ -1461,13 +1423,13 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	replybuf = calloc(1, 65536);
 	if (replybuf == NULL) {
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	 }
 
-	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]) < 0) {
+	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]) < 0) {
 		dolog(LOG_INFO, "socketpair() failed\n");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
@@ -1483,12 +1445,11 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 				if (axfrport && axfrport != port)
 					close(cfg->axfr[i]);
 		}
-		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
-		close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[1]);
+		close(ibuf->fd);
 		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
-		imsg_init(ibuf[MY_IMSG_PARSER], cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
+		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
 		setproctitle("udp parse engine %d", cfg->pid);
-		parseloop(cfg, ibuf);
+		parseloop(cfg, &parse_ibuf);
 		/* NOTREACHED */
 		exit(1);
 	default:
@@ -1498,12 +1459,6 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 		break;
 	}
 
-	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]) < 0) {
-		dolog(LOG_INFO, "socketpair() failed\n");
-		slave_shutdown();
-		exit(1);
-	}
-
 	pid = fork();
 	switch (pid) {
 	case -1:
@@ -1515,21 +1470,26 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 				if (axfrport && axfrport != port)
 					close(cfg->axfr[i]);
 		}
-		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]); /* we open our own */
-		close(cfg->my_imsg[MY_IMSG_MASTER].imsg_fds[1]);
-		close(cfg->my_imsg[MY_IMSG_TCP].imsg_fds[1]);
-		imsg_init(ibuf[MY_IMSG_TCP], cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]);
+		tcp_ibuf = register_cortex(ibuf, MY_IMSG_TCP);
+		if (tcp_ibuf == NULL) {
+			ddd_shutdown();
+			exit(1);
+		}
 		setproctitle("TCP engine %d", cfg->pid);
-		tcploop(cfg, ibuf);
+		tcploop(cfg, tcp_ibuf);
 		/* NOTREACHED */
 		exit(1);
 	default:
 		for (i = 0; i < cfg->sockcount; i++)  {
 				close(cfg->tcp[i]);
 		}
-		close(cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]);
-		imsg_init(&tcp_ibuf, cfg->my_imsg[MY_IMSG_TCP].imsg_fds[1]);
 		break;
+	}
+
+	udp_ibuf = register_cortex(ibuf, MY_IMSG_UDP);
+	if (udp_ibuf == NULL) {
+		ddd_shutdown();
+		exit(1);
 	}
 
 #if __OpenBSD__
@@ -1571,12 +1531,15 @@ mainloop(struct cfg *cfg, struct imsgbuf **ibuf)
 		}
 
 		if (sel == 0) {
-			/* send an imsg hello to the root owned process */
+			if (nomore)
+				continue;
 
 			idata = 42;
-			imsg_compose(ibuf[MY_IMSG_MASTER], IMSG_HELLO_MESSAGE, 
+			imsg_compose(ibuf, IMSG_CRIPPLE_NEURON,
 				0, 0, -1, &idata, sizeof(idata));
-			msgbuf_write(&ibuf[MY_IMSG_MASTER]->w);
+			msgbuf_write(&ibuf->w);
+
+			nomore = 1;
 
 			continue;
 		}
@@ -1842,10 +1805,10 @@ axfrentry:
 							slen = reply_notify(&sreply, NULL);
 
 							/* send notify to replicant process */
-							idata = question->hdr->namelen;
-							imsg_compose(ibuf[MY_IMSG_RAXFR], IMSG_NOTIFY_MESSAGE, 
+							idata = (pid_t)question->hdr->namelen;
+							imsg_compose(udp_ibuf, IMSG_NOTIFY_MESSAGE, 
 									0, 0, -1, question->hdr->name, idata);
-							msgbuf_write(&ibuf[MY_IMSG_RAXFR]->w);
+							msgbuf_write(&udp_ibuf->w);
 							goto udpout;
 					
 					} else if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0) {
@@ -1862,10 +1825,10 @@ axfrentry:
 						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_notify(&sreply, NULL);
 							/* send notify to replicant process */
-							idata = question->hdr->namelen;
-							imsg_compose(ibuf[MY_IMSG_RAXFR], IMSG_NOTIFY_MESSAGE, 
+							idata = (pid_t)question->hdr->namelen;
+							imsg_compose(udp_ibuf, IMSG_NOTIFY_MESSAGE, 
 									0, 0, -1, question->hdr->name, idata);
-							msgbuf_write(&ibuf[MY_IMSG_RAXFR]->w);
+							msgbuf_write(&udp_ibuf->w);
 						goto udpout;
 					} else {
 						/* RFC 1996 - 3.10 is probably broken reply REFUSED */
@@ -2257,7 +2220,7 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 
 				pid = getpgrp();
 				killpg(pid, SIGTERM);
-				if (munmap(ptr, sizeof(int)) < 0) {
+				if (munmap(ptr, sizeof(pid_t)) < 0) {
 					dolog(LOG_ERR, "munmap: %s\n", strerror(errno));
 				}
 			
@@ -2309,6 +2272,9 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 						reload = 1;
 						break;	
 					case IMSG_SHUTDOWN_MESSAGE:
+#if DEBUG
+						dolog(LOG_INFO, "received shutdown from cortex\n");
+#endif
 						mshutdown = 1;
 						msig = SIGTERM;
 						break;
@@ -2335,13 +2301,13 @@ master_shutdown(int sig)
 }
 
 /* 
- * slave_signal - a slave got a signal, call slave_shutdown and exit..
+ * ddd_signal - delphinusdnsd got a signal, call ddd_shutdown and exit..
  */
 
 void
-slave_signal(int sig)
+ddd_signal(int sig)
 {
-	slave_shutdown();
+	ddd_shutdown();
 	dolog(LOG_INFO, "shutting down on signal\n");
 	exit(1);
 }
@@ -2364,7 +2330,7 @@ master_reload(int sig)
  */
 		
 void
-tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
+tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 {
 	fd_set rset;
 	int sel;
@@ -2381,7 +2347,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	int require_tsig = 0;
 	int axfr_acl = 0;
 	int sp; 
-	int idata;
+	pid_t idata;
 	uint conncnt = 0;
 	int tcpflags;
 	pid_t pid;
@@ -2422,9 +2388,9 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	ssize_t n, datalen;
 	u_int32_t imsg_type;
 
-	if (socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]) < 0) {
+	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]) < 0) {
 		dolog(LOG_INFO, "socketpair() failed\n");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
@@ -2439,12 +2405,11 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 				if (axfrport && axfrport != port)
 					close(cfg->axfr[i]);
 		}
-		close(cfg->my_imsg[MY_IMSG_AXFR].imsg_fds[1]);
-		close(cfg->my_imsg[MY_IMSG_TCP].imsg_fds[0]);
+		close(ibuf->fd);
 		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
-		imsg_init(ibuf[MY_IMSG_PARSER], cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
+		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
 		setproctitle("tcp parse engine %d", cfg->pid);
-		parseloop(cfg, ibuf);
+		parseloop(cfg, &parse_ibuf);
 		/* NOTREACHED */
 		exit(1);
 	default:
@@ -2465,7 +2430,7 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 	replybuf = calloc(1, 65536);
 	if (replybuf == NULL) {
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
@@ -2801,10 +2766,10 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 							slen = reply_notify(&sreply, NULL);
 							/* send notify to replicant process */
-							idata = question->hdr->namelen;
-							imsg_compose(ibuf[MY_IMSG_RAXFR], IMSG_NOTIFY_MESSAGE, 
+							idata = (pid_t)question->hdr->namelen;
+							imsg_compose(ibuf, IMSG_NOTIFY_MESSAGE, 
 									0, 0, -1, question->hdr->name, idata);
-							msgbuf_write(&ibuf[MY_IMSG_RAXFR]->w);
+							msgbuf_write(&ibuf->w);
 							goto tcpout;
 					
 					} else if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0) {
@@ -2821,10 +2786,10 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
 						slen = reply_notify(&sreply, NULL);
 						/* send notify to replicant process */
-						idata = question->hdr->namelen;
-						imsg_compose(ibuf[MY_IMSG_RAXFR], IMSG_NOTIFY_MESSAGE, 
+						idata = (pid_t)question->hdr->namelen;
+						imsg_compose(ibuf, IMSG_NOTIFY_MESSAGE, 
 								0, 0, -1, question->hdr->name, idata);
-						msgbuf_write(&ibuf[MY_IMSG_RAXFR]->w);
+						msgbuf_write(&ibuf->w);
 						goto tcpout;
 					} else {
 						/* RFC 1996 - 3.10 is probably broken, replying REFUSED */
@@ -3033,8 +2998,8 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 					/* FALLTHROUGH */
 				case DNS_TYPE_AXFR:
 					dolog(LOG_INFO, "composed AXFR message to axfr process\n");
-					imsg_compose(ibuf[MY_IMSG_AXFR], IMSG_XFR_MESSAGE, 0, 0, tcpnp->so, tcpnp->buf, tcpnp->bytes_read);
-					msgbuf_write(&ibuf[MY_IMSG_AXFR]->w);
+					imsg_compose(ibuf, IMSG_XFR_MESSAGE, 0, 0, tcpnp->so, tcpnp->buf, tcpnp->bytes_read);
+					msgbuf_write(&ibuf->w);
 					TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
 					close(tcpnp->so);
 					free(tcpnp->address);
@@ -3174,10 +3139,10 @@ tcploop(struct cfg *cfg, struct imsgbuf **ibuf)
 }
 
 void
-parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
+parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 {
 	struct imsg imsg;
-	struct imsgbuf *mybuf = ibuf[MY_IMSG_PARSER];
+	struct imsgbuf *mybuf = ibuf;
 	struct dns_header *dh = NULL;
 	struct question *question = NULL;
 	struct parsequestion pq;
@@ -3191,7 +3156,7 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 #if __OpenBSD__
 	if (pledge("stdio", NULL) < 0) {
 		perror("pledge");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 #endif
@@ -3199,7 +3164,7 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 	packet = calloc(1, 16384);
 	if (packet == NULL) {
 		dolog(LOG_ERR, "calloc: %m");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
@@ -3248,8 +3213,8 @@ parseloop(struct cfg *cfg, struct imsgbuf **ibuf)
 					if (datalen < sizeof(struct dns_header)) {
 						/* SEND NAK */
 						pq.rc = PARSE_RETURN_NAK;
-						imsg_compose(ibuf[MY_IMSG_PARSER], IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
-						msgbuf_write(&ibuf[MY_IMSG_PARSER]->w);
+						imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
+						msgbuf_write(&ibuf->w);
 						msgbuf_write(&mybuf->w);
 						break;
 					}
@@ -3416,8 +3381,10 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	memset(&sun, 0, sizeof(sun));
 	sun.sun_family = AF_UNIX;
 	if (strlcpy(sun.sun_path, socketpath, sizeof(sun.sun_path)) >= sizeof(sun.sun_path)) {
-		slave_shutdown();
-		exit(1);
+		ddd_shutdown();
+		for (;;) {
+			sleep(1);
+		}
 	}
 #ifndef __linux__
 	sun.sun_len = SUN_LEN(&sun);
@@ -3425,25 +3392,27 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 
 	/* only root, 0100 == nonexecute */
 	if (umask(0177) < 0) {
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
 	so = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (so < 0) {
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
 	if (bind(so, (struct sockaddr *)&sun, sizeof(sun)) < 0) {
-		slave_shutdown();
-		exit(1);
+		ddd_shutdown();
+		for (;;) {
+			sleep(1);
+		}
 	}
 
 	pw = getpwnam(DEFAULT_PRIVILEGE);
 	if (pw == NULL) {
 		perror("getpwnam");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
@@ -3453,7 +3422,7 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	if (drop_privs(pw->pw_dir, pw) < 0) {
 #endif
 		dolog(LOG_INFO, "dropping privileges failed in unix socket\n");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 
@@ -3462,7 +3431,7 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 #if __OpenBSD__
 	if (pledge("stdio rpath wpath cpath unix proc", NULL) < 0) {
 		perror("pledge");
-		slave_shutdown();
+		ddd_shutdown();
 		exit(1);
 	}
 #endif
@@ -3504,15 +3473,15 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 			dc = (struct dddcomm *)&buf[0];		
 			if (dc->command == IMSG_RELOAD_MESSAGE || 
 				dc->command == IMSG_SHUTDOWN_MESSAGE) {
-				int idata;
+				pid_t idata;
 				
-				idata = 1;
+				idata = getpid();
 				imsg_compose(ibuf, dc->command, 
 					0, 0, -1, &idata, sizeof(idata));
 				msgbuf_write(&ibuf->w);
 				send(nso, buf, len, 0);
 				close(nso);
-				exit(0);
+				/* exit here before but it caused sigpipes */
 			}
 			send(nso, buf, len, 0);
 			close(nso);
@@ -3708,4 +3677,273 @@ determine_glue(ddDB *db)
 	}
 
 	return 0;
+}
+
+void
+setup_cortex(struct imsgbuf *ibuf)
+{
+	int sel, max = 0;
+	int datalen, nomore = 0;
+
+	ssize_t n;
+	fd_set rset;
+
+	struct imsg imsg;
+	struct passwd *pw;
+
+	SLIST_HEAD(, neuron) neuronhead;
+	struct neuron {
+		int desc;
+		pid_t pid;
+		struct imsgbuf ibuf;
+		SLIST_ENTRY(neuron) entries;
+	} *neup, *neup2, *neup3;
+
+	SLIST_INIT(&neuronhead);
+
+#ifndef NO_SETPROCTITLE
+	setproctitle("cortex");
+#endif
+
+	pw = getpwnam(DEFAULT_PRIVILEGE);
+	if (pw == NULL) {
+		perror("getpwnam");
+		ddd_shutdown();
+		exit(1);
+	}
+
+#ifdef DEFAULT_LOCATION
+	if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
+#else
+	if (drop_privs(pw->pw_dir, pw) < 0) {
+#endif
+		dolog(LOG_INFO, "dropping privileges failed in cortex\n");
+		ddd_shutdown();
+		exit(1);
+	}
+
+#if __OpenBSD__
+	if (unveil("/", "") == -1) {
+		dolog(LOG_INFO, "unveil cortex: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+	if (unveil(NULL, NULL) == -1) {
+		dolog(LOG_INFO, "unveil cortex: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+	if (pledge("stdio sendfd recvfd", NULL) < 0) {
+		perror("pledge");
+		exit(1);
+	}
+#endif
+	
+	for (;;) {
+		FD_ZERO(&rset);	
+		FD_SET(ibuf->fd, &rset);
+		if (ibuf->fd > max)
+			max = ibuf->fd;
+
+		SLIST_FOREACH(neup, &neuronhead, entries) {
+			if (neup->ibuf.fd > max)
+				max = neup->ibuf.fd;
+
+			FD_SET(neup->ibuf.fd, &rset);
+		}
+	
+		sel = select(max + 1, &rset, NULL, NULL, NULL);
+
+		SLIST_FOREACH(neup, &neuronhead, entries) {
+			if (FD_ISSET(neup->ibuf.fd, &rset)) {
+				if ((n = imsg_read(&neup->ibuf)) < 0 && errno != EAGAIN) {
+					dolog(LOG_ERR, "imsg read failure %s\n", strerror(errno));
+					continue;
+				}
+				if (n == 0) {
+					/* child died? */
+					dolog(LOG_INFO, "sigpipe on child?  exiting.\n");
+					exit(1);
+				}
+
+				for (;;) {
+					if ((n = imsg_get(&neup->ibuf, &imsg)) < 0) {
+						dolog(LOG_ERR, "imsg read error: %s\n", strerror(errno));
+						break;
+					} else {
+						if (n == 0)
+							break;
+
+#if DEBUG
+						dolog(LOG_INFO, "received imsg type %d from %d\n", imsg.hdr.type, imsg.hdr.pid);
+#endif
+						datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+
+						switch(imsg.hdr.type) {
+						/* hellos go to the master */
+						case IMSG_HELLO_MESSAGE:
+						case IMSG_SHUTDOWN_MESSAGE:
+						case IMSG_RELOAD_MESSAGE:
+							SLIST_FOREACH(neup2, &neuronhead, entries) {
+								if (neup2->desc == MY_IMSG_MASTER)
+									break;
+							}
+							/* didn't find it?  skip */
+							if (neup2 == NULL)
+								break;
+
+#if DEBUG
+							dolog(LOG_INFO, "relaying shutdown from %d to %d\n", imsg.hdr.pid, neup2->pid);
+#endif
+							
+							imsg_compose(&neup2->ibuf, imsg.hdr.type, 0, 0, -1, imsg.data, datalen);
+							msgbuf_write(&neup2->ibuf.w);
+							
+							break;
+						case IMSG_SPREAD_MESSAGE:
+							SLIST_FOREACH(neup2, &neuronhead, entries) {
+								imsg_compose(&neup2->ibuf, IMSG_SPREAD_MESSAGE, 0, 0, -1, imsg.data, datalen);
+								msgbuf_write(&neup2->ibuf.w);
+							}
+
+							break;
+						case IMSG_XFR_MESSAGE:
+							SLIST_FOREACH(neup2, &neuronhead, entries) {
+								if (neup2->desc == MY_IMSG_AXFR)
+									break;
+							}
+							/* didn't find it?  skip */
+							if (neup2 == NULL)
+								break;
+							
+							imsg_compose(&neup2->ibuf, IMSG_XFR_MESSAGE, 0, 0, imsg.fd, imsg.data, datalen);
+							msgbuf_write(&neup2->ibuf.w);
+							break;
+						case IMSG_NOTIFY_MESSAGE:
+							SLIST_FOREACH(neup2, &neuronhead, entries) {
+								if (neup2->desc == MY_IMSG_RAXFR)
+									break;
+							}
+							/* didn't find it?  skip */
+							if (neup2 == NULL)
+								break;
+
+						
+							imsg_compose(&neup2->ibuf, IMSG_NOTIFY_MESSAGE, 0, 0, -1, imsg.data, datalen);
+							msgbuf_write(&neup2->ibuf.w);
+							break;
+						default:
+							/* unknown imsg */
+							break;
+						}
+
+						imsg_free(&imsg);
+					}
+				} /* for (;;) */
+				
+			} /* if maxneurons */
+		} /* for maxneurons */
+
+		if (FD_ISSET(ibuf->fd, &rset)) {
+			if ((n = imsg_read(ibuf)) < 0 && errno != EAGAIN) {
+				dolog(LOG_ERR, "imsg read failure %s\n", strerror(errno));
+				continue;
+			}
+			if (n == 0) {
+				/* child died? */
+				dolog(LOG_INFO, "sigpipe on child?  exiting.\n");
+				exit(1);
+			}
+
+			for (;;) {
+				if ((n = imsg_get(ibuf, &imsg)) < 0) {
+					dolog(LOG_ERR, "imsg read error: %s\n", strerror(errno));
+					break;
+				} else {
+					if (n == 0)
+						break;
+
+					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+
+					if (nomore == 1) {
+						imsg_free(&imsg);
+						break;
+					}
+
+					switch(imsg.hdr.type) {
+					case IMSG_CRIPPLE_NEURON:
+						if (datalen != sizeof(int))
+							break;
+						nomore = 1;
+						break;
+					case IMSG_SETUP_NEURON:
+						if (datalen != sizeof(int))
+							break;
+
+						neup3 = calloc(sizeof(struct neuron), 1);
+						if (neup3 == NULL) {
+							break;
+						}
+						
+						memcpy((char *)&neup3->desc, (char *)imsg.data, sizeof(int));
+						neup3->pid = (pid_t)imsg.hdr.pid;
+#if DEBUG
+						dolog(LOG_INFO, "registered pid %u with description %d\n", neup3->pid, neup3->desc);
+#endif
+						imsg_init(&neup3->ibuf, imsg.fd);
+
+						SLIST_INSERT_HEAD(&neuronhead, neup3, entries);
+						break;
+					default:
+						break;
+					}
+
+					imsg_free(&imsg);
+				}
+			} /* for (;;) */
+		} /* IF_ISSET(ibuf... */
+	} /* for(;;) */
+
+	/* NOTREACHED */
+}
+
+/*
+ * REGISTER_CORTEX - register with the cortex process via imsg
+ */
+
+struct imsgbuf *
+register_cortex(struct imsgbuf *cortex, int type)
+{
+	int fd[2];
+	struct imsgbuf *ibuf;
+	int desc = type;
+
+
+	ibuf = calloc(sizeof(struct imsgbuf), 1);
+	if (ibuf == NULL)
+		return NULL;
+
+	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &fd[0]) < 0) {
+		return NULL;
+	}
+
+	imsg_init(ibuf, fd[0]);
+		
+	/* send the cortex a setup neuron */
+	imsg_compose(cortex, IMSG_SETUP_NEURON, 0, 0, fd[1], &desc, sizeof(int));
+	msgbuf_write(&cortex->w);
+		
+	close(fd[1]);
+
+	return (ibuf);
+}
+
+void
+nomore_neurons(struct imsgbuf *cortex)
+{
+	int desc = 1;
+
+	imsg_compose(cortex, IMSG_CRIPPLE_NEURON, 0, 0, -1, &desc, sizeof(int));
+	msgbuf_write(&cortex->w);
 }

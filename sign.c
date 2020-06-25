@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: sign.c,v 1.3 2020/05/07 12:17:36 pjp Exp $
+ * $Id: sign.c,v 1.4 2020/06/25 10:01:11 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -257,7 +257,7 @@ extern int                      memcasecmp(u_char *, u_char *, int);
 extern int insert_axfr(char *, char *);
 extern int insert_filter(char *, char *);
 extern int insert_whitelist(char *, char *);
-extern int insert_notifyslave(char *, char *);
+extern int insert_notifyddd(char *, char *);
 
 extern int dnssec;
 extern int tsig;
