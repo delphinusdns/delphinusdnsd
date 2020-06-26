@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.101 2020/06/25 10:01:10 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.102 2020/06/26 11:22:27 pjp Exp $
  */
 
 
@@ -3701,9 +3701,7 @@ setup_cortex(struct imsgbuf *ibuf)
 
 	SLIST_INIT(&neuronhead);
 
-#ifndef NO_SETPROCTITLE
 	setproctitle("cortex");
-#endif
 
 	pw = getpwnam(DEFAULT_PRIVILEGE);
 	if (pw == NULL) {
