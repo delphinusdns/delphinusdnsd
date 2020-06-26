@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.102 2020/06/26 11:22:27 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.103 2020/06/26 11:50:56 pjp Exp $
  */
 
 
@@ -3365,7 +3365,7 @@ void
 setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 {
 	int so, nso;
-	int sel, slen;
+	int sel, slen = sizeof(struct sockaddr_un);
 	int len;
 	char buf[512];
 	struct sockaddr_un sun, *psun;
@@ -3479,8 +3479,6 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 				imsg_compose(ibuf, dc->command, 
 					0, 0, -1, &idata, sizeof(idata));
 				msgbuf_write(&ibuf->w);
-				send(nso, buf, len, 0);
-				close(nso);
 				/* exit here before but it caused sigpipes */
 			}
 			send(nso, buf, len, 0);
