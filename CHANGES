@@ -117,7 +117,7 @@ Changes in BETA_7 from BETA_6
 - remote (sys)-logging feature with HMAC message verification
 - change to Berkeley DB 4.6+ on BSD hosts (Linux had it already)
 - allow numerous copies of wildcardnsd to pre-fork (-n flag)
-- AXFR master code (this allows a bind9 slave to work with wildcarddnsd)
+- AXFR master code (this allows a BIND9 to work with wildcarddnsd)
 - fix an integer overrun in parse.c which prevented big endian hosts to
   make use of ANY replies and AXFR
 - SRV RR support
