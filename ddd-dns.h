@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.11 2020/06/25 10:01:10 pjp Exp $
+ * $Id: ddd-dns.h,v 1.12 2020/06/27 12:37:14 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -117,7 +117,11 @@ struct dns_question_hdr {
 #define DNS_RECURSE	0x100	/* if set Recursion Desired (RD) */
 #define DNS_RECAVAIL	0x80	/* if set Recursion Available (RA) */
 #define DNS_BADVERS	0x10	/* RCODE (16) BADVERS RFC 2671 p. 6 */
+#define DNS_NOTZONE	0xA	/* RCODE - Not within zone section RFC 2136 */
 #define DNS_NOTAUTH	0x9	/* RCODE - Not Authenticated RFC 2845 */
+#define DNS_NXRRSET	0x8	/* RCODE - RRSET should exist, but doesn't */
+#define DNS_XYRRSET	0x7	/* RCODE - RRSET should not exist, but does */
+#define DNS_YXDOMAIN	0x6	/* RCODE - Should not exist but does RFC 2136 */
 #define	DNS_REFUSED	0x5	/* RCODE - Refused */
 #define DNS_NOTIMPL	0x4	/* RCODE - Not Implemented */
 #define DNS_NAMEERR	0x3	/* RCODE - Name Error, NXDOMAIN */

@@ -17,6 +17,9 @@ For 1.5.0 release
 to have replicant compatibility for NSEC
 - get rid of zincludes and incorporate them into mzone blocks (for masters)
 - display statistics via the UNIX socket, now possible with the cortex process.
+- get started with DNS Update (RFC 2136 and 3007) must be Secure with TSIG
+- simple DNS forwarding (with TSIG) is kinda what I want too
+- an IODINE-like DNS tunnel functionality (perhaps for 1.6.0?)
 
 For 1.4.0 release
 - a github mirrored copy
