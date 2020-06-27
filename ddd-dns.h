@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.12 2020/06/27 12:37:14 pjp Exp $
+ * $Id: ddd-dns.h,v 1.13 2020/06/27 13:30:48 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -120,7 +120,7 @@ struct dns_question_hdr {
 #define DNS_NOTZONE	0xA	/* RCODE - Not within zone section RFC 2136 */
 #define DNS_NOTAUTH	0x9	/* RCODE - Not Authenticated RFC 2845 */
 #define DNS_NXRRSET	0x8	/* RCODE - RRSET should exist, but doesn't */
-#define DNS_XYRRSET	0x7	/* RCODE - RRSET should not exist, but does */
+#define DNS_YXRRSET	0x7	/* RCODE - RRSET should not exist, but does */
 #define DNS_YXDOMAIN	0x6	/* RCODE - Should not exist but does RFC 2136 */
 #define	DNS_REFUSED	0x5	/* RCODE - Refused */
 #define DNS_NOTIMPL	0x4	/* RCODE - Not Implemented */
