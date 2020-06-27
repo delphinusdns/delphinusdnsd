@@ -63,5 +63,5 @@ For 1.0.0 release
   what records exist.  This is a lot of work but will make records under 44KB
   again. [DONE]
 - DNSSEC (RFC 4034 / DNSKEY RR, DS RR, RRSIG RR, NSEC RR) [DONE]
-- Notify needs to be rewritten for allowing notifies to different slaves.
+- Notify needs to be rewritten for allowing notifies to different replicants.
 - A zone signer possibly written in ruby. [PARTIALLY DONE]
