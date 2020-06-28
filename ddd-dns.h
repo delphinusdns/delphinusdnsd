@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.15 2020/06/28 08:34:34 pjp Exp $
+ * $Id: ddd-dns.h,v 1.16 2020/06/28 08:59:30 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -223,6 +223,7 @@ struct dns_question_hdr {
 #define DNS_CLASS_CH	3		/* chaos */
 #define DNS_CLASS_HS	4		/* hesiod */
 
+#define DNS_CLASS_NONE	254		/* none class RFC 2136 */
 #define DNS_CLASS_ANY	255		/* any class */
 
 /* limits */
