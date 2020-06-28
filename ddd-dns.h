@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.13 2020/06/27 13:30:48 pjp Exp $
+ * $Id: ddd-dns.h,v 1.14 2020/06/28 08:32:42 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -109,6 +109,7 @@ struct dns_question_hdr {
  */
 
 #define DNS_REPLY	0x8000	/* if set response if not set query */
+#define DNS_UPDATE	0x2800	/* a DNS Update RFC 2136 */
 #define DNS_NOTIFY	0x2000	/* a NOTIFY query RFC 1996 */
 #define DNS_SREQ	0x1000	/* if set a server status request (STATUS) */
 #define DNS_INV		0x800	/* if set an inverse query */
