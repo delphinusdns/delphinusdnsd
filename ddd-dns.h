@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2002-2015 Peter J. Philipp
+ * Copyright (c) 2002-2020 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.14 2020/06/28 08:32:42 pjp Exp $
+ * $Id: ddd-dns.h,v 1.15 2020/06/28 08:34:34 pjp Exp $
  */
 
 #ifndef _DNS_H
