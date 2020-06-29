@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.44 2020/06/29 16:22:05 pjp Exp $
+ * $Id: axfr.c,v 1.45 2020/06/29 16:54:47 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -838,9 +838,9 @@ void
 axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int packetlen)
 {
 
-	char buf[4000];
+	char *buf;
 	char tsigkey[512];
-	char *p = &buf[0];
+	char *p;
 	char *q;
 	char *reply, *replybuf;
 
@@ -863,6 +863,17 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 	ddDBT key, data;
 	HMAC_CTX *tsigctx = NULL;
+		
+
+#define DDD_AXFR_RECBUF	(0xffff + 3)
+
+	if ((buf = calloc(1, DDD_AXFR_RECBUF)) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		close(so);
+		exit(1);
+	}
+
+	p = &buf[0];
 
 	if ((replybuf = calloc(1, 0xffff + 3)) == NULL) {
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
@@ -871,7 +882,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 	}
 		
 
-	if (packetlen > sizeof(buf)) {
+	if (packetlen > DDD_AXFR_RECBUF) {
 		dolog(LOG_ERR, "buffer size of buf is smaller than given packet, drop\n");
 		close(so);
 		exit(1);
@@ -879,7 +890,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 	for (;;) {
 		if (packetlen == 0) {
-			len = recv(so, p + offset, sizeof(buf) - offset, 0);
+			len = recv(so, p + offset, DDD_AXFR_RECBUF - offset, 0);
 			if (len <= 0) {
 				close(so);
 				exit(1);
