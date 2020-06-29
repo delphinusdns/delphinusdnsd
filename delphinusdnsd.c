@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.103 2020/06/26 11:50:56 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.104 2020/06/29 16:22:05 pjp Exp $
  */
 
 
@@ -173,7 +173,7 @@ extern struct rbtree *	get_ns(ddDB *, struct rbtree *, int *);
 
 
 struct question		*convert_question(struct parsequestion *);
-void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, void *, char *);
+void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, char *);
 int 			compress_label(u_char *, u_int16_t, int);
 int			determine_glue(ddDB *db);
 void			mainloop(struct cfg *, struct imsgbuf *);
@@ -1666,7 +1666,7 @@ axfrentry:
 
 				if (filter && require_tsig == 0) {
 
-					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 					slen = reply_refused(&sreply, NULL);
 
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, filter policy\n", so, cfg->ident[i], address, received_ttl, aregion);
@@ -1675,7 +1675,7 @@ axfrentry:
 
 				if (whitelist && blacklist == 0) {
 
-					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 					slen = reply_refused(&sreply, NULL);
 
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, whitelist policy\n", so, cfg->ident[i], address, received_ttl, aregion);
@@ -1751,7 +1751,7 @@ axfrentry:
 									case PARSE_RETURN_NOQUESTION:
 										dolog(LOG_INFO, "on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
 										/* format error */
-										build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+										build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 										slen = reply_fmterror(&sreply, NULL);
 										dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
 										imsg_free(&imsg);
@@ -1767,7 +1767,7 @@ axfrentry:
 									case PARSE_RETURN_NOTAUTH:
 										/* we didn't see a tsig header */
 										if (filter && pq.tsig.have_tsig == 0) {
-											build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+											build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 											slen = reply_refused(&sreply, NULL);
 											dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, received_ttl, aregion);
 											imsg_free(&imsg);
@@ -1801,7 +1801,7 @@ axfrentry:
 							question->tsig.tsigverified == 1) {
 							dolog(LOG_INFO, "on descriptor %u interface \"%s\" authenticated dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[i], address);
 							snprintf(replystring, DNS_MAXNAME, "NOTIFY");
-							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 							slen = reply_notify(&sreply, NULL);
 
 							/* send notify to replicant process */
@@ -1814,7 +1814,7 @@ axfrentry:
 					} else if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0) {
 							dolog(LOG_INFO, "on descriptor %u interface \"%s\" not authenticated dns NOTIFY packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsig.tsigerrorcode, address);
 							snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
-							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 							slen = reply_notauth(&sreply, NULL);
 							goto udpout;
 					}
@@ -1822,7 +1822,7 @@ axfrentry:
 					if (notifysource(question, (struct sockaddr_storage *)from)) {
 						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[i], address);
 						snprintf(replystring, DNS_MAXNAME, "NOTIFY");
-						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 						slen = reply_notify(&sreply, NULL);
 							/* send notify to replicant process */
 							idata = (pid_t)question->hdr->namelen;
@@ -1834,7 +1834,7 @@ axfrentry:
 						/* RFC 1996 - 3.10 is probably broken reply REFUSED */
 						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying REFUSED\n", so, cfg->ident[i], address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
-						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 						slen = reply_refused(&sreply, NULL);
 
 						goto udpout;
@@ -1844,13 +1844,13 @@ axfrentry:
 				if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0)  {
 					dolog(LOG_INFO, "on descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsig.tsigerrorcode, address);
 					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
-					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 					slen = reply_notauth(&sreply, NULL);
 					goto udpout;
 				}
 				/* hack around whether we're edns version 0 */
 				if (question->ednsversion != 0) {
-					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 					slen = reply_badvers(&sreply, NULL);
 
 					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" edns version is %u from %s, replying badvers\n", so, cfg->ident[i], question->ednsversion, address);
@@ -1863,7 +1863,7 @@ axfrentry:
 					ntohs(question->hdr->qtype) == DNS_TYPE_TXT &&
 					strcasecmp(question->converted_name, "version.bind.") == 0) {
 							snprintf(replystring, DNS_MAXNAME, "VERSION");
-							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 							slen = reply_version(&sreply, NULL);
 							goto udpout;
 				}
@@ -1883,7 +1883,7 @@ axfrentry:
 					case ERR_REFUSED:
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 
-						build_reply(&sreply, so, buf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
+						build_reply(&sreply, so, buf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
 						slen = reply_refused(&sreply, NULL);
 						goto udpout;
 						break;
@@ -1901,7 +1901,7 @@ axfrentry:
 						if (rbt0 != NULL) {
 							build_reply(&sreply, so, buf, len, question, from, \
 							fromlen, rbt0, NULL, aregion, istcp, \
-							0, NULL, replybuf);
+							0, replybuf);
 
 							slen = reply_nxdomain(&sreply, cfg->db);
 						}
@@ -1917,10 +1917,10 @@ axfrentry:
 						rbt1 = get_soa(cfg->db, question);
 						if (rbt1 != NULL) {
 							snprintf(replystring, DNS_MAXNAME, "NODATA");
-							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, NULL, replybuf);
+							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
 							slen = reply_nodata(&sreply, cfg->db);
 						} else {
-							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, NULL, replybuf);
+							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
 							slen = reply_refused(&sreply, cfg->db);
 							snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						}
@@ -1947,7 +1947,7 @@ axfrentry:
 						if (rbt0 != NULL) {
 							build_reply(&sreply, so, buf, len, question, from, \
 								fromlen, rbt0, NULL, aregion, istcp, 0, 
-								NULL, replybuf);
+								replybuf);
 
 							slen = reply_noerror(&sreply, cfg->db);
 
@@ -1962,7 +1962,7 @@ axfrentry:
 						if (rbt0 != NULL) {
 							build_reply(&sreply, so, buf, len, question, from, \
 							fromlen, rbt0, NULL, aregion, istcp, \
-							0, NULL, replybuf);
+							0, replybuf);
 
 							slen = reply_ns(&sreply, cfg->db);
 						} else {
@@ -2015,7 +2015,7 @@ axfrentry:
 				default:
 					 build_reply(&sreply, so, buf, len, question, from, \
 							fromlen, NULL, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
+							replybuf);
 
 					slen = reply_notimpl(&sreply, NULL);
 					snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
@@ -2029,12 +2029,12 @@ axfrentry:
 							case BUILD_CNAME:
 								build_reply(&sreply, so, buf, len, question,
 									from, fromlen, rbt0, ((type1 > 0) ? rbt1 : 
-									NULL), aregion, istcp, 0, NULL, replybuf);
+									NULL), aregion, istcp, 0, replybuf);
 								break;
 							case BUILD_OTHER:
 								build_reply(&sreply, so, buf, len, question, 
 									from, fromlen, rbt0, NULL, aregion, istcp,
-									0, NULL, replybuf);
+									0, replybuf);
 								break;
 							}
 						} else {
@@ -2058,7 +2058,7 @@ axfrentry:
 
 						build_reply(&sreply, so, buf, len, question, from, \
 							fromlen, rbt0, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
+							replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 					} else {
@@ -2066,7 +2066,7 @@ axfrentry:
 
 						build_reply(&sreply, so, buf, len, question, from, \
 							fromlen, NULL, NULL, aregion, istcp, 0, \
-							NULL, replybuf);
+							replybuf);
 
 						slen = reply_notimpl(&sreply, NULL);
 						snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
@@ -2123,7 +2123,7 @@ axfrentry:
  */
 
 void
-build_reply(struct sreply *reply, int so, char *buf, int len, struct question *q, struct sockaddr *sa, socklen_t slen, struct rbtree *rbt1, struct rbtree *rbt2, u_int8_t region, int istcp, int deprecated0, void *sr, char *replybuf)
+build_reply(struct sreply *reply, int so, char *buf, int len, struct question *q, struct sockaddr *sa, socklen_t slen, struct rbtree *rbt1, struct rbtree *rbt2, u_int8_t region, int istcp, int deprecated0, char *replybuf)
 {
 	reply->so = so;
 	reply->buf = buf;
@@ -2136,7 +2136,6 @@ build_reply(struct sreply *reply, int so, char *buf, int len, struct question *q
 	reply->region = region;
 	reply->istcp = istcp;
 	reply->wildcard = 0;
-	reply->sr = NULL;
 	reply->replybuf = replybuf;
 
 	return;
@@ -2544,7 +2543,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 				if (filter && require_tsig == 0) {
 					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, filter policy, drop\n", so, cfg->ident[i], address);
 #if 0
-					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 					slen = reply_refused(&sreply, NULL);
 #endif
 					close(so);
@@ -2716,7 +2715,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 							case PARSE_RETURN_NOQUESTION:
 								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 								/* format error */
-								build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+								build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 								slen = reply_fmterror(&sreply, NULL);
 								dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 								imsg_free(&imsg);
@@ -2731,7 +2730,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 								goto drop;
 							case PARSE_RETURN_NOTAUTH:
 								if (filter && pq.tsig.have_tsig == 0) {
-									build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+									build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 									slen = reply_refused(&sreply, NULL);
 									dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion);
 									imsg_free(&imsg);
@@ -2763,7 +2762,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 							question->tsig.tsigverified == 1) {
 							dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" authenticated dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 							snprintf(replystring, DNS_MAXNAME, "NOTIFY");
-							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 							slen = reply_notify(&sreply, NULL);
 							/* send notify to replicant process */
 							idata = (pid_t)question->hdr->namelen;
@@ -2775,7 +2774,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 					} else if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0) {
 							dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns NOTIFY packet (code = %d) from %s, replying notauth\n", so, cfg->ident[tcpnp->intidx], question->tsig.tsigerrorcode, tcpnp->address);
 							snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
-							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 							slen = reply_notauth(&sreply, NULL);
 							goto tcpout;
 					}
@@ -2783,7 +2782,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 					if (notifysource(question, (struct sockaddr_storage *)from)) {
 						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 						snprintf(replystring, DNS_MAXNAME, "NOTIFY");
-						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 						slen = reply_notify(&sreply, NULL);
 						/* send notify to replicant process */
 						idata = (pid_t)question->hdr->namelen;
@@ -2795,7 +2794,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 						/* RFC 1996 - 3.10 is probably broken, replying REFUSED */
 						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying REFUSED\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
-						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 						slen = reply_refused(&sreply, NULL);
 
 						goto tcpout;
@@ -2805,7 +2804,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 				if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0)  {
 					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[tcpnp->intidx], question->tsig.tsigerrorcode, tcpnp->address);
 					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
-					build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+					build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 					slen = reply_notauth(&sreply, NULL);
 					goto tcpout;
 				}
@@ -2835,7 +2834,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 					ntohs(question->hdr->qtype) == DNS_TYPE_TXT &&
 					strcasecmp(question->converted_name, "version.bind.") == 0) {
 						snprintf(replystring, DNS_MAXNAME, "VERSION");
-						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, NULL, replybuf);
+						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 						slen = reply_version(&sreply, NULL);
 						goto tcpout;
 				}
@@ -2854,7 +2853,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 
 					case ERR_REFUSED:
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
-						build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
+						build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
 						slen = reply_refused(&sreply, NULL);
 						goto tcpout;
 						break;
@@ -2867,11 +2866,11 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 								rbt0 = get_soa(cfg->db, question);
 								if (rbt0 != NULL) {
 									snprintf(replystring, DNS_MAXNAME, "NODATA");
-									build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
+									build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
 									slen = reply_nodata(&sreply, cfg->db);
 								} else {
 									snprintf(replystring, DNS_MAXNAME, "REFUSED");
-									build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, NULL, replybuf);
+									build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
 									slen = reply_refused(&sreply, cfg->db);
 								}
 
@@ -2888,8 +2887,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 			
 							build_reply(	&sreply, so, pbuf, len, question, 
 											from, fromlen, rbt0, NULL, 
-											aregion, istcp, 0, NULL,
-											replybuf);
+											aregion, istcp, 0, replybuf);
 
 							slen = reply_nxdomain(&sreply, cfg->db);
 					 	}
@@ -2916,7 +2914,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 								build_reply(	&sreply, so, pbuf, len, 
 												question, from, fromlen, 
 												rbt0, NULL, aregion, istcp, 
-												0, NULL, replybuf);
+												0, replybuf);
 
 								slen = reply_noerror(&sreply, cfg->db);
 			
@@ -2932,8 +2930,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 			
 							build_reply(	&sreply, so, pbuf, len, question, 
 											from, fromlen, rbt0, NULL, 
-											aregion, istcp, 0, NULL,
-											replybuf);
+											aregion, istcp, 0, replybuf);
 
 							slen = reply_ns(&sreply, cfg->db);
 						} else {
@@ -2985,7 +2982,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 				default:
 					 build_reply(	&sreply, so, pbuf, len, question, 
 									from, fromlen, NULL, NULL, aregion, 
-									istcp, 0, NULL, replybuf);
+									istcp, 0, replybuf);
 
 					slen = reply_notimpl(&sreply, NULL);
 					snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
@@ -3018,12 +3015,12 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 							case BUILD_CNAME:
 								build_reply(&sreply, so, pbuf, len, question, 
 									from, fromlen, rbt0, ((type1 > 0) ? rbt1 : 
-									NULL), aregion, istcp, 0, NULL, replybuf);
+									NULL), aregion, istcp, 0, replybuf);
 								break;
 							case BUILD_OTHER:
 								build_reply(&sreply, so, pbuf, len, question, 
 									from, fromlen, rbt0, NULL, aregion, istcp, 
-									0, NULL, replybuf);
+									0, replybuf);
 								break;
 							}
 						} else {
@@ -3047,7 +3044,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 					if (type0 == DNS_TYPE_NS) {
 						build_reply(&sreply, so, pbuf, len, question, from, \
 							fromlen, rbt0, NULL, aregion, istcp, 
-							0, NULL, replybuf);
+							0, replybuf);
 
 						slen = reply_ns(&sreply, cfg->db);
 
@@ -3055,7 +3052,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 
 						build_reply(&sreply, so, pbuf, len, question, from, \
 						fromlen, NULL, NULL, aregion, istcp, 
-						0, NULL, replybuf);
+						0, replybuf);
 		
 						slen = reply_notimpl(&sreply, NULL);
 						snprintf(replystring, DNS_MAXNAME, "NOTIMPL");

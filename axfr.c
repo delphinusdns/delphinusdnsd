@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2019 Peter J. Philipp
+ * Copyright (c) 2011-2020 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.43 2020/06/25 10:01:10 pjp Exp $
+ * $Id: axfr.c,v 1.44 2020/06/29 16:22:05 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -114,7 +114,7 @@ extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int)
 extern struct question	*build_question(char *, int, int, char *);
 extern int		free_question(struct question *);
 extern void		dolog(int, char *, ...);
-extern void 		build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, struct recurses *);
+extern void 		build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, char *);
 
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
@@ -842,9 +842,9 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 	char tsigkey[512];
 	char *p = &buf[0];
 	char *q;
-	char *reply;
+	char *reply, *replybuf;
 
-	int len, dnslen;
+	int len, dnslen = 0;
 	int offset = 0;
 	int qlen;
 	int outlen;
@@ -863,6 +863,13 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 	ddDBT key, data;
 	HMAC_CTX *tsigctx = NULL;
+
+	if ((replybuf = calloc(1, 0xffff + 3)) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		close(so);
+		exit(1);
+	}
+		
 
 	if (packetlen > sizeof(buf)) {
 		dolog(LOG_ERR, "buffer size of buf is smaller than given packet, drop\n");
@@ -895,8 +902,9 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			offset += len;
 			continue;
 		}
-		if (dnslen + 2 != offset + len) {
-			offset += len;
+
+		/* sanity check around dnslen */
+		if (dnslen > 0 && (dnslen + 2) != (offset + len)) {
 			continue;
 		}
 	
@@ -913,7 +921,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		if (ntohs(dh->question) != 1) {	
 			dolog(LOG_INFO, "AXFR dns packet does not have a question count of 1 (RFC 5936, page 9), reply fmterror\n");
 			
-			build_reply(&sreply, so, (p + 2), dnslen, NULL, NULL, 0, NULL, NULL, 0xff, 1, 0, NULL);
+			build_reply(&sreply, so, (p + 2), dnslen, NULL, NULL, 0, NULL, NULL, 0xff, 1, 0, replybuf);
 
 			reply_fmterror(&sreply, NULL);
 			goto drop;	
@@ -965,7 +973,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				dolog(LOG_INFO, "internal error: %s\n", strerror(errno));
 				goto drop;
 			}
-			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, rbt2, NULL, 0xff, 1, 0, NULL);
+			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, rbt2, NULL, 0xff, 1, 0, replybuf);
 			reply_nxdomain(&sreply, NULL);
 			dolog(LOG_INFO, "AXFR request for zone %s, no db entry, nxdomain -> drop\n", question->converted_name);
 			goto drop;
@@ -981,7 +989,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				dolog(LOG_INFO, "internal error: %s\n", strerror(errno));
 				goto drop;
 			}
-			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, rbt2, NULL, 0xff, 1, 0, NULL);
+			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, rbt2, NULL, 0xff, 1, 0, replybuf);
 			reply_nxdomain(&sreply, NULL);
 			
 			dolog(LOG_INFO, "AXFR request for zone %s, which has no SOA for the zone, nxdomain -> drop\n", question->converted_name);
@@ -1063,7 +1071,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 			if (checklabel(db, rbt, soa, question)) {
 				fq = build_fake_question(rbt->zone, rbt->zonelen, 0, NULL, 0);
-				build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, rbt, NULL, 0xff, 1, 0, NULL);
+				build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, rbt, NULL, 0xff, 1, 0, replybuf);
 				outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0);
 				free_question(fq);
 	
@@ -1080,7 +1088,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 								continue;
 							}
 
-							build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, rbt2, NULL, 0xff, 1, 0, NULL);
+							build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, rbt2, NULL, 0xff, 1, 0, replybuf);
 							outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0);
 							if (rbt2) {
 								free(rbt2);

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.33 2020/06/25 10:01:10 pjp Exp $
+ * $Id: ddd-db.h,v 1.34 2020/06/29 16:22:05 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -249,7 +249,6 @@ struct sreply {
 	u_int8_t region;	/* region of question */
 	int istcp;		/* when set it's tcp */
 	int wildcard;		/* wildcarding boolean */
-	struct recurses *sr;	/* recurses struct for raw sockets */
 	char *replybuf;		/* reply buffer */
 };
 
