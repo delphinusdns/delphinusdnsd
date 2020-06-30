@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.105 2020/06/30 07:09:46 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.106 2020/06/30 07:24:19 pjp Exp $
  */
 
 
@@ -912,7 +912,18 @@ main(int argc, char *argv[], char *environ[])
 				exit(1);
 			}
 #if __OpenBSD__
-			if (pledge("stdio inet proc id sendfd recvfd unveil", NULL) < 0) {
+			if (unveil("/", "") < 0) {
+				dolog(LOG_INFO, "unveil locking failed: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			if (unveil(NULL, NULL) < 0) {
+				dolog(LOG_INFO, "unveil locking failed: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+			if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
 				perror("pledge");
 				exit(1);
 			}
