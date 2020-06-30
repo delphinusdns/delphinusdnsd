@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.104 2020/06/29 16:22:05 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.105 2020/06/30 07:09:46 pjp Exp $
  */
 
 
@@ -104,6 +104,7 @@ extern void 	unpack(char *, char *, int);
 
 extern void 	add_rrlimit(int, u_int16_t *, int, char *);
 extern void 	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *);
+extern void	forwardloop(ddDB *, struct imsgbuf *);
 extern void	replicantloop(ddDB *, struct imsgbuf *);
 extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
 extern int 	check_ent(char *, int);
@@ -275,6 +276,7 @@ int lflag = 0;
 int nflag = 0;
 int bcount = 0;
 int icount = 0;
+int forward = 0;
 u_int16_t port = 53;
 u_int32_t cachesize = 0;
 char *bind_list[255];
@@ -884,6 +886,53 @@ main(int argc, char *argv[], char *environ[])
 	signal(SIGTERM, ddd_signal);
 	signal(SIGINT, ddd_signal);
 	signal(SIGQUIT, ddd_signal);
+
+	/* start our forwarding process */
+	if (forward) {	
+		switch (pid = fork()) {
+		case -1:
+			dolog(LOG_ERR, "fork() failed: %s\n", strerror(errno));
+			ddd_shutdown();
+			exit(1);
+		case 0:
+			ibuf = register_cortex(&cortex_ibuf, MY_IMSG_FORWARD);
+			if (ibuf == NULL) {
+				ddd_shutdown();
+				exit(1);
+			}
+
+			/* chroot to the drop priv user home directory */
+#ifdef DEFAULT_LOCATION
+			if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
+#else
+			if (drop_privs(pw->pw_dir, pw) < 0) {
+#endif
+				dolog(LOG_INFO, "forward dropping privileges\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#if __OpenBSD__
+			if (pledge("stdio inet proc id sendfd recvfd unveil", NULL) < 0) {
+				perror("pledge");
+				exit(1);
+			}
+#endif
+
+			/* close descriptors that we don't need */
+			for (j = 0; j < i; j++) {
+				close(tcp[j]);
+				close(udp[j]);
+			}
+
+			setproctitle("FORWARD engine");
+			forwardloop(db, ibuf);
+			/* NOTREACHED */
+			exit(1);
+		default:
+			break;
+		}
+	
+	} /* forward */
 
 	/* 
 	 * start our axfr process 
@@ -1926,6 +1975,12 @@ axfrentry:
 						}
 						goto udpout;
 						break;
+	
+					case ERR_FORWARD:
+						snprintf(replystring, DNS_MAXNAME, "FORWARD");
+						/* send query to forward process/cortex */
+						goto udpout;
+						break;
 
 					case ERR_NOERROR:
 						/*
@@ -2892,6 +2947,13 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 							slen = reply_nxdomain(&sreply, cfg->db);
 					 	}
 						goto tcpout;
+
+					case ERR_FORWARD:
+						snprintf(replystring, DNS_MAXNAME, "FORWARD");
+						/* send query to forward process/cortex */
+						goto tcpout;
+						break;
+
 					case ERR_NOERROR:
 						/*
  						 * this is hackish not sure if this should be here

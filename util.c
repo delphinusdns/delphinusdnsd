@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.62 2020/06/25 10:01:11 pjp Exp $
+ * $Id: util.c,v 1.63 2020/06/30 07:09:46 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -123,6 +123,7 @@ int bytes_received;
 extern int debug;
 extern int *ptr;
 extern int tsig;
+extern int forward;
 
 extern void 	dolog(int, char *, ...);
 
@@ -357,6 +358,20 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 	plen = question->hdr->namelen;
 
 	*returnval = 0;
+
+	if (forward) {
+		/* 
+		 * We short circuit forwarded lookups to the root, which
+		 * would usually come out as ERR_NODATA for some reason
+		 * I don't know why exactly, XXX.
+		 */
+		if (plen == 1 && *p == '\0') {
+			*lzerrno = ERR_FORWARD;
+			*returnval = -1;
+		
+			return NULL;
+		}
+	}
 	/* if the find_rrset fails, the find_rr will not get questioned */
 	if ((rbt = find_rrset(db, p, plen)) == NULL ||
 		((ntohs(question->hdr->qtype) != DNS_TYPE_DS) && 
@@ -443,7 +458,10 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 				free(rbt);
 			}
 		}
-		*lzerrno = ERR_REFUSED;
+		if (forward)
+			*lzerrno = ERR_FORWARD;
+		else
+			*lzerrno = ERR_REFUSED;
 		*returnval = -1;
 		return (NULL);
 	}

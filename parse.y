@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.98 2020/06/25 10:01:11 pjp Exp $
+ * $Id: parse.y,v 1.99 2020/06/30 07:09:46 pjp Exp $
  */
 
 %{
@@ -111,6 +111,7 @@ extern int tsig;
 extern int notify;
 extern int errno;
 extern int debug;
+extern int forward;
 extern int verbose;
 extern int bflag;
 extern int iflag;
@@ -248,7 +249,8 @@ int 		drop_privs(char *, struct passwd *);
 %token DOT COLON TEXT WOF INCLUDE ZONE COMMA CRLF 
 %token ERROR AXFRPORT OPTIONS FILTER MZONE
 %token WHITELIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
-%token TSIG NOTIFYDEST NOTIFYBIND PORT
+%token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
+%token INCOMINGKEY DESTINATION
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -283,6 +285,7 @@ cmd	:
 	| whitelist CRLF
 	| tsig CRLF
 	| filter CRLF
+	| forward CRLF
 	| comment CRLF
 	| options
 	;
@@ -1400,6 +1403,43 @@ whiteliststatement	:	ipcidr SEMICOLON CRLF
 			| comment CRLF
 			;	
 
+/* forward "these hosts" { .. } */
+
+forward:
+	FORWARD forwardlabel forwardcontent
+	{
+		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
+                        dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
+                        return (-1);
+                }
+
+		forward = 1;
+	}
+	;
+
+forwardlabel:
+	QUOTEDSTRING
+	;
+
+forwardcontent:
+			OBRACE forwardstatements EBRACE 
+			| OBRACE CRLF forwardstatements EBRACE 
+			;
+
+forwardstatements 	:  		
+				forwardstatements forwardstatement 
+				| forwardstatement 
+				;
+
+forwardstatement	:	INCOMINGKEY STRING SEMICOLON CRLF
+			{
+			}
+			| DESTINATION ipcidr PORT NUMBER STRING STRING SEMICOLON CRLF
+			{
+			}
+			| comment CRLF
+			;	
+
 /* filter "these hosts" { .. } */
 
 filter:
@@ -1580,9 +1620,11 @@ struct tab {
 struct tab cmdtab[] = {
 	{ "axfrport", AXFRPORT, 0},
 	{ "axfr-for", AXFRFOR, STATE_IP },
-	{ "whitelist", WHITELIST, STATE_IP },
+	{ "destination", DESTINATION, 0 },
 	{ "filter", FILTER, STATE_IP },
+	{ "forward", FORWARD, 0 },
 	{ "include", INCLUDE, 0 },
+	{ "incoming-key", INCOMINGKEY, 0 },
 	{ "master", MASTER, 0 },
 	{ "masterport", MASTERPORT, 0 },
 	{ "mzone", MZONE, 0},
@@ -1594,6 +1636,7 @@ struct tab cmdtab[] = {
 	{ "rzone", RZONE, 0 },
 	{ "tsig", TSIG, 0 },
 	{ "tsig-auth", TSIGAUTH, 0 }, 
+	{ "whitelist", WHITELIST, STATE_IP },
 	{ "wildcard-only-for", WOF, STATE_IP },
 	{ "version", VERSION, 0 },
 	{ "zinclude", ZINCLUDE, 0 },

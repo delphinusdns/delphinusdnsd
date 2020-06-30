@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.34 2020/06/29 16:22:05 pjp Exp $
+ * $Id: ddd-db.h,v 1.35 2020/06/30 07:09:46 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -68,6 +68,7 @@
 #define ERR_REFUSED	0x8
 #define	ERR_NODATA	0x10
 #define ERR_DELEGATE	0x20
+#define ERR_FORWARD	0x40
 
 #define RECORD_COUNT	20
 #define NEGATIVE_CACHE_TIME	600	/* DNS & Bind 3rd edition page 35 */
@@ -345,7 +346,8 @@ struct cfg {
 #define MY_IMSG_MASTER		5
 #define MY_IMSG_UNIXCONTROL	6
 #define MY_IMSG_UDP		7
-#define MY_IMSG_MAX		8
+#define MY_IMSG_FORWARD		8
+#define MY_IMSG_MAX		9
 	int recurse;			/* recurse socket */
 	int sockcount;			/* set sockets */
 	int nth;

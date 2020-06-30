@@ -8,8 +8,8 @@ AR=ar
 
 all: delphinusdnsd dddctl
 
-delphinusdnsd: imsg-buffer.o imsg.o additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o
-	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o imsg-buffer.o imsg.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o $(LDADD)
+delphinusdnsd: imsg-buffer.o imsg.o additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o
+	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o imsg-buffer.o imsg.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o whitelist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o $(LDADD)
 
 dddctl:  dddctl.o util.o dnssec.o parse.o base64.o ent.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o
 	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o $(LDADD)
@@ -83,6 +83,8 @@ ent.o:  ent.c
 raxfr.o:  raxfr.c
 	$(CC) $(CFLAGS) -c raxfr.c
 
+forward.o:  forward.c
+	$(CC) $(CFLAGS) -c forward.c
 
 install: install-delphinusdnsd install-dddctl
 
