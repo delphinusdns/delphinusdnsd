@@ -27,13 +27,14 @@
  */
 
 /* 
- * $Id: forward.c,v 1.1 2020/06/30 07:09:46 pjp Exp $
+ * $Id: forward.c,v 1.2 2020/06/30 14:06:21 pjp Exp $
  */
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/queue.h>
 #include <sys/uio.h>
+#include <sys/select.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -81,7 +82,8 @@
 
 void	init_forward(void);
 int	insert_forward(void);
-void	forwardloop(ddDB *, struct imsgbuf *);
+void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *);
+void	forwardthis(int, struct forward *);
 
 extern void 		dolog(int, char *, ...);
 
@@ -125,12 +127,78 @@ insert_forward(void)
 }
 
 void
-forwardloop(ddDB *db, struct imsgbuf *ibuf)
+forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf)
 {
+	struct imsg imsg;
+	int max, sel;
+	ssize_t n, datalen;
+	fd_set rset;
+
+	for (;;) {
+		FD_ZERO(&rset);	
+		FD_SET(ibuf->fd, &rset);
+		if (ibuf->fd > max)
+			max = ibuf->fd;
+
+		sel = select(max + 1, &rset, NULL, NULL, NULL);
+		if (sel == -1) {	
+			continue;
+		}
+		if (FD_ISSET(ibuf->fd, &rset)) {
+
+			if ((n = imsg_read(ibuf)) < 0 && errno != EAGAIN) {
+				dolog(LOG_ERR, "imsg read failure %s\n", strerror(errno));
+				continue;
+			}
+			if (n == 0) {
+				/* child died? */
+				dolog(LOG_INFO, "sigpipe on child?  exiting.\n");
+				exit(1);
+			}
+
+			for (;;) {
+				if ((n = imsg_get(ibuf, &imsg)) < 0) {
+					dolog(LOG_ERR, "imsg read error: %s\n", strerror(errno));
+					break;
+				} else {
+					if (n == 0)
+						break;
+
+					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+					if (datalen != sizeof(struct forward)) {
+						imsg_free(&imsg);
+						continue;
+					}
+
+					switch(imsg.hdr.type) {
+					case IMSG_FORWARD_UDP:
+						dolog(LOG_INFO, "received UDP message from mainloop\n");
+						forwardthis(-1, imsg.data);	
+						break;
+
+					case IMSG_FORWARD_TCP:
+						dolog(LOG_INFO, "received TCP message and descriptor\n");
+						forwardthis(imsg.fd, imsg.data);
+						break;
+					}
+
+					imsg_free(&imsg);
+				}
+			} /* for (;;) */
+		} /* FD_ISSET... */
+	}
 
 	while (1)
 		sleep(10);
 
 	/* NOTREACHED */
+
+}
+
+void
+forwardthis(int so, struct forward *forward)
+{
+
+
 
 }

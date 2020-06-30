@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.35 2020/06/30 07:09:46 pjp Exp $
+ * $Id: ddd-db.h,v 1.36 2020/06/30 14:06:21 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -61,6 +61,8 @@
 #define	IMSG_NOTIFY_MESSAGE	9	/* notify our replicant engine */
 #define IMSG_SETUP_NEURON	10	/* set up a new imsg via fd passing */
 #define IMSG_CRIPPLE_NEURON	11	/* no new neurons are needed */
+#define IMSG_FORWARD_UDP	12	/* forward a UDP packet */
+#define IMSG_FORWARD_TCP	13	/* forward a TCP packet (with fd) */
 
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2
@@ -417,6 +419,12 @@ struct raxfr_logic {
 	int rrtype;
 	int dnssec;
 	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+};
+
+struct forward {
+	struct sockaddr_in from;
+	char buf[4000];		/* the maximum payload of an imsg is 0xffff */
+	int buflen;
 };
 
 #endif /* _DB_H */
