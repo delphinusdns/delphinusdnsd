@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.106 2020/06/30 07:24:19 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.107 2020/06/30 07:30:36 pjp Exp $
  */
 
 
@@ -933,6 +933,10 @@ main(int argc, char *argv[], char *environ[])
 			for (j = 0; j < i; j++) {
 				close(tcp[j]);
 				close(udp[j]);
+				if (axfrport && axfrport != port) {
+					close(uafd[j]);
+					close(afd[j]);
+				}
 			}
 
 			setproctitle("FORWARD engine");
