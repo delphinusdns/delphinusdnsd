@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.36 2020/06/30 14:06:21 pjp Exp $
+ * $Id: ddd-db.h,v 1.37 2020/07/01 05:07:47 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -422,7 +422,8 @@ struct raxfr_logic {
 };
 
 struct forward {
-	struct sockaddr_in from;
+	struct sockaddr_storage from;
+	uint16_t rport;
 	char buf[4000];		/* the maximum payload of an imsg is 0xffff */
 	int buflen;
 };

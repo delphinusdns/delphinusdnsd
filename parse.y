@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.99 2020/06/30 07:09:46 pjp Exp $
+ * $Id: parse.y,v 1.100 2020/07/01 05:07:47 pjp Exp $
  */
 
 %{
@@ -92,6 +92,7 @@ extern int 	insert_region(char *, char *, u_int8_t);
 extern int 	insert_axfr(char *, char *);
 extern int 	insert_notifyddd(char *, char *);
 extern int 	insert_filter(char *, char *);
+extern int	insert_forward(struct sockaddr_storage *, uint16_t, char *);
 extern int 	insert_whitelist(char *, char *);
 extern int	insert_tsig(char *, char *);
 extern int	insert_tsig_key(char *, int, char *, int);
@@ -112,6 +113,7 @@ extern int notify;
 extern int errno;
 extern int debug;
 extern int forward;
+extern int forwardtsig;
 extern int verbose;
 extern int bflag;
 extern int iflag;
@@ -250,7 +252,7 @@ int 		drop_privs(char *, struct passwd *);
 %token ERROR AXFRPORT OPTIONS FILTER MZONE
 %token WHITELIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
-%token INCOMINGKEY DESTINATION
+%token INCOMINGTSIG DESTINATION
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -259,6 +261,8 @@ int 		drop_privs(char *, struct passwd *);
 %token <v.string> IPV6
 %token <v.string> SLASH
 %token <v.string> QUOTEDSTRING
+%token <v.string> DESTINATION
+%token <v.string> INCOMINGTSIG
 
 %token <v.intval> NUMBER
 
@@ -1431,11 +1435,33 @@ forwardstatements 	:
 				| forwardstatement 
 				;
 
-forwardstatement	:	INCOMINGKEY STRING SEMICOLON CRLF
+forwardstatement	:	INCOMINGTSIG STRING SEMICOLON CRLF
 			{
+				if (strcmp($2, "yes") == 0 ||
+					strcmp($2, "on") == 0 ||
+					strcmp($2, "1") == 0) {
+					forwardtsig = 1;
+				}
+
+				free($2);
 			}
 			| DESTINATION ipcidr PORT NUMBER STRING STRING SEMICOLON CRLF
 			{
+				struct sockaddr_storage sso;
+				struct sockaddr_in *sin = (struct sockaddr_in *)&sso;
+				struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&sso;
+
+				memset(&sso, 0, sizeof(struct sockaddr_storage));
+
+				if (strchr($2, ':') != NULL) 
+					inet_pton(AF_INET6, $2, sin6);
+				else
+					inet_pton(AF_INET, $2, sin);
+
+				insert_forward(&sso, $4, $6);
+					
+				free($5);
+				free($6);
 			}
 			| comment CRLF
 			;	
@@ -1624,7 +1650,7 @@ struct tab cmdtab[] = {
 	{ "filter", FILTER, STATE_IP },
 	{ "forward", FORWARD, 0 },
 	{ "include", INCLUDE, 0 },
-	{ "incoming-key", INCOMINGKEY, 0 },
+	{ "incoming-tsig", INCOMINGTSIG, 0 },
 	{ "master", MASTER, 0 },
 	{ "masterport", MASTERPORT, 0 },
 	{ "mzone", MZONE, 0},

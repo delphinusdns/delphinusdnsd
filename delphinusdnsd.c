@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.108 2020/06/30 14:06:21 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.109 2020/07/01 05:07:47 pjp Exp $
  */
 
 
@@ -277,6 +277,7 @@ int nflag = 0;
 int bcount = 0;
 int icount = 0;
 int forward = 0;
+int forwardtsig = 0;
 u_int16_t port = 53;
 u_int32_t cachesize = 0;
 char *bind_list[255];
@@ -2022,7 +2023,19 @@ axfrentry:
 						break;
 	
 					case ERR_FORWARD:
-						snprintf(replystring, DNS_MAXNAME, "FORWARD");
+						if (forwardtsig) {
+								if (question->tsig.have_tsig && 
+									question->tsig.tsigverified) {
+									snprintf(replystring, DNS_MAXNAME, "FORWARD");
+								} else {
+									snprintf(replystring, DNS_MAXNAME, "REFUSED");
+									build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
+									slen = reply_refused(&sreply, cfg->db);
+									goto udpout;
+								}
+						} else
+								snprintf(replystring, DNS_MAXNAME, "FORWARD");
+
 						/* send query to forward process/cortex */
 
 						if (len > 4000) {
@@ -2030,7 +2043,16 @@ axfrentry:
 							goto udpout;
 						}
 
-						forward->from.sin_addr.s_addr = sin->sin_addr.s_addr;
+						memcpy(&forward->from, from, fromlen);
+						switch (from->sa_family) {
+						case AF_INET:
+							forward->rport = sin->sin_port;
+							break;
+						case AF_INET6:
+							forward->rport = sin6->sin6_port;
+							break;
+						}
+						
 						memcpy(&forward->buf, buf, len);
 						forward->buflen = len;
 
@@ -3008,7 +3030,19 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 						goto tcpout;
 
 					case ERR_FORWARD:
-						snprintf(replystring, DNS_MAXNAME, "FORWARD");
+						if (forwardtsig) {
+								if (question->tsig.have_tsig && 
+									question->tsig.tsigverified) {
+									snprintf(replystring, DNS_MAXNAME, "FORWARD");
+								} else {
+									snprintf(replystring, DNS_MAXNAME, "REFUSED");
+									build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
+									slen = reply_refused(&sreply, cfg->db);
+									goto tcpout;
+								}
+						} else
+								snprintf(replystring, DNS_MAXNAME, "FORWARD");
+
 						/* send query to forward process/cortex */
 						imsg_compose(ibuf, IMSG_FORWARD_TCP,
 							0, 0, tcpnp->so, &tcpnp->buf,  tcpnp->bytes_read);

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.2 2020/06/30 14:06:21 pjp Exp $
+ * $Id: forward.c,v 1.3 2020/07/01 05:07:47 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -81,7 +81,7 @@
 #include "ddd-db.h"
 
 void	init_forward(void);
-int	insert_forward(void);
+int	insert_forward(struct sockaddr_storage *, uint16_t, char *);
 void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *);
 void	forwardthis(int, struct forward *);
 
@@ -94,14 +94,25 @@ SLIST_HEAD(, forwardentry) forwardhead;
 static struct forwardentry {
 	char name[INET6_ADDRSTRLEN];
 	int family;
-	struct sockaddr_storage hostmask;
-	struct sockaddr_storage netmask;
-	u_int8_t prefixlen;
+	struct sockaddr_storage host;
 	uint16_t destport;
 	char *tsigkey;
 	SLIST_ENTRY(forwardentry) forward_entry;
 } *fw2, *fwp;
 
+SLIST_HEAD(, forwardqueue) fwqhead;
+
+static struct forwardqueue {
+	time_t time;
+	struct sockaddr_storage host;
+	uint16_t id;
+	uint16_t port;
+	struct sockaddr_storage oldhost;
+	uint16_t oldid;
+	uint16_t oldport;
+	int so;
+	SLIST_ENTRY(forwardqueue) entries;
+} *fwq1, *fwq2, *fwqp;
 
 /*
  * INIT_FORWARD - initialize the forward singly linked list
@@ -111,6 +122,7 @@ void
 init_forward(void)
 {
 	SLIST_INIT(&forwardhead);
+	SLIST_INIT(&fwqhead);
 	return;
 }
 
@@ -119,9 +131,37 @@ init_forward(void)
  */
 
 int
-insert_forward(void)
+insert_forward(struct sockaddr_storage *ip, uint16_t port, char *tsigkey)
 {
-	/* SLIST_INSERT_HEAD(&forwardhead, fw2, forward_entry); */
+	fw2 = calloc(1, sizeof(struct forwardentry));
+	if (fw2 == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		return 1;
+	}
+
+	switch (fw2->family = ip->ss_family) {
+	case AF_INET:
+		inet_ntop(AF_INET, (struct sockaddr_in *)ip, fw2->name, sizeof(fw2->name));
+		break;
+	case AF_INET6:
+		inet_ntop(AF_INET6, (struct sockaddr_in6 *)ip, fw2->name, sizeof(fw2->name));
+		break;
+	}
+
+	memcpy(&fw2->host, ip, sizeof(struct sockaddr_storage));
+	fw2->destport = port;
+
+	if (strcmp(tsigkey, "NOKEY") == 0)
+		fw2->tsigkey = NULL;
+	else {
+		fw2->tsigkey = strdup(tsigkey);
+		if (fw2->tsigkey == NULL) {
+			dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+			return 1;
+		}
+	}
+			
+	SLIST_INSERT_HEAD(&forwardhead, fw2, forward_entry);
 
 	return (0);
 }
@@ -198,7 +238,36 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf)
 void
 forwardthis(int so, struct forward *forward)
 {
+	struct dns_header *dh = (struct dns_header *)forward->buf;
+	time_t now;
+	char *p;
+	
+	now = time(NULL);
+	p = forward->buf;
 
+	SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwq2) {
+		if (difftime(now, fwq1->time) > 15) {
+			SLIST_REMOVE(&fwqhead, fwq1, forwardqueue, entries);
+			continue;
+		}
+	
+		if (memcmp(&fwq1->oldhost, &forward->from, 
+			sizeof(struct sockaddr_storage)) == 0 &&
+			fwq1->oldport == forward->rport &&
+			fwq1->oldid == dh->id) {
+			/* found, break... */
+			break;
+		}
+	}
 
+	if (fwq1 == NULL) {
+		/* create a new queue and send it */
+		
+	} else {
+		/* resend this one */
+		
+		fwq1->time = now;
+	}
 
+	
 }

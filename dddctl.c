@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.107 2020/06/30 07:09:46 pjp Exp $
+ * $Id: dddctl.c,v 1.108 2020/07/01 05:07:47 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -82,6 +82,7 @@
 int debug = 0;
 int verbose = 0;
 int forward = 0;
+int forwardtsig = 0;
 extern int dnssec;
 extern int bytes_received;
 
@@ -105,6 +106,7 @@ int insert_axfr(char *, char *);
 int insert_filter(char *, char *);
 int insert_whitelist(char *, char *);
 int insert_notifyddd(char *, char *);
+int insert_forward(struct sockaddr_storage *, uint16_t, char *);
 
 
 int illdestination;
@@ -222,8 +224,11 @@ insert_notifyddd(char *address, char *prefixlen)
 	return 0;
 }
 
-
-
+int
+insert_forward(struct sockaddr_storage *sso, uint16_t port, char *tsigkey)
+{
+	return 0;
+}
 
 /*
  * dolog() - is a wrapper to syslog and printf depending on debug flag
