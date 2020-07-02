@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.102 2020/06/25 10:01:11 pjp Exp $
+ * $Id: reply.c,v 1.103 2020/07/02 13:38:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -4769,14 +4769,18 @@ reply_refused(struct sreply *sreply, ddDB *db)
 		return (retlen);
 	}
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
 	outlen += (sizeof(struct dns_header) + q->hdr->namelen + 4); 
 
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	SET_DNS_REPLY(odh);
 	SET_DNS_RCODE_REFUSED(odh);
+	SET_DNS_AUTHORITATIVE(odh);
+
+	if (q->rd)
+		SET_DNS_RECURSION(odh);
 
 	if (q->notify)
 		SET_DNS_NOTIFY(odh);
