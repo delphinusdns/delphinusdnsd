@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.111 2020/07/03 17:15:29 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.112 2020/07/03 17:47:32 pjp Exp $
  */
 
 
@@ -104,7 +104,7 @@ extern void 	unpack(char *, char *, int);
 
 extern void 	add_rrlimit(int, u_int16_t *, int, char *);
 extern void 	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *);
-extern void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *);
+extern void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
 extern void	replicantloop(ddDB *, struct imsgbuf *);
 extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
 extern int 	check_ent(char *, int);
@@ -1008,8 +1008,10 @@ main(int argc, char *argv[], char *environ[])
 				cfg->dup[j] = dup[j];
 			}
 
+			cfg->sockcount = i;
+
 			setproctitle("FORWARD engine");
-			forwardloop(db, cfg, ibuf);
+			forwardloop(db, cfg, ibuf, &cortex_ibuf);
 			/* NOTREACHED */
 			exit(1);
 		default:

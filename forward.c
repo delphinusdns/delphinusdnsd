@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.8 2020/07/03 17:14:03 pjp Exp $
+ * $Id: forward.c,v 1.9 2020/07/03 17:47:32 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -134,7 +134,7 @@ struct fwdpq {
 
 void	init_forward(void);
 int	insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
-void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *);
+void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
 void	forwardthis(int, struct sforward *);
 void	sendit(struct forwardqueue *, struct sforward *);
 void	returnit(struct cfg *cfg, struct forwardqueue *, char *, int, struct imsgbuf *);
@@ -219,7 +219,7 @@ insert_forward(int family, struct sockaddr_storage *ip, uint16_t port, char *tsi
 }
 
 void
-forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf)
+forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 {
 	struct timeval tv;
 	struct imsg imsg;
@@ -254,6 +254,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf)
 			close(cfg->dup[i]);
 
 		close(ibuf->fd);
+		close(cortex->fd);
 		close(pi[1]);
 		imsg_init(&parse_ibuf, pi[0]);
 
