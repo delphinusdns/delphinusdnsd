@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.4 2020/07/03 06:49:57 pjp Exp $
+ * $Id: forward.c,v 1.5 2020/07/03 09:04:07 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -246,17 +246,20 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf)
 			if (FD_ISSET(fwq1->so, &rset)) {
 				if (fwq1->istcp) {
 					len = recv(fwq1->so, buf, 2, MSG_WAITALL);
-					if (len < 0) {
+					if (len <= 0) 
 						goto drop;
-					}
+
 					need = ntohs(unpack16(buf));
 					len = recv(fwq1->so, buf, need, MSG_WAITALL);
+					if (len <= 0) 
+						goto drop;
+
 					returnit(cfg, fwq1, buf, len);
 				} else {
 					len = recv(fwq1->so, buf, 0xffff, 0);
-					if (len < 0) {
+					if (len < 0) 
 						goto drop;
-					}
+
 					returnit(cfg, fwq1, buf, len);
 				}
 
