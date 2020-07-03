@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.109 2020/07/01 05:07:47 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.110 2020/07/03 06:49:57 pjp Exp $
  */
 
 
@@ -278,6 +278,7 @@ int bcount = 0;
 int icount = 0;
 int forward = 0;
 int forwardtsig = 0;
+int zonecount = 0;
 u_int16_t port = 53;
 u_int32_t cachesize = 0;
 char *bind_list[255];
@@ -301,6 +302,7 @@ int
 main(int argc, char *argv[], char *environ[])
 {
 	static int udp[DEFAULT_SOCKET];
+	static int dup[DEFAULT_SOCKET];
 	static int tcp[DEFAULT_SOCKET];
 	static int afd[DEFAULT_SOCKET];
 	static int uafd[DEFAULT_SOCKET];
@@ -553,13 +555,13 @@ main(int argc, char *argv[], char *environ[])
 		exit(1);
 	}
 
-	if (determine_glue(db) < 0) {
+	if (zonecount && determine_glue(db) < 0) {
 		dolog(LOG_INFO, "determine_glue() failed\n");
 		ddd_shutdown();
 		exit(1);
 	}
 
-	if (init_entlist(db) < 0) {
+	if (zonecount && init_entlist(db) < 0) {
 		dolog(LOG_INFO, "creating entlist failed\n");
 		ddd_shutdown();
 		exit(1);
@@ -614,10 +616,41 @@ main(int argc, char *argv[], char *environ[])
 
 			res = res0;
 
+			if ((dup[i] = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0) {
+				dolog(LOG_INFO, "dup socket: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			on = 1;
+			if (setsockopt(dup[i], SOL_SOCKET, SO_REUSEPORT,
+				&on, sizeof(on)) < 0) {
+				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+			}
+        
+			if (shutdown(dup[i], SHUT_RD) < 0) {
+				dolog(LOG_INFO, "shutdown: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+			
+			if (bind(dup[i], res->ai_addr, res->ai_addrlen) < 0) {
+				dolog(LOG_INFO, "bind: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+
 			if ((udp[i] = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0) {
 				dolog(LOG_INFO, "socket: %s\n", strerror(errno));
 				ddd_shutdown();
 				exit(1);
+			}
+
+			on = 1;
+			if (setsockopt(udp[i], SOL_SOCKET, SO_REUSEPORT,
+				&on, sizeof(on)) < 0) {
+				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 			}
         
 			if (bind(udp[i], res->ai_addr, res->ai_addrlen) < 0) {
@@ -632,21 +665,11 @@ main(int argc, char *argv[], char *environ[])
 					&on, sizeof(on)) < 0) {
 					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 				}
-				on = 1;
-				if (setsockopt(udp[i], SOL_SOCKET, SO_REUSEPORT,
-					&on, sizeof(on)) < 0) {
-					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-				}
 			} else if (res->ai_family == AF_INET6) {
 				/* RFC 3542 page 30 */
 				on = 1;
      				if (setsockopt(udp[i], IPPROTO_IPV6, 
 					IPV6_RECVHOPLIMIT, &on, sizeof(on)) < 0) {
-					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-				}
-				on = 1;
-				if (setsockopt(udp[i], SOL_SOCKET, SO_REUSEPORT,
-					&on, sizeof(on)) < 0) {
 					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 				}
 			}
@@ -784,11 +807,43 @@ main(int argc, char *argv[], char *environ[])
 				continue;
 			}
 
+			if ((dup[i] = socket(pifap->ifa_addr->sa_family, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
+				dolog(LOG_INFO, "dup socket: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			on = 1;
+			if (setsockopt(dup[i], SOL_SOCKET, SO_REUSEPORT,
+				&on, sizeof(on)) < 0) {
+				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+			}
+        
+			if (shutdown(dup[i], SHUT_RD) < 0) {
+				dolog(LOG_INFO, "shutdown: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+			
+			if (bind(dup[i], (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
+				dolog(LOG_INFO, "bind: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+
 			if ((udp[i] = socket(pifap->ifa_addr->sa_family, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
 				dolog(LOG_INFO, "socket: %s\n", strerror(errno));
 				ddd_shutdown();
 				exit(1);
 			}
+
+			on = 1;
+			if (setsockopt(udp[i], SOL_SOCKET, SO_REUSEPORT,
+				&on, sizeof(on)) < 0) {
+				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+			}
+        
 			
 			if (bind(udp[i], (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
 				dolog(LOG_INFO, "bind: %s\n", strerror(errno));
@@ -802,21 +857,11 @@ main(int argc, char *argv[], char *environ[])
 					&on, sizeof(on)) < 0) {
 				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 				}
-				on = 1;
-				if (setsockopt(udp[i], SOL_SOCKET, SO_REUSEPORT,
-					&on, sizeof(on)) < 0) {
-					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-				}
 			} else if (pifap->ifa_addr->sa_family == AF_INET6) {
 				/* RFC 3542 page 30 */
 				on = 1;
      				if (setsockopt(udp[i], IPPROTO_IPV6, 
 					IPV6_RECVHOPLIMIT, &on, sizeof(on)) < 0) {
-					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-				}
-				on = 1;
-				if (setsockopt(udp[i], SOL_SOCKET, SO_REUSEPORT,
-					&on, sizeof(on)) < 0) {
 					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 				}
 			}
@@ -959,6 +1004,8 @@ main(int argc, char *argv[], char *environ[])
 					close(uafd[j]);
 					close(afd[j]);
 				}
+
+				cfg->dup[j] = dup[j];
 			}
 
 			setproctitle("FORWARD engine");
@@ -1136,6 +1183,8 @@ main(int argc, char *argv[], char *environ[])
 					cfg->axfr[i] = uafd[i];
 
 				cfg->ident[i] = strdup(ident[i]);
+	
+				close(dup[i]);
 			}
 
 			setproctitle("child %d pid %d", n, cfg->pid);
@@ -1158,6 +1207,7 @@ main(int argc, char *argv[], char *environ[])
 
 		cfg->ident[i] = strdup(ident[i]);
 
+		close(dup[i]);
 	}
 
 	(void)mainloop(cfg, &cortex_ibuf);
@@ -1446,7 +1496,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	fd_set rset;
 	pid_t pid;
 
-	int sel;
+	int sel, oldsel;
 	int len, slen = 0;
 	int is_ipv6;
 	int i, nomore = 0;
@@ -1504,13 +1554,13 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	struct imsgbuf *pibuf;
 	struct imsg imsg;
 
-	struct forward *forward;
+	struct sforward *sforward;
 
 	ssize_t n, datalen;
 	
 
-	forward = calloc(1, sizeof(struct forward));
-	if (forward == NULL) {
+	sforward = (struct sforward *)calloc(1, sizeof(struct sforward));
+	if (sforward == NULL) {
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		ddd_shutdown();
 		exit(1);
@@ -1650,6 +1700,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 			if (FD_ISSET(cfg->udp[i], &rset)) {
 				istcp = 0;
 				so = cfg->udp[i];
+				oldsel = i;
 axfrentry:
 				fromlen = sizeof(sockaddr_large);
 
@@ -2015,6 +2066,8 @@ axfrentry:
 							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
 							slen = reply_nodata(&sreply, cfg->db);
 						} else {
+							if (forward)
+								goto forwardudp;
 							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
 							slen = reply_refused(&sreply, cfg->db);
 							snprintf(replystring, DNS_MAXNAME, "REFUSED");
@@ -2023,6 +2076,7 @@ axfrentry:
 						break;
 	
 					case ERR_FORWARD:
+forwardudp:
 						if (forwardtsig) {
 								if (question->tsig.have_tsig && 
 									question->tsig.tsigverified) {
@@ -2043,23 +2097,45 @@ axfrentry:
 							goto udpout;
 						}
 
-						memcpy(&forward->from, from, fromlen);
+						memset(sforward, 0, sizeof(struct sforward));
+						sforward->oldsel = oldsel;
+
 						switch (from->sa_family) {
 						case AF_INET:
-							forward->rport = sin->sin_port;
+							sforward->rport = sin->sin_port;
+							memcpy((char *)&sforward->from4, sin, fromlen);
+							sforward->family = AF_INET;
+						
 							break;
 						case AF_INET6:
-							forward->rport = sin6->sin6_port;
+							sforward->rport = sin6->sin6_port;
+							memcpy((char *)&sforward->from6, sin6, fromlen);
+							sforward->family = AF_INET6;
+						
 							break;
 						}
 						
-						memcpy(&forward->buf, buf, len);
-						forward->buflen = len;
+						memcpy(&sforward->buf, question->hdr->name, question->hdr->namelen);
+						sforward->buflen = question->hdr->namelen;
+		
+						memcpy((char *)&sforward->header, buf, sizeof(struct dns_header));
+						sforward->type = question->hdr->qtype;
+						sforward->class = question->hdr->qclass;
+						sforward->edns0len = question->edns0len;
 
-						imsg_compose(ibuf, IMSG_FORWARD_UDP,
-							0, 0, -1, forward, sizeof(struct forward));
+						if (question->tsig.have_tsig && question->tsig.tsigverified) {
+							sforward->havemac = 1;
+							memcpy((char *)&sforward->tsigname, question->tsig.tsigkey, question->tsig.tsigkeylen);
+							sforward->tsignamelen = question->tsig.tsigkeylen;
+							memcpy(&sforward->mac, question->tsig.tsigmac, sizeof(sforward->mac));
+							sforward->tsigtimefudge = question->tsig.tsig_timefudge;
+						} else
+							sforward->havemac = 0;
 
-						msgbuf_write(&ibuf->w);
+						imsg_compose(udp_ibuf, IMSG_FORWARD_UDP,
+							0, 0, -1, sforward, sizeof(struct sforward));
+
+						msgbuf_write(&udp_ibuf->w);
 						goto udpout;
 						break;
 
@@ -2522,6 +2598,16 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 
 	ssize_t n, datalen;
 	u_int32_t imsg_type;
+
+	struct sforward *sforward;
+
+
+	sforward = (struct sforward *)calloc(1, sizeof(struct sforward));
+	if (sforward == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
 
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]) < 0) {
 		dolog(LOG_INFO, "socketpair() failed\n");
@@ -2994,24 +3080,27 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 						goto tcpout;
 						break;
 					case ERR_NODATA:
-								if (rbt0) {
-									free(rbt0);
-									rbt0 = NULL;
-								}
+						if (rbt0) {
+							free(rbt0);
+							rbt0 = NULL;
+						}
 
-								rbt0 = get_soa(cfg->db, question);
-								if (rbt0 != NULL) {
-									snprintf(replystring, DNS_MAXNAME, "NODATA");
-									build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
-									slen = reply_nodata(&sreply, cfg->db);
-								} else {
-									snprintf(replystring, DNS_MAXNAME, "REFUSED");
-									build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
-									slen = reply_refused(&sreply, cfg->db);
-								}
+						rbt0 = get_soa(cfg->db, question);
+						if (rbt0 != NULL) {
+							snprintf(replystring, DNS_MAXNAME, "NODATA");
+							build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
+							slen = reply_nodata(&sreply, cfg->db);
+						} else {
+							if (forward)
+								goto forwardtcp;
 
-								goto tcpout;
-								break;
+							snprintf(replystring, DNS_MAXNAME, "REFUSED");
+							build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
+							slen = reply_refused(&sreply, cfg->db);
+						}
+
+						goto tcpout;
+						break;
 
 					case ERR_NXDOMAIN:
 							snprintf(replystring, DNS_MAXNAME, "NXDOMAIN");
@@ -3030,6 +3119,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 						goto tcpout;
 
 					case ERR_FORWARD:
+forwardtcp:
 						if (forwardtsig) {
 								if (question->tsig.have_tsig && 
 									question->tsig.tsigverified) {
@@ -3044,11 +3134,71 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 								snprintf(replystring, DNS_MAXNAME, "FORWARD");
 
 						/* send query to forward process/cortex */
-						imsg_compose(ibuf, IMSG_FORWARD_TCP,
-							0, 0, tcpnp->so, &tcpnp->buf,  tcpnp->bytes_read);
+						if (len > 4000) {
+							dolog(LOG_INFO, "question is larger than 4000 bytes, not forwarding\n");
+							goto tcpout;
+						}
 
+						switch (from->sa_family) {
+						case AF_INET:
+							memcpy(&sforward->from4, from, fromlen);
+							sforward->rport = sin->sin_port;
+							sforward->family = AF_INET;
+							break;
+						case AF_INET6:
+							memcpy(&sforward->from6, from, fromlen);
+							sforward->rport = sin6->sin6_port;
+							sforward->family = AF_INET6;
+							break;
+						}
+						
+						memcpy(&sforward->buf, question->hdr->name, question->hdr->namelen);
+						sforward->buflen = question->hdr->namelen;
+		
+						memcpy((char *)&sforward->header, pbuf, sizeof(struct dns_header));
+						sforward->type = question->hdr->qtype;
+						sforward->class = question->hdr->qclass;
+
+						sforward->edns0len = question->edns0len;
+
+						if (question->tsig.have_tsig && question->tsig.tsigverified) {
+							sforward->havemac = 1;
+							memcpy((char *)&sforward->tsigname, question->tsig.tsigkey, question->tsig.tsigkeylen);
+							sforward->tsignamelen = question->tsig.tsigkeylen;
+							memcpy(&sforward->mac, question->tsig.tsigmac, sizeof(sforward->mac));
+							sforward->tsigtimefudge = question->tsig.tsig_timefudge;
+						} else
+							sforward->havemac = 0;
+
+						imsg_compose(ibuf, IMSG_FORWARD_TCP,
+							0, 0, so, sforward,  sizeof(struct sforward));
 						msgbuf_write(&ibuf->w);
-						goto tcpout;
+						slen = 0;
+
+						if (lflag)
+							dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (%d/%d)\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), replystring, len, slen);
+
+						if (fakequestion != NULL) {
+							free_question(fakequestion);
+						}
+			
+						free_question(question);
+						
+						if (rbt0) {
+							free(rbt0);
+							rbt0 = NULL;
+						}
+						if (rbt1) {
+							free (rbt1);
+							rbt1 = NULL;
+						}
+						TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
+						close(tcpnp->so);
+						free(tcpnp->address);
+						free(tcpnp);
+						if (conncnt > 0)
+							conncnt--;
+						continue;
 						break;
 
 					case ERR_NOERROR:
@@ -3095,6 +3245,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 						} else {
 							slen = 0;
 							snprintf(replystring, DNS_MAXNAME, "DROP");
+
 						}
 						goto tcpout;
 						
@@ -3272,7 +3423,8 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 				conncnt--;
 
 			continue;
-		} /* TAILQ_FOREACH */
+		
+		} /* TAILQ_FOREACH_SAFE */
 
 		/*
 		 * kick off the idlers 
@@ -3353,9 +3505,10 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
 				require_tsig = 0;
 
+				memset(&pq, 0, sizeof(struct parsequestion));
+
 				switch (imsg.hdr.type) {
 				case IMSG_PARSE_MESSAGE:
-					memset(&pq, 0, sizeof(struct parsequestion));
 
 					/* XXX magic numbers */
 					if (datalen > 16384) {
@@ -3874,6 +4027,11 @@ setup_cortex(struct imsgbuf *ibuf)
 		exit(1);
 	}
 
+#if 0
+	/* reopenlog */
+	openlog(__progname, LOG_PID | LOG_NDELAY, LOG_DAEMON);
+#endif
+
 #if __OpenBSD__
 	if (unveil("/", "") == -1) {
 		dolog(LOG_INFO, "unveil cortex: %s\n", strerror(errno));
@@ -3961,6 +4119,7 @@ setup_cortex(struct imsgbuf *ibuf)
 
 							imsg_compose(&neup2->ibuf, IMSG_FORWARD_UDP, 0, 0, -1, imsg.data, datalen);
 							msgbuf_write(&neup2->ibuf.w);
+
 							
 							break;
 							

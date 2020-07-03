@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.16 2020/06/28 08:59:30 pjp Exp $
+ * $Id: ddd-dns.h,v 1.17 2020/07/03 06:49:57 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -254,6 +254,7 @@ struct tsig {
 	int tsigmaclen;
 	u_int64_t tsig_timefudge;
 	u_int16_t tsigorigid;
+	int tsigoffset;
 };
 
 #define DEFAULT_TSIG_FUDGE	300
@@ -293,6 +294,29 @@ struct parsequestion {
 	pid_t pid;	/* originating pid */
 };
 	
+struct sforward {
+	int family;
+
+	struct sockaddr_in from4;
+	struct sockaddr_in6 from6;
+
+	int oldsel;
+	uint16_t rport;
+	char buf[512];
+	int buflen;
+	struct dns_header header;
+	uint16_t type;
+	uint16_t class;
+	uint16_t edns0len;
+
+	int havemac;
+	char tsigname[256];
+	int tsignamelen;
+	uint64_t tsigtimefudge;
+
+	char mac[32];
+};
+
 	
 	
 

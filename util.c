@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.63 2020/06/30 07:09:46 pjp Exp $
+ * $Id: util.c,v 1.64 2020/07/03 06:49:57 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -124,6 +124,7 @@ extern int debug;
 extern int *ptr;
 extern int tsig;
 extern int forward;
+extern int zonecount;
 
 extern void 	dolog(int, char *, ...);
 
@@ -360,12 +361,8 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 	*returnval = 0;
 
 	if (forward) {
-		/* 
-		 * We short circuit forwarded lookups to the root, which
-		 * would usually come out as ERR_NODATA for some reason
-		 * I don't know why exactly, XXX.
-		 */
-		if (plen == 1 && *p == '\0') {
+		/* short circuit when we have no zones loaded */
+		if (zonecount == 0) {
 			*lzerrno = ERR_FORWARD;
 			*returnval = -1;
 		

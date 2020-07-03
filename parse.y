@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.100 2020/07/01 05:07:47 pjp Exp $
+ * $Id: parse.y,v 1.101 2020/07/03 06:49:57 pjp Exp $
  */
 
 %{
@@ -92,7 +92,7 @@ extern int 	insert_region(char *, char *, u_int8_t);
 extern int 	insert_axfr(char *, char *);
 extern int 	insert_notifyddd(char *, char *);
 extern int 	insert_filter(char *, char *);
-extern int	insert_forward(struct sockaddr_storage *, uint16_t, char *);
+extern int	insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
 extern int 	insert_whitelist(char *, char *);
 extern int	insert_tsig(char *, char *);
 extern int	insert_tsig_key(char *, int, char *, int);
@@ -114,6 +114,7 @@ extern int errno;
 extern int debug;
 extern int forward;
 extern int forwardtsig;
+extern int zonecount;
 extern int verbose;
 extern int bflag;
 extern int iflag;
@@ -803,12 +804,7 @@ rzonestatement:
 zone:
 	ZONE zonelabel zonecontent
 	{
-#if 0
-		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
-                        dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
-                        return (-1);
-                }
-#endif
+		zonecount++;
 	}
 	;
 
@@ -1453,12 +1449,19 @@ forwardstatement	:	INCOMINGTSIG STRING SEMICOLON CRLF
 
 				memset(&sso, 0, sizeof(struct sockaddr_storage));
 
-				if (strchr($2, ':') != NULL) 
-					inet_pton(AF_INET6, $2, sin6);
-				else
-					inet_pton(AF_INET, $2, sin);
+				if (strchr($2, ':') != NULL) {
+					inet_pton(AF_INET6, $2, &sin6->sin6_addr);
+					sin6->sin6_family = AF_INET6;
+					sin6->sin6_port = htons($4);
+					sin6->sin6_len = sizeof(struct sockaddr_in6);
+					insert_forward(AF_INET6, &sso, $4, $6);
+				} else {
+					inet_pton(AF_INET, $2, &sin->sin_addr);
+					sin->sin_family = AF_INET;
+					sin->sin_port = htons($4);
+					insert_forward(AF_INET, &sso, $4, $6);
+				}
 
-				insert_forward(&sso, $4, $6);
 					
 				free($5);
 				free($6);

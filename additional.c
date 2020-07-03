@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.35 2020/05/07 12:17:35 pjp Exp $
+ * $Id: additional.c,v 1.36 2020/07/03 06:49:57 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -40,6 +40,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <syslog.h>
 
 #ifdef __linux__
 #include <grp.h>
@@ -90,6 +92,8 @@ extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern int  find_tsig_key(char *, int, char *, int);
+extern void      dolog(int, char *, ...);
+
 
 
 extern int dnssec;
@@ -477,6 +481,8 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	if ((offset + 2 +  8 + 2 + question->tsig.tsigmaclen + 
 		question->tsig.tsigkeylen + 
 		question->tsig.tsigalglen + 2 + 2 + 4) > replylen) {
+		dolog(LOG_ERR, "additional_tsig: is bigger than replylen\n");
+		offset = rollback;
 		goto out;
 	}
 

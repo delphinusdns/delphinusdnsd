@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.3 2020/07/01 05:07:47 pjp Exp $
+ * $Id: forward.c,v 1.4 2020/07/03 06:49:57 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -77,17 +77,10 @@
 #include "endian.h"
 #endif
 
+#include <openssl/hmac.h>
+
 #include "ddd-dns.h"
 #include "ddd-db.h"
-
-void	init_forward(void);
-int	insert_forward(struct sockaddr_storage *, uint16_t, char *);
-void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *);
-void	forwardthis(int, struct forward *);
-
-extern void 		dolog(int, char *, ...);
-
-extern int debug, verbose;
 
 SLIST_HEAD(, forwardentry) forwardhead;
 
@@ -97,22 +90,66 @@ static struct forwardentry {
 	struct sockaddr_storage host;
 	uint16_t destport;
 	char *tsigkey;
+	int active;
 	SLIST_ENTRY(forwardentry) forward_entry;
 } *fw2, *fwp;
 
 SLIST_HEAD(, forwardqueue) fwqhead;
 
 static struct forwardqueue {
-	time_t time;
-	struct sockaddr_storage host;
-	uint16_t id;
-	uint16_t port;
-	struct sockaddr_storage oldhost;
-	uint16_t oldid;
-	uint16_t oldport;
-	int so;
-	SLIST_ENTRY(forwardqueue) entries;
+	uint32_t longid;			/* a long identifier */
+	time_t time;				/* time created */
+	struct sockaddr_storage host;		/* remote host to query */
+	uint16_t id;				/* new id to query */
+	uint16_t port;				/* remote port to query */
+	struct sockaddr_in oldhost4;		/* old v4 host source */
+	struct sockaddr_in6 oldhost6;		/* old v6 host source */
+	uint16_t oldid;				/* old id source */
+	uint16_t oldport;			/* the old port */
+	int oldfamily;				/* old family */
+	int oldsel;				/* this indicates which sock */
+	int so;					/* open connected socket */
+	int returnso;				/* return socket (TCP) */
+	int istcp;				/* whether we're tcp */
+	int family;				/* our family */
+	char *tsigkey;				/* which key we use for query */
+	uint64_t tsigtimefudge;			/* passed tsigtimefudge */
+	char mac[32];				/* passed mac from query */
+	int haveoldmac;				/* do we have an old mac? */
+	char oldkeyname[256];			/* old key name */
+	int oldkeynamelen;			/* old key name len */
+	char oldmac[32];			/* old mac */
+	SLIST_ENTRY(forwardqueue) entries;	/* next entry */
 } *fwq1, *fwq2, *fwqp;
+
+void	init_forward(void);
+int	insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
+void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *);
+void	forwardthis(int, struct sforward *);
+void	sendit(struct forwardqueue *, struct sforward *);
+void	returnit(struct cfg *cfg, struct forwardqueue *, char *, int);
+struct tsig * check_tsig(char *, int, char *);
+
+extern void 	dolog(int, char *, ...);
+extern void     pack16(char *, u_int16_t);
+extern uint16_t unpack16(char *);
+extern uint32_t unpack32(char *);
+extern void     ddd_shutdown(void);
+extern int      additional_opt(struct question *, char *, int, int);
+extern int      additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *);
+extern struct question	*build_question(char *, int, int, char *);
+extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
+extern int	free_question(struct question *);
+extern char *	dns_label(char *, int *);
+extern int	find_tsig_key(char *, int, char *, int);
+extern int	memcasecmp(u_char *, u_char *, int);
+extern char *	expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
+
+
+extern int debug, verbose;
+extern int tsig;
+extern int dnssec;
+
 
 /*
  * INIT_FORWARD - initialize the forward singly linked list
@@ -131,7 +168,7 @@ init_forward(void)
  */
 
 int
-insert_forward(struct sockaddr_storage *ip, uint16_t port, char *tsigkey)
+insert_forward(int family, struct sockaddr_storage *ip, uint16_t port, char *tsigkey)
 {
 	fw2 = calloc(1, sizeof(struct forwardentry));
 	if (fw2 == NULL) {
@@ -139,7 +176,9 @@ insert_forward(struct sockaddr_storage *ip, uint16_t port, char *tsigkey)
 		return 1;
 	}
 
-	switch (fw2->family = ip->ss_family) {
+	fw2->family = family;
+
+	switch (fw2->family) {
 	case AF_INET:
 		inet_ntop(AF_INET, (struct sockaddr_in *)ip, fw2->name, sizeof(fw2->name));
 		break;
@@ -160,6 +199,8 @@ insert_forward(struct sockaddr_storage *ip, uint16_t port, char *tsigkey)
 			return 1;
 		}
 	}
+
+	fw2->active = 1;
 			
 	SLIST_INSERT_HEAD(&forwardhead, fw2, forward_entry);
 
@@ -169,20 +210,69 @@ insert_forward(struct sockaddr_storage *ip, uint16_t port, char *tsigkey)
 void
 forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf)
 {
+	char *buf;
 	struct imsg imsg;
 	int max, sel;
+	int len, need;
 	ssize_t n, datalen;
 	fd_set rset;
 
+	buf = calloc(1, (0xffff + 2));
+	if (buf == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+	
 	for (;;) {
 		FD_ZERO(&rset);	
 		FD_SET(ibuf->fd, &rset);
 		if (ibuf->fd > max)
 			max = ibuf->fd;
 
+		SLIST_FOREACH(fwq1, &fwqhead, entries) {
+			if (fwq1->so > max)
+				max = fwq1->so;
+	
+			FD_SET(fwq1->so, &rset);
+		}
+
 		sel = select(max + 1, &rset, NULL, NULL, NULL);
 		if (sel == -1) {	
 			continue;
+		}
+
+		SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwqp) {
+			if (FD_ISSET(fwq1->so, &rset)) {
+				if (fwq1->istcp) {
+					len = recv(fwq1->so, buf, 2, MSG_WAITALL);
+					if (len < 0) {
+						goto drop;
+					}
+					need = ntohs(unpack16(buf));
+					len = recv(fwq1->so, buf, need, MSG_WAITALL);
+					returnit(cfg, fwq1, buf, len);
+				} else {
+					len = recv(fwq1->so, buf, 0xffff, 0);
+					if (len < 0) {
+						goto drop;
+					}
+					returnit(cfg, fwq1, buf, len);
+				}
+
+drop:
+
+				SLIST_REMOVE(&fwqhead, fwq1, forwardqueue, entries);
+				close(fwq1->so);
+				if (fwq1->returnso != -1)
+					close(fwq2->returnso);
+				
+				if (fwq1->tsigkey)
+					free(fwq1->tsigkey);
+
+				free(fwq1);
+
+			}
 		}
 		if (FD_ISSET(ibuf->fd, &rset)) {
 
@@ -205,20 +295,24 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf)
 						break;
 
 					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
-					if (datalen != sizeof(struct forward)) {
+					if (datalen != sizeof(struct sforward)) {
 						imsg_free(&imsg);
 						continue;
 					}
 
 					switch(imsg.hdr.type) {
 					case IMSG_FORWARD_UDP:
+#if DEBUG
 						dolog(LOG_INFO, "received UDP message from mainloop\n");
-						forwardthis(-1, imsg.data);	
+#endif
+						forwardthis(-1, (struct sforward *)imsg.data);	
 						break;
 
 					case IMSG_FORWARD_TCP:
+#if DEBUG
 						dolog(LOG_INFO, "received TCP message and descriptor\n");
-						forwardthis(imsg.fd, imsg.data);
+#endif
+						forwardthis(imsg.fd, (struct sforward *)imsg.data);
 						break;
 					}
 
@@ -228,46 +322,841 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf)
 		} /* FD_ISSET... */
 	}
 
-	while (1)
-		sleep(10);
-
 	/* NOTREACHED */
-
 }
 
 void
-forwardthis(int so, struct forward *forward)
+forwardthis(int so, struct sforward *sforward)
 {
-	struct dns_header *dh = (struct dns_header *)forward->buf;
+	int found = 0;
 	time_t now;
 	char *p;
+	socklen_t namelen;
 	
 	now = time(NULL);
-	p = forward->buf;
+	p = sforward->buf;
 
 	SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwq2) {
 		if (difftime(now, fwq1->time) > 15) {
 			SLIST_REMOVE(&fwqhead, fwq1, forwardqueue, entries);
+			if (fwq1->returnso != -1)
+				close(fwq1->returnso);
+			close(fwq1->so);
+			if (fwq1->tsigkey)
+				free(fwq1->tsigkey);
+			free(fwq1);
 			continue;
 		}
 	
-		if (memcmp(&fwq1->oldhost, &forward->from, 
-			sizeof(struct sockaddr_storage)) == 0 &&
-			fwq1->oldport == forward->rport &&
-			fwq1->oldid == dh->id) {
-			/* found, break... */
+		found = 0;
+		switch (fwq1->oldfamily) {
+		case AF_INET:
+			if (memcmp(&fwq1->oldhost4.sin_addr.s_addr, 
+				&sforward->from4.sin_addr.s_addr, 
+				sizeof(struct in_addr)) == 0 &&
+				fwq1->oldport == sforward->rport &&
+				fwq1->oldid == sforward->header.id) {
+				/* found, break... */
+					found = 1;
+			}
+			break;
+		case AF_INET6:
+			if (memcmp(&fwq1->oldhost6.sin6_addr, 
+				&sforward->from6.sin6_addr, 16) == 0 && 
+				fwq1->oldport == sforward->rport &&
+				fwq1->oldid == sforward->header.id) {
+				/* found, break... */
+					found = 1;
+			}
 			break;
 		}
+
+		if (found)
+			break;
 	}
 
 	if (fwq1 == NULL) {
 		/* create a new queue and send it */
+
+		SLIST_FOREACH(fw2, &forwardhead, forward_entry) {
+			if (fw2->active == 1)
+				break;
+		}
+
+		if (fw2 == NULL) {
+			SLIST_FOREACH(fwp, &forwardhead, forward_entry) {
+				if (fwp != fw2) {
+					fw2 = fwp;
+					fw2->active = 1;
+					break;
+				}
+			}
+
+			if (fw2 == NULL) {
+				dolog(LOG_INFO, "FORWARD: no suitable destinations found\n");
+				return;
+			}
+				
+		}
 		
+		fwq1 = calloc(1, sizeof(struct forwardqueue));
+		if (fwq1 == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			return;
+		}
+		fwq1->oldfamily = sforward->family;
+		fwq1->oldsel = sforward->oldsel;
+
+		switch (sforward->family) {
+		case AF_INET:
+			memcpy(&fwq1->oldhost4, &sforward->from4, sizeof(struct sockaddr_in));
+			break;
+		case AF_INET6:
+			memcpy(&fwq1->oldhost6, &sforward->from6, sizeof(struct sockaddr_in));
+			break;
+		}
+
+		fwq1->oldport = sforward->rport;
+		fwq1->oldid = sforward->header.id;
+
+		fwq1->port = fw2->destport;
+		fwq1->longid = arc4random();
+		fwq1->id = fwq1->longid % 0xffff;	
+		fwq1->time = now;
+		if (so == -1)
+			fwq1->istcp = 0;
+		else
+			fwq1->istcp = 1;	
+
+
+		memcpy((char *)&fwq1->host, (char *)&fw2->host, sizeof(struct sockaddr_storage));
+
+		fwq1->family = fw2->family;
+		if (fw2->tsigkey) {
+			fwq1->tsigkey = strdup(fw2->tsigkey);
+			if (fwq1->tsigkey == NULL) {
+				dolog(LOG_ERR, "FORWARD strdup: %s\n", strerror(errno));
+				free(fwq1);
+				return;
+			}
+		} else
+			fwq1->tsigkey = NULL;
+
+		/* connect the UDP sockets */
+
+		fwq1->so = socket(fw2->family, (fwq1->istcp != 1) ? SOCK_DGRAM : SOCK_STREAM, 0);
+		if (fwq1->so < 0) {
+			dolog(LOG_ERR, "FORWARD socket: %s\n", strerror(errno));
+			if (fwq1->tsigkey)
+				free(fwq1->tsigkey);
+			free(fwq1);
+			return;
+		}
+
+		namelen = (fw2->family == AF_INET) ? sizeof(struct sockaddr_in) \
+			: sizeof(struct sockaddr_in6);
+
+		if (connect(fwq1->so, (struct sockaddr *)&fwq1->host, namelen) < 0) {
+			dolog(LOG_ERR, "FORWARD can't connect: %s\n", strerror(errno));
+			if (fwq1->tsigkey)
+				free(fwq1->tsigkey);
+
+			free(fwq1);
+			return;
+		}
+
+		fwq1->returnso = so;
+
+		/* are we TSIG'ed?  save key and mac */
+		if (sforward->havemac) {
+			fwq1->haveoldmac = 1;
+			memcpy(&fwq1->oldkeyname, &sforward->tsigname, sizeof(fwq1->oldkeyname));
+			fwq1->oldkeynamelen = sforward->tsignamelen;
+			memcpy(&fwq1->oldmac, &sforward->mac, sizeof(fwq1->oldmac));
+			fwq1->tsigtimefudge = sforward->tsigtimefudge;
+		} else
+			fwq1->haveoldmac = 0;
+				
+		SLIST_INSERT_HEAD(&fwqhead, fwq1, entries);
+
+		sendit(fwq1, sforward);
 	} else {
 		/* resend this one */
 		
 		fwq1->time = now;
+		sendit(fwq1, sforward);
+	}
+
+	return;	
+}
+
+void
+sendit(struct forwardqueue *fwq, struct sforward *sforward)
+{
+	struct dns_header *dh;
+	struct question *q;
+	char *buf, *p, *packet;
+	char *tsigname;
+	int len = 0, outlen;
+	int tsignamelen = 0;
+
+	buf = calloc(1, (0xffff + 2));
+	if (buf == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		return;	
+	}
+
+	if (fwq->tsigkey) {
+		tsigname = dns_label(fwq->tsigkey, &tsignamelen);
+		if (tsigname == NULL) {
+			dolog(LOG_INFO, "dns_label failed\n");
+			free(buf);
+			return;
+		}
+	} else {
+		tsigname = NULL;
+		tsignamelen = 0;
+	}
+
+	q = build_fake_question(sforward->buf, sforward->buflen, sforward->type, tsigname, tsignamelen);
+
+	if (q == NULL) {
+		dolog(LOG_INFO, "build_fake_question failed\n");
+		free(buf);
+		return;
+	}
+
+	q->edns0len = sforward->edns0len;
+	
+	if (fwq->istcp == 1) {
+		p = &buf[2];
+	} else
+		p = &buf[0];
+		
+	packet = p;
+	dh = (struct dns_header *)p;
+	
+	memcpy((char *)dh, (char *)&sforward->header, sizeof(struct dns_header));
+	dh->id = htons(fwq->id);
+	dh->question = htons(1);	
+	dh->answer = 0; dh->nsrr = 0; dh->additional = htons(1);
+
+	memset((char *)&dh->query, 0, sizeof(dh->query));
+
+	SET_DNS_QUERY(dh);
+	SET_DNS_RECURSION(dh);
+	HTONS(dh->query);
+
+	p += sizeof(struct dns_header);
+	len += sizeof(struct dns_header);
+
+	memcpy(p, sforward->buf, sforward->buflen);
+	p += sforward->buflen;
+	len += sforward->buflen;
+	
+	pack16(p, sforward->type);
+	p += 2;
+	pack16(p, sforward->class);
+
+	p += 2;
+	len += 4;	/* type and class */
+
+	/* additionals */
+		
+	if (dnssec)
+		q->dnssecok = 1;
+
+	outlen = additional_opt(q, packet, 0xffff, len);
+	len = outlen;
+
+	if (tsigname) {
+		outlen = additional_tsig(q, packet, 0xffff, len, 1, 0, NULL);
+		dh->additional = htons(2);	
+	}
+
+	memcpy(&fwq->mac, &q->tsig.tsigmac, 32);
+
+	len = outlen;
+	p = packet + outlen;
+	
+	if (fwq->istcp == 1) {
+		pack16(buf, htons(len));
+		send(fwq->so, buf, len + 2, 0);
+	} else
+		send(fwq->so, buf, len, 0);
+
+	
+	free(buf);
+	free_question(q);
+
+	return;
+}
+
+void
+returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen)
+{
+
+	struct dns_header *dh;
+	struct tsig *stsig = NULL;
+	struct question *q;
+
+	char *buf, *buf0, *p;
+
+	int so;
+	int len = 0;
+	int outlen;
+
+	socklen_t tolen;
+
+	buf = calloc(1, 0xffff + 2);
+	if (buf == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		return;	
+	}
+
+	if (fwq->istcp == 1) {
+		p = &buf[2];
+		so = fwq->returnso;
+		len = 2;
+	} else {
+		p = buf;
+		so = cfg->dup[fwq->oldsel];
+	}
+		
+	if (rlen <= sizeof(struct dns_header)) {
+		dolog(LOG_INFO, "FORWARD returnit, returned packet is too small");	
+		free(buf);
+		return;
+	}
+
+	memcpy(p, rbuf, rlen);
+	dh = (struct dns_header *)p;
+	
+	if (! (ntohs(dh->query) & DNS_REPLY)) {
+		dolog(LOG_INFO, "FORWARD returnit, returned packet is not a reply\n");
+		free(buf);
+		return;
+	}
+
+	if (dh->id != htons(fwq->id)) {
+		/* returned packet ID does not match */
+		dolog(LOG_INFO, "FORWARD returnit, returned packet ID does not match %d vs %d\n", ntohs(dh->id), fwq->id);
+		free(buf);
+		return;
+	}
+
+	if (fwq->tsigkey) {
+		buf0 = calloc(1, rlen);
+		if (buf0 == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			free(buf);
+			return;
+		}
+
+		memcpy(buf0, p, rlen);
+
+		stsig = check_tsig(buf0, rlen, fwq->mac);
+		if (stsig == NULL) {
+			dolog(LOG_INFO, "FORWARD returninit, malformed reply packet\n");
+			free(buf);
+			free(buf0);
+			return;
+		}
+
+		free(buf0);
+
+
+		if (stsig->have_tsig && stsig->tsigverified == 0) {
+			dolog(LOG_INFO, "FORWARD returnit, TSIG didn't check out error code = %d\n", stsig->tsigerrorcode);
+			free(buf);
+			return;
+		}
+
+		NTOHS(dh->additional);
+		dh->additional--;
+		HTONS(dh->additional);
+
+		rlen = stsig->tsigoffset;
+	}
+
+	/* add new tsig if needed */
+	pack16((char *)&dh->id, fwq->oldid);
+
+	NTOHS(dh->query);
+	dh->query &= ~(DNS_AUTH | DNS_NOTIFY);	/* take AA answers out */
+	SET_DNS_RECURSION(dh);
+	SET_DNS_RECURSION_AVAIL(dh);
+	HTONS(dh->query);
+	
+	if (fwq->haveoldmac) {
+		q = build_fake_question(p, rlen, DNS_TYPE_A, fwq->oldkeyname, fwq->oldkeynamelen);
+
+		if (q == NULL) {
+			dolog(LOG_INFO, "build_fake_question failed\n");
+			free(buf);
+			return;
+		}
+
+		memcpy(&q->tsig.tsigmac, &fwq->oldmac, 32);
+		q->tsig.tsigmaclen = 32;
+		q->tsig.tsigalglen = 13;
+		q->tsig.tsigerrorcode = 0;
+		q->tsig.tsigorigid = fwq->oldid;
+		q->tsig.have_tsig = 1;
+		q->tsig.tsig_timefudge = fwq->tsigtimefudge;
+
+		outlen = additional_tsig(q, p, 0xffff, rlen, 0, 0, NULL);
+		if (outlen == rlen) {
+			dolog(LOG_INFO, "additional tsig failed\n");
+		} else {
+			rlen = outlen;
+
+			NTOHS(dh->additional);
+			dh->additional++;
+			HTONS(dh->additional);
+
+			free_question(q);
+		}
+	}
+
+	len += rlen;
+	
+	if (fwq->istcp == 1) {
+		pack16(buf, htons(rlen));
+		if (send(so, buf, len, 0) != len)
+			dolog(LOG_INFO, "send(): %s\n", strerror(errno));
+		close(so);	/* only close the tcp stream */
+		fwq->returnso = -1;	
+
+	} else {
+		
+		switch (fwq->oldfamily) {
+		case AF_INET:
+			tolen = sizeof(struct sockaddr_in);
+			if (sendto(so, buf, len, 0, (struct sockaddr *)&fwq->oldhost4, tolen) < 0)
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			break;
+		default:
+			tolen = sizeof(struct sockaddr_in6);
+			if (sendto(so, buf, len, 0, (struct sockaddr *)&fwq->oldhost6, tolen) < 0)
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			break;
+		}
+	}
+
+	free(buf);
+	return;
+}
+
+struct tsig *
+check_tsig(char *buf, int len, char *mac)
+{
+	char pseudo_packet[4096];		/* for tsig */
+	char expand[DNS_MAXNAME + 1];
+	u_int rollback, i, j;
+	u_int16_t type, rdlen;
+	u_int32_t ttl;
+	u_int64_t timefudge;
+	int elen = 0;
+	int additional;
+
+	char *o, *pb;
+
+	struct dns_tsigrr *tsigrr = NULL;
+	struct dns_optrr *opt = NULL;
+	struct dns_header *hdr = (struct dns_header *)buf;
+	struct tsig *rtsig;
+
+	
+	rtsig = (void *)calloc(1, sizeof(struct tsig));
+	if (rtsig == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	rollback = i = sizeof(struct dns_header);
+	/* the name is parsed here */
+	elen = 0;
+	memset(&expand, 0, sizeof(expand));
+	pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
+	if (pb == NULL) {
+		dolog(LOG_INFO, "expand_compression() failed -2\n");
+		free(rtsig);
+		return NULL;
+	}
+	i = (pb - buf);
+	if (i > len) {
+		free(rtsig);
+		return NULL;
+	}
+
+	i += (2 * sizeof(u_int16_t));	/*  type,class */
+
+	/* skip any payloads other than additional */
+	
+	additional = ntohs(hdr->additional);
+	j = ntohs(hdr->answer) + ntohs(hdr->nsrr) + ntohs(hdr->additional);
+
+	for (;j > 0; j--) {
+		rollback = i;
+		/* the name is parsed here */
+		elen = 0;
+		memset(&expand, 0, sizeof(expand));
+		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
+		if (pb == NULL) {
+			dolog(LOG_INFO, "expand_compression() failed -1\n");
+			free(rtsig);
+			return NULL;
+		}
+		i = (pb - buf);
+		if (i > len) {
+			free(rtsig);
+			return NULL;
+		}
+
+		type = ntohs(unpack16(&buf[i]));
+		if (type == DNS_TYPE_OPT || type == DNS_TYPE_TSIG) {
+			i = rollback;
+			break;
+		}
+			
+		i += 8;		/* skip type, class, ttl */
+		if (i > len) {
+			free(rtsig);
+			return NULL;
+		}
+		
+		rdlen = unpack16(&buf[i]);
+		i += 2;			/* skip rdlen */
+		i += ntohs(rdlen);	/* skip rdata, next */
+
+		if (i > len) {
+			free(rtsig);
+			return NULL;
+		}
 	}
 
 	
+	/* check for edns0 opt rr */
+	do {
+		/* if we don't have an additional section, break */
+		if (additional < 1) 
+			break;
+
+		rollback = i;
+
+		/* check that the minimum optrr fits */
+		/* 10 */
+		if (i + sizeof(struct dns_optrr) > len) {
+			i = rollback;
+			break;
+		}
+
+		opt = (struct dns_optrr *)&buf[i];
+		if (opt->name[0] != 0) {
+			i = rollback;
+			break;
+		}
+
+		if (ntohs(opt->type) != DNS_TYPE_OPT) {
+			i = rollback;
+			break;
+		}
+
+		/* RFC 3225 */
+		ttl = ntohl(opt->ttl);
+
+		i += 11 + ntohs(opt->rdlen);
+		if (i > len) {
+			free(rtsig);
+			return NULL;
+		}
+		additional--;
+	} while (0);
+	/* check for TSIG rr */
+	do {
+		u_int16_t val16, tsigerror, tsigotherlen;
+		u_int16_t fudge;
+		u_int32_t val32;
+		int elen, tsignamelen;
+		char tsigkey[512];
+		u_char sha256[32];
+		u_int shasize = sizeof(sha256);
+		time_t now, tsigtime;
+		int pseudolen1, pseudolen2, ppoffset = 0;
+		int pseudolen3 , pseudolen4;
+
+		rtsig->have_tsig = 0;
+		rtsig->tsigerrorcode = 1;
+
+		/* if we don't have an additional section, break */
+		if (additional < 1) {
+			break;
+		}
+
+		memset(rtsig->tsigkey, 0, sizeof(rtsig->tsigkey));
+		memset(rtsig->tsigalg, 0, sizeof(rtsig->tsigalg));
+		memset(rtsig->tsigmac, 0, sizeof(rtsig->tsigmac));
+		rtsig->tsigkeylen = rtsig->tsigalglen = rtsig->tsigmaclen = 0;
+
+		/* the key name is parsed here */
+		rollback = i;
+		rtsig->tsigoffset = i;
+
+		elen = 0;
+		memset(&expand, 0, sizeof(expand));
+		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
+		if (pb == NULL) {
+			dolog(LOG_INFO, "expand_compression() failed\n");
+			free(rtsig);
+			return NULL;
+		}
+		i = (pb - buf);
+		pseudolen1 = i;
+
+		memcpy(rtsig->tsigkey, expand, elen);
+		rtsig->tsigkeylen = elen;
+
+
+		if (i + 10 > len) {	/* type + class + ttl + rdlen == 10 */
+			i = rollback;
+			break;
+		}
+
+		/* type */
+		o = &buf[i];
+		val16 = unpack16(o);
+		if (ntohs(val16) != DNS_TYPE_TSIG) {
+			i = rollback;
+			break;
+		}
+		i += 2;
+		o += 2;
+		pseudolen2 = i;
+
+		rtsig->have_tsig = 1;
+
+		/* we don't have any tsig keys configured, no auth done */
+		if (tsig == 0) {
+			i = rollback;
+			break;
+		}
+
+		rtsig->tsigerrorcode = DNS_BADKEY;
+
+		/* class */
+		val16 = unpack16(o);
+		if (ntohs(val16) != DNS_CLASS_ANY) {
+#if DEBUG
+			dolog(LOG_INFO, "TSIG not class ANY\n");
+#endif
+			i = rollback;
+			break;
+		}
+		i += 2;
+		o += 2;
+	
+		/* ttl */
+		val32 = unpack32(o);
+		if (ntohl(val32) != 0) {
+#if DEBUG
+			dolog(LOG_INFO, "TSIG not TTL 0\n");
+#endif
+			i = rollback;
+			break;
+		}
+		i += 4;	
+		o += 4;
+			
+		/* rdlen */
+		val16 = unpack16(o);
+		if (ntohs(val16) != (len - (i + 2))) {
+#if DEBUG
+			dolog(LOG_INFO, "TSIG not matching RDLEN\n");
+#endif
+			i = rollback;
+			break;
+		}
+		i += 2;
+		o += 2;
+		pseudolen3 = i;
+
+		/* the algorithm name is parsed here */
+		elen = 0;
+		memset(&expand, 0, sizeof(expand));
+		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
+		if (pb == NULL) {
+			dolog(LOG_INFO, "expand_compression() failed 2\n");
+			free(rtsig);
+			return NULL;
+		}
+		i = (pb - buf);
+		pseudolen4 = i;
+
+		memcpy(rtsig->tsigalg, expand, elen);
+		rtsig->tsigalglen = elen;
+			
+		/* now check for MAC type, since it's given once again */
+		if (elen == 11) {
+			if (expand[0] != 9 ||
+				memcasecmp(&expand[1], "hmac-sha1", 9) != 0) {
+				break;
+			}
+		} else if (elen == 13) {
+			if (expand[0] != 11 ||
+				memcasecmp(&expand[1], "hmac-sha256", 11) != 0) {
+				break;
+			}
+		} else if (elen == 26) {
+			if (expand[0] != 8 ||
+				memcasecmp(&expand[1], "hmac-md5", 8) != 0) {
+				break;
+			}
+		} else {
+			break;
+		}
+
+		/* 
+		 * this is a delayed (moved down) check of the key, we don't
+		 * know if this is a TSIG packet until we've chekced the TSIG
+		 * type, that's why it's delayed...
+		 */
+
+		if ((tsignamelen = find_tsig_key(rtsig->tsigkey, rtsig->tsigkeylen, (char *)&tsigkey, sizeof(tsigkey))) < 0) {
+			/* we don't have the name configured, let it pass */
+			i = rollback;
+			break;
+		}
+		
+		if (i + sizeof(struct dns_tsigrr) > len) {
+			i = rollback;
+			break;
+		}
+
+		tsigrr = (struct dns_tsigrr *)&buf[i];
+		/* XXX */
+#ifndef __OpenBSD__
+		timefudge = be64toh(tsigrr->timefudge);
+#else
+		timefudge = betoh64(tsigrr->timefudge);
+#endif
+		fudge = (u_int16_t)(timefudge & 0xffff);
+		tsigtime = (u_int64_t)(timefudge >> 16);
+
+		rtsig->tsig_timefudge = tsigrr->timefudge;
+		
+		i += (8 + 2);		/* timefudge + macsize */
+
+		if (ntohs(tsigrr->macsize) != 32) {
+#if DEBUG
+			dolog(LOG_INFO, "bad macsize\n");
+#endif
+			rtsig->tsigerrorcode = DNS_BADSIG; 
+			break; 
+		}
+
+		i += ntohs(tsigrr->macsize);
+	
+
+		/* now get the MAC from packet with length rollback */
+		NTOHS(hdr->additional);
+		hdr->additional--;
+		HTONS(hdr->additional);
+
+		/* origid */
+		o = &buf[i];
+		val16 = unpack16(o);
+		i += 2;
+		o += 2;
+		if (hdr->id != val16)
+			hdr->id = val16;
+		rtsig->tsigorigid = val16;
+
+		/* error */
+		tsigerror = unpack16(o);
+		i += 2;
+		o += 2;
+
+		/* other len */
+		tsigotherlen = unpack16(o);
+		i += 2;
+		o += 2;
+
+		ppoffset = 0;
+
+		/* check if we have a request mac, this means it's an answer */
+		if (mac) {
+			o = &pseudo_packet[ppoffset];
+			pack16(o, htons(32));
+			ppoffset += 2;
+
+			memcpy(&pseudo_packet[ppoffset], mac, 32);
+			ppoffset += 32;
+		}
+
+		memcpy(&pseudo_packet[ppoffset], buf, pseudolen1);
+		ppoffset += pseudolen1;
+		memcpy((char *)&pseudo_packet[ppoffset], &buf[pseudolen2], 6); 
+		ppoffset += 6;
+
+		memcpy((char *)&pseudo_packet[ppoffset], &buf[pseudolen3], pseudolen4 - pseudolen3);
+		ppoffset += (pseudolen4 - pseudolen3);
+
+		memcpy((char *)&pseudo_packet[ppoffset], (char *)&tsigrr->timefudge, 8); 
+		ppoffset += 8;
+
+		o = &pseudo_packet[ppoffset];
+		pack16(o, tsigerror);
+		ppoffset += 2;
+		o += 2;
+
+		o = &pseudo_packet[ppoffset];
+		pack16(o, tsigotherlen);
+		ppoffset += 2;
+		o += 2;
+
+		memcpy(&pseudo_packet[ppoffset], &buf[i], len - i);
+		ppoffset += (len - i);
+
+		/* check for BADTIME before the HMAC memcmp as per RFC 2845 */
+		now = time(NULL);
+		/* outside our fudge window */
+		if (tsigtime < (now - fudge) || tsigtime > (now + fudge)) {
+#if DEBUG
+			dolog(LOG_INFO, "outside of our fudge window\n");
+#endif
+			rtsig->tsigerrorcode = DNS_BADTIME;
+			break;
+		}
+
+		HMAC(EVP_sha256(), tsigkey, tsignamelen, (unsigned char *)pseudo_packet, 
+			ppoffset, (unsigned char *)&sha256, &shasize);
+
+
+
+#if __OpenBSD__
+		if (timingsafe_memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
+#else
+		if (memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
+#endif
+#if DEBUG
+			dolog(LOG_INFO, "HMAC did not verify\n");
+#endif
+			rtsig->tsigerrorcode = DNS_BADSIG;
+			break;
+		}
+
+		/* copy the mac for error coding */
+		memcpy(rtsig->tsigmac, tsigrr->mac, sizeof(rtsig->tsigmac));
+		rtsig->tsigmaclen = 32;
+		
+		/* we're now authenticated */
+		rtsig->tsigerrorcode = 0;
+		rtsig->tsigverified = 1;
+		
+	} while (0);
+
+	/* parse type and class from the question */
+
+	return (rtsig);
 }

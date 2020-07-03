@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.37 2020/07/01 05:07:47 pjp Exp $
+ * $Id: ddd-db.h,v 1.38 2020/07/03 06:49:57 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -336,6 +336,7 @@ struct cfg {
 	int udp[DEFAULT_SOCKET];	/* udp sockets */
 	int tcp[DEFAULT_SOCKET];	/* tcp socket */
 	int axfr[DEFAULT_SOCKET];	/* axfr udp socket */
+	int dup[DEFAULT_SOCKET];	/* dup sockets */
 	char *ident[DEFAULT_SOCKET];	/* identification of interface */
 	struct my_imsg {
 		int imsg_fds[2];
@@ -419,13 +420,6 @@ struct raxfr_logic {
 	int rrtype;
 	int dnssec;
 	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-};
-
-struct forward {
-	struct sockaddr_storage from;
-	uint16_t rport;
-	char buf[4000];		/* the maximum payload of an imsg is 0xffff */
-	int buflen;
 };
 
 #endif /* _DB_H */
