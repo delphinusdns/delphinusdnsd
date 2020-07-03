@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.7 2020/07/03 16:16:27 pjp Exp $
+ * $Id: forward.c,v 1.8 2020/07/03 17:14:03 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -591,6 +591,8 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	}
 
 	q->edns0len = sforward->edns0len;
+	if (q->edns0len > (MAX_IMSGSIZE - FWDPQHEADER))
+		q->edns0len = (MAX_IMSGSIZE - FWDPQHEADER);
 	
 	if (fwq->istcp == 1) {
 		p = &buf[2];
@@ -1323,21 +1325,15 @@ fwdparseloop(struct imsgbuf *ibuf)
 		exit(1);
 	}
 #endif
-	fwdpq = (struct fwdpq *)calloc(1, 65535);
+
+
+	fwdpq = (struct fwdpq *)calloc(1, MAX_IMSGSIZE);
 	if (fwdpq == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 		ddd_shutdown();
 		exit(1);
 	}
 
-#if 0
-	packet = calloc(1, 16384);
-	if (packet == NULL) {
-		dolog(LOG_ERR, "calloc: %m");
-		ddd_shutdown();
-		exit(1);
-	}
-#endif
 	packet = &fwdpq->buf[0];
 
 	for (;;) {
@@ -1370,7 +1366,7 @@ fwdparseloop(struct imsgbuf *ibuf)
 				case IMSG_PARSE_MESSAGE:
 
 					/* XXX magic numbers */
-					if (datalen > 16384) {
+					if (datalen > MAX_IMSGSIZE) {
 						fwdpq->rc = PARSE_RETURN_NAK;
 						imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, fwdpq, sizeof(struct fwdpq));
 						msgbuf_write(&ibuf->w);
