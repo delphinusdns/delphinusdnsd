@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.110 2020/07/03 06:49:57 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.111 2020/07/03 17:15:29 pjp Exp $
  */
 
 
@@ -3469,7 +3469,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	}
 #endif
 
-	packet = calloc(1, 16384);
+	packet = calloc(1, MAX_IMSGSIZE);
 	if (packet == NULL) {
 		dolog(LOG_ERR, "calloc: %m");
 		ddd_shutdown();
@@ -3510,8 +3510,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				switch (imsg.hdr.type) {
 				case IMSG_PARSE_MESSAGE:
 
-					/* XXX magic numbers */
-					if (datalen > 16384) {
+					if (datalen > MAX_IMSGSIZE) {
 						pq.rc = PARSE_RETURN_NAK;
 						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
 						msgbuf_write(&mybuf->w);
