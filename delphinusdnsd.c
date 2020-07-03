@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.112 2020/07/03 17:47:32 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.113 2020/07/03 18:04:46 pjp Exp $
  */
 
 
@@ -184,7 +184,7 @@ void 			setup_master(ddDB *, char **, char *, struct imsgbuf *);
 void			setup_cortex(struct imsgbuf *);
 void 			setup_unixsocket(char *, struct imsgbuf *);
 void 			ddd_signal(int);
-void 			tcploop(struct cfg *, struct imsgbuf *);
+void 			tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 void 			parseloop(struct cfg *, struct imsgbuf *);
 struct imsgbuf * 	register_cortex(struct imsgbuf *, int);
 void			nomore_neurons(struct imsgbuf *);
@@ -1575,6 +1575,12 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		exit(1);
 	}
 
+	udp_ibuf = register_cortex(ibuf, MY_IMSG_UDP);
+	if (udp_ibuf == NULL) {
+		ddd_shutdown();
+		exit(1);
+	}
+
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]) < 0) {
 		dolog(LOG_INFO, "socketpair() failed\n");
 		ddd_shutdown();
@@ -1594,6 +1600,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 					close(cfg->axfr[i]);
 		}
 		close(ibuf->fd);
+		close(udp_ibuf->fd);
 		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
 		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
 		setproctitle("udp parse engine %d", cfg->pid);
@@ -1623,8 +1630,10 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 			ddd_shutdown();
 			exit(1);
 		}
+		close(udp_ibuf->fd);
+		close(pibuf->fd);
 		setproctitle("TCP engine %d", cfg->pid);
-		tcploop(cfg, tcp_ibuf);
+		tcploop(cfg, tcp_ibuf, ibuf);
 		/* NOTREACHED */
 		exit(1);
 	default:
@@ -1634,11 +1643,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		break;
 	}
 
-	udp_ibuf = register_cortex(ibuf, MY_IMSG_UDP);
-	if (udp_ibuf == NULL) {
-		ddd_shutdown();
-		exit(1);
-	}
 
 #if __OpenBSD__
 	if (pledge("stdio inet sendfd recvfd", NULL) < 0) {
@@ -2543,7 +2547,7 @@ master_reload(int sig)
  */
 		
 void
-tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
+tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 {
 	fd_set rset;
 	int sel;
@@ -2629,6 +2633,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf)
 					close(cfg->axfr[i]);
 		}
 		close(ibuf->fd);
+		close(cortex->fd);
 		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
 		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
 		setproctitle("tcp parse engine %d", cfg->pid);
