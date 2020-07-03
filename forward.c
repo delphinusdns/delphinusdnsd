@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.5 2020/07/03 09:04:07 pjp Exp $
+ * $Id: forward.c,v 1.6 2020/07/03 09:14:39 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -210,10 +210,14 @@ insert_forward(int family, struct sockaddr_storage *ip, uint16_t port, char *tsi
 void
 forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf)
 {
-	char *buf;
+	struct timeval tv;
 	struct imsg imsg;
+
+	char *buf;
+
 	int max, sel;
 	int len, need;
+
 	ssize_t n, datalen;
 	fd_set rset;
 
@@ -245,6 +249,14 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf)
 		SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwqp) {
 			if (FD_ISSET(fwq1->so, &rset)) {
 				if (fwq1->istcp) {
+					tv.tv_sec = 2;
+					tv.tv_usec = 0;
+
+					if (setsockopt(fwq1->so, SOL_SOCKET, SO_RCVTIMEO, &tv, 
+							sizeof(tv)) < 0) {
+							goto drop;
+					}
+
 					len = recv(fwq1->so, buf, 2, MSG_WAITALL);
 					if (len <= 0) 
 						goto drop;
