@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.113 2020/07/03 18:04:46 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.114 2020/07/03 18:13:49 pjp Exp $
  */
 
 
@@ -3528,8 +3528,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 					if (datalen < sizeof(struct dns_header)) {
 						/* SEND NAK */
 						pq.rc = PARSE_RETURN_NAK;
-						imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
-						msgbuf_write(&ibuf->w);
+						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
 						msgbuf_write(&mybuf->w);
 						break;
 					}
