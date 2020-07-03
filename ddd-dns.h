@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.17 2020/07/03 06:49:57 pjp Exp $
+ * $Id: ddd-dns.h,v 1.18 2020/07/03 16:16:27 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -291,6 +291,7 @@ struct parsequestion {
 #define PARSE_RETURN_NOQUESTION 3
 #define PARSE_RETURN_NOTAQUESTION 4
 #define PARSE_RETURN_NOTAUTH	5
+#define PARSE_RETURN_NOTAREPLY	6	/* fwdpq */
 	pid_t pid;	/* originating pid */
 };
 	
