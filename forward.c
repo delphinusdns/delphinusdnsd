@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.10 2020/07/04 07:22:58 pjp Exp $
+ * $Id: forward.c,v 1.11 2020/07/04 08:25:28 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -142,6 +142,7 @@ void	returnit(struct cfg *cfg, struct forwardqueue *, char *, int, struct imsgbu
 struct tsig * check_tsig(char *, int, char *);
 void	fwdparseloop(struct imsgbuf *);
 void	changeforwarder(struct forwardqueue *);
+void 	stirforwarders(void);
 
 extern void 	dolog(int, char *, ...);
 extern void     pack16(char *, u_int16_t);
@@ -238,6 +239,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	int len, need;
 	int pi[2];
 	int i;
+	u_int packetcount = 0;
 
 	ssize_t n, datalen;
 	fd_set rset;
@@ -286,6 +288,13 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	}
 	
 	for (;;) {
+		/*
+		 * due to our strategy (which kinda sucks) stir some
+		 * entropy into the active forwarder
+		 */
+		if (packetcount++ && packetcount % 1000 == 0)
+			stirforwarders();
+
 		FD_ZERO(&rset);	
 		FD_SET(ibuf->fd, &rset);
 		if (ibuf->fd > max)
@@ -1473,4 +1482,28 @@ changeforwarder(struct forwardqueue *fwq)
 	}
 
 	return;
+}
+
+void
+stirforwarders(void)
+{
+	int randomforwarder;
+	int count = 0;
+
+	TAILQ_FOREACH(fwp, &forwardhead, forward_entry) {
+		fwp->active = 0;
+		count++;
+	}
+
+	randomforwarder = arc4random() % count;	
+	
+	count = 0;
+	TAILQ_FOREACH(fwp, &forwardhead, forward_entry) {
+		if (randomforwarder == count) {
+			dolog(LOG_INFO, "stirforwarders: %s is now active\n", fwp->name);
+			fwp->active = 1;
+		}
+		
+		count++;
+	}
 }
