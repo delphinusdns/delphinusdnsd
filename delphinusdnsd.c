@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.114 2020/07/03 18:13:49 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.115 2020/07/04 07:22:58 pjp Exp $
  */
 
 
@@ -2128,6 +2128,7 @@ forwardudp:
 						sforward->type = question->hdr->qtype;
 						sforward->class = question->hdr->qclass;
 						sforward->edns0len = question->edns0len;
+						sforward->dnssecok = question->dnssecok;
 
 						if (question->tsig.have_tsig && question->tsig.tsigverified) {
 							sforward->havemac = 1;
@@ -3167,6 +3168,7 @@ forwardtcp:
 						sforward->class = question->hdr->qclass;
 
 						sforward->edns0len = question->edns0len;
+						sforward->dnssecok = question->dnssecok;
 
 						if (question->tsig.have_tsig && question->tsig.tsigverified) {
 							sforward->havemac = 1;

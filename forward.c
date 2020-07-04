@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.9 2020/07/03 17:47:32 pjp Exp $
+ * $Id: forward.c,v 1.10 2020/07/04 07:22:58 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -82,21 +82,21 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-SLIST_HEAD(, forwardentry) forwardhead;
+TAILQ_HEAD(forwardentrys, forwardentry) forwardhead;
 
-static struct forwardentry {
+struct forwardentry {
 	char name[INET6_ADDRSTRLEN];
 	int family;
 	struct sockaddr_storage host;
 	uint16_t destport;
 	char *tsigkey;
 	int active;
-	SLIST_ENTRY(forwardentry) forward_entry;
+	TAILQ_ENTRY(forwardentry) forward_entry;
 } *fw2, *fwp;
 
 SLIST_HEAD(, forwardqueue) fwqhead;
 
-static struct forwardqueue {
+struct forwardqueue {
 	uint32_t longid;			/* a long identifier */
 	time_t time;				/* time created */
 	struct sockaddr_storage host;		/* remote host to query */
@@ -119,6 +119,7 @@ static struct forwardqueue {
 	char oldkeyname[256];			/* old key name */
 	int oldkeynamelen;			/* old key name len */
 	char oldmac[32];			/* old mac */
+	struct forwardentry *cur_forwardentry;	/* current forwardentry */
 	SLIST_ENTRY(forwardqueue) entries;	/* next entry */
 } *fwq1, *fwq2, *fwqp;
 
@@ -140,6 +141,7 @@ void	sendit(struct forwardqueue *, struct sforward *);
 void	returnit(struct cfg *cfg, struct forwardqueue *, char *, int, struct imsgbuf *);
 struct tsig * check_tsig(char *, int, char *);
 void	fwdparseloop(struct imsgbuf *);
+void	changeforwarder(struct forwardqueue *);
 
 extern void 	dolog(int, char *, ...);
 extern void     pack16(char *, u_int16_t);
@@ -163,13 +165,13 @@ extern int dnssec;
 
 
 /*
- * INIT_FORWARD - initialize the forward singly linked list
+ * INIT_FORWARD - initialize the forward linked lists
  */
 
 void
 init_forward(void)
 {
-	SLIST_INIT(&forwardhead);
+	TAILQ_INIT(&forwardhead);
 	SLIST_INIT(&fwqhead);
 	return;
 }
@@ -181,6 +183,8 @@ init_forward(void)
 int
 insert_forward(int family, struct sockaddr_storage *ip, uint16_t port, char *tsigkey)
 {
+	static int active = 0;
+
 	fw2 = calloc(1, sizeof(struct forwardentry));
 	if (fw2 == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
@@ -211,9 +215,12 @@ insert_forward(int family, struct sockaddr_storage *ip, uint16_t port, char *tsi
 		}
 	}
 
-	fw2->active = 1;
+	if (! active)
+		fw2->active = 1;
+
+	active = 1;
 			
-	SLIST_INSERT_HEAD(&forwardhead, fw2, forward_entry);
+	TAILQ_INSERT_HEAD(&forwardhead, fw2, forward_entry);
 
 	return (0);
 }
@@ -443,13 +450,13 @@ forwardthis(int so, struct sforward *sforward)
 	if (fwq1 == NULL) {
 		/* create a new queue and send it */
 
-		SLIST_FOREACH(fw2, &forwardhead, forward_entry) {
+		TAILQ_FOREACH(fw2, &forwardhead, forward_entry) {
 			if (fw2->active == 1)
 				break;
 		}
 
 		if (fw2 == NULL) {
-			SLIST_FOREACH(fwp, &forwardhead, forward_entry) {
+			TAILQ_FOREACH(fwp, &forwardhead, forward_entry) {
 				if (fwp != fw2) {
 					fw2 = fwp;
 					fw2->active = 1;
@@ -485,6 +492,7 @@ forwardthis(int so, struct sforward *sforward)
 		fwq1->oldid = sforward->header.id;
 
 		fwq1->port = fw2->destport;
+		fwq1->cur_forwardentry = fw2;
 		fwq1->longid = arc4random();
 		fwq1->id = fwq1->longid % 0xffff;	
 		fwq1->time = now;
@@ -523,6 +531,9 @@ forwardthis(int so, struct sforward *sforward)
 
 		if (connect(fwq1->so, (struct sockaddr *)&fwq1->host, namelen) < 0) {
 			dolog(LOG_ERR, "FORWARD can't connect: %s\n", strerror(errno));
+
+			changeforwarder(fwq1);
+
 			if (fwq1->tsigkey)
 				free(fwq1->tsigkey);
 
@@ -630,7 +641,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 
 	/* additionals */
 		
-	if (dnssec)
+	if (dnssec && sforward->dnssecok)
 		q->dnssecok = 1;
 
 	outlen = additional_opt(q, packet, 0xffff, len);
@@ -648,9 +659,16 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	
 	if (fwq->istcp == 1) {
 		pack16(buf, htons(len));
-		send(fwq->so, buf, len + 2, 0);
-	} else
-		send(fwq->so, buf, len, 0);
+		if (send(fwq->so, buf, len + 2, 0) < 0) {
+			dolog(LOG_INFO, "send() failed changing forwarder: %s\n", strerror(errno));
+			changeforwarder(fwq);
+		}
+	} else {
+		if (send(fwq->so, buf, len, 0) < 0) {
+			dolog(LOG_INFO, "send() failed (udp) changing forwarder %s\n", strerror(errno));
+			changeforwarder(fwq);
+		}
+	}
 
 	
 	free(buf);
@@ -1435,4 +1453,24 @@ fwdparseloop(struct imsgbuf *ibuf)
 	} /* for(;;) */
 
 	/* NOTREACHED */
+}
+
+void
+changeforwarder(struct forwardqueue *fwq)
+{
+	fw2 = fwq->cur_forwardentry;
+
+	if ((fwp = TAILQ_PREV(fw2, forwardentrys, forward_entry)) == NULL) {
+		if ((fwp = TAILQ_NEXT(fw2, forward_entry)) == NULL) {
+			return;
+		}
+		
+		fw2->active = 0;
+		fwp->active = 1;
+	} else {
+		fw2->active = 0;
+		fwp->active = 1;
+	}
+
+	return;
 }

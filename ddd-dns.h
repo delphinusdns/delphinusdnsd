@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.18 2020/07/03 16:16:27 pjp Exp $
+ * $Id: ddd-dns.h,v 1.19 2020/07/04 07:22:58 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -309,6 +309,7 @@ struct sforward {
 	uint16_t type;
 	uint16_t class;
 	uint16_t edns0len;
+	int dnssecok;
 
 	int havemac;
 	char tsigname[256];
