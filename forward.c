@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.11 2020/07/04 08:25:28 pjp Exp $
+ * $Id: forward.c,v 1.12 2020/07/04 08:44:04 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -196,10 +196,10 @@ insert_forward(int family, struct sockaddr_storage *ip, uint16_t port, char *tsi
 
 	switch (fw2->family) {
 	case AF_INET:
-		inet_ntop(AF_INET, (struct sockaddr_in *)ip, fw2->name, sizeof(fw2->name));
+		inet_ntop(AF_INET, &((struct sockaddr_in *)ip)->sin_addr, fw2->name, sizeof(fw2->name));
 		break;
 	case AF_INET6:
-		inet_ntop(AF_INET6, (struct sockaddr_in6 *)ip, fw2->name, sizeof(fw2->name));
+		inet_ntop(AF_INET6, &((struct sockaddr_in6 *)ip)->sin6_addr, fw2->name, sizeof(fw2->name));
 		break;
 	}
 
@@ -286,7 +286,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		ddd_shutdown();
 		exit(1);
 	}
-	
+
 	for (;;) {
 		/*
 		 * due to our strategy (which kinda sucks) stir some
