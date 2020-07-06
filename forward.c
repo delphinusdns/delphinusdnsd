@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.13 2020/07/06 07:17:40 pjp Exp $
+ * $Id: forward.c,v 1.14 2020/07/06 08:03:34 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -593,7 +593,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 		/* check cache and expire it, then send if it remains */
 		if ((count = expire_rr(db, sforward->buf, sforward->buflen, 
 			ntohs(sforward->type))) != 0) {
-			dolog(LOG_INFO, "expired %d records\n", count);
+			dolog(LOG_INFO, "forwarding cache expired %d records\n", count);
 			goto newqueue;
 		}
 		/* sforward->type is in netbyte order */
