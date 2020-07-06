@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.12 2020/07/04 08:44:04 pjp Exp $
+ * $Id: forward.c,v 1.13 2020/07/06 07:17:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -131,20 +131,22 @@ struct fwdpq {
 	char buf[1];
 };
 
+
 #define	FWDPQHEADER	sizeof(struct fwdpq)
 
 void	init_forward(void);
 int	insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
 void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
-void	forwardthis(int, struct sforward *);
+void	forwardthis(ddDB *, struct cfg *, int, struct sforward *);
 void	sendit(struct forwardqueue *, struct sforward *);
-void	returnit(struct cfg *cfg, struct forwardqueue *, char *, int, struct imsgbuf *);
+void	returnit(ddDB *, struct cfg *, struct forwardqueue *, char *, int, struct imsgbuf *);
 struct tsig * check_tsig(char *, int, char *);
 void	fwdparseloop(struct imsgbuf *);
 void	changeforwarder(struct forwardqueue *);
 void 	stirforwarders(void);
 
 extern void 	dolog(int, char *, ...);
+extern void      pack(char *, char *, int);
 extern void     pack16(char *, u_int16_t);
 extern uint16_t unpack16(char *);
 extern uint32_t unpack32(char *);
@@ -158,11 +160,113 @@ extern char *	dns_label(char *, int *);
 extern int	find_tsig_key(char *, int, char *, int);
 extern int	memcasecmp(u_char *, u_char *, int);
 extern char *	expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
+extern int	expire_rr(ddDB *, char *, int, u_int16_t);
+extern void 	build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, char *);
+extern struct rbtree * Lookup_zone(ddDB *, char *, int, int, int);
+extern struct rbtree *  lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
+extern char *convert_name(char *, int);
 
+extern int 	reply_a(struct sreply *, ddDB *);
+extern int 	reply_aaaa(struct sreply *, ddDB *);
+extern int 	reply_any(struct sreply *, ddDB *);
+extern int 	reply_cname(struct sreply *, ddDB *);
+extern int	reply_notify(struct sreply *, ddDB *);
+extern int 	reply_soa(struct sreply *, ddDB *);
+extern int 	reply_mx(struct sreply *, ddDB *);
+extern int 	reply_naptr(struct sreply *, ddDB *);
+extern int 	reply_ns(struct sreply *, ddDB *);
+extern int 	reply_ptr(struct sreply *, ddDB *);
+extern int 	reply_srv(struct sreply *, ddDB *);
+extern int 	reply_sshfp(struct sreply *, ddDB *);
+extern int 	reply_tlsa(struct sreply *, ddDB *);
+extern int 	reply_txt(struct sreply *, ddDB *);
+extern int      reply_rrsig(struct sreply *, ddDB *);
+extern int	reply_dnskey(struct sreply *, ddDB *);
+extern int	reply_ds(struct sreply *, ddDB *);
+extern int	reply_nsec(struct sreply *, ddDB *);
+extern int	reply_nsec3(struct sreply *, ddDB *);
+extern int	reply_nsec3param(struct sreply *, ddDB *);
+
+/*
+ * XXX everything but txt and naptr, works...
+ */
+
+static struct reply_logic rlogic[] = {
+	/* { DNS_TYPE_A, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname }, */
+	/* { DNS_TYPE_A, DNS_TYPE_NS, BUILD_OTHER, reply_ns }, */
+	{ DNS_TYPE_A, DNS_TYPE_A, BUILD_OTHER, reply_a },
+	/* { DNS_TYPE_AAAA, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname }, */
+	/* { DNS_TYPE_AAAA, DNS_TYPE_NS, BUILD_OTHER, reply_ns }, */
+	{ DNS_TYPE_AAAA, DNS_TYPE_AAAA, BUILD_OTHER, reply_aaaa },
+	{ DNS_TYPE_DNSKEY, DNS_TYPE_DNSKEY, BUILD_OTHER, reply_dnskey },
+	{ DNS_TYPE_SOA, DNS_TYPE_SOA, BUILD_OTHER, reply_soa },
+	{ DNS_TYPE_SOA, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
+	/* { DNS_TYPE_MX, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname }, */
+	/* { DNS_TYPE_MX, DNS_TYPE_NS, BUILD_OTHER, reply_ns }, */
+	{ DNS_TYPE_MX, DNS_TYPE_MX, BUILD_OTHER, reply_mx },
+	/* { DNS_TYPE_TXT, DNS_TYPE_TXT, BUILD_OTHER, reply_txt }, */
+	{ DNS_TYPE_NS, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
+	{ DNS_TYPE_ANY, DNS_TYPE_ANY, BUILD_OTHER, reply_any },
+	{ DNS_TYPE_DS, DNS_TYPE_DS, BUILD_OTHER, reply_ds },
+	{ DNS_TYPE_SSHFP, DNS_TYPE_SSHFP, BUILD_OTHER, reply_sshfp },
+	{ DNS_TYPE_TLSA, DNS_TYPE_TLSA, BUILD_OTHER, reply_tlsa },
+	{ DNS_TYPE_SRV, DNS_TYPE_SRV, BUILD_OTHER, reply_srv },
+	{ DNS_TYPE_CNAME, DNS_TYPE_CNAME, BUILD_OTHER, reply_cname },
+	{ DNS_TYPE_CNAME, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
+	{ DNS_TYPE_NSEC3PARAM, DNS_TYPE_NSEC3PARAM, BUILD_OTHER, reply_nsec3param },
+	/* { DNS_TYPE_PTR, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname }, */
+	/* { DNS_TYPE_PTR, DNS_TYPE_NS, BUILD_OTHER, reply_ns }, */
+	{ DNS_TYPE_PTR, DNS_TYPE_PTR, BUILD_OTHER, reply_ptr },
+	/* { DNS_TYPE_NAPTR, DNS_TYPE_NAPTR, BUILD_OTHER, reply_naptr }, */
+	{ DNS_TYPE_NSEC3, DNS_TYPE_NSEC3, BUILD_OTHER, reply_nsec3 },
+	{ DNS_TYPE_NSEC, DNS_TYPE_NSEC, BUILD_OTHER, reply_nsec },
+	{ DNS_TYPE_RRSIG, DNS_TYPE_RRSIG, BUILD_OTHER, reply_rrsig },
+	{ 0, 0, 0, NULL }
+};
+
+extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
+extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
+
+static struct raxfr_logic supported[] = {
+	{ DNS_TYPE_A, 0, raxfr_a },
+	{ DNS_TYPE_NS, 0, raxfr_ns },
+	{ DNS_TYPE_MX, 0, raxfr_mx },
+	{ DNS_TYPE_PTR, 0, raxfr_ptr },
+	{ DNS_TYPE_AAAA, 0, raxfr_aaaa },
+	{ DNS_TYPE_CNAME, 0, raxfr_cname },
+	{ DNS_TYPE_TXT, 0, raxfr_txt },
+	{ DNS_TYPE_DNSKEY, 1, raxfr_dnskey },
+	{ DNS_TYPE_RRSIG, 1, raxfr_rrsig },
+	{ DNS_TYPE_NSEC3PARAM, 1, raxfr_nsec3param },
+	{ DNS_TYPE_NSEC3, 1, raxfr_nsec3 },
+	{ DNS_TYPE_DS, 1, raxfr_ds },
+	{ DNS_TYPE_SSHFP, 0, raxfr_sshfp },
+	{ DNS_TYPE_TLSA, 0, raxfr_tlsa },
+	{ DNS_TYPE_SRV, 0, raxfr_srv },
+	{ DNS_TYPE_NAPTR, 0, raxfr_naptr },
+	{ 0, 0, NULL }
+};
 
 extern int debug, verbose;
 extern int tsig;
 extern int dnssec;
+extern int cache;
 
 
 /*
@@ -245,7 +349,6 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	fd_set rset;
 	pid_t pid;
 
-	
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &pi[0]) < 0) {
 		dolog(LOG_INFO, "socketpair() failed\n");
 		ddd_shutdown();
@@ -332,13 +435,13 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					if (len <= 0) 
 						goto drop;
 
-					returnit(cfg, fwq1, buf, len, pibuf);
+					returnit(db, cfg, fwq1, buf, len, pibuf);
 				} else {
 					len = recv(fwq1->so, buf, 0xffff, 0);
 					if (len < 0) 
 						goto drop;
 
-					returnit(cfg, fwq1, buf, len, pibuf);
+					returnit(db, cfg, fwq1, buf, len, pibuf);
 				}
 
 drop:
@@ -386,14 +489,14 @@ drop:
 #if DEBUG
 						dolog(LOG_INFO, "received UDP message from mainloop\n");
 #endif
-						forwardthis(-1, (struct sforward *)imsg.data);	
+						forwardthis(db, cfg, -1, (struct sforward *)imsg.data);	
 						break;
 
 					case IMSG_FORWARD_TCP:
 #if DEBUG
 						dolog(LOG_INFO, "received TCP message and descriptor\n");
 #endif
-						forwardthis(imsg.fd, (struct sforward *)imsg.data);
+						forwardthis(db, cfg, imsg.fd, (struct sforward *)imsg.data);
 						break;
 					}
 
@@ -407,12 +510,37 @@ drop:
 }
 
 void
-forwardthis(int so, struct sforward *sforward)
+forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 {
+	struct question *q;
+	struct sreply sreply;
+	struct reply_logic *rl = NULL;
+	struct sockaddr_storage *from = NULL;
+	struct dns_header *dh;
+	struct rbtree *rbt = NULL;
+
+	char buf[512];
+	char replystring[DNS_MAXNAME + 1];
+	static char *replybuf = NULL;
+	int len, slen;
+
+	int fromlen, returnval, lzerrno;
+	int istcp = (so == -1 ? 0 : 1);
+
 	int found = 0;
 	time_t now;
 	char *p;
 	socklen_t namelen;
+
+	if (replybuf == NULL) {
+		replybuf = calloc(1, 0xffff + 2);
+		if (replybuf == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			ddd_shutdown();
+			exit(1);
+		}
+	} else
+		memset(replybuf, 0, 0xffff + 2);
 	
 	now = time(NULL);
 	p = sforward->buf;
@@ -457,7 +585,102 @@ forwardthis(int so, struct sforward *sforward)
 	}
 
 	if (fwq1 == NULL) {
+		int count;
+
+		if (! cache)
+			goto newqueue;
+
+		/* check cache and expire it, then send if it remains */
+		if ((count = expire_rr(db, sforward->buf, sforward->buflen, 
+			ntohs(sforward->type))) != 0) {
+			dolog(LOG_INFO, "expired %d records\n", count);
+			goto newqueue;
+		}
+		/* sforward->type is in netbyte order */
+		if (Lookup_zone(db, sforward->buf, sforward->buflen, 
+			ntohs(sforward->type), 0) != NULL) {
+			/* we have a cache */
+#if DEBUG
+			dolog(LOG_INFO, "replying %s type %d out of the cache\n", convert_name(sforward->buf, sforward->buflen), ntohs(sforward->type));
+#endif
+			/* build a pseudo question packet */
+			dh = (struct dns_header *)&buf[0];
+			pack16((char *)&dh->id, sforward->header.id);
+			p = (char *)&dh[1];
+
+			pack(p, sforward->buf, sforward->buflen);
+			p += sforward->buflen;
+			pack16(p, sforward->type);
+			p += sizeof(uint16_t);
+			pack16(p, htons(DNS_CLASS_IN));
+			p += sizeof(uint16_t);
+
+			len = (p - buf);
+			/* pseudo question packet done */
+
+			switch (sforward->family) {
+			case AF_INET:
+				from = (struct sockaddr_storage *)&sforward->from4;
+				fromlen = sizeof(struct sockaddr_in);
+				break;
+			case AF_INET6:
+				from = (struct sockaddr_storage *)&sforward->from6;
+				fromlen = sizeof(struct sockaddr_in6);
+				break;
+			default:
+				dolog(LOG_INFO, "unknown address family, drop\n");
+				return;
+			}
+			
+			if (sforward->havemac)
+				q = build_fake_question(sforward->buf, sforward->buflen,
+					sforward->type, sforward->tsigname, 
+					sforward->tsignamelen);
+			else
+				q = build_fake_question(sforward->buf, sforward->buflen,
+					sforward->type, NULL, 0);
+		
+
+			if (q == NULL) {
+				dolog(LOG_INFO, "build_fake_question failed\n");
+				goto newqueue;
+			}
+	
+			q->aa = 0;
+			q->rd = 1;
+			
+			rbt = lookup_zone(db, q, &returnval, &lzerrno, (char *)&replystring, sizeof(replystring));
+			if (rbt == NULL) {
+				dolog(LOG_INFO, "lookup_zone failed\n");
+				goto newqueue;
+			}
+			
+			q->edns0len = sforward->edns0len;
+
+			build_reply(&sreply, 
+				(istcp ? so : cfg->dup[sforward->oldsel]),
+				buf, len, q, (struct sockaddr *)from, fromlen, 
+				rbt, NULL, 0xff, istcp, 0, replybuf); 
+
+
+			/* from delphinusdnsd.c */
+			for (rl = &rlogic[0]; rl->rrtype != 0; rl++) {
+			    if (rl->rrtype == ntohs(q->hdr->qtype)) {
+				slen = (*rl->reply)(&sreply, cfg->db);
+				if (slen < 0) {
+					dolog(LOG_INFO, "reply failed\n");
+				}
+				break;
+			    } /* if rl->rrtype == */
+			}
+
+			/* at this point we return everythign is done */
+			return;
+		}
+
 		/* create a new queue and send it */
+
+newqueue:
 
 		TAILQ_FOREACH(fw2, &forwardhead, forward_entry) {
 			if (fw2->active == 1)
@@ -687,7 +910,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 }
 
 void
-returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct imsgbuf *ibuf)
+returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct imsgbuf *ibuf)
 {
 	struct timeval tv;
 	struct dns_header *dh;
@@ -695,23 +918,35 @@ returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct
 	struct question *q;
 	struct fwdpq *fwdpq;
 	struct imsg imsg;
+	struct raxfr_logic *sr;
 
-	char *buf, *p;
+	static char *buf = NULL;
+	char *p;
+	char *estart, *end;
+	char expand[DNS_MAXNAME + 1];
 
-	int so;
+	int so, i, x;
 	int sel;
 	int len = 0;
 	int outlen;
+	uint16_t rrtype;
+	uint16_t rdlen;
+	uint32_t rrttl;
+	int elen;
+	char *pb;
 
 	socklen_t tolen;
 	fd_set rset;
 	ssize_t n, datalen;
 
-	buf = calloc(1, 0xffff + 2);
 	if (buf == NULL) {
-		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-		return;	
-	}
+		buf = calloc(1, 0xffff + 2);
+		if (buf == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			return;	
+		}
+	} else
+		memset(buf, 0, 0xffff + 2);
 
 	if (fwq->istcp == 1) {
 		p = &buf[2];
@@ -724,7 +959,6 @@ returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct
 		
 	if (rlen <= sizeof(struct dns_header)) {
 		dolog(LOG_INFO, "FORWARD returnit, returned packet is too small");	
-		free(buf);
 		return;
 	}
 
@@ -733,28 +967,24 @@ returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct
 	
 	if (! (ntohs(dh->query) & DNS_REPLY)) {
 		dolog(LOG_INFO, "FORWARD returnit, returned packet is not a reply\n");
-		free(buf);
 		return;
 	}
 
 	if (dh->id != htons(fwq->id)) {
 		/* returned packet ID does not match */
 		dolog(LOG_INFO, "FORWARD returnit, returned packet ID does not match %d vs %d\n", ntohs(dh->id), fwq->id);
-		free(buf);
 		return;
 	}
 
 	if (fwq->tsigkey) {
 		if (rlen > 16300) {	/* leave some space for struct */
 			dolog(LOG_INFO, "can't send packet to parser, too big\n");
-			free(buf);
 			return;
 		}
 
 		fwdpq = (struct fwdpq *)calloc(1, rlen + FWDPQHEADER);
 		if (fwdpq == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-			free(buf);
 			return;
 		}
 
@@ -765,7 +995,6 @@ returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct
 		if (imsg_compose(ibuf, IMSG_PARSE_MESSAGE, 0, 0, -1, fwdpq, rlen + FWDPQHEADER) < 0) {
 			dolog(LOG_INFO, "imsg_compose: %s\n", strerror(errno));
 			free(fwdpq);
-			free(buf);
 			return;
 		}
 		msgbuf_write(&ibuf->w);
@@ -781,20 +1010,17 @@ returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct
 		if (sel < 0) {
 			dolog(LOG_ERR, "returnit internal error around select, drop\n");
 			free(fwdpq);
-			free(buf);
 			return;
 		}
 		if (sel == 0) {
 			dolog(LOG_ERR, "returnit internal error around select (timeout), drop\n");
 			free(fwdpq);
-			free(buf);
 			return;
 		}
 
 		if (((n = imsg_read(ibuf)) == -1 && errno != EAGAIN) || n == 0) {
 			dolog(LOG_ERR, "returnit internal error around imsg_read, drop\n");
 			free(fwdpq);
-			free(buf);
 			return;
 		}
 
@@ -802,14 +1028,12 @@ returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct
 			if ((n = imsg_get(ibuf, &imsg)) == -1) {
 					dolog(LOG_ERR, "returnit internal error around imsg_get, drop\n");
 					free(fwdpq);
-					free(buf);
 					return;
 			}
 
 			if (n == 0) {
 					dolog(LOG_ERR, "returnit internal error (n == 0), drop\n");
 					free(fwdpq);
-					free(buf);
 					return;
 			}
 	
@@ -821,7 +1045,6 @@ returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct
 				if (fwdpq->rc != PARSE_RETURN_ACK) {
 					dolog(LOG_ERR, "returnit parser did not ACK this (%d), drop\n", fwdpq->rc);
 					free(fwdpq);
-					free(buf);
 					return;
 				}
 
@@ -836,7 +1059,6 @@ returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct
 		if (fwdpq->tsig.have_tsig && fwdpq->tsig.tsigverified == 0) {
 			dolog(LOG_INFO, "FORWARD returnit, TSIG didn't check out error code = %d\n", stsig->tsigerrorcode);
 			free(fwdpq);
-			free(buf);
 			return;
 		}
 
@@ -848,12 +1070,83 @@ returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct
 
 		free(fwdpq);
 	}
+	
+	/* insert into the cache */
+
+	if (! cache)
+		goto skipcache;
+
+	estart = (char *)&dh[0];
+	end = &p[rlen];
+
+	p = (char *)&dh[1];
+	
+	elen = 0;
+	memset(&expand, 0, sizeof(expand));
+	pb = expand_compression(p, estart, end, (u_char *)&expand, &elen, sizeof(expand));
+	if (pb == NULL) {
+		dolog(LOG_INFO, "expand_compression() failed -2\n");
+		return;
+	}
+	i = (pb - estart);
+	if (i > rlen) {
+		return;
+	}
+
+	rrtype = ntohs(unpack16(pb));
+
+	/* our cache doesn't like ANY questions/replies */
+	if (rrtype == DNS_TYPE_ANY)
+		goto skipcache;
+
+	pb += 4;	/* skip type and class */
+
+	/* we are now at the start of answer */
+	for (x = 0; x < ntohs(dh->answer); x++) {
+		elen = 0;
+		memset(&expand, 0, sizeof(expand));
+		pb = expand_compression(pb, estart, end, (u_char *)&expand, &elen, sizeof(expand));
+		if (pb == NULL) {
+			dolog(LOG_INFO, "expand_compression() failed X\n");
+			return;
+		}
+		i = (pb - estart);
+		if (i > rlen) {
+			return;
+		}
+
+		if (pb + 10 >= end) {
+			dolog(LOG_INFO, "malformed reply, drop\n");
+			return;
+		}
+
+		rrtype = ntohs(unpack16(pb));
+		rrttl = ntohl(unpack32(pb + 4));
+		rdlen = ntohs(unpack16(pb + 8));
+
+		pb += 10;   /* skip answerd */
+
+
+		for (sr = supported; sr->rrtype != 0; sr++) {
+			if (rrtype == sr->rrtype) {
+				if ((*sr->raxfr)(NULL, pb, estart, end, NULL, rdlen, NULL, expand, elen, rrttl, db) < 0) {
+#if DEBUG
+					dolog(LOG_INFO, "error with rrtype %d\n", sr->rrtype);
+#endif
+				}
+			} /* if rrtype */
+		}  /* for (sr .. */
+		
+		pb += rdlen;
+	} /* for (x... */
+
+skipcache:
 
 	/* add new tsig if needed */
 	pack16((char *)&dh->id, fwq->oldid);
 
 	NTOHS(dh->query);
-	dh->query &= ~(DNS_AUTH | DNS_NOTIFY);	/* take AA answers out */
+	dh->query &= ~(DNS_AUTH);		/* take AA answers out */
 	SET_DNS_RECURSION(dh);
 	SET_DNS_RECURSION_AVAIL(dh);
 	HTONS(dh->query);
@@ -863,7 +1156,6 @@ returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct
 
 		if (q == NULL) {
 			dolog(LOG_INFO, "build_fake_question failed\n");
-			free(buf);
 			return;
 		}
 
@@ -914,7 +1206,6 @@ returnit(struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct
 		}
 	}
 
-	free(buf);
 	return;
 }
 

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.38 2020/07/03 06:49:57 pjp Exp $
+ * $Id: ddd-db.h,v 1.39 2020/07/06 07:17:40 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -105,6 +105,7 @@ struct rrsig {
 	u_int16_t signature_len;
 	uint32_t ttl;		/* RFC 4034 section 3, the TTL value of ... */
 	int used;		/* if this RRSIG is used at all */
+	time_t created;		/* when this was added to the cache */
 } __attribute__((packed)); 
 
 #if 0
@@ -306,6 +307,7 @@ struct rr {
 struct rrset {
 	u_int16_t rrtype;
 	u_int32_t ttl;
+	time_t created;
 	TAILQ_ENTRY(rrset) entries;
 	TAILQ_HEAD(rrh, rr) rr_head;
 };
@@ -419,7 +421,25 @@ struct rzone {
 struct raxfr_logic {
 	int rrtype;
 	int dnssec;
-	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
 };
+
+
+/* reply logic */
+
+struct reply_logic {
+	int rrtype;
+	int type0;
+	int buildtype;
+#define BUILD_CNAME	1
+#define BUILD_OTHER	2
+	int (*reply)(struct sreply *, ddDB *);
+};
+
+
+#ifndef MIN
+#define	MIN(a,b)	(((a) < (b))?(a):(b))
+#endif
+
 
 #endif /* _DB_H */

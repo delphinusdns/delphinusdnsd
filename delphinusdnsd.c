@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.115 2020/07/04 07:22:58 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.116 2020/07/06 07:17:40 pjp Exp $
  */
 
 
@@ -173,7 +173,7 @@ extern struct rbtree * 	get_soa(ddDB *, struct question *);
 extern struct rbtree *	get_ns(ddDB *, struct rbtree *, int *);
 
 
-struct question		*convert_question(struct parsequestion *);
+struct question		*convert_question(struct parsequestion *, int);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, char *);
 int 			compress_label(u_char *, u_int16_t, int);
 int			determine_glue(ddDB *db);
@@ -196,14 +196,8 @@ void			nomore_neurons(struct imsgbuf *);
 
 /* structs */
 
-static struct reply_logic {
-	int rrtype;
-	int type0;
-	int buildtype;
-#define BUILD_CNAME	1
-#define BUILD_OTHER	2
-	int (*reply)(struct sreply *, ddDB *);
-} rlogic[] = {
+/* reply_logic is mirrored with forward.c */
+static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_A, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_A, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
 	{ DNS_TYPE_A, DNS_TYPE_A, BUILD_OTHER, reply_a },
@@ -235,6 +229,8 @@ static struct reply_logic {
 	{ DNS_TYPE_RRSIG, DNS_TYPE_RRSIG, BUILD_OTHER, reply_rrsig },
 	{ 0, 0, 0, NULL }
 };
+	
+
 
 TAILQ_HEAD(, tcpentry) tcphead;
 
@@ -279,6 +275,7 @@ int icount = 0;
 int forward = 0;
 int forwardtsig = 0;
 int zonecount = 0;
+int cache = 0;
 u_int16_t port = 53;
 u_int32_t cachesize = 0;
 char *bind_list[255];
@@ -1009,6 +1006,7 @@ main(int argc, char *argv[], char *environ[])
 			}
 
 			cfg->sockcount = i;
+			cfg->db = db;
 
 			setproctitle("FORWARD engine");
 			forwardloop(db, cfg, ibuf, &cortex_ibuf);
@@ -1928,7 +1926,7 @@ axfrentry:
 									}
 								}
 
-								question = convert_question(&pq);
+								question = convert_question(&pq, 1);
 								if (question == NULL) {
 									dolog(LOG_INFO, "on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[i], address);
 									imsg_free(&imsg);
@@ -2969,7 +2967,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 							}
 						}	
 
-						question = convert_question(&pq);
+						question = convert_question(&pq, 1);
 						if (question == NULL) {
 							dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 							imsg_free(&imsg);
@@ -3616,7 +3614,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
  */
  
 struct question	*
-convert_question(struct parsequestion *pq)
+convert_question(struct parsequestion *pq, int authoritative)
 {
 	struct question *q;
 
@@ -3655,6 +3653,7 @@ convert_question(struct parsequestion *pq)
 	q->edns0len = pq->edns0len;
 	q->ednsversion = pq->ednsversion;
 	q->rd = pq->rd;
+	q->aa = authoritative;
 	q->dnssecok = pq->dnssecok;
 	q->badvers = pq->badvers;
 	q->tsig.have_tsig = pq->tsig.have_tsig;

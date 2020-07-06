@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: sign.c,v 1.4 2020/06/25 10:01:11 pjp Exp $
+ * $Id: sign.c,v 1.5 2020/07/06 07:17:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -225,10 +225,10 @@ extern void 	pack(char *, char *, int);
 extern void 	pack32(char *, u_int32_t);
 extern void 	pack16(char *, u_int16_t);
 extern void 	pack8(char *, u_int8_t);
-extern int fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
-extern int fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
-extern int fill_nsec3param(char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
-extern int fill_nsec3(char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
+extern int fill_dnskey(ddDB *,char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
+extern int fill_rrsig(ddDB *,char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
+extern int fill_nsec3param(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
+extern int fill_nsec3(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
 extern char * convert_name(char *name, int namelen);
 
 extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
@@ -849,7 +849,7 @@ add_dnskey(ddDB *db)
 				dolog(LOG_INFO, "get_key: %s\n", knp->keyname);
 				return -1;
 			}
-			if (fill_dnskey(zone, "dnskey", ttl, flags, protocol, algorithm, key) < 0) {
+			if (fill_dnskey(db, zone, "dnskey", ttl, flags, protocol, algorithm, key) < 0) {
 				return -1;
 			}
 		} /* if ZSK */
@@ -862,7 +862,7 @@ add_dnskey(ddDB *db)
 				dolog(LOG_INFO, "get_key %s\n", knp->keyname);
 				return -1;
 			}
-			if (fill_dnskey(zone, "dnskey", ttl, flags, protocol, algorithm, key) < 0) {
+			if (fill_dnskey(db, zone, "dnskey", ttl, flags, protocol, algorithm, key) < 0) {
 				return -1;
 			}
 		} /* if KSK */
@@ -1936,7 +1936,7 @@ sign_soa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "SOA", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "SOA", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -2162,7 +2162,7 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "TXT", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "TXT", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -2391,7 +2391,7 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "AAAA", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "AAAA", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -2587,7 +2587,7 @@ sign_nsec3(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "NSEC3", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "NSEC3", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -2773,7 +2773,7 @@ sign_nsec3param(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int ro
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", 0, "NSEC3PARAM", algorithm, labels, 0, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", 0, "NSEC3PARAM", algorithm, labels, 0, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -2946,7 +2946,7 @@ sign_cname(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "CNAME", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "CNAME", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -3119,7 +3119,7 @@ sign_ptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "PTR", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "PTR", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -3368,7 +3368,7 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "NAPTR", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "NAPTR", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -3605,7 +3605,7 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "SRV", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "SRV", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -3840,7 +3840,7 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "SSHFP", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "SSHFP", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -4078,7 +4078,7 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "TLSA", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "TLSA", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -4312,7 +4312,7 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 	tmp[len] = '\0';
 
-	if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "DS", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+	if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "DS", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 		dolog(LOG_INFO, "fill_rrsig\n");
 		return -1;
 	}
@@ -4541,7 +4541,7 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "NS", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "NS", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -4771,7 +4771,7 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "MX", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "MX", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -5000,7 +5000,7 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", rrset->ttl, "A", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "A", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -5427,7 +5427,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 			len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 			tmp[len] = '\0';
 
-			if (fill_rrsig(rbt->humanname, "RRSIG", ttl, "DNSKEY", algorithm, labels, 		ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			if (fill_rrsig(db, rbt->humanname, "RRSIG", ttl, "DNSKEY", algorithm, labels, 		ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 				dolog(LOG_INFO, "fill_rrsig\n");
 				return -1;
 			}
@@ -5618,7 +5618,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(rbt->humanname, "RRSIG", ttl, "DNSKEY", algorithm, labels, 			ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", ttl, "DNSKEY", algorithm, labels, 			ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
@@ -5981,7 +5981,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 
 	/* fill nsec3param */
 	
-	if (fill_nsec3param(zone, "nsec3param", 0, 1, 0, iterations, salt) < 0) {
+	if (fill_nsec3param(db, zone, "nsec3param", 0, 1, 0, iterations, salt) < 0) {
 		printf("fill_nsec3param failed\n");
 		return -1;
 	}
@@ -6202,7 +6202,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		printf("%s next: %s %s\n", n2->hashname, np->hashname, n2->bitmap);
 #endif
 		snprintf(buf, sizeof(buf), "%s.%s.", n2->hashname, zone);
-		fill_nsec3(buf, "nsec3", ttl, n3p.algorithm, n3p.flags, n3p.iterations, salt, np->hashname, n2->bitmap);
+		fill_nsec3(db, buf, "nsec3", ttl, n3p.algorithm, n3p.flags, n3p.iterations, salt, np->hashname, n2->bitmap);
 	}
 
 #if 0

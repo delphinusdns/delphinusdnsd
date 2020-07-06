@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.101 2020/07/03 06:49:57 pjp Exp $
+ * $Id: parse.y,v 1.102 2020/07/06 07:17:40 pjp Exp $
  */
 
 %{
@@ -114,6 +114,7 @@ extern int errno;
 extern int debug;
 extern int forward;
 extern int forwardtsig;
+extern int cache;
 extern int zonecount;
 extern int verbose;
 extern int bflag;
@@ -204,24 +205,24 @@ int raxfrflag = 0;
 int tcpanyonly = 0;
 
 char 		*check_rr(char *, char *, int, int *);
-int 		fill_a(char *, char *, int, char *);
-int 		fill_aaaa(char *, char *, int, char *);
-int 		fill_ptr(char *, char *, int, char *);
-int 		fill_cname(char *, char *, int, char *);
-int 		fill_mx(char *, char *, int, int, char *);
-int 		fill_naptr(char *, char *, int, int, int, char *, char *, char *, char *);
-int 		fill_ns(char *, char *, int, char *);
-int 		fill_soa(char *, char *, int, char *, char *, int, int, int, int, int);
-int 		fill_sshfp(char *, char *, int, int, int, char *);
-int 		fill_srv(char *, char *, int, int, int, int, char *);
-int 		fill_tlsa(char *, char *,int, uint8_t, uint8_t, uint8_t, char *);
-int 		fill_txt(char *, char *, int, char *);
-int		fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
-int		fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
-int 		fill_nsec(char *, char *, u_int32_t, char *, char *);
-int		fill_nsec3param(char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
-int		fill_nsec3(char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
-int		fill_ds(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
+int 		fill_a(ddDB *, char *, char *, int, char *);
+int 		fill_aaaa(ddDB *, char *, char *, int, char *);
+int 		fill_ptr(ddDB *, char *, char *, int, char *);
+int 		fill_cname(ddDB *, char *, char *, int, char *);
+int 		fill_mx(ddDB *, char *, char *, int, int, char *);
+int 		fill_naptr(ddDB *, char *, char *, int, int, int, char *, char *, char *, char *);
+int 		fill_ns(ddDB *, char *, char *, int, char *);
+int 		fill_soa(ddDB *, char *, char *, int, char *, char *, int, int, int, int, int);
+int 		fill_sshfp(ddDB *, char *, char *, int, int, int, char *);
+int 		fill_srv(ddDB *, char *, char *, int, int, int, int, char *);
+int 		fill_tlsa(ddDB *, char *, char *,int, uint8_t, uint8_t, uint8_t, char *);
+int 		fill_txt(ddDB *, char *, char *, int, char *);
+int		fill_dnskey(ddDB *, char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
+int		fill_rrsig(ddDB *, char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
+int 		fill_nsec(ddDB *, char *, char *, u_int32_t, char *, char *);
+int		fill_nsec3param(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
+int		fill_nsec3(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
+int		fill_ds(ddDB *, char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
 
 void		create_nsec_bitmap(char *, char *, int *);
 int             findeol(void);
@@ -253,7 +254,7 @@ int 		drop_privs(char *, struct passwd *);
 %token ERROR AXFRPORT OPTIONS FILTER MZONE
 %token WHITELIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
-%token INCOMINGTSIG DESTINATION
+%token INCOMINGTSIG DESTINATION CACHE
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -264,6 +265,7 @@ int 		drop_privs(char *, struct passwd *);
 %token <v.string> QUOTEDSTRING
 %token <v.string> DESTINATION
 %token <v.string> INCOMINGTSIG
+%token <v.string> CACHE
 
 %token <v.intval> NUMBER
 
@@ -831,7 +833,7 @@ zonestatement:
 		STRING COMMA STRING COMMA NUMBER COMMA STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER CRLF 
 		{
 			if (strcasecmp($3, "soa") == 0) {
-				if (fill_soa($1, $3, $5, $7, $9, $11, $13, $15, $17, $19) < 0) {
+				if (fill_soa(mydb, $1, $3, $5, $7, $9, $11, $13, $15, $17, $19) < 0) {
 					return -1;
 				}
 
@@ -855,7 +857,7 @@ zonestatement:
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING CRLF
 		{
 			if (strcasecmp($3, "sshfp") == 0) { 
-				if (fill_sshfp($1, $3, $5, $7, $9, $11) < 0) {
+				if (fill_sshfp(mydb, $1, $3, $5, $7, $9, $11) < 0) {
 					return -1;
 				}
 
@@ -873,7 +875,7 @@ zonestatement:
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA STRING CRLF
 		{
 			if (strcasecmp($3, "srv") == 0) { 
-				if (fill_srv($1, $3, $5, $7, $9, $11, $13) < 0) {
+				if (fill_srv(mydb, $1, $3, $5, $7, $9, $11, $13) < 0) {
 					return -1;
 				}
 #if DEBUG
@@ -896,7 +898,7 @@ zonestatement:
 			if (strcasecmp($3, "ns") == 0 || 
 				strcasecmp($3, "delegate") == 0 ||
 				strcasecmp($3, "hint") == 0) {
-				if (fill_ns($1, $3, $5, $7) < 0) {
+				if (fill_ns(mydb, $1, $3, $5, $7) < 0) {
 					return -1;
 				}
 
@@ -906,7 +908,7 @@ zonestatement:
 #endif
 
 			} else if (strcasecmp($3, "ptr") == 0) {
-				if (fill_ptr($1, $3, $5, $7) < 0) {
+				if (fill_ptr(mydb, $1, $3, $5, $7) < 0) {
 					return -1;
 				}
 
@@ -916,7 +918,7 @@ zonestatement:
 #endif
 
 			} else if (strcasecmp($3, "cname") == 0) {
-				if (fill_cname($1, $3, $5, $7) < 0) {
+				if (fill_cname(mydb, $1, $3, $5, $7) < 0) {
 					return -1;
 				}
 
@@ -938,7 +940,7 @@ zonestatement:
 		|
 		STRING COMMA STRING COMMA NUMBER COMMA IPV6 CRLF {
 			if (strcasecmp($3, "aaaa") == 0) {
-				if (fill_aaaa($1, $3, $5, $7) < 0) {
+				if (fill_aaaa(mydb, $1, $3, $5, $7) < 0) {
 					return -1;
 				}
 
@@ -960,7 +962,7 @@ zonestatement:
 		STRING COMMA STRING COMMA NUMBER COMMA IP CRLF 
 		{
 			if (strcasecmp($3, "a") == 0) { 
-				if (fill_a($1, $3, $5, $7) < 0) {
+				if (fill_a(mydb, $1, $3, $5, $7) < 0) {
 					return -1;
 				}
 
@@ -983,7 +985,7 @@ zonestatement:
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA STRING CRLF
 		{
 			if (strcasecmp($3, "mx") == 0) { 
-				if (fill_mx($1, $3, $5, $7, $9) < 0) {
+				if (fill_mx(mydb, $1, $3, $5, $7, $9) < 0) {
 					return -1;
 				}
 
@@ -1006,7 +1008,7 @@ zonestatement:
 		STRING COMMA STRING COMMA NUMBER COMMA QUOTEDSTRING CRLF
 		{
 			if (strcasecmp($3, "txt") == 0) {
-				if (fill_txt($1, $3, $5, $7) < 0) {	
+				if (fill_txt(mydb, $1, $3, $5, $7) < 0) {	
 					return -1;
 				}
 
@@ -1028,7 +1030,7 @@ zonestatement:
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING COMMA QUOTEDSTRING COMMA QUOTEDSTRING COMMA STRING CRLF
 		{
 			if (strcasecmp($3, "naptr") == 0) {
-				if (fill_naptr($1, $3, $5, $7, $9, $11, $13, $15, $17) < 0) {	
+				if (fill_naptr(mydb, $1, $3, $5, $7, $9, $11, $13, $15, $17) < 0) {	
 					return -1;
 				}
 
@@ -1057,7 +1059,7 @@ zonestatement:
 			}
 
 			if (strcasecmp($3, "dnskey") == 0) {
-				if (fill_dnskey($1, $3, $5, $7, $9, $11, $13) < 0) {	
+				if (fill_dnskey(mydb, $1, $3, $5, $7, $9, $11, $13) < 0) {	
 					return -1;
 				}
 
@@ -1066,7 +1068,7 @@ zonestatement:
 					printf(" %s DNSKEY\n", $1);
 #endif
 			} else if (strcasecmp($3, "ds") == 0) {
-				if (fill_ds($1, $3, $5, $7, $9, $11, $13) < 0) {
+				if (fill_ds(mydb, $1, $3, $5, $7, $9, $11, $13) < 0) {
 					return -1;
 				}
 #if DEBUG
@@ -1074,7 +1076,7 @@ zonestatement:
 					printf(" %s DS\n", $1);
 #endif
 			} else if (strcasecmp($3, "nsec3param") == 0) {
-				if (fill_nsec3param($1, $3, $5, $7, $9, $11, $13) < 0) {
+				if (fill_nsec3param(mydb, $1, $3, $5, $7, $9, $11, $13) < 0) {
 					return -1;
 				}
 #if DEBUG
@@ -1082,7 +1084,7 @@ zonestatement:
 					printf(" %s NSEC3PARAM\n", $1);
 #endif
 			} else if (strcasecmp($3, "tlsa") == 0) {
-				if (fill_tlsa($1, $3, $5, $7, $9, $11, $13) < 0) {
+				if (fill_tlsa(mydb, $1, $3, $5, $7, $9, $11, $13) < 0) {
 					return -1;
 				}
 #if DEBUG
@@ -1107,7 +1109,7 @@ zonestatement:
 					dolog(LOG_INFO, "WARNING DNSSEC RRSIG RR but no dnssec enabled!\n");
 				}
 
-				if (fill_rrsig($1, $3, $5, $7, $9, $11, $13, $15, $17, $19, $21, $23) < 0) {	
+				if (fill_rrsig(mydb, $1, $3, $5, $7, $9, $11, $13, $15, $17, $19, $21, $23) < 0) {	
 					fprintf(stderr, "fill_rrsig failed\n");
 					return -1;
 				}
@@ -1136,7 +1138,7 @@ zonestatement:
 					dolog(LOG_INFO, "WARNING DNSSEC NSEC RR but no dnssec enabled!\n");
 				}
 
-				if (fill_nsec($1, $3, $5, $7, $9) < 0) {
+				if (fill_nsec(mydb, $1, $3, $5, $7, $9) < 0) {
 					return -1;
 				}
 
@@ -1163,7 +1165,7 @@ zonestatement:
 					dolog(LOG_INFO, "WARNING DNSSEC NSEC3 RR but no dnssec enabled!\n");
 				}
 
-				if (fill_nsec3($1, $3, $5, $7, $9, $11, $13, $15, $17) < 0) {
+				if (fill_nsec3(mydb, $1, $3, $5, $7, $9, $11, $13, $15, $17) < 0) {
 					return -1;
 				}
 
@@ -1466,6 +1468,16 @@ forwardstatement	:	INCOMINGTSIG STRING SEMICOLON CRLF
 				free($5);
 				free($6);
 			}
+			| CACHE STRING SEMICOLON CRLF
+			{
+				if (strcmp($2, "yes") == 0 ||
+					strcmp($2, "on") == 0)
+
+					cache = 1;
+
+	
+				free ($2);
+			}
 			| comment CRLF
 			;	
 
@@ -1649,6 +1661,7 @@ struct tab {
 struct tab cmdtab[] = {
 	{ "axfrport", AXFRPORT, 0},
 	{ "axfr-for", AXFRFOR, STATE_IP },
+	{ "cache", CACHE, 0 },
 	{ "destination", DESTINATION, 0 },
 	{ "filter", FILTER, STATE_IP },
 	{ "forward", FORWARD, 0 },
@@ -2144,9 +2157,8 @@ check_rr(char *domainname, char *mytype, int itype, int *converted_namelen)
 }
 
 int
-fill_cname(char *name, char *type, int myttl, char *hostname)
+fill_cname(ddDB *db, char *name, char *type, int myttl, char *hostname)
 {
-	ddDB *db = mydb;
 	struct rbtree *rbt;
 	struct cname *cname;
 	char *myname, *converted_name;
@@ -2199,9 +2211,8 @@ fill_cname(char *name, char *type, int myttl, char *hostname)
 }
 
 int
-fill_ptr(char *name, char *type, int myttl, char *hostname)
+fill_ptr(ddDB *db, char *name, char *type, int myttl, char *hostname)
 {
-	ddDB *db = mydb;
 	struct ptr *ptr;
 	struct rbtree *rbt;
 	int len, converted_namelen;
@@ -2255,9 +2266,8 @@ fill_ptr(char *name, char *type, int myttl, char *hostname)
 
 /* first two dnssec RRs! */
 int		
-fill_dnskey(char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t protocol, u_int8_t algorithm, char *pubkey)
+fill_dnskey(ddDB *db, char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t protocol, u_int8_t algorithm, char *pubkey)
 {
-	ddDB *db = mydb;
 	struct dnskey *dnskey;
 	struct rbtree *rbt;
 	int converted_namelen;
@@ -2307,9 +2317,8 @@ fill_dnskey(char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t p
 }
 
 int
-fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t algorithm, u_int8_t labels, u_int32_t original_ttl, u_int64_t sig_expiration, u_int64_t sig_inception, u_int16_t keytag, char *signers_name, char *signature)
+fill_rrsig(ddDB *db, char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t algorithm, u_int8_t labels, u_int32_t original_ttl, u_int64_t sig_expiration, u_int64_t sig_inception, u_int16_t keytag, char *signers_name, char *signature)
 {
-	ddDB *db = mydb;
 	ddDBT key, data;
 	struct rbtree *rbt;
 	struct rrsig *rrsig;
@@ -2424,9 +2433,8 @@ fill_rrsig(char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t 
 }
 
 int
-fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algorithm, u_int8_t digesttype, char *digest)
+fill_ds(ddDB *db, char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algorithm, u_int8_t digesttype, char *digest)
 {
-	ddDB *db = mydb;
 	struct rbtree *rbt;
 	struct ds *ds;
 	int converted_namelen;
@@ -2471,9 +2479,8 @@ fill_ds(char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algo
 }
 
 int
-fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt, char *nextname, char *bitmap)
+fill_nsec3(ddDB *db, char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt, char *nextname, char *bitmap)
 {
-	ddDB *db = mydb;
 	struct nsec3 *nsec3;
 	struct rbtree *rbt;
 	int i;
@@ -2546,9 +2553,8 @@ fill_nsec3(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t
 }
 
 int
-fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt)
+fill_nsec3param(ddDB *db, char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt)
 {
-	ddDB *db = mydb;
 	struct rbtree *rbt;
 	struct nsec3param *nsec3param;
 	int i;
@@ -2591,9 +2597,8 @@ fill_nsec3param(char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_i
 }
 
 int
-fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitmap)
+fill_nsec(ddDB *db, char *name, char *type, u_int32_t myttl, char *domainname, char *bitmap)
 {
-	ddDB *db = mydb;
 	struct nsec *nsec;
 	struct rbtree *rbt;
 	int converted_namelen, converted_domainnamelen;
@@ -2647,9 +2652,8 @@ fill_nsec(char *name, char *type, u_int32_t myttl, char *domainname, char *bitma
 
 
 int
-fill_naptr(char *name, char *type, int myttl, int order, int preference, char *flags, char *services, char *regexp, char *replacement)
+fill_naptr(ddDB *db, char *name, char *type, int myttl, int order, int preference, char *flags, char *services, char *regexp, char *replacement)
 {
-	ddDB *db = mydb;
 	struct rbtree *rbt;
 	struct naptr *naptr;
 	int converted_namelen;
@@ -2719,9 +2723,8 @@ fill_naptr(char *name, char *type, int myttl, int order, int preference, char *f
 }
 
 int
-fill_txt(char *name, char *type, int myttl, char *msg)
+fill_txt(ddDB *db, char *name, char *type, int myttl, char *msg)
 {
-	ddDB *db = mydb;
 	struct rbtree *rbt;
 	struct txt *txt;
 	int converted_namelen;
@@ -2792,9 +2795,8 @@ fill_txt(char *name, char *type, int myttl, char *msg)
 }
 
 int
-fill_tlsa(char *name, char *type, int myttl, uint8_t usage, uint8_t selector, uint8_t matchtype, char *data)
+fill_tlsa(ddDB *db, char *name, char *type, int myttl, uint8_t usage, uint8_t selector, uint8_t matchtype, char *data)
 {
-	ddDB *db = mydb;
 	struct rbtree *rbt;
 	struct tlsa *tlsa;
 	int converted_namelen;
@@ -2859,9 +2861,8 @@ fill_tlsa(char *name, char *type, int myttl, uint8_t usage, uint8_t selector, ui
 }
 
 int
-fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerprint)
+fill_sshfp(ddDB *db, char *name, char *type, int myttl, int alg, int fptype, char *fingerprint)
 {
-	ddDB *db = mydb;
 	struct sshfp *sshfp;
 	struct rbtree *rbt;
 	int converted_namelen;
@@ -2919,9 +2920,8 @@ fill_sshfp(char *name, char *type, int myttl, int alg, int fptype, char *fingerp
 }
 
 int
-fill_srv(char *name, char *type, int myttl, int priority, int weight, int port, char *srvhost)
+fill_srv(ddDB *db, char *name, char *type, int myttl, int priority, int weight, int port, char *srvhost)
 {
-	ddDB *db = mydb;
 	struct srv *srv;
 	struct rbtree *rbt;
 	int converted_namelen;
@@ -2978,9 +2978,8 @@ fill_srv(char *name, char *type, int myttl, int priority, int weight, int port, 
 }
 
 int
-fill_mx(char *name, char *type, int myttl, int priority, char *mxhost)
+fill_mx(ddDB *db, char *name, char *type, int myttl, int priority, char *mxhost)
 {
-	ddDB *db = mydb;
 	struct smx *mx;	
 	struct rbtree *rbt;
 	int converted_namelen;
@@ -3030,9 +3029,8 @@ fill_mx(char *name, char *type, int myttl, int priority, char *mxhost)
 }
 
 int
-fill_a(char *name, char *type, int myttl, char *a)
+fill_a(ddDB *db, char *name, char *type, int myttl, char *a)
 {
-	ddDB *db = mydb;
 	struct a *sa;
 	struct rbtree *rbt;
 	int converted_namelen;
@@ -3077,9 +3075,8 @@ fill_a(char *name, char *type, int myttl, char *a)
 
 
 int
-fill_aaaa(char *name, char *type, int myttl, char *aaaa)
+fill_aaaa(ddDB *db, char *name, char *type, int myttl, char *aaaa)
 {
-	ddDB *db = mydb;
 	struct aaaa *saaaa;
 	struct rbtree *rbt;
 	int converted_namelen;
@@ -3125,9 +3122,8 @@ fill_aaaa(char *name, char *type, int myttl, char *aaaa)
 
 
 int
-fill_ns(char *name, char *type, int myttl, char *nameserver)
+fill_ns(ddDB *db, char *name, char *type, int myttl, char *nameserver)
 {
-	ddDB *db = mydb;
 	struct ns *ns;
 	struct rbtree *rbt;
 	int len, converted_namelen;
@@ -3212,9 +3208,8 @@ fill_ns(char *name, char *type, int myttl, char *nameserver)
 }
 
 int
-fill_soa(char *name, char *type, int myttl, char *auth, char *contact, int serial, int refresh, int retry, int expire, int ttl)
+fill_soa(ddDB *db, char *name, char *type, int myttl, char *auth, char *contact, int serial, int refresh, int retry, int expire, int ttl)
 {
-	ddDB *db = mydb;
 	struct rbtree *rbt;
 	struct soa *soa;
 	int len, converted_namelen;

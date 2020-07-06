@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.18 2020/05/07 12:17:35 pjp Exp $
+ * $Id: db.c,v 1.19 2020/07/06 07:17:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -42,6 +42,7 @@
 #include <string.h>
 #include <errno.h>
 #include <time.h>
+#include <syslog.h>
 
 #ifdef __linux__
 #include <grp.h>
@@ -69,6 +70,7 @@ int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdat
 int display_rr(struct rrset *rrset);
 int rotate_rr(struct rrset *rrset);
 void flag_rr(struct rbtree *rbt);
+int expire_rr(ddDB *, char *, int, u_int16_t);
 
 extern void      dolog(int, char *, ...);
 
@@ -200,6 +202,7 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl)
 		humanname = convert_name(name, len);
 		strlcpy(rbt->humanname, humanname, sizeof(rbt->humanname));
 		rbt->flags &= ~RBT_DNSSEC;	 /* by default not dnssec'ed */
+
 		TAILQ_INIT(&rbt->rrset_head);
 	}
 	
@@ -219,10 +222,13 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl)
 		else
 			rrset->ttl = 0;		/* fill in later */
 
+		rrset->created = time(NULL);
+
 		TAILQ_INIT(&rrset->rr_head);
 
 		TAILQ_INSERT_TAIL(&rbt->rrset_head, rrset, entries);
-	}
+	} else
+		rrset->created = time(NULL);
 
 
 	/* save this new rbtree (it changed) */
@@ -251,9 +257,12 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl)
 	myrr->rdata = rdata;
 	myrr->changed = time(NULL);
 
+	rrset->ttl = ttl;
+
 	if (type == DNS_TYPE_RRSIG) {
 		struct rrsig *rrsig = (struct rrsig *)rdata;
 		rrsig->ttl = ttl;
+		rrsig->created = time(NULL);
 	}
 
 	TAILQ_INSERT_TAIL(&rrset->rr_head, myrr, entries);
@@ -331,10 +340,69 @@ add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata)
 	return 0;
 }
 
+int
+expire_rr(ddDB *db, char *name, int len, u_int16_t rrtype)
+{
+	struct rbtree *rbt = NULL;
+	struct rrset *rp;
+	struct rr *rt = NULL, *rt1 = NULL, *rt2 = NULL;
+	time_t now;
+	int count = 0;
+
+	now = time(NULL);
+	
+	rbt = find_rrset(db, name, len);
+	if (rbt == NULL) {
+		return 0;	
+	}
+
+	rp = find_rr(rbt, rrtype);
+	if (rp == NULL) {
+		return 0;
+	}
+
+	rt = TAILQ_FIRST(&rp->rr_head);
+	if (rt == NULL)
+		return 0;
+
+	/* expire these */
+	if (rrtype != DNS_TYPE_RRSIG) {
+		if (difftime(now, rp->created) >= rp->ttl) {
+			count = 0;
+			TAILQ_FOREACH_SAFE(rt1, &rp->rr_head, entries, rt2) {
+				TAILQ_REMOVE(&rp->rr_head, rt1, entries);
+				free(rt1->rdata);
+				free(rt1);
+				count++;		
+			}
+
+			return (count);
+		}
+	} else {
+		struct rrsig *rrsig = (struct rrsig *)rt->rdata;
+
+		if (difftime(now, rrsig->created) >= rrsig->ttl) {
+			count = 0;
+			TAILQ_FOREACH_SAFE(rt1, &rp->rr_head, entries, rt2) {
+				TAILQ_REMOVE(&rp->rr_head, rt1, entries);
+				free(rt1->rdata);
+				free(rt1);
+				count++;
+			}
+			return (count);
+		}
+	}
+
+	return 0;
+}
+
 struct rrset *
 find_rr(struct rbtree *rbt, u_int16_t rrtype)
 {
 	struct rrset *rp = NULL, *rp0 = NULL;
+
+	if (TAILQ_EMPTY(&rbt->rrset_head))
+		return NULL;
 
 	TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
 		if (rrtype == rp->rrtype)

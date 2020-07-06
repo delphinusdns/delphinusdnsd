@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.36 2020/07/03 06:49:57 pjp Exp $
+ * $Id: additional.c,v 1.37 2020/07/06 07:17:40 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -74,9 +74,9 @@ int additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_ds(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_opt(struct question *, char *, int, int);
 int additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
-int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *);
-int additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int *);
-int additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *);
+int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int);
+int additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int *, int);
+int additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *);
 
 extern void 	pack(char *, char *, int);
@@ -677,7 +677,7 @@ out:
  */
 
 int 
-additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count)
+additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count, int authoritative)
 {
 	struct answer {
 		u_int16_t type;
@@ -699,6 +699,9 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 	struct rr *rrp = NULL;
 	int tmplen, rroffset;
 	int rrsig_count = 0;
+	time_t now;
+
+	now = time(NULL);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) == NULL)
 		return 0;
@@ -728,7 +731,12 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 		answer = (struct answer *)&reply[offset];
 		answer->type = htons(DNS_TYPE_RRSIG);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(((struct rrsig *)rrp->rdata)->ttl);
+
+		if (authoritative)
+			answer->ttl = htonl(((struct rrsig *)rrp->rdata)->ttl);
+		else
+			answer->ttl = htonl(((struct rrsig *)rrp->rdata)->ttl - (MIN(((struct rrsig *)rrp->rdata)->ttl , difftime(now, ((struct rrsig *)rrp->rdata)->created))));
+
 		answer->type_covered = htons(((struct rrsig *)rrp->rdata)->type_covered);
 		answer->algorithm = ((struct rrsig *)rrp->rdata)->algorithm;
 		answer->labels = ((struct rrsig *)rrp->rdata)->labels;
@@ -769,7 +777,7 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
  */
 
 int 
-additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count)
+additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count, int authoritative)
 {
 	struct answer {
 		u_int16_t type;
@@ -783,6 +791,9 @@ additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *
 	struct rr *rrp = NULL;
 	int tmplen, rroffset;
 	int retcount;
+	time_t now;
+
+	now = time(NULL);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) == NULL)
 		goto out;
@@ -812,7 +823,11 @@ additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *
 	answer = (struct answer *)&reply[offset];
 	answer->type = htons(DNS_TYPE_NSEC);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(rrset->ttl);
+	if (authoritative)
+		answer->ttl = htonl(rrset->ttl);
+	else
+		answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
 	answer->rdlength = htons(((struct nsec *)rrp->rdata)->ndn_len + 
 			((struct nsec *)rrp->rdata)->bitmap_len);
 	
@@ -827,7 +842,7 @@ additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *
 			((struct nsec *)rrp->rdata)->bitmap_len);
 	offset += ((struct nsec *)rrp->rdata)->bitmap_len;
 
-	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC, rbt, reply, replylen, offset, &retcount);
+	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC, rbt, reply, replylen, offset, &retcount, authoritative);
 
 	if (tmplen == 0) {
 		goto out;
@@ -848,7 +863,7 @@ out:
  */
 
 int 
-additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count)
+additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count, int authoritative)
 {
 	struct answer {
 		u_int16_t type;
@@ -868,6 +883,9 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 	int tmplen, rroffset;
 	u_int8_t *somelen;
 	int retcount;
+	time_t now;
+
+	now = time(NULL);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) == NULL)
 		goto out;
@@ -897,7 +915,12 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 	answer = (struct answer *)&reply[offset];
 	answer->type = htons(DNS_TYPE_NSEC3);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(rrset->ttl);
+
+	if (authoritative)
+		answer->ttl = htonl(rrset->ttl);
+	else
+		answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
 	answer->rdlength = htons(6 + ((struct nsec3 *)rrp->rdata)->saltlen + 
 			((struct nsec3 *)rrp->rdata)->nextlen + 
 			((struct nsec3 *)rrp->rdata)->bitmap_len);
@@ -928,7 +951,7 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 			((struct nsec3 *)rrp->rdata)->bitmap_len);
 	offset += ((struct nsec3 *)rrp->rdata)->bitmap_len;
 
-	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, rbt, reply, replylen, offset, &retcount);
+	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, rbt, reply, replylen, offset, &retcount, authoritative);
 
 	if (tmplen == 0) {
 		return 0;

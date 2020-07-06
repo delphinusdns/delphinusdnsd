@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.19 2020/07/04 07:22:58 pjp Exp $
+ * $Id: ddd-dns.h,v 1.20 2020/07/06 07:17:40 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -264,6 +264,7 @@ struct question {
 	char *converted_name;
 	u_int16_t edns0len;
 	u_int8_t ednsversion;
+	int aa;
 	int rd;
 	int dnssecok;
 	int badvers;
@@ -319,7 +320,6 @@ struct sforward {
 	char mac[32];
 };
 
-	
 	
 
 #endif /* DNS_H */
