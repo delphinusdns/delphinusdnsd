@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.53 2020/07/06 07:17:40 pjp Exp $
+ * $Id: raxfr.c,v 1.54 2020/07/07 14:22:38 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -719,7 +719,8 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 		}
 	} else {
 		fill_mx(db, convert_name(name, namelen), "mx", dnsttl,
-			mxpriority, (*humanname == '\0' ? "." : humanname));
+			ntohs(mxpriority), 
+			(*humanname == '\0' ? "." : humanname));
 	}
 
 	free(humanname);
@@ -1504,7 +1505,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 			}
 			if (n == 0) {
 				/* child died? */
-				dolog(LOG_INFO, "sigpipe on child?  exiting.\n");
+				dolog(LOG_INFO, "sigpipe on child?  raxfr process exiting.\n");
 				continue;
 			}
 
