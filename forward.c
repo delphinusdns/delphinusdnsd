@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.15 2020/07/08 12:29:02 pjp Exp $
+ * $Id: forward.c,v 1.16 2020/07/08 17:33:28 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -126,6 +126,7 @@ struct forwardqueue {
 
 struct fwdpq {
 	int rc;
+	int istcp;
 	int cache;
 	int tsigcheck;
 	struct tsig tsig;
@@ -435,6 +436,8 @@ drop:
 
 				SLIST_REMOVE(&fwqhead, fwq1, forwardqueue, entries);
 				close(fwq1->so);
+				fwq1->so = -1;
+
 				if (fwq1->returnso != -1)
 					close(fwq2->returnso);
 				
@@ -518,6 +521,13 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	time_t now;
 	char *p;
 	socklen_t namelen;
+	time_t highexpire;
+
+#if __OpenBSD__
+	highexpire = 67768036191673199;
+#else
+	highexpire = 2147483647;
+#endif
 
 	if (replybuf == NULL) {
 		replybuf = calloc(1, 0xffff + 2);
@@ -535,9 +545,13 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwq2) {
 		if (difftime(now, fwq1->time) > 15) {
 			SLIST_REMOVE(&fwqhead, fwq1, forwardqueue, entries);
-			if (fwq1->returnso != -1)
+			if (fwq1->returnso != -1) {
 				close(fwq1->returnso);
-			close(fwq1->so);
+				fwq1->returnso = -1;
+			}
+			if (fwq1->so != -1)
+				close(fwq1->so);
+
 			if (fwq1->tsigkey)
 				free(fwq1->tsigkey);
 			free(fwq1);
@@ -657,12 +671,24 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 			    if (rl->rrtype == ntohs(q->hdr->qtype)) {
 				slen = (*rl->reply)(&sreply, cfg->db);
 				if (slen < 0) {
+					/*
+					 * we may have a non-dnssec answer cached without RRSIG
+					 * at this point the rl->reply will fail.. expire it
+					 * and fill it with dnssec data if available
+					 */
+					if (q->dnssecok == 1) {
+						expire_rr(db, q->hdr->name, q->hdr->namelen, 
+							ntohs(q->hdr->qtype), highexpire);
+						free_question(q);
+						goto newqueue;
+					}
 					dolog(LOG_INFO, "reply failed\n");
 				}
 				break;
 			    } /* if rl->rrtype == */
 			}
 
+			free_question(q);
 			/* at this point we return everythign is done */
 			return;
 		}
@@ -881,12 +907,12 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	
 	if (fwq->istcp == 1) {
 		pack16(buf, htons(len));
-		if (send(fwq->so, buf, len + 2, 0) < 0) {
+		if (fwq->so != -1 && send(fwq->so, buf, len + 2, 0) < 0) {
 			dolog(LOG_INFO, "send() failed changing forwarder: %s\n", strerror(errno));
 			changeforwarder(fwq);
 		}
 	} else {
-		if (send(fwq->so, buf, len, 0) < 0) {
+		if (fwq->so != -1 && send(fwq->so, buf, len, 0) < 0) {
 			dolog(LOG_INFO, "send() failed (udp) changing forwarder %s\n", strerror(errno));
 			changeforwarder(fwq);
 		}
@@ -934,7 +960,6 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 
 	if (fwq->istcp == 1) {
 		p = &buf[2];
-		so = fwq->returnso;
 		len = 2;
 	} else {
 		p = buf;
@@ -987,6 +1012,13 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	
 	if (cache)
 		fwdpq->cache = 1;
+	else
+		fwdpq->cache = 0;
+
+	if (fwq->istcp)
+		fwdpq->istcp = 1;
+	else
+		fwdpq->istcp = 0;
 
 	if (imsg_compose(ibuf, IMSG_PARSE_MESSAGE, 0, 0, (fwq->istcp == 1) ? fwq->so : -1, fwdpq, fwq->istcp ? FWDPQHEADER : rlen + FWDPQHEADER) < 0) {
 			dolog(LOG_INFO, "imsg_compose: %s\n", strerror(errno));
@@ -999,36 +1031,47 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		FD_ZERO(&rset);
 		FD_SET(ibuf->fd, &rset);
 
-		tv.tv_sec = 10;
+		tv.tv_sec = 4;
 		tv.tv_usec = 0;
 
 		sel = select(ibuf->fd + 1, &rset, NULL, NULL, &tv);
 
 		if (sel < 0) {
 			dolog(LOG_ERR, "returnit internal error around select, drop\n");
-			free(fwdpq);
-			return;
+			continue;
 		}
 		if (sel == 0) {
 			dolog(LOG_ERR, "returnit internal error around select (timeout), drop\n");
-			free(fwdpq);
-			return;
+			continue;
 		}
 
-		if (((n = imsg_read(ibuf)) == -1 && errno != EAGAIN) || n == 0) {
-			dolog(LOG_ERR, "returnit internal error around imsg_read, drop\n");
-			free(fwdpq);
-			return;
+		if (FD_ISSET(ibuf->fd, &rset)) {
+			if (((n = imsg_read(ibuf)) == -1 && errno != EAGAIN)) {
+				dolog(LOG_ERR, "returnit internal error around imsg_read, drop\n");
+				continue;
+			}
+			if (n == 0) {
+				dolog(LOG_INFO, "imsg peer died?  shutting down\n");
+				ddd_shutdown();
+				exit(1);
+			}
+			
+		} else {
+			/* the ibuf has no selectable fd */
+			continue;
 		}
+			
 
 		for (;;) {
 			if ((n = imsg_get(ibuf, &imsg)) == -1) {
 				dolog(LOG_ERR, "returnit internal error around imsg_get, drop\n");
-				free(fwdpq);
-				return;
+				break;
 			}
 
 			if (n == 0) {
+#if DEBUG
+				dolog(LOG_INFO, "n == 0, odd...\n");
+#endif
 				break;
 			}
 		
@@ -1037,14 +1080,15 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 			case IMSG_PARSEREPLY_MESSAGE:
 				memcpy(fwdpq, imsg.data, datalen);
 
-				if (fwdpq->rc != PARSE_RETURN_ACK) {
-					dolog(LOG_ERR, "returnit parser did not ACK this (%d), drop\n", fwdpq->rc);
-					free(fwdpq);
-					return;
-				}
-
 				if (fwq->istcp == 1) 
 					fwq->so = imsg.fd;
+
+				if (fwdpq->rc != PARSE_RETURN_ACK) {
+					dolog(LOG_ERR, "returnit parser did not ACK this (%d), drop\n", fwdpq->rc);
+					imsg_free(&imsg);
+					break;
+				}
+
 
 				imsg_free(&imsg);
 				goto endimsg;
@@ -1071,6 +1115,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 						ri.rrtype, (void *)rdata, ri.ttl)) == NULL) {
 					dolog(LOG_ERR, "returnit cache insertion failed 2\n");
 					imsg_free(&imsg);
+					free(rdata);
 					break;
 				}
 
@@ -1148,9 +1193,9 @@ endimsg:
 	
 	if (fwq->istcp == 1) {
 		pack16(buf, htons(rlen));
-		if (send(so, buf, len, 0) != len)
+		if (send(fwq->returnso, buf, len, 0) != len)
 			dolog(LOG_INFO, "send(): %s\n", strerror(errno));
-		close(so);	/* only close the tcp stream */
+		close(fwq->returnso);	/* only close the tcp stream */
 		fwq->returnso = -1;	
 
 	} else {
@@ -1618,7 +1663,6 @@ fwdparseloop(struct imsgbuf *ibuf)
 		exit(1);
 	}
 
-	packet = &fwdpq->buf[0];
 
 	for (;;) {
 		FD_ZERO(&rset);
@@ -1663,6 +1707,10 @@ fwdparseloop(struct imsgbuf *ibuf)
 					}
 
 					memcpy(fwdpq, imsg.data, datalen);
+
+
+					istcp = fwdpq->istcp;
+
 					if (istcp) {
 						packet = malloc(fwdpq->buflen);
 						if (packet == NULL) {
@@ -1682,7 +1730,8 @@ fwdparseloop(struct imsgbuf *ibuf)
 							msgbuf_write(&ibuf->w);
 							break;
 						}
-					}
+					} else
+						packet = (u_char *)&fwdpq->buf;
 
 					if (istcp) {
 						tmp = fwdpq->buflen;
@@ -1726,7 +1775,7 @@ fwdparseloop(struct imsgbuf *ibuf)
 					/* check for cache */
 					if (fwdpq->cache) {
 							estart = packet;
-							rlen = fwdpq->buflen;
+							rlen = tmp;
 							end = &packet[rlen];
 
 							if (cacheit(packet, estart, end, ibuf, imsg.fd) < 0) {
@@ -1738,7 +1787,8 @@ skipcache:
 					/* check to see if we tsig */
 			
 					if (fwdpq->tsigcheck) {
-							stsig = check_tsig((char *)fwdpq->buf, fwdpq->buflen, fwdpq->mac);
+							rlen = tmp;
+							stsig = check_tsig((char *)packet, rlen, fwdpq->mac);
 							if (stsig == NULL) {
 								dolog(LOG_INFO, "FORWARD parser, malformed reply packet\n");
 								fwdpq->rc = PARSE_RETURN_MALFORMED;

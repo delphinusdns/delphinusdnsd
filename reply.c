@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.105 2020/07/08 12:29:02 pjp Exp $
+ * $Id: reply.c,v 1.106 2020/07/08 17:33:28 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -297,6 +297,10 @@ reply_a(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_A, rbt, reply, replysize, outlen, &retcount, q->aa);
 	
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -519,6 +523,10 @@ reply_nsec3param(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC3PARAM, rbt, reply, replysize, outlen, &retcount, q->aa);
 		
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -755,6 +763,10 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC3, rbt, reply, replysize, outlen, &retcount, q->aa);
 		
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -959,6 +971,11 @@ reply_nsec(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, rbt, reply, replysize, outlen, &retcount, q->aa);
 		
 		if (tmplen == 0) {
+
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -1164,6 +1181,11 @@ reply_ds(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_DS, rbt, reply, replysize, outlen, &retcount, q->aa);
 		
 		if (tmplen == 0) {
+
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -1372,6 +1394,11 @@ reply_dnskey(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_DNSKEY, rbt, reply, replysize, outlen, &rrsig_count, q->aa);
 		
 		if (tmplen == 0) {
+
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -1507,6 +1534,10 @@ reply_rrsig(struct sreply *sreply, ddDB *db)
 
 	tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, -1, rbt, reply, replysize, outlen, &a_count, q->aa);
 	if (tmplen == 0) {
+		/* we're forwarding and had no RRSIG return with -1 */
+		if (q->aa != 1)
+			return -1;
+
 		NTOHS(odh->query);
 		SET_DNS_TRUNCATION(odh);
 		HTONS(odh->query);
@@ -1685,6 +1716,11 @@ reply_aaaa(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_AAAA, rbt, reply, replysize, outlen, &retcount, q->aa);
 	
 		if (tmplen == 0) {
+
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -1917,6 +1953,11 @@ reply_mx(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_MX, rbt, reply, replysize, outlen, &retcount, q->aa);
 
 		if (tmplen == 0) {
+
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -1967,6 +2008,10 @@ reply_mx(struct sreply *sreply, ddDB *db)
 				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_AAAA, rbt0, reply, replysize, outlen, &retcount, q->aa);
 
 				if (tmplen == 0) {
+					/* we're forwarding and had no RRSIG return with -1 */
+					if (q->aa != 1)
+						return -1;
+
 					NTOHS(odh->query);
 					SET_DNS_TRUNCATION(odh);
 					HTONS(odh->query);
@@ -2014,6 +2059,10 @@ reply_mx(struct sreply *sreply, ddDB *db)
 				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_A, rbt0, reply, replysize, outlen, &retcount, q->aa);
 
 				if (tmplen == 0) {
+					/* we're forwarding and had no RRSIG return with -1 */
+					if (q->aa != 1)
+						return -1;
+
 					NTOHS(odh->query);
 					SET_DNS_TRUNCATION(odh);
 					HTONS(odh->query);
@@ -2249,6 +2298,10 @@ reply_ns(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(rbt1->zone, rbt1->zonelen, DNS_TYPE_NS, rbt1, reply, replysize, outlen, &retcount, q->aa);
 
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -2279,6 +2332,10 @@ reply_ns(struct sreply *sreply, ddDB *db)
 				tmplen = additional_rrsig(rbt1->zone, rbt1->zonelen, DNS_TYPE_DS, rbt1, reply, replysize, outlen, &retcount, q->aa);
 
 				if (tmplen == 0) {
+					/* we're forwarding and had no RRSIG return with -1 */
+					if (q->aa != 1)
+						return -1;
+
 					NTOHS(odh->query);
 					SET_DNS_TRUNCATION(odh);
 					HTONS(odh->query);
@@ -2357,6 +2414,10 @@ reply_ns(struct sreply *sreply, ddDB *db)
 				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_AAAA, rbt0, reply, replysize, outlen, &retcount, q->aa);
 
 				if (tmplen == 0) {
+					/* we're forwarding and had no RRSIG return with -1 */
+					if (q->aa != 1)
+						return -1;
+
 					NTOHS(odh->query);
 					SET_DNS_TRUNCATION(odh);
 					HTONS(odh->query);
@@ -2405,6 +2466,10 @@ reply_ns(struct sreply *sreply, ddDB *db)
 				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_A, rbt0, reply, replysize, outlen, &retcount, q->aa);
 
 				if (tmplen == 0) {
+					/* we're forwarding and had no RRSIG return with -1 */
+					if (q->aa != 1)
+						return -1;
+
 					NTOHS(odh->query);
 					SET_DNS_TRUNCATION(odh);
 					HTONS(odh->query);
@@ -2622,6 +2687,10 @@ reply_cname(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_CNAME, rbt, reply, replysize, outlen, &retcount, q->aa);
 	
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -2655,6 +2724,10 @@ reply_cname(struct sreply *sreply, ddDB *db)
 			tmplen = additional_rrsig(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, DNS_TYPE_A, rbt1, reply, replysize, outlen, &retcount, q->aa);
 		
 			if (tmplen == 0) {
+				/* we're forwarding and had no RRSIG return with -1 */
+				if (q->aa != 1)
+					return -1;
+
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
@@ -2687,6 +2760,10 @@ reply_cname(struct sreply *sreply, ddDB *db)
 			tmplen = additional_rrsig(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, DNS_TYPE_AAAA, rbt1, reply, replysize, outlen, &retcount, q->aa);
 		
 			if (tmplen == 0) {
+				/* we're forwarding and had no RRSIG return with -1 */
+				if (q->aa != 1)
+					return -1;
+
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
@@ -2719,6 +2796,10 @@ reply_cname(struct sreply *sreply, ddDB *db)
 			tmplen = additional_rrsig(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, DNS_TYPE_MX, rbt1, reply, replysize, outlen, &retcount, q->aa);
 		
 			if (tmplen == 0) {
+				/* we're forwarding and had no RRSIG return with -1 */
+				if (q->aa != 1)
+					return -1;
+
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
@@ -2751,6 +2832,10 @@ reply_cname(struct sreply *sreply, ddDB *db)
 			tmplen = additional_rrsig(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, DNS_TYPE_PTR, rbt1, reply, replysize, outlen, &retcount, q->aa);
 		
 			if (tmplen == 0) {
+				/* we're forwarding and had no RRSIG return with -1 */
+				if (q->aa != 1)
+					return -1;
+
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
 				HTONS(odh->query);
@@ -2952,6 +3037,10 @@ reply_ptr(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_PTR, rbt, reply, replysize, outlen, &retcount, q->aa);
 
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -3212,6 +3301,10 @@ reply_soa(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_SOA, rbt, reply, replysize, outlen, &retcount, q->aa);
 	
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -3421,6 +3514,10 @@ reply_txt(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_TXT, rbt, reply, replysize, outlen, &retcount, q->aa);
 	
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -3756,6 +3853,10 @@ reply_tlsa(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_TLSA, rbt, reply, replysize, outlen, &retcount, q->aa);
 	
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -3955,6 +4056,10 @@ reply_sshfp(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_SSHFP, rbt, reply, replysize, outlen, &retcount, q->aa);
 	
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -4188,6 +4293,10 @@ reply_naptr(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NAPTR, rbt, reply, replysize, outlen, &retcount, q->aa);
 
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -4392,6 +4501,10 @@ reply_srv(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_SRV, rbt, reply, replysize, outlen, &retcount, q->aa);
 
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -4764,6 +4877,10 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(rbt->zone, rbt->zonelen, DNS_TYPE_SOA, rbt, reply, replysize, outlen, &retcount, q->aa);
 	
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);
@@ -5494,6 +5611,10 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 		tmplen = additional_rrsig(rbt->zone, rbt->zonelen, DNS_TYPE_SOA, rbt, reply, replysize, outlen, &retcount, q->aa);
 	
 		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: cache.c,v 1.1 2020/07/08 12:29:02 pjp Exp $
+ * $Id: cache.c,v 1.2 2020/07/08 17:33:28 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -201,7 +201,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, i
 	char expand[DNS_MAXNAME + 1];
 	int elen, i, x;
 	int rlen = (end - estart);
-	u_char *pb, *p = (char *)&dh[1];
+	u_char *pb, *p = payload;
 	
 	uint16_t rrtype;
 	uint16_t rdlen;
@@ -209,6 +209,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, i
 	
 	struct cache_logic *cr;
 
+	p += sizeof(struct dns_header);	/* skip dns_header */
 	
 	elen = 0,
 	memset(&expand, 0, sizeof(expand));
@@ -236,7 +237,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, i
 	
 	pb += 4;	/* skip type and class */
 
-	for (x = 0; x < ntohs(dh->answer) + ntohs(dh->additional); x++) {
+	for (x = 0; x < ntohs(dh->answer); x++) {
 		elen = 0;
 		memset(&expand, 0, sizeof(expand));
 		pb = expand_compression(pb, estart, end, (u_char *)&expand, &elen, sizeof(expand));
@@ -259,6 +260,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, i
 		}
 
 		rrtype = ntohs(unpack16(pb));
+		/* class in here not parsed */
 		rrttl = ntohl(unpack32(pb + 4));
 		rdlen = ntohs(unpack16(pb + 8));
 		
