@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.104 2020/07/06 07:17:40 pjp Exp $
+ * $Id: reply.c,v 1.105 2020/07/08 12:29:02 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1984,12 +1984,8 @@ reply_mx(struct sreply *sreply, ddDB *db)
 				outlen = tmplen;
 			}
 
-			free(rbt0);
 			rbt0 = NULL;
 		}
-
-		if (rbt0)
-			free(rbt0);
 
 		addiscount = 0;
 		rbt0 = find_rrset(db, ad0->name, ad0->namelen);
@@ -2035,12 +2031,9 @@ reply_mx(struct sreply *sreply, ddDB *db)
 				outlen = tmplen;
 			}
 
-			free(rbt0);
 			rbt0 = NULL;
 		}
 
-		if (rbt0)
-			free(rbt0);
 	}
 
 out:
@@ -2151,7 +2144,6 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	rbt1 = get_ns(db, rbt, &delegation);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_NS)) == NULL) {
-		free(rbt1);
 		return -1;
 	}
 
@@ -2167,7 +2159,6 @@ reply_ns(struct sreply *sreply, ddDB *db)
 	outlen = sizeof(struct dns_header);
 
 	if (len > replysize) {
-		free(rbt1);
 		return (retlen);
 	}
 
@@ -2223,7 +2214,6 @@ reply_ns(struct sreply *sreply, ddDB *db)
 
 		ad0 = malloc(sizeof(struct addis));
 		if (ad0 == NULL) {
-			free(rbt1);
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 			return -1;
 		}
@@ -2308,7 +2298,6 @@ reply_ns(struct sreply *sreply, ddDB *db)
 			} else {
 				rbt0 = get_soa(db, q);
 				if (rbt0 == NULL) {
-					free(rbt1);
 					return -1;
 				}
 
@@ -2334,16 +2323,11 @@ reply_ns(struct sreply *sreply, ddDB *db)
 					odh->nsrr += retcount;
 					HTONS(odh->nsrr);
 
-					free(nrbt);
 				}
 
-			free(rbt0);
 			}  /* nrbt != NULL */
 		} /* else tmplen != 0 */
 	} /* if delegation */
-
-	if (delegation)
-		free(rbt1);
 
 	/* tack on additional A or AAAA records */
 
@@ -2390,12 +2374,9 @@ reply_ns(struct sreply *sreply, ddDB *db)
 				outlen = tmplen;
 			}
 
-			free(rbt0);
 			rbt0 = NULL;
 		}
 
-		if (rbt0)
-			free(rbt0);
 
 		addiscount = 0;
 		rbt0 = find_rrset(db, ad0->name, ad0->namelen);
@@ -2441,12 +2422,9 @@ reply_ns(struct sreply *sreply, ddDB *db)
 				outlen = tmplen;
 			}
 
-			free(rbt0);
 			rbt0 = NULL;
 		}
 
-		if (rbt0)
-			free(rbt0);
 	}
 
 out:
@@ -4814,7 +4792,6 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 			uniq[rruniq++].len = rbt0->zonelen;
 			
 			tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa);
-			free (rbt0);
 
 			if (tmplen == 0) {
 				NTOHS(odh->query);
@@ -4849,8 +4826,6 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 				addrec = 1;
 			}
 
-			free (rbt0);
-			
 			if (tmplen == 0) {
 				NTOHS(odh->query);
 				SET_DNS_TRUNCATION(odh);
@@ -4885,7 +4860,6 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 				tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa);
 				addrec = 1;
 			}
-			free (rbt0);
 			
 			if (tmplen == 0) {
 				NTOHS(odh->query);
@@ -5540,7 +5514,6 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 			rbt0 = Lookup_zone(db, q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, 0);
 			if (rbt0 != NULL) {
 				tmplen = additional_nsec(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, rbt0, reply, replysize, outlen, q->aa);
-				free(rbt0);
 			}
 		} else if (find_rr(rbt, DNS_TYPE_NSEC3PARAM)) {
 			rbt0 = find_nsec3_match_qname(q->hdr->name, q->hdr->namelen, rbt, db);
@@ -5551,7 +5524,6 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 			uniq[rruniq++].len = rbt0->zonelen;
 
 			tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa);
-			free (rbt0);
 		}
 
 		if (tmplen == 0) {

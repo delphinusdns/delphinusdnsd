@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: sign.c,v 1.5 2020/07/06 07:17:40 pjp Exp $
+ * $Id: sign.c,v 1.6 2020/07/08 12:29:02 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1010,7 +1010,6 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 
 		if (rbt->zonelen == rbt0->zonelen && 
 			memcasecmp(rbt->zone, rbt0->zone, rbt->zonelen) == 0) {
-			free(rbt);
 			continue;
 		}
 
@@ -1018,8 +1017,6 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 			fprintf(stderr, "print_rbt error\n");
 			return -1;
 		}
-
-		free(rbt);
 
 		j++;
 	} 
@@ -1752,7 +1749,6 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 		}
 
 
-		free(rbt);
 		j++;
 	}
 	
@@ -6117,7 +6113,6 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 				TAILQ_INSERT_TAIL(&head, n1, entries);
 		}
 
-		free(rbt);
 	}  /* RB_FOREACH_SAFE */
 
 	/* check ENT's which we'll create */
@@ -6179,7 +6174,6 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 
 		} /* if len > rootlen */
 
-		free(rbt);
 
 	} /* RB_FOREACH_SAFE */
 
@@ -6873,12 +6867,10 @@ notglue(ddDB *db, struct rbtree *rbt, char *zonename)
 		}
 
 		if (len > apexlen && find_rr(rbt0, DNS_TYPE_NS) != NULL) {
-			free(rbt0);
 			free(zoneapex);
 			return 0;
 		}
 		
-		free(rbt0);
 
 	} while (*p && len > 0 && ! (len == apexlen && memcasecmp(p, zoneapex, len) == 0));
 		
@@ -6947,6 +6939,5 @@ update_soa_serial(ddDB *db, char *zonename, time_t serial)
 		((struct soa *)rrp->rdata)->serial = serial;
 	}
 
-	free(rbt0);
 
 }

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.116 2020/07/06 07:17:40 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.117 2020/07/08 12:29:02 pjp Exp $
  */
 
 
@@ -94,6 +94,7 @@
 
 /* prototypes */
 
+extern char *convert_name(char *, int);
 extern void 	pack(char *, char *, int);
 extern void 	pack32(char *, u_int32_t);
 extern void 	pack16(char *, u_int16_t);
@@ -2060,7 +2061,6 @@ axfrentry:
 
 					case ERR_NODATA:
 						if (rbt1) {
-							free(rbt1);
 							rbt1 = NULL;
 						}
 
@@ -2156,7 +2156,6 @@ forwardudp:
 						 */
 
 						if (rbt0) {
-							free (rbt0);
 							rbt0 = NULL;
 						}
 						
@@ -2303,11 +2302,9 @@ forwardudp:
 				free_question(question);
 
 				if (rbt0) {
-					free (rbt0);
 					rbt0 = NULL;
 				}
 				if (rbt1) {
-					free (rbt1);
 					rbt1 = NULL;
 				}
 
@@ -2318,12 +2315,10 @@ forwardudp:
 	drop:
 		
 		if (rbt0) {	
-			free(rbt0);
 			rbt0 = NULL;
 		}
 
 		if (rbt1) {
-			free(rbt1);
 			rbt1 = NULL;
 		}
 
@@ -2468,7 +2463,7 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 			}
 			if (n == 0) {
 				/* child died? */
-				dolog(LOG_INFO, "sigpipe on child?  exiting.\n");
+				dolog(LOG_INFO, "sigpipe on child?  delphinusdnsd master process exiting.\n");
 				exit(1);
 			}
 
@@ -3087,7 +3082,6 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 						break;
 					case ERR_NODATA:
 						if (rbt0) {
-							free(rbt0);
 							rbt0 = NULL;
 						}
 
@@ -3192,11 +3186,9 @@ forwardtcp:
 						free_question(question);
 						
 						if (rbt0) {
-							free(rbt0);
 							rbt0 = NULL;
 						}
 						if (rbt1) {
-							free (rbt1);
 							rbt1 = NULL;
 						}
 						TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
@@ -3220,7 +3212,6 @@ forwardtcp:
 						 */
 
 						if (rbt0) {
-							free(rbt0);
 							rbt0 = NULL;
 						}
 
@@ -3388,11 +3379,9 @@ forwardtcp:
 				free_question(question);
 				
 				if (rbt0) {
-					free(rbt0);
 					rbt0 = NULL;
 				}
 				if (rbt1) {
-					free (rbt1);
 					rbt1 = NULL;
 				}
 
@@ -3413,12 +3402,10 @@ forwardtcp:
 	drop:
 		
 			if (rbt0) {	
-				free(rbt0);
 				rbt0 = NULL;
 			}
 
 			if (rbt1) {
-				free(rbt1);
 				rbt1 = NULL;
 			}
 
@@ -3809,7 +3796,6 @@ determine_glue(ddDB *db)
 {
 	struct rbtree *rbt, *rbt0;
 	struct rrset *rrset;
-	ddDBT key, data;
 	int rs;
 	struct node *n, *nx;
 	int len;
@@ -3818,12 +3804,7 @@ determine_glue(ddDB *db)
 
         RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
                 rs = n->datalen;
-                if ((rbt = calloc(1, rs)) == NULL) {
-                        dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-                        exit(1);
-                }
-
-                memcpy((char *)rbt, (char *)n->data, n->datalen);
+		rbt = (struct rbtree *)n->data;
 
 		rrset = find_rr(rbt, DNS_TYPE_SOA);
 		if (rrset != NULL) {
@@ -3834,7 +3815,6 @@ determine_glue(ddDB *db)
 			have_ns = 1;
 		}
 		
-		free(rbt);
 	}
 
 	if (! have_soa || ! have_ns) {
@@ -3845,87 +3825,36 @@ determine_glue(ddDB *db)
 	/* mark SOA's */
         RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
                 rs = n->datalen;
-                if ((rbt = calloc(1, rs)) == NULL) {
-                        dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-                        exit(1);
-                }
-
-                memcpy((char *)rbt, (char *)n->data, n->datalen);
+		rbt = (struct rbtree *)n->data;
 
 		rrset = find_rr(rbt, DNS_TYPE_SOA);
 		if (rrset == NULL) {
-			free(rbt);
 			continue;
 		}
 
 		rbt->flags |= RBT_APEX;
-
-		memset(&key, 0, sizeof(key));
-		memset(&data, 0, sizeof(data));
-
-		key.data = (char *)rbt->zone;
-		key.size = rbt->zonelen;	
-
-		data.data = (void *)rbt;
-		data.size = sizeof(struct rbtree);
-
-		if (db->put(db, &key, &data) != 0) {
-			dolog(LOG_INFO, "db->put failed\n");
-			free(rbt);
-			return -1;
-		}
-
-		free(rbt);
 	}
 
 	/* mark glue */
         RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
                 rs = n->datalen;
-                if ((rbt = calloc(1, rs)) == NULL) {
-                        dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-                        exit(1);
-                }
-
-                memcpy((char *)rbt, (char *)n->data, n->datalen);
+		rbt = (struct rbtree *)n->data;
 
 		if (rbt->flags & RBT_APEX) {
-			free(rbt);
 			continue;
 		}
 
 		rrset = find_rr(rbt, DNS_TYPE_NS);
 		if (rrset == NULL) {
-			free(rbt);
 			continue;
 		}
 
 		rbt->flags |= RBT_GLUE;
-
-		memset(&key, 0, sizeof(key));
-		memset(&data, 0, sizeof(data));
-
-		key.data = (char *)rbt->zone;
-		key.size = rbt->zonelen;	
-
-		data.data = (void *)rbt;
-		data.size = sizeof(struct rbtree);
-
-		if (db->put(db, &key, &data) != 0) {
-			dolog(LOG_INFO, "db->put failed\n");
-			free(rbt);
-			return -1;
-		}
-
-		free(rbt);
 	}
+
         RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
                 rs = n->datalen;
-                if ((rbt = calloc(1, rs)) == NULL) {
-                        dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-                        exit(1);
-                }
-
-                memcpy((char *)rbt, (char *)n->data, n->datalen);
+		rbt = (struct rbtree *)n->data;
 
 
 		p = rbt->zone;
@@ -3935,30 +3864,12 @@ determine_glue(ddDB *db)
 		while (! (rbt0->flags & RBT_APEX)) {
 			if (rbt0->flags & RBT_GLUE) {
 				/* repeat */
-				free(rbt0);
 				p = rbt->zone;
 				len = rbt->zonelen;
 				rbt0 = find_rrset(db, p, len);
 
 				while (!(rbt0->flags & RBT_GLUE)) {
 					rbt0->flags |= RBT_GLUE;
-
-					memset(&key, 0, sizeof(key));
-					memset(&data, 0, sizeof(data));
-
-					key.data = (char *)p;
-					key.size = len;
-
-					data.data = (void *)rbt0;
-					data.size = sizeof(struct rbtree);
-
-					if (db->put(db, &key, &data) != 0) {
-						dolog(LOG_INFO, "db->put failed\n");
-						free(rbt);
-						return -1;
-					}
-
-					free(rbt0);
 
 					len -= (*p + 1);
 					p += (*p + 1);
@@ -3973,7 +3884,6 @@ determine_glue(ddDB *db)
 
 				break;
 			}
-			free(rbt0);
 	
 			len -= (1 + *p);
 			p += (1 + *p);
@@ -3986,7 +3896,6 @@ determine_glue(ddDB *db)
 			}
 		}
 
-		free(rbt);
 	}
 
 	return 0;
@@ -4079,7 +3988,7 @@ setup_cortex(struct imsgbuf *ibuf)
 				}
 				if (n == 0) {
 					/* child died? */
-					dolog(LOG_INFO, "sigpipe on child?  exiting.\n");
+					dolog(LOG_INFO, "sigpipe on child?  delphinusdnsd cortex process exiting.\n");
 					exit(1);
 				}
 
@@ -4200,7 +4109,7 @@ setup_cortex(struct imsgbuf *ibuf)
 			}
 			if (n == 0) {
 				/* child died? */
-				dolog(LOG_INFO, "sigpipe on child?  exiting.\n");
+				dolog(LOG_INFO, "sigpipe on child?  delphinusdnsd cortex process exiting.\n");
 				exit(1);
 			}
 

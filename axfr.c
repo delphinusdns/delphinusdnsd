@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.45 2020/06/29 16:54:47 pjp Exp $
+ * $Id: axfr.c,v 1.46 2020/07/08 12:29:02 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -531,7 +531,7 @@ axfrloop(int *afd, int sockcount, char **ident, ddDB *db, struct imsgbuf *ibuf)
 
 			if (n == 0) {
 				/* child died? */
-				dolog(LOG_INFO, "sigpipe on child? exiting.\n");
+				dolog(LOG_INFO, "sigpipe on child? AXFR process exiting.\n");
 				exit(1);
 			}
 
@@ -1102,7 +1102,6 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 							build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, rbt2, NULL, 0xff, 1, 0, replybuf);
 							outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0);
 							if (rbt2) {
-								free(rbt2);
 								rbt2 = NULL;
 							}
 							free_question(fq);
@@ -1157,11 +1156,9 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			memset(&key, 0, sizeof(key));	
 			memset(&data, 0, sizeof(data));
 			if (rbt) {
-				free(rbt);
 				rbt = NULL;
 			}
 			if (rbt2) {
-				free(rbt2);
 				rbt2 = NULL;
 			}
 		}  /* RB_FOREACH */
@@ -1208,17 +1205,14 @@ drop:
 	}
 
 	if (rbt) {
-		free (rbt);
 		rbt = NULL;
 	}
 	
 	if (rbt2) {
-		free (rbt2);
 		rbt2 = NULL;
 	}
 
 	if (saverbt) {
-		free (saverbt);
 		saverbt = NULL;
 	}
 
@@ -1421,7 +1415,6 @@ checklabel(ddDB *db, struct rbtree *rbt, struct rbtree *soa, struct question *q)
 			plen -= (*p + 1);
 			p = (p + (*p + 1));
 
-			free(tmprbt);
 			continue;
 		}
 	
@@ -1431,7 +1424,6 @@ checklabel(ddDB *db, struct rbtree *rbt, struct rbtree *soa, struct question *q)
 		 */
 
 		if ((rrset = find_rr(tmprbt, DNS_TYPE_SOA)) != NULL) {
-			free (tmprbt);
 			return (0);
 		}
 
@@ -1443,7 +1435,6 @@ checklabel(ddDB *db, struct rbtree *rbt, struct rbtree *soa, struct question *q)
 		plen -= (*p + 1);
 		p = (p + (*p + 1));
 
-		free(tmprbt);
 		
 	} while (memcmp(p, q->hdr->name, q->hdr->namelen) != 0);
 

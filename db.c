@@ -27,11 +27,13 @@
  */
 
 /*
- * $Id: db.c,v 1.19 2020/07/06 07:17:40 pjp Exp $
+ * $Id: db.c,v 1.20 2020/07/08 12:29:02 pjp Exp $
  */
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/queue.h>
+#include <sys/tree.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -70,7 +72,8 @@ int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdat
 int display_rr(struct rrset *rrset);
 int rotate_rr(struct rrset *rrset);
 void flag_rr(struct rbtree *rbt);
-int expire_rr(ddDB *, char *, int, u_int16_t);
+int expire_rr(ddDB *, char *, int, u_int16_t, time_t);
+int expire_db(ddDB *, int);
 
 extern void      dolog(int, char *, ...);
 
@@ -117,7 +120,6 @@ int
 dddbput(ddDB *db, ddDBT *key, ddDBT *data)
 {
 	struct node find, *n, *res;
-	char *map;
 
 	strlcpy(find.domainname, key->data, sizeof(find.domainname));
 	find.len = key->size;
@@ -125,29 +127,26 @@ dddbput(ddDB *db, ddDBT *key, ddDBT *data)
 	res = RB_FIND(domaintree, &db->head, &find);
 	if (res == NULL) {
 		/* does not exist, create it */
-		
-		map = calloc(1, data->size);
-		if (map == NULL) {
-			return -1;
-		}
-
 		n = calloc(sizeof(struct node), 1);
 		if (n == NULL) {
 			return -1;
 		}
-		memset(n, 0, sizeof(struct node));
 		n->len = key->size;
 		memcpy(n->domainname, key->data, n->len);
-		n->data = map;
+		n->data = data->data;
 		n->datalen = data->size;
-		memcpy(map, data->data, data->size);
 
 		RB_INSERT(domaintree, &db->head, n);
 	} else {
 		if (res->datalen != data->size)
 			return -1;
 
-		memcpy(res->data, data->data, res->datalen);
+		if (res->data != data->data)
+			free(res->data);
+
+		res->data = data->data;
+		RB_REMOVE(domaintree, &db->head, res);
+		RB_INSERT(domaintree, &db->head, res);
 	}
 
 	return 0;
@@ -182,10 +181,10 @@ dddbclose(ddDB *db)
 struct rbtree *
 create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl)
 {
+	ddDBT key, data;
 	struct rbtree *rbt = NULL;
 	struct rrset *rrset = NULL;
 	struct rr *myrr = NULL;
-	ddDBT key, data;
 	char *humanname = NULL;
 
 
@@ -204,6 +203,18 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl)
 		rbt->flags &= ~RBT_DNSSEC;	 /* by default not dnssec'ed */
 
 		TAILQ_INIT(&rbt->rrset_head);
+
+		/* rb insert too */
+		memset(&key, 0, sizeof(key));
+		memset(&data, 0, sizeof(data));
+
+		key.data = (char *)name;
+		key.size = len;
+
+		data.data = (void *)rbt;
+		data.size = sizeof(struct rbtree);
+
+		db->put(db, &key, &data);
 	}
 	
 	rrset = find_rr(rbt, type);
@@ -211,8 +222,6 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl)
 		rrset = (struct rrset *)calloc(1, sizeof(struct rrset));
 		if (! rrset){
 			perror("calloc");
-
-			free(rbt);
 			return NULL;
 		}
 
@@ -230,22 +239,6 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl)
 	} else
 		rrset->created = time(NULL);
 
-
-	/* save this new rbtree (it changed) */
-
-	memset(&key, 0, sizeof(key));
-	memset(&data, 0, sizeof(data));
-
-	key.data = (char *)name;
-	key.size = len;
-
-	data.data = (void*)rbt;
-	data.size = sizeof(struct rbtree);
-
-	if (db->put(db, &key, &data) != 0) {
-		return NULL;
-	}
-
 	/* this sets up the RR */
 
 	myrr = (struct rr *)calloc(1, sizeof(struct rr));
@@ -254,7 +247,14 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl)
 		return NULL;
 	}
 
-	myrr->rdata = rdata;
+	switch (type) {
+	case DNS_TYPE_A:
+		myrr->rdata = (struct a *)rdata;
+		break;
+	default:
+		myrr->rdata = rdata;
+		break;
+	}
 	myrr->changed = time(NULL);
 
 	rrset->ttl = ttl;
@@ -274,7 +274,6 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl)
 struct rbtree *
 find_rrset(ddDB *db, char *name, int len)
 {
-	static struct rbtree *rb;
 	ddDBT key, data;
 
 	if (name == NULL || len == 0)
@@ -290,13 +289,7 @@ find_rrset(ddDB *db, char *name, int len)
 		return (NULL);
 	}
 
-	if ((rb = calloc(1, sizeof(struct rbtree))) == NULL)
-		return NULL;
-
-
-	memcpy((char *)rb, (char *)data.data, sizeof(struct rbtree));
-
-	return (rb);
+	return ((struct rbtree *)data.data);
 }
 
 
@@ -341,16 +334,13 @@ add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata)
 }
 
 int
-expire_rr(ddDB *db, char *name, int len, u_int16_t rrtype)
+expire_rr(ddDB *db, char *name, int len, u_int16_t rrtype, time_t now)
 {
 	struct rbtree *rbt = NULL;
 	struct rrset *rp;
-	struct rr *rt = NULL, *rt1 = NULL, *rt2 = NULL;
-	time_t now;
+	struct rr *rt1 = NULL, *rt2 = NULL;
 	int count = 0;
 
-	now = time(NULL);
-	
 	rbt = find_rrset(db, name, len);
 	if (rbt == NULL) {
 		return 0;	
@@ -361,14 +351,17 @@ expire_rr(ddDB *db, char *name, int len, u_int16_t rrtype)
 		return 0;
 	}
 
+#if 0
 	rt = TAILQ_FIRST(&rp->rr_head);
 	if (rt == NULL)
 		return 0;
+#endif
 
 	/* expire these */
 	if (rrtype != DNS_TYPE_RRSIG) {
 		if (difftime(now, rp->created) >= rp->ttl) {
 			count = 0;
+
 			TAILQ_FOREACH_SAFE(rt1, &rp->rr_head, entries, rt2) {
 				TAILQ_REMOVE(&rp->rr_head, rt1, entries);
 				free(rt1->rdata);
@@ -376,24 +369,66 @@ expire_rr(ddDB *db, char *name, int len, u_int16_t rrtype)
 				count++;		
 			}
 
+			TAILQ_REMOVE(&rbt->rrset_head, rp, entries);
+			free(rp);
+
 			return (count);
 		}
 	} else {
-		struct rrsig *rrsig = (struct rrsig *)rt->rdata;
-
-		if (difftime(now, rrsig->created) >= rrsig->ttl) {
-			count = 0;
-			TAILQ_FOREACH_SAFE(rt1, &rp->rr_head, entries, rt2) {
+		count = 0;
+		TAILQ_FOREACH_SAFE(rt1, &rp->rr_head, entries, rt2) {
+			struct rrsig *rrsig = (struct rrsig *)rt1->rdata;
+			if (difftime(now, rrsig->created) >= rrsig->ttl) {
 				TAILQ_REMOVE(&rp->rr_head, rt1, entries);
 				free(rt1->rdata);
 				free(rt1);
 				count++;
 			}
-			return (count);
 		}
+		
+		if (TAILQ_EMPTY(&rp->rr_head)) {
+			TAILQ_REMOVE(&rbt->rrset_head, rp, entries);
+			free(rp);
+		}
+
+		return (count);
 	}
 
 	return 0;
+}
+
+int
+expire_db(ddDB *db, int all)
+{
+	struct node *walk, *walk0;
+	struct rbtree *rbt = NULL;
+	struct rrset *rp, *rp0;
+	int totalcount = 0, count = 0;
+	time_t now;
+
+	if (all == 0)
+		now = time(NULL);
+	else
+#if __OpenBSD__
+		now = 67768036191673199;
+#else
+		now = 2147483647;
+#endif
+	
+	RB_FOREACH_SAFE(walk, domaintree, &db->head, walk0) {
+		rbt = (struct rbtree *)walk->data;
+		if (rbt == NULL)
+			continue;
+
+		TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
+			count = expire_rr(db, rbt->zone, rbt->zonelen, \
+					rp->rrtype, now);
+			
+			totalcount += count;
+		}
+	}
+
+	return (totalcount);
 }
 
 struct rrset *

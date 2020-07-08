@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.110 2020/07/06 07:17:40 pjp Exp $
+ * $Id: dddctl.c,v 1.111 2020/07/08 12:29:02 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -713,7 +713,6 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 
 		if (rbt->zonelen == rbt0->zonelen && 
 			memcasecmp(rbt->zone, rbt0->zone, rbt->zonelen) == 0) {
-			free(rbt0);
 			continue;
 		}
 
@@ -722,7 +721,6 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 			return -1;
 		}
 
-		free(rbt0);
 
 		j++;
 	} 
@@ -1108,7 +1106,6 @@ count_db(ddDB *db)
 					count++;
 			}
 		}
-		free(rbt);
 	}
 
 	printf("Records = %d , ", count);

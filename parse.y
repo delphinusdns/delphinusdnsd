@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.102 2020/07/06 07:17:40 pjp Exp $
+ * $Id: parse.y,v 1.103 2020/07/08 12:29:02 pjp Exp $
  */
 
 %{
@@ -102,7 +102,6 @@ extern int 	mybase64_decode(char const *, u_char *, size_t);
 extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
-extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 extern int display_rr(struct rrset *rrset);
 extern void flag_rr(struct rbtree *);
 extern int pull_rzone(struct rzone *, time_t);
@@ -2205,7 +2204,6 @@ fill_cname(ddDB *db, char *name, char *type, int myttl, char *hostname)
 	if (converted_name)
 		free (converted_name);
 
-	free (rbt);
 	
 	return (0);
 }
@@ -2258,7 +2256,6 @@ fill_ptr(ddDB *db, char *name, char *type, int myttl, char *hostname)
 	if (converted_name)
 		free (converted_name);
 
-	free (rbt);
 	
 	return (0);
 
@@ -2310,7 +2307,6 @@ fill_dnskey(ddDB *db, char *name, char *type, u_int32_t myttl, u_int16_t flags, 
 	if (converted_name)
 		free (converted_name);
 
-	free (rbt);
 	
 	return (0);
 
@@ -2419,14 +2415,13 @@ fill_rrsig(ddDB *db, char *name, char *type, u_int32_t myttl, char *typecovered,
         if (db->put(db, &key, &data) != 0) {
                 return -1;
         }
-	
+
 	if (signers_name2)
 		free(signers_name2);
 
 	if (converted_name)
 		free (converted_name);
 
-	free (rbt);
 
 	return (0);
 
@@ -2472,7 +2467,6 @@ fill_ds(ddDB *db, char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_i
 	if (converted_name)
 		free (converted_name);
 
-	free(rbt);
 	
 	return (0);
 
@@ -2547,7 +2541,6 @@ fill_nsec3(ddDB *db, char *name, char *type, u_int32_t myttl, u_int8_t algorithm
 	if (converted_name)
 		free (converted_name);
 	
-	free (rbt);
 
 	return (0);
 }
@@ -2591,7 +2584,6 @@ fill_nsec3param(ddDB *db, char *name, char *type, u_int32_t myttl, u_int8_t algo
 	if (converted_name)
 		free (converted_name);
 	
-	free (rbt);
 
 	return (0);
 }
@@ -2644,7 +2636,6 @@ fill_nsec(ddDB *db, char *name, char *type, u_int32_t myttl, char *domainname, c
 	if (converted_name)
 		free (converted_name);
 	
-	free (rbt);
 
 	return (0);
 
@@ -2716,7 +2707,6 @@ fill_naptr(ddDB *db, char *name, char *type, int myttl, int order, int preferenc
 	if (converted_name)
 		free (converted_name);
 
-	free (rbt);
 	
 	return (0);
 
@@ -2786,7 +2776,6 @@ fill_txt(ddDB *db, char *name, char *type, int myttl, char *msg)
 	if (converted_name)
 		free (converted_name);
 	
-	free (rbt);
 	free (tmp);
 
 
@@ -2854,7 +2843,6 @@ fill_tlsa(ddDB *db, char *name, char *type, int myttl, uint8_t usage, uint8_t se
 	if (converted_name)
 		free (converted_name);
 
-	free (rbt);
 	
 	return (0);
 
@@ -2913,7 +2901,6 @@ fill_sshfp(ddDB *db, char *name, char *type, int myttl, int alg, int fptype, cha
 	if (converted_name)
 		free (converted_name);
 
-	free (rbt);
 	
 	return (0);
 
@@ -2971,7 +2958,6 @@ fill_srv(ddDB *db, char *name, char *type, int myttl, int priority, int weight, 
 	if (converted_name)
 		free (converted_name);
 	
-	free (rbt);
 	
 	return (0);
 
@@ -3022,7 +3008,6 @@ fill_mx(ddDB *db, char *name, char *type, int myttl, int priority, char *mxhost)
 	if (converted_name)
 		free (converted_name);
 	
-	free (rbt);
 
 	return (0);
 
@@ -3067,7 +3052,6 @@ fill_a(ddDB *db, char *name, char *type, int myttl, char *a)
 	if (converted_name)
 		free (converted_name);
 
-	free (rbt);
 	
 	return (0);
 
@@ -3114,7 +3098,6 @@ fill_aaaa(ddDB *db, char *name, char *type, int myttl, char *aaaa)
 	if (converted_name)
 		free (converted_name);
 
-	free (rbt);
 	
 	return (0);
 
@@ -3165,7 +3148,6 @@ fill_ns(ddDB *db, char *name, char *type, int myttl, char *nameserver)
 		if (rrset == NULL)
 			nstype = NS_TYPE_DELEGATE;
 
-		free(rbt);
 	} 
 
 	if ((ns = (struct ns *)calloc(1, sizeof(struct ns))) == NULL) {
@@ -3201,7 +3183,6 @@ fill_ns(ddDB *db, char *name, char *type, int myttl, char *nameserver)
 	if (converted_name)
 		free (converted_name);
 
-	free (rbt);
 	
 	return (0);
 
@@ -3283,7 +3264,6 @@ fill_soa(ddDB *db, char *name, char *type, int myttl, char *auth, char *contact,
 	if (converted_name)
 		free (converted_name);
 
-	free (rbt);
 	
 	return (0);
 

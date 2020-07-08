@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.54 2020/07/07 14:22:38 pjp Exp $
+ * $Id: raxfr.c,v 1.55 2020/07/08 12:29:02 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -96,22 +96,22 @@ struct myschedule {
 
 
 
-int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
 
 u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
@@ -431,7 +431,7 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 }
 
 int 
-raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct rrsig rs;
 	char *save, *humanname;
@@ -506,26 +506,16 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 		return -1;
 	}
 
-	if (name == NULL) {
-		if (f != NULL) {
-			fprintf(f, "%s,%u,%u,%u,%llu,%llu,%u,%s,\"%s\"\n", 
-				get_dns_type(rs.type_covered, 0),
-				rs.algorithm, rs.labels, rs.original_ttl, 
-				timethuman(rs.signature_expiration), 
-				timethuman(rs.signature_inception),
-				rs.key_tag, 
-				(*humanname == '\0' ? "." : humanname), b);
-		}
-	} else {
-		fill_rrsig(db, convert_name(name, namelen), "rrsig", dnsttl,
-			get_dns_type(rs.type_covered, 0), rs.algorithm,
-			rs.labels, rs.original_ttl,
-			timethuman(rs.signature_expiration),
+	if (f != NULL) {
+		fprintf(f, "%s,%u,%u,%u,%llu,%llu,%u,%s,\"%s\"\n", 
+			get_dns_type(rs.type_covered, 0),
+			rs.algorithm, rs.labels, rs.original_ttl, 
+			timethuman(rs.signature_expiration), 
 			timethuman(rs.signature_inception),
 			rs.key_tag, 
 			(*humanname == '\0' ? "." : humanname), b);
 	}
-		
+	
 
 	free(humanname);
 	free(b);
@@ -537,7 +527,7 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 }
 
 int 
-raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct ds d;
 	u_int16_t tmpshort;
@@ -561,15 +551,9 @@ raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 	p += d.digestlen;
 
 
-	if (name == NULL) {
-		if (f != NULL) {
-			fprintf(f, "%u,%u,%u,\"%s\"\n", d.key_tag, d.algorithm, 
-				d.digest_type, bin2hex(d.digest, d.digestlen));
-		}
-	} else {
-		fill_ds(db, convert_name(name, namelen), "ds", dnsttl, 
-			d.key_tag, d.algorithm, d.digest_type,
-			bin2hex(d.digest, d.digestlen));
+	if (f != NULL) {
+		fprintf(f, "%u,%u,%u,\"%s\"\n", d.key_tag, d.algorithm, 
+			d.digest_type, bin2hex(d.digest, d.digestlen));
 	}
 
 	if (ctx != NULL)
@@ -579,7 +563,7 @@ raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 }
 
 int 
-raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct sshfp s;
 	char *hex;
@@ -602,13 +586,8 @@ raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 
 	hex = bin2hex(s.fingerprint, s.fplen);
 
-	if (name == NULL) {
-		if (f != NULL) {
-			fprintf(f, "%u,%u,\"%s\"\n", s.algorithm, s.fptype, hex);
-		}
-	} else {
-		fill_sshfp(db, convert_name(name, namelen), "sshfp", dnsttl,
-			s.algorithm, s.fptype, hex);
+	if (f != NULL) {
+		fprintf(f, "%u,%u,\"%s\"\n", s.algorithm, s.fptype, hex);
 	}
 
 	if (ctx != NULL)
@@ -618,7 +597,7 @@ raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 }
 
 int 
-raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct dnskey dk;
 	u_int16_t tmpshort;
@@ -657,14 +636,9 @@ raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 
 	b[len] = '\0';
 
-	if (name == NULL) {
-		if (f != NULL) {
-			fprintf(f, "%u,%u,%u,\"%s\"\n", dk.flags, dk.protocol, 
-				dk.algorithm, b);
-		}
-	} else {
-		fill_dnskey(db, convert_name(name, namelen), "dnskey", dnsttl,
-			dk.flags, dk.protocol, dk.algorithm, b);
+	if (f != NULL) {
+		fprintf(f, "%u,%u,%u,\"%s\"\n", dk.flags, dk.protocol, 
+			dk.algorithm, b);
 	}
 
 	free(b);
@@ -677,7 +651,7 @@ raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 
 
 int 
-raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	u_int16_t mxpriority;
 	char *save, *humanname;
@@ -689,10 +663,8 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
 	mxpriority = unpack16(q);
 
-	if (name == NULL) {
-		if (f != NULL)
-			fprintf(f, "%u,", ntohs(mxpriority));
-	}
+	if (f != NULL)
+		fprintf(f, "%u,", ntohs(mxpriority));
 
 	q += 2;
 
@@ -710,17 +682,11 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 		return -1;
 	}
 
-	if (name == NULL) {
-		if (f != NULL) {
-			if (*humanname == '\0')
-				fprintf(f, ".\n");
-			else
-				fprintf(f, "%s\n", humanname);
-		}
-	} else {
-		fill_mx(db, convert_name(name, namelen), "mx", dnsttl,
-			ntohs(mxpriority), 
-			(*humanname == '\0' ? "." : humanname));
+	if (f != NULL) {
+		if (*humanname == '\0')
+			fprintf(f, ".\n");
+		else
+			fprintf(f, "%s\n", humanname);
 	}
 
 	free(humanname);
@@ -732,13 +698,13 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 }
 
 int 
-raxfr_ptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_ptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
-	return (raxfr_ns(f, p, estart, end, mysoa, rdlen, ctx, name, namelen, dnsttl, db));
+	return (raxfr_ns(f, p, estart, end, mysoa, rdlen, ctx));
 }
 
 int
-raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct nsec3 n;
 	u_int16_t iter;
@@ -778,23 +744,13 @@ raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	
 	bitmap2human(n.bitmap, n.bitmap_len);
 
-	if (name == NULL) {
-		if (f != NULL) {
-			fprintf(f, "%u,%u,%u,\"%s\",\"%s\",\"%s\"\n", n.algorithm, 
-				n.flags, n.iterations, 
-				(n.saltlen == 0 ? "-" : 
-					bin2hex(n.salt, n.saltlen)), 
-				base32hex_encode(n.next, n.nextlen), 
-				bitmap2human(n.bitmap, n.bitmap_len));
-		}
-	} else {
-
-		fill_nsec3(db, convert_name(name, namelen), "nsec3", dnsttl,
-			n.algorithm, n.flags, n.iterations, 
-			(n.saltlen == 0 ? "-" : bin2hex(n.salt, n.saltlen)),
-			base32hex_encode(n.next, n.nextlen),
+	if (f != NULL) {
+		fprintf(f, "%u,%u,%u,\"%s\",\"%s\",\"%s\"\n", n.algorithm, 
+			n.flags, n.iterations, 
+			(n.saltlen == 0 ? "-" : 
+				bin2hex(n.salt, n.saltlen)), 
+			base32hex_encode(n.next, n.nextlen), 
 			bitmap2human(n.bitmap, n.bitmap_len));
-	
 	}
 
 	if (ctx != NULL)
@@ -804,7 +760,7 @@ raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 }
 
 int
-raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct nsec3param np;
 	u_int16_t iter;
@@ -827,15 +783,9 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 	
 	hex = bin2hex(np.salt, np.saltlen);
 
-	if (name == NULL) {
-		if (f != NULL) {
-			fprintf(f, "%u,%u,%u,\"%s\"\n", np.algorithm, np.flags, 
-				np.iterations, 
-				(np.saltlen == 0 ? "-" : bin2hex(np.salt, np.saltlen)));
-		}
-	} else {
-		fill_nsec3param(db, convert_name(name, namelen), "nsec3param",	
-			dnsttl, np.algorithm, np.flags, np.iterations, 
+	if (f != NULL) {
+		fprintf(f, "%u,%u,%u,\"%s\"\n", np.algorithm, np.flags, 
+			np.iterations, 
 			(np.saltlen == 0 ? "-" : bin2hex(np.salt, np.saltlen)));
 	}
 
@@ -847,7 +797,7 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 
 
 int
-raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx,char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	u_int8_t len;
 	int i;
@@ -878,7 +828,7 @@ raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 }
 
 int
-raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	char *save, *humanname;
 	u_char *q = p;
@@ -900,16 +850,11 @@ raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 		return -1;
 	}
 
-	if (name == NULL) {
-		if (f != NULL) {
-			if (*humanname == '\0')
-				fprintf(f, ".\n");
-			else
-				fprintf(f, "%s\n", humanname);
-		}
-	} else {
-		fill_ns(db, convert_name(name, namelen), "ns", dnsttl,
-			(*humanname == '\0' ? "." : humanname));
+	if (f != NULL) {
+		if (*humanname == '\0')
+			fprintf(f, ".\n");
+		else
+			fprintf(f, "%s\n", humanname);
 	}
 
 	free(humanname);
@@ -922,14 +867,14 @@ raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 }
 
 int 
-raxfr_cname(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_cname(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
-	return (raxfr_ns(f, p, estart, end, mysoa, rdlen, ctx, name, namelen, dnsttl, db));
+	return (raxfr_ns(f, p, estart, end, mysoa, rdlen, ctx));
 }
 
 
 int
-raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	char buf[INET6_ADDRSTRLEN];
 	struct in6_addr ia;
@@ -939,13 +884,8 @@ raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	unpack((char *)&ia, p, sizeof(struct in6_addr));
 	inet_ntop(AF_INET6, &ia, buf, sizeof(buf));
 
-	if (name == NULL) {
-		if (f != NULL) 
-			fprintf(f, "%s\n", buf);
-	} else {
-		fill_aaaa(db, convert_name(name, namelen), "aaaa", dnsttl,
-			buf);
-	}
+	if (f != NULL) 
+		fprintf(f, "%s\n", buf);
 
 	p += sizeof(ia);
 
@@ -956,7 +896,7 @@ raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 }
 
 int
-raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	char buf[INET_ADDRSTRLEN];
 	struct in_addr ia;
@@ -967,12 +907,8 @@ raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_in
 
 	inet_ntop(AF_INET, &ia, buf, sizeof(buf));
 	
-	if (name == NULL) {
-		if (f != NULL)
-			fprintf(f, "%s\n", buf);
-	} else {
-		fill_a(db, convert_name(name, namelen), "a", dnsttl, buf);
-	}
+	if (f != NULL)
+		fprintf(f, "%s\n", buf);
 
 	p += sizeof(ia);
 
@@ -983,7 +919,7 @@ raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_in
 }
 
 int 
-raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct tlsa t;
 	u_char *q = p;
@@ -1006,15 +942,9 @@ raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	memcpy(&t.data, p, t.datalen);
 	p += t.datalen;
 
-	if (name == NULL) {
-		if (f != NULL) {
-			fprintf(f, "%u,%u,%u,\"%s\"\n", t.usage, t.selector, 
-				t.matchtype, bin2hex(t.data, t.datalen));
-		}
-	} else {
-		fill_tlsa(db, convert_name(name, namelen), "tlsa", dnsttl,
-			t.usage, t.selector, t.matchtype,
-			bin2hex(t.data, t.datalen));
+	if (f != NULL) {
+		fprintf(f, "%u,%u,%u,\"%s\"\n", t.usage, t.selector, 
+			t.matchtype, bin2hex(t.data, t.datalen));
 	}
 
 	if (ctx != NULL)
@@ -1024,7 +954,7 @@ raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 }
 
 int 
-raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	u_int16_t tmp16;
 	struct srv s;
@@ -1061,17 +991,12 @@ raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 		return -1;
 	}
 
-	if (name == NULL) {
-		if (f != NULL) {
-			if (*humanname == '\0')
-				fprintf(f, "%u,%u,%u,.\n", s.priority, s.weight, s.port);
-			else
-				fprintf(f, "%u,%u,%u,%s\n", s.priority, s.weight,
-					s.port, humanname);
-		}
-	} else {
-		fill_srv(db, convert_name(name, namelen), "srv", dnsttl,
-			s.priority, s.weight, s.port, humanname);	
+	if (f != NULL) {
+		if (*humanname == '\0')
+			fprintf(f, "%u,%u,%u,.\n", s.priority, s.weight, s.port);
+		else
+			fprintf(f, "%u,%u,%u,%s\n", s.priority, s.weight,
+				s.port, humanname);
 	}
 
 	free(humanname);
@@ -1083,7 +1008,7 @@ raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 }
 
 int 
-raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *name, int namelen, uint32_t dnsttl, ddDB *db)
+raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	u_int16_t tmp16;
 	struct naptr n;
@@ -1410,14 +1335,12 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 		if (rrset == NULL) {
 			dolog(LOG_INFO, "%s has no SOA, removing zone from replicant engine\n", lrz->zonename);
 			SLIST_REMOVE(&rzones, lrz, rzone, rzone_entry);
-			free(rbt);
 			continue;
 		}
 		rrp = TAILQ_FIRST(&rrset->rr_head);
 		if (rrp == NULL) {
 			dolog(LOG_INFO, "SOA record corrupted for zone %s, removing zone from replicant engine\n", lrz->zonename);
 			SLIST_REMOVE(&rzones, lrz, rzone, rzone_entry);
-			free(rbt);
 			continue;
 		}
 
@@ -1433,7 +1356,6 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 		zonecount++;
 		tot_refresh += lrz->soa.refresh;
 
-		free(rbt);
 	}
 
 	period = (tot_refresh / zonecount) / zonecount;
@@ -2119,7 +2041,7 @@ get_remote_soa(struct rzone *rzone)
 		} else {
 			for (sr = supported; sr->rrtype != 0; sr++) {
 				if (rrtype == sr->rrtype) {
-					if ((len = (*sr->raxfr)(f, p, estart, end, &mysoa, rdlen, (dotsig == 1) ? ctx : NULL, NULL, 0, 0, NULL)) < 0) {
+					if ((len = (*sr->raxfr)(f, p, estart, end, &mysoa, rdlen, (dotsig == 1) ? ctx : NULL)) < 0) {
 						dolog(LOG_INFO, "error with rrtype %d\n", sr->rrtype);
 						close(so);
 						free(reply);  free(dupreply);

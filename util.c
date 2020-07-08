@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.65 2020/07/06 07:17:40 pjp Exp $
+ * $Id: util.c,v 1.66 2020/07/08 12:29:02 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -137,22 +137,22 @@ extern int 	check_ent(char *, int);
 extern int     find_tsig_key(char *, int, char *, int);
 extern int      mybase64_decode(char const *, u_char *, size_t);
 
-extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
-extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
 extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
@@ -400,10 +400,8 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 				}
 
 				if (rbt0->flags & RBT_GLUE) {
-					free(rbt);
 					rbt = rbt0;
 				} else {
-					free(rbt0);
 					/* answer the delegation */
 					snprintf(replystring, replystringsize, "%s", rbt->humanname);
 					*lzerrno = ERR_DELEGATE;
@@ -417,16 +415,9 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 			*lzerrno = ERR_NODATA;
 			*returnval = -1;
 
-			/* stop leakage */
-			if (rbt != NULL)
-				free(rbt);
-
 			return NULL;
 		}
 	
-		if (rbt != NULL)
-			free(rbt);
-
 		/*
 		 * We have a condition where a record does not exist but we
 		 * move toward the apex of the record, and there may be 
@@ -452,7 +443,6 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 					return (rbt);
 				}
 	
-				free(rbt);
 			}
 		}
 		if (forward)
@@ -521,7 +511,6 @@ get_soa(ddDB *db, struct question *question)
 			p = (p + (*p + 1));
 		} 
 
-		free(rbt);
 	} while (*p);
 
 	return (NULL);
@@ -562,7 +551,6 @@ get_ns(ddDB *db, struct rbtree *rbt, int *delegation)
 		
 	if ((rrset = find_rr(rbt0, DNS_TYPE_SOA)) != NULL) {
 		pack32((char *)delegation, 0);
-		free(rbt0);
 		return (rbt);
 	}
 		
@@ -586,8 +574,7 @@ Lookup_zone(ddDB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcar
 		rrset = find_rr(rbt, type);
 		if (rrset != NULL) {
 			return (rbt);
-		} else
-			free(rbt);
+		} 
 	}
 
 	return NULL;
@@ -2200,7 +2187,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			} else {
 				for (sr = supported; sr->rrtype != 0; sr++) {
 					if (rrtype == sr->rrtype) {
-						if ((len = (*sr->raxfr)(f, p, estart, end, mysoa, rdlen, ctx, NULL, 0, 0, NULL)) < 0) {
+						if ((len = (*sr->raxfr)(f, p, estart, end, mysoa, rdlen, ctx)) < 0) {
 							fprintf(stderr, "error with rrtype %d\n", sr->rrtype);
 							return -1;
 						}

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.39 2020/07/06 07:17:40 pjp Exp $
+ * $Id: ddd-db.h,v 1.40 2020/07/08 12:29:02 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -63,6 +63,7 @@
 #define IMSG_CRIPPLE_NEURON	11	/* no new neurons are needed */
 #define IMSG_FORWARD_UDP	12	/* forward a UDP packet */
 #define IMSG_FORWARD_TCP	13	/* forward a TCP packet (with fd) */
+#define IMSG_RR_ATTACHED	14	/* an RR is sent through imsg */
 
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2
@@ -324,7 +325,7 @@ struct rbtree {
 #define RBT_GLUE		0x4 /* this rbtree entry is GLUE data */
 
 
-	TAILQ_HEAD(, rrset) rrset_head;
+	TAILQ_HEAD(rrseth, rrset) rrset_head;
 };
 
 struct rrtab {
@@ -421,9 +422,27 @@ struct rzone {
 struct raxfr_logic {
 	int rrtype;
 	int dnssec;
-	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int, uint32_t, ddDB *);
+	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 };
 
+struct scache {
+	u_char *payload;
+	u_char *estart;
+	u_char *end;
+	uint16_t rdlen;
+	char *name;
+	int namelen;
+	uint32_t dnsttl;
+	uint16_t rrtype;
+	struct imsgbuf *imsgbuf;
+	int fd;
+};
+
+struct cache_logic {
+	int rrtype;
+	int dnssec;
+	int (*cacheit)(struct scache *);
+};
 
 /* reply logic */
 
@@ -440,6 +459,53 @@ struct reply_logic {
 #ifndef MIN
 #define	MIN(a,b)	(((a) < (b))?(a):(b))
 #endif
+
+struct rr_imsg {
+	char name[DNS_MAXNAME + 1];
+	int namelen;
+	uint16_t rrtype;
+	uint32_t ttl;
+	
+	uint16_t unlen;
+	union {
+		struct dnskey dnskey;
+		struct rrsig rrsig;
+		struct nsec nsec;
+		struct nsec3 nsec3;
+		struct nsec3param nsec3param;
+		struct ds ds;
+		struct soa soa;
+		struct smx mx;
+		struct ns ns;
+		struct srv srv;
+		struct sshfp sshfp;
+		struct tlsa tlsa;		
+		struct naptr naptr;
+		struct cname cname;
+		struct ptr ptr;
+		struct txt txt;
+		struct a a;
+		struct aaaa aaaa;
+	} un;
+#define ri_dnskey	un.dnskey
+#define ri_rrsig	un.rrsig
+#define ri_nsec		un.nsec
+#define ri_nsec3	un.nsec3
+#define ri_nsec3param	un.nsec3param
+#define ri_ds		un.ds
+#define ri_soa		un.soa
+#define ri_mx		un.mx
+#define ri_ns		un.ns
+#define	ri_srv		un.srv
+#define ri_sshfp	un.sshfp
+#define ri_tlsa		un.tlsa
+#define ri_naptr	un.naptr
+#define ri_cname	un.cname
+#define ri_ptr		un.ptr
+#define ri_txt		un.txt
+#define ri_a		un.a
+#define ri_aaaa		un.aaaa
+}; /* end of struct rr_imsg */
 
 
 #endif /* _DB_H */
