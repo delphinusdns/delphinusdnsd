@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.118 2020/07/10 10:42:27 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.119 2020/07/10 16:42:31 pjp Exp $
  */
 
 
@@ -581,60 +581,6 @@ main(int argc, char *argv[], char *environ[])
 			exit(1);
 		}
 	}
-	
-	if (forward) {	
-		shsize = 16 + (SHAREDMEMSIZE * sizeof(struct sf_imsg));
-
-		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
-			MAP_ANON, -1, 0);
-
-		if (shptr == MAP_FAILED) {
-			dolog(LOG_ERR, "failed to setup rlimit mmap segment, exit\n");
-			exit(1);
-		}
-
-		/* initialize */
-		for (sf = (struct sf_imsg *)&shptr[16], i = 0; i < SHAREDMEMSIZE; i++, sf++) {
-			sf->read = 1;
-		}
-
-		cfg->shptr = shptr;
-
-		shsize = 16 + (SHAREDMEMSIZE * sizeof(struct rr_imsg));
-
-		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
-			MAP_ANON, -1, 0);
-
-		if (shptr == MAP_FAILED) {
-			dolog(LOG_ERR, "failed to setup rlimit mmap segment, exit\n");
-			exit(1);
-		}
-
-		/* initialize */
-		for (ri = (struct rr_imsg *)&shptr[16], i = 0; i < SHAREDMEMSIZE; i++, ri++) {
-			ri->read = 1;
-		}
-
-		cfg->shptr2 = shptr;
-
-		shsize = 16 + (SHAREDMEMSIZE3 * sizeof(struct fwdpq));
-
-		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
-			MAP_ANON, -1, 0);
-
-		if (shptr == MAP_FAILED) {
-			dolog(LOG_ERR, "failed to setup rlimit mmap segment, exit\n");
-			exit(1);
-		}
-
-		/* initialize */
-		for (fwdpq = (struct fwdpq *)&shptr[16], i = 0; i < SHAREDMEMSIZE3; i++, fwdpq++) {
-			pack32((char *)&fwdpq->read, 1);
-		}
-
-		cfg->shptr3 = shptr;
-
-	} /* if forward */
 
 	pw = getpwnam(DEFAULT_PRIVILEGE);
 	if (pw == NULL) {
@@ -1011,73 +957,6 @@ main(int argc, char *argv[], char *environ[])
 	signal(SIGINT, ddd_signal);
 	signal(SIGQUIT, ddd_signal);
 
-	/* start our forwarding process */
-	if (forward) {	
-		switch (pid = fork()) {
-		case -1:
-			dolog(LOG_ERR, "fork() failed: %s\n", strerror(errno));
-			ddd_shutdown();
-			exit(1);
-		case 0:
-			ibuf = register_cortex(&cortex_ibuf, MY_IMSG_FORWARD);
-			if (ibuf == NULL) {
-				ddd_shutdown();
-				exit(1);
-			}
-
-			/* chroot to the drop priv user home directory */
-#ifdef DEFAULT_LOCATION
-			if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
-#else
-			if (drop_privs(pw->pw_dir, pw) < 0) {
-#endif
-				dolog(LOG_INFO, "forward dropping privileges\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
-#if __OpenBSD__
-			if (unveil("/", "") < 0) {
-				dolog(LOG_INFO, "unveil locking failed: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
-
-			if (unveil(NULL, NULL) < 0) {
-				dolog(LOG_INFO, "unveil locking failed: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
-			if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
-				perror("pledge");
-				exit(1);
-			}
-#endif
-
-			/* close descriptors that we don't need */
-			for (j = 0; j < i; j++) {
-				close(tcp[j]);
-				close(udp[j]);
-				if (axfrport && axfrport != port) {
-					close(uafd[j]);
-					close(afd[j]);
-				}
-
-				cfg->dup[j] = dup[j];
-			}
-
-			cfg->sockcount = i;
-			cfg->db = db;
-
-			setproctitle("FORWARD engine");
-			forwardloop(db, cfg, ibuf, &cortex_ibuf);
-			/* NOTREACHED */
-			exit(1);
-		default:
-			break;
-		}
-	
-	} /* forward */
-
 	/* 
 	 * start our axfr process 
 	 */
@@ -1118,6 +997,8 @@ main(int argc, char *argv[], char *environ[])
 				close(udp[j]);
 				if (axfrport && axfrport != port)
 					close(uafd[j]);
+			
+				close(dup[j]);
 			}
 
 			setproctitle("AXFR engine on port %d", axfrport);
@@ -1134,7 +1015,8 @@ main(int argc, char *argv[], char *environ[])
 		}
 	
 	} /* axfrport */
-
+	
+	/* raxfr */
 	if (raxfrflag) {
 		switch (pid = fork()) {
 		case -1:
@@ -1187,6 +1069,122 @@ main(int argc, char *argv[], char *environ[])
 		}
 
 	} /* raxfrflag */
+	/* start our forwarding process */
+	
+	if (forward) {	
+		shsize = 16 + (SHAREDMEMSIZE * sizeof(struct sf_imsg));
+
+		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
+			MAP_ANON, -1, 0);
+
+		if (shptr == MAP_FAILED) {
+			dolog(LOG_ERR, "failed to setup  mmap segment, exit\n");
+			exit(1);
+		}
+
+		/* initialize */
+		for (sf = (struct sf_imsg *)&shptr[16], j = 0; j < SHAREDMEMSIZE; j++, sf++) {
+			sf->read = 1;
+		}
+
+		cfg->shptr = shptr;
+
+		shsize = 16 + (SHAREDMEMSIZE * sizeof(struct rr_imsg));
+
+		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
+			MAP_ANON, -1, 0);
+
+		if (shptr == MAP_FAILED) {
+			dolog(LOG_ERR, "failed to setup mmap segment, exit\n");
+			exit(1);
+		}
+
+		/* initialize */
+		for (ri = (struct rr_imsg *)&shptr[16], j = 0; j < SHAREDMEMSIZE; j++, ri++) {
+			ri->read = 1;
+		}
+
+		cfg->shptr2 = shptr;
+
+		shsize = 16 + (SHAREDMEMSIZE3 * sizeof(struct fwdpq));
+
+		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
+			MAP_ANON, -1, 0);
+
+		if (shptr == MAP_FAILED) {
+			dolog(LOG_ERR, "failed to setup mmap segment, exit\n");
+			exit(1);
+		}
+
+		/* initialize */
+		for (fwdpq = (struct fwdpq *)&shptr[16], j = 0; j < SHAREDMEMSIZE3; j++, fwdpq++) {
+			pack32((char *)&fwdpq->read, 1);
+		}
+
+		cfg->shptr3 = shptr;
+
+		switch (pid = fork()) {
+		case -1:
+			dolog(LOG_ERR, "fork() failed: %s\n", strerror(errno));
+			ddd_shutdown();
+			exit(1);
+		case 0:
+			ibuf = register_cortex(&cortex_ibuf, MY_IMSG_FORWARD);
+			if (ibuf == NULL) {
+				ddd_shutdown();
+				exit(1);
+			}
+
+			/* chroot to the drop priv user home directory */
+#ifdef DEFAULT_LOCATION
+			if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
+#else
+			if (drop_privs(pw->pw_dir, pw) < 0) {
+#endif
+				dolog(LOG_INFO, "forward dropping privileges\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#if __OpenBSD__
+			if (unveil("/", "") < 0) {
+				dolog(LOG_INFO, "unveil locking failed: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			if (unveil(NULL, NULL) < 0) {
+				dolog(LOG_INFO, "unveil locking failed: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+			if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
+				perror("pledge");
+				exit(1);
+			}
+#endif
+
+			/* close descriptors that we don't need */
+			for (j = 0; j < i; j++) {
+				close(tcp[j]);
+				close(udp[j]);
+
+				cfg->dup[j] = dup[j];
+			}
+
+			cfg->sockcount = i;
+			cfg->db = db;
+
+			setproctitle("FORWARD engine");
+			forwardloop(db, cfg, ibuf, &cortex_ibuf);
+			/* NOTREACHED */
+			exit(1);
+		default:
+			break;
+		}
+	
+	} /* forward */
+
+
 
 	/* the rest of the daemon goes on in TCP and UDP loops */
 #ifdef DEFAULT_LOCATION
@@ -2712,8 +2710,6 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	case 0:
 		for (i = 0; i < cfg->sockcount; i++)  {
 				close(cfg->tcp[i]);
-				if (axfrport && axfrport != port)
-					close(cfg->axfr[i]);
 		}
 		close(ibuf->fd);
 		close(cortex->fd);
@@ -3065,7 +3061,6 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					imsg_free(&imsg);
 				} /* for (;;) */
 
-				/* pjp end of parseloop branch */
 				/* goto drop beyond this point should goto out instead */
 				fakequestion = NULL;
 				/* handle tcp notifications , XXX not tested */
@@ -3422,7 +3417,6 @@ forwardtcp:
 					imsg_compose(ibuf, IMSG_XFR_MESSAGE, 0, 0, tcpnp->so, tcpnp->buf, tcpnp->bytes_read);
 					msgbuf_write(&ibuf->w);
 					TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
-					close(tcpnp->so);
 					free(tcpnp->address);
 					free(tcpnp);
 					if (conncnt > 0)
@@ -3635,7 +3629,6 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 						msgbuf_write(&mybuf->w);
 						break;
 					}
-					/* pjp */
 					dh = (struct dns_header *)packet;
 
 					if ((ntohs(dh->query) & DNS_REPLY)) {
@@ -4307,8 +4300,6 @@ register_cortex(struct imsgbuf *cortex, int type)
 	imsg_compose(cortex, IMSG_SETUP_NEURON, 0, 0, fd[1], &desc, sizeof(int));
 	msgbuf_write(&cortex->w);
 		
-	close(fd[1]);
-
 	return (ibuf);
 }
 
