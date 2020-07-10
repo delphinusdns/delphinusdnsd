@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.117 2020/07/08 12:29:02 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.118 2020/07/10 10:42:27 pjp Exp $
  */
 
 
@@ -328,11 +328,17 @@ main(int argc, char *argv[], char *environ[])
 	struct cfg *cfg;
 	struct imsgbuf cortex_ibuf;
 	struct imsgbuf *ibuf;
+	struct rr_imsg *ri = NULL;
+	struct sf_imsg *sf = NULL;
+	struct fwdpq *fwdpq = NULL;
 
 	static ddDB *db;
 	
 	time_t now;
 	struct tm *ltm;
+
+	char *shptr;
+	int shsize;
 
 	
 	if (geteuid() != 0) {
@@ -576,6 +582,59 @@ main(int argc, char *argv[], char *environ[])
 		}
 	}
 	
+	if (forward) {	
+		shsize = 16 + (SHAREDMEMSIZE * sizeof(struct sf_imsg));
+
+		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
+			MAP_ANON, -1, 0);
+
+		if (shptr == MAP_FAILED) {
+			dolog(LOG_ERR, "failed to setup rlimit mmap segment, exit\n");
+			exit(1);
+		}
+
+		/* initialize */
+		for (sf = (struct sf_imsg *)&shptr[16], i = 0; i < SHAREDMEMSIZE; i++, sf++) {
+			sf->read = 1;
+		}
+
+		cfg->shptr = shptr;
+
+		shsize = 16 + (SHAREDMEMSIZE * sizeof(struct rr_imsg));
+
+		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
+			MAP_ANON, -1, 0);
+
+		if (shptr == MAP_FAILED) {
+			dolog(LOG_ERR, "failed to setup rlimit mmap segment, exit\n");
+			exit(1);
+		}
+
+		/* initialize */
+		for (ri = (struct rr_imsg *)&shptr[16], i = 0; i < SHAREDMEMSIZE; i++, ri++) {
+			ri->read = 1;
+		}
+
+		cfg->shptr2 = shptr;
+
+		shsize = 16 + (SHAREDMEMSIZE3 * sizeof(struct fwdpq));
+
+		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
+			MAP_ANON, -1, 0);
+
+		if (shptr == MAP_FAILED) {
+			dolog(LOG_ERR, "failed to setup rlimit mmap segment, exit\n");
+			exit(1);
+		}
+
+		/* initialize */
+		for (fwdpq = (struct fwdpq *)&shptr[16], i = 0; i < SHAREDMEMSIZE3; i++, fwdpq++) {
+			pack32((char *)&fwdpq->read, 1);
+		}
+
+		cfg->shptr3 = shptr;
+
+	} /* if forward */
 
 	pw = getpwnam(DEFAULT_PRIVILEGE);
 	if (pw == NULL) {
@@ -1543,6 +1602,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	struct rbtree *rbt0 = NULL, *rbt1 = NULL;
 	struct rrset *csd;
 	struct rr *rr_csd;
+	struct sf_imsg sf, *sfi = NULL;
 	
 	struct sreply sreply;
 	struct reply_logic *rl = NULL;
@@ -1558,6 +1618,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	struct sforward *sforward;
 
 	ssize_t n, datalen;
+	int ix;
 	
 
 	sforward = (struct sforward *)calloc(1, sizeof(struct sforward));
@@ -2137,8 +2198,34 @@ forwardudp:
 						} else
 							sforward->havemac = 0;
 
+						sforward->gotit = time(NULL);
+						memcpy(&sf.sf, sforward, sizeof(struct sforward));
+						
+						/* wait for lock */
+						while (cfg->shptr[0] == '*') {
+							usleep(arc4random() % 300);
+						}
+
+						cfg->shptr[0] = '*'; /* nice semaphore eh? */
+
+						for (sfi = (struct sf_imsg *)&cfg->shptr[16], ix = 0;
+								 ix < SHAREDMEMSIZE; ix++, sfi++) {
+									if (unpack32((char *)&sfi->read) == 1) {
+										memcpy(sfi, &sf, sizeof(struct sf_imsg));
+										pack32((char *)&sfi->read, 0);
+										break;
+									}
+						}
+
+						if (ix == SHAREDMEMSIZE) {
+							dolog(LOG_INFO, "delphinusdnsd udp: can't find an open slot in sharedmemsize\n");
+							goto udpout;
+						}
+
+						cfg->shptr[0] = ' ';
+
 						imsg_compose(udp_ibuf, IMSG_FORWARD_UDP,
-							0, 0, -1, sforward, sizeof(struct sforward));
+							0, 0, -1, &ix, sizeof(int));
 
 						msgbuf_write(&udp_ibuf->w);
 						goto udpout;
@@ -2587,6 +2674,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	struct rbtree *rbt0 = NULL, *rbt1 = NULL;
 	struct rrset *csd;
 	struct rr *rr_csd;
+	struct sf_imsg sf, *sfi = NULL;
 	
 	struct sreply sreply;
 	struct reply_logic *rl = NULL;
@@ -2600,6 +2688,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	u_int32_t imsg_type;
 
 	struct sforward *sforward;
+	int ix;
 
 
 	sforward = (struct sforward *)calloc(1, sizeof(struct sforward));
@@ -3171,8 +3260,35 @@ forwardtcp:
 						} else
 							sforward->havemac = 0;
 
+						sforward->gotit = time(NULL);
+						memcpy(&sf.sf, sforward, sizeof(struct sforward));
+						
+						/* wait for lock */
+						while (cfg->shptr[0] == '*') {
+							usleep(arc4random() % 300);
+						}
+
+						cfg->shptr[0] = '*'; /* nice semaphore eh? */
+
+						for (sfi = (struct sf_imsg *)&cfg->shptr[16], ix = 0;
+								 ix < SHAREDMEMSIZE; ix++, sfi++) {
+									if (unpack32((char *)&sfi->read) == 1) {
+										memcpy(sfi, &sf, sizeof(struct sf_imsg));
+										pack32((char *)&sfi->read, 0);
+										break;
+									}
+						}
+
+						if (ix == SHAREDMEMSIZE) {
+							dolog(LOG_INFO, "delphinusdnsd udp: can't find an open slot in sharedmemsize\n");
+							goto tcpout;
+						}
+
+						cfg->shptr[0] = ' ';
+
+
 						imsg_compose(ibuf, IMSG_FORWARD_TCP,
-							0, 0, so, sforward,  sizeof(struct sforward));
+							0, 0, so, &ix,  sizeof(int));
 						msgbuf_write(&ibuf->w);
 						slen = 0;
 

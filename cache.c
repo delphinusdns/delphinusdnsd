@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: cache.c,v 1.2 2020/07/08 17:33:28 pjp Exp $
+ * $Id: cache.c,v 1.3 2020/07/10 10:42:27 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -87,6 +87,7 @@ extern void     dolog(int, char *, ...);
 extern char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
 extern void      pack(char *, char *, int);
 extern void     pack16(char *, u_int16_t);
+extern void     pack32(char *, u_int32_t);
 extern void     unpack(char *, char *, int);
 extern uint16_t unpack16(char *);
 extern uint32_t unpack32(char *);
@@ -97,8 +98,8 @@ extern int tsig;
 extern int dnssec;
 extern int cache;
 
-int cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, int);
-struct scache * build_cache(u_char *, u_char *, u_char *, uint16_t, char *, int, uint32_t, uint16_t, struct imsgbuf *, int);
+int cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, char *);
+struct scache * build_cache(u_char *, u_char *, u_char *, uint16_t, char *, int, uint32_t, uint16_t, struct imsgbuf *, struct imsgbuf *, char *);
 void transmit_rr(struct scache *, void *, int);
 
 
@@ -155,7 +156,7 @@ static struct cache_logic supported_cache[] = {
 
 
 struct scache *
-build_cache(u_char *payload, u_char *estart, u_char *end, uint16_t rdlen, char *name, int namelen, uint32_t dnsttl, uint16_t dnstype, struct imsgbuf *imsgbuf, int fd)
+build_cache(u_char *payload, u_char *estart, u_char *end, uint16_t rdlen, char *name, int namelen, uint32_t dnsttl, uint16_t dnstype, struct imsgbuf *imsgbuf, struct imsgbuf *bimsgbuf, char *ptr)
 {
 	static struct scache ret;
 
@@ -169,7 +170,8 @@ build_cache(u_char *payload, u_char *estart, u_char *end, uint16_t rdlen, char *
 	ret.dnsttl = dnsttl;
 	ret.rrtype = dnstype;
 	ret.imsgbuf = imsgbuf;
-	ret.fd = fd;
+	ret.bimsgbuf = bimsgbuf;
+	ret.shared = ptr;
 
 	return (&ret);
 }
@@ -177,26 +179,51 @@ build_cache(u_char *payload, u_char *estart, u_char *end, uint16_t rdlen, char *
 void
 transmit_rr(struct scache *scache, void *rr, int rrsize)
 {
-	struct rr_imsg ri;
+	struct rr_imsg ri, *pri;
+	int offset, i;
 
-	memset(&ri, 0, sizeof(ri));
-	memcpy(&ri.name, scache->name, sizeof(ri.name));
-	ri.namelen = scache->namelen;
+	memcpy(ri.imsg.rr.name, scache->name, sizeof(ri.imsg.rr.name));
+	ri.imsg.rr.namelen = scache->namelen;
 
-	ri.ttl = scache->dnsttl;
-	ri.rrtype = scache->rrtype;
+	ri.imsg.rr.ttl = scache->dnsttl;
+	ri.imsg.rr.rrtype = scache->rrtype;
 
-	memcpy(&ri.un, rr, rrsize);
-	ri.unlen = rrsize;
+	memcpy(&ri.imsg.rr.un, rr, rrsize);
+	ri.imsg.rr.buflen = rrsize;
+	ri.read = 0;
+
+	/* wait for lock */
+	while (scache->shared[0] == '*') {
+		usleep(arc4random() % 300);
+	}
+
+	scache->shared[0] = '*'; /* nice semaphore eh? */
+
 	
-	imsg_compose(scache->imsgbuf, IMSG_RR_ATTACHED, 0, 0, -1, (void*)&ri, sizeof(ri));
-	msgbuf_write(&scache->imsgbuf->w);
+	for (pri = (struct rr_imsg *)&scache->shared[16], i = 0; 
+			i < SHAREDMEMSIZE; i++, pri++) {
+		if (unpack32((char *)&pri->read) == 1) {
+			memcpy(pri, &ri, sizeof(struct rr_imsg));
+			pack32((char *)&pri->read, 0);
+			break;
+		}
+	}
+	
+	if (i == SHAREDMEMSIZE) {
+		dolog(LOG_INFO, "can't find an open slot in sharedmemsize\n");
+	}
+
+	scache->shared[0] = ' ';	/* release */
+	
+	offset = i;
+
+
 }
 
 int
-cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, int fd)
+cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, struct imsgbuf *bimsgbuf, char *ptr)
 {
-	struct dns_header *dh = (struct dns_header *)payload;
+	struct dns_header *dh;
 	struct scache *scache;
 	char expand[DNS_MAXNAME + 1];
 	int elen, i, x;
@@ -209,6 +236,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, i
 	
 	struct cache_logic *cr;
 
+	dh = (struct dns_header *)payload;
 	p += sizeof(struct dns_header);	/* skip dns_header */
 	
 	elen = 0,
@@ -238,6 +266,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, i
 	pb += 4;	/* skip type and class */
 
 	for (x = 0; x < ntohs(dh->answer); x++) {
+		printf("%d out of %d\n", x, ntohs(dh->answer));
 		elen = 0;
 		memset(&expand, 0, sizeof(expand));
 		pb = expand_compression(pb, estart, end, (u_char *)&expand, &elen, sizeof(expand));
@@ -266,7 +295,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, i
 		
 		pb += 10;   /* skip answerd */
 	
-		scache = build_cache(pb, estart, end, rdlen, expand, elen, rrttl, rrtype, imsgbuf, fd);
+		scache = build_cache(pb, estart, end, rdlen, expand, elen, rrttl, rrtype, imsgbuf, bimsgbuf, ptr);
 			
 		for (cr = supported_cache; cr->rrtype != 0; cr++) {
 			if (rrtype == cr->rrtype) {
@@ -282,6 +311,13 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, i
 
 	} /* for(x ... */
 			
+	i = 42;
+	if (imsg_compose(bimsgbuf, IMSG_RR_ATTACHED, 0, 0, -1, &i, sizeof(int)) != 1) {
+		dolog(LOG_INFO, "imsg_compose failed: %s\n", strerror(errno));
+	}
+
+	if (msgbuf_write(&bimsgbuf->w) == -1)
+		dolog(LOG_ERR, "msgbuf_write: %s\n", strerror(errno));
 		
 	return (0);	
 }
@@ -299,6 +335,8 @@ cache_rrsig(struct scache *scache)
 	uint16_t rdlen = scache->rdlen;
 	u_int32_t tmp4;
 	u_char *p = q;
+
+	memset(&rs, 0, sizeof(struct rrsig));
 
 	BOUNDS_CHECK((q + 2), scache->payload, scache->rdlen, scache->end);
 	tmp = unpack16(q);
@@ -344,7 +382,7 @@ cache_rrsig(struct scache *scache)
 	memcpy(&rs.signature, q, rs.signature_len);
 	q += rs.signature_len;
 
-	transmit_rr(scache, &rs, sizeof(rs));
+	transmit_rr(scache, (void *)&rs, sizeof(rs));
 
 	return (q - scache->estart);
 }
@@ -357,6 +395,8 @@ cache_ds(struct scache *scache)
 	uint16_t rdlen = scache->rdlen;
 	u_char *p = scache->payload;
 	u_char *q = p;
+
+	memset(&d, 0, sizeof(struct ds));
 
 	BOUNDS_CHECK((scache->payload + 2), q, scache->rdlen, scache->end);
 	tmpshort = unpack16(p);
@@ -389,6 +429,8 @@ cache_sshfp(struct scache *scache)
 	u_char *p = scache->payload;
 	u_char *q = p;
 
+	memset(&s, 0, sizeof(struct sshfp));
+
 	BOUNDS_CHECK((scache->payload + 1), q, scache->rdlen, scache->end);
 	s.algorithm = *p++;
 	BOUNDS_CHECK((scache->payload + 1), q, scache->rdlen, scache->end);
@@ -417,6 +459,9 @@ cache_dnskey(struct scache *scache)
 	uint16_t rdlen = scache->rdlen;
 	u_char *p = scache->payload;
 	u_char *q = p;
+
+
+	memset(&dk, 0, sizeof(struct dnskey));
 
 	BOUNDS_CHECK((scache->payload + 2), q, scache->rdlen, scache->end);
 	tmpshort = unpack16(p);
@@ -453,6 +498,8 @@ cache_mx(struct scache *scache)
 	u_char expand[256];
 	int max = sizeof(expand);
 	int elen = 0;
+
+	memset(&mx, 0, sizeof(struct smx));
 
 	BOUNDS_CHECK((q + 2), scache->payload, scache->rdlen, scache->end);
 	mxpriority = unpack16(q);
@@ -491,6 +538,8 @@ cache_nsec3(struct scache *scache)
 	uint16_t rdlen = scache->rdlen;
 	u_int16_t iter;
 	u_char *brr = scache->payload;	/* begin of rd record :-) */
+
+	memset(&n, 0, sizeof(struct nsec3));
 
 	BOUNDS_CHECK((scache->payload + 1), brr, scache->rdlen, scache->end);
 	n.algorithm = *p++;
@@ -536,6 +585,9 @@ cache_nsec3param(struct scache *scache)
 	u_int16_t iter;
 	u_char *p = scache->payload;
 	u_char *q = scache->payload;
+
+
+	memset(&np, 0, sizeof(struct nsec3param));
 
 	BOUNDS_CHECK((scache->payload + 1), q, scache->rdlen, scache->end);
 	np.algorithm = *p++;
@@ -594,6 +646,7 @@ cache_ns(struct scache *scache)
 	int max = sizeof(expand);
 	int elen = 0;
 
+	memset(&nsi, 0, sizeof(struct ns));
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, scache->estart, scache->end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
@@ -626,6 +679,8 @@ cache_aaaa(struct scache *scache)
 	u_char *p = scache->payload;
 	u_char *q = p;
 
+	memset(&aaaa, 0, sizeof(struct aaaa));
+
 	BOUNDS_CHECK((scache->payload + sizeof(ia)), q, scache->rdlen, scache->end);
 	unpack((char *)&ia, p, sizeof(struct in6_addr));
 	p += sizeof(ia);
@@ -645,6 +700,8 @@ cache_a(struct scache *scache)
 	u_char *q = p;
 	struct a ar;
 
+	memset(&ar, 0, sizeof(ar));
+
 	BOUNDS_CHECK((scache->payload + sizeof(ia)), q, scache->rdlen, scache->end);
 	ar.a = unpack32(p);
 	p += sizeof(ia);
@@ -663,6 +720,8 @@ cache_tlsa(struct scache *scache)
 	u_char *p = scache->payload;
 	u_char *q = p;
 	uint16_t rdlen = scache->rdlen;
+
+	memset(&t, 0, sizeof(struct tlsa));
 
 	BOUNDS_CHECK((scache->payload + 1), q, scache->rdlen, scache->end);
 	t.usage = *p++;
@@ -700,6 +759,8 @@ cache_srv(struct scache *scache)
 	int max = sizeof(expand);
 	int elen = 0;
 
+	memset(&s, 0, sizeof(struct srv));
+
 	BOUNDS_CHECK((q + 2), scache->payload, scache->rdlen, scache->end);
 	tmp16 = unpack16(q);
 	s.priority = ntohs(tmp16);
@@ -724,7 +785,7 @@ cache_srv(struct scache *scache)
 
 	memcpy(&s.target, expand, sizeof(s.target));
 		
-	transmit_rr(scache, &s, sizeof(s));
+	transmit_rr(scache, (void*)&s, sizeof(s));
 
 	return (q - scache->estart);
 }
@@ -741,7 +802,6 @@ cache_naptr(struct scache *scache)
 	int max = sizeof(expand);
 	int elen = 0;
 	int len, i;
-
 
 	/* we won't cache naptr either for now */
 	return -1;

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.40 2020/07/08 12:29:02 pjp Exp $
+ * $Id: ddd-db.h,v 1.41 2020/07/10 10:42:27 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -64,6 +64,7 @@
 #define IMSG_FORWARD_UDP	12	/* forward a UDP packet */
 #define IMSG_FORWARD_TCP	13	/* forward a TCP packet (with fd) */
 #define IMSG_RR_ATTACHED	14	/* an RR is sent through imsg */
+#define IMSG_PARSEERROR_MESSAGE 15	/* return error message from pledge parser */
 
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2
@@ -358,6 +359,9 @@ struct cfg {
 	int sockcount;			/* set sockets */
 	int nth;
 	pid_t pid;
+	char *shptr;			/* shared memory 1 */
+	char *shptr2;			/* shared memory 2 */
+	char *shptr3;			/* shared memory 3 */
 	ddDB *db;			/* database */
 };
 
@@ -435,7 +439,8 @@ struct scache {
 	uint32_t dnsttl;
 	uint16_t rrtype;
 	struct imsgbuf *imsgbuf;
-	int fd;
+	struct imsgbuf *bimsgbuf;
+	char *shared;
 };
 
 struct cache_logic {
@@ -460,52 +465,48 @@ struct reply_logic {
 #define	MIN(a,b)	(((a) < (b))?(a):(b))
 #endif
 
+struct sf_imsg {
+	int read;
+	int len;
+	char pad[12];
+	struct sforward sf;
+};
+
 struct rr_imsg {
-	char name[DNS_MAXNAME + 1];
-	int namelen;
-	uint16_t rrtype;
-	uint32_t ttl;
-	
-	uint16_t unlen;
+	int read;
+	int len;
+	char pad[12];
 	union {
-		struct dnskey dnskey;
-		struct rrsig rrsig;
-		struct nsec nsec;
-		struct nsec3 nsec3;
-		struct nsec3param nsec3param;
-		struct ds ds;
-		struct soa soa;
-		struct smx mx;
-		struct ns ns;
-		struct srv srv;
-		struct sshfp sshfp;
-		struct tlsa tlsa;		
-		struct naptr naptr;
-		struct cname cname;
-		struct ptr ptr;
-		struct txt txt;
-		struct a a;
-		struct aaaa aaaa;
-	} un;
-#define ri_dnskey	un.dnskey
-#define ri_rrsig	un.rrsig
-#define ri_nsec		un.nsec
-#define ri_nsec3	un.nsec3
-#define ri_nsec3param	un.nsec3param
-#define ri_ds		un.ds
-#define ri_soa		un.soa
-#define ri_mx		un.mx
-#define ri_ns		un.ns
-#define	ri_srv		un.srv
-#define ri_sshfp	un.sshfp
-#define ri_tlsa		un.tlsa
-#define ri_naptr	un.naptr
-#define ri_cname	un.cname
-#define ri_ptr		un.ptr
-#define ri_txt		un.txt
-#define ri_a		un.a
-#define ri_aaaa		un.aaaa
+		struct  {
+			char name[DNS_MAXNAME + 1];
+			int namelen;
+			uint16_t rrtype;
+			uint32_t ttl;
+			
+			uint16_t buflen;
+
+			char un[7000];
+		} rr;
+
+		char pad[8192];
+	} imsg;
 }; /* end of struct rr_imsg */
 
+struct fwdpq {
+	int read;
+	int rc;
+	int istcp;
+	int cache;
+	int tsigcheck;
+	struct tsig tsig;
+	char mac[32];
+	int buflen;
+
+	char buf[16384];
+};
+
+
+#define	SHAREDMEMSIZE	400
+#define SHAREDMEMSIZE3	200
 
 #endif /* _DB_H */

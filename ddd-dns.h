@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.20 2020/07/06 07:17:40 pjp Exp $
+ * $Id: ddd-dns.h,v 1.21 2020/07/10 10:42:27 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -298,6 +298,7 @@ struct parsequestion {
 	
 struct sforward {
 	int family;
+	time_t gotit;
 
 	struct sockaddr_in from4;
 	struct sockaddr_in6 from6;

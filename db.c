@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.20 2020/07/08 12:29:02 pjp Exp $
+ * $Id: db.c,v 1.21 2020/07/10 10:42:27 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -359,7 +359,7 @@ expire_rr(ddDB *db, char *name, int len, u_int16_t rrtype, time_t now)
 
 	/* expire these */
 	if (rrtype != DNS_TYPE_RRSIG) {
-		if (difftime(now, rp->created) >= rp->ttl) {
+		if (difftime(now, rp->created) >= (double)rp->ttl) {
 			count = 0;
 
 			TAILQ_FOREACH_SAFE(rt1, &rp->rr_head, entries, rt2) {
@@ -378,7 +378,7 @@ expire_rr(ddDB *db, char *name, int len, u_int16_t rrtype, time_t now)
 		count = 0;
 		TAILQ_FOREACH_SAFE(rt1, &rp->rr_head, entries, rt2) {
 			struct rrsig *rrsig = (struct rrsig *)rt1->rdata;
-			if (difftime(now, rrsig->created) >= rrsig->ttl) {
+			if (difftime(now, rrsig->created) >= (double)rrsig->ttl) {
 				TAILQ_REMOVE(&rp->rr_head, rt1, entries);
 				free(rt1->rdata);
 				free(rt1);
@@ -410,7 +410,8 @@ expire_db(ddDB *db, int all)
 		now = time(NULL);
 	else
 #if __OpenBSD__
-		now = 67768036191673199;
+		now = 4000000000;  /* Tue Oct  2 09:06:40 CEST 2096 hbdM */
+
 #else
 		now = 2147483647;
 #endif

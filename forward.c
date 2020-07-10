@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.16 2020/07/08 17:33:28 pjp Exp $
+ * $Id: forward.c,v 1.17 2020/07/10 10:42:27 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -35,6 +35,8 @@
 #include <sys/queue.h>
 #include <sys/uio.h>
 #include <sys/select.h>
+#include <sys/mman.h>
+#include <sys/resource.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -48,6 +50,7 @@
 #include <syslog.h>
 
 #include <unistd.h>
+#include <fcntl.h>
 #include <imsg.h>
 
 #ifdef __linux__
@@ -124,20 +127,6 @@ struct forwardqueue {
 	SLIST_ENTRY(forwardqueue) entries;	/* next entry */
 } *fwq1, *fwq2, *fwqp;
 
-struct fwdpq {
-	int rc;
-	int istcp;
-	int cache;
-	int tsigcheck;
-	struct tsig tsig;
-	char mac[32];
-	int buflen;
-	char buf[1];
-};
-
-
-#define	FWDPQHEADER	sizeof(struct fwdpq)
-
 void	init_forward(void);
 int	insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
 void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
@@ -145,13 +134,14 @@ void	forwardthis(ddDB *, struct cfg *, int, struct sforward *);
 void	sendit(struct forwardqueue *, struct sforward *);
 void	returnit(ddDB *, struct cfg *, struct forwardqueue *, char *, int, struct imsgbuf *);
 struct tsig * check_tsig(char *, int, char *);
-void	fwdparseloop(struct imsgbuf *);
+void	fwdparseloop(struct imsgbuf *, struct imsgbuf *, struct cfg *);
 void	changeforwarder(struct forwardqueue *);
 void 	stirforwarders(void);
 
 extern void 	dolog(int, char *, ...);
 extern void      pack(char *, char *, int);
 extern void     pack16(char *, u_int16_t);
+extern void     pack32(char *, u_int32_t);
 extern uint16_t unpack16(char *);
 extern uint32_t unpack32(char *);
 extern void     ddd_shutdown(void);
@@ -170,7 +160,7 @@ extern void 	build_reply(struct sreply *, int, char *, int, struct question *, s
 extern struct rbtree * Lookup_zone(ddDB *, char *, int, int, int);
 extern struct rbtree *  lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
 extern char *convert_name(char *, int);
-extern int	cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, int);
+extern int	cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, char *);
 
 extern int 	reply_a(struct sreply *, ddDB *);
 extern int 	reply_aaaa(struct sreply *, ddDB *);
@@ -194,6 +184,7 @@ extern int	reply_nsec3(struct sreply *, ddDB *);
 extern int	reply_nsec3param(struct sreply *, ddDB *);
 extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t);
 extern void flag_rr(struct rbtree *rbt);
+extern struct rbtree * find_rrset(ddDB *, char *, int);
 
 /*
  * XXX everything but txt and naptr, works...
@@ -305,13 +296,18 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 {
 	struct timeval tv;
 	struct imsg imsg;
-	struct imsgbuf parse_ibuf, *pibuf;
+	struct imsgbuf parse_ibuf, biparse_ibuf, *pibuf, *bpibuf;
+	struct rr_imsg *ri;
+	struct sf_imsg *sf;
 
 	char *buf;
+	char *rdata;
+	struct rbtree *rbt = NULL;
 
 	int max, sel;
 	int len, need;
 	int pi[2];
+	int bipi[2];
 	int i, count;
 	u_int packetcount = 0;
 
@@ -319,9 +315,19 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	fd_set rset;
 	pid_t pid;
 
+	char *ptr;
+	time_t now, time0;
+
+	ptr = cfg->shptr;
+
 	dolog(LOG_INFO, "FORWARD: expired %d records from non-forwarding DB\n",  expire_db(db, 1));
 
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &pi[0]) < 0) {
+		dolog(LOG_INFO, "socketpair() failed\n");
+		ddd_shutdown();
+		exit(1);
+	}
+	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &bipi[0]) < 0) {
 		dolog(LOG_INFO, "socketpair() failed\n");
 		ddd_shutdown();
 		exit(1);
@@ -340,18 +346,23 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		close(ibuf->fd);
 		close(cortex->fd);
 		close(pi[1]);
+		close(bipi[1]);
 		imsg_init(&parse_ibuf, pi[0]);
-
+		imsg_init(&biparse_ibuf, bipi[0]);
+		
 		setproctitle("forward parse engine");
-		fwdparseloop(&parse_ibuf);
+		fwdparseloop(&parse_ibuf, &biparse_ibuf, cfg);
 		/* NOTREACHED */
 
 		break;
 	default:
 		close(pi[0]);
+		close(bipi[0]);
 		imsg_init(&parse_ibuf, pi[1]);
+		imsg_init(&biparse_ibuf, bipi[1]);
 
 		pibuf = &parse_ibuf;
+		bpibuf = &biparse_ibuf;
 		break;
 	}
 
@@ -374,6 +385,9 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		FD_SET(ibuf->fd, &rset);
 		if (ibuf->fd > max)
 			max = ibuf->fd;
+		FD_SET(bpibuf->fd, &rset);
+		if (bpibuf->fd > max)
+			max = bpibuf->fd;
 
 		SLIST_FOREACH(fwq1, &fwqhead, entries) {
 			if (fwq1->so > max)
@@ -392,17 +406,26 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 
 		sel = select(max + 1, &rset, NULL, NULL, &tv);
 		if (sel == -1) {	
+			dolog(LOG_INFO, "select error\n");
 			continue;
 		}
 		if (sel == 0) {
 			if (cache) {
+				time0 = time(NULL);
 				count = expire_db(db, 0);
+
+				now = time(NULL);
+#if DEBUG
+				dolog(LOG_INFO, "%f seconds spent in expire_db()\n", difftime(now, time0));
+#endif
 				if (count)
 					dolog(LOG_INFO, "Forward CACHE expire_db: expired %d RR's\n", count);
 			}
 			continue;
 		}
 
+		
+		time0 = time(NULL);
 		SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwqp) {
 			if (FD_ISSET(fwq1->so, &rset)) {
 				if (fwq1->istcp) {
@@ -423,13 +446,23 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					if (len <= 0) 
 						goto drop;
 
+					time0 = time(NULL);
 					returnit(db, cfg, fwq1, buf, len, pibuf);
+					now = time(NULL);
+#if DEBUG
+					dolog(LOG_INFO, "%f seconds spent in returnit tcp\n", difftime(now, time0));
+#endif
 				} else {
 					len = recv(fwq1->so, buf, 0xffff, 0);
 					if (len < 0) 
 						goto drop;
 
+					time0 = time(NULL);
 					returnit(db, cfg, fwq1, buf, len, pibuf);
+					now = time(NULL);
+#if DEBUG
+					dolog(LOG_INFO, "%f seconds spent in returnit udp\n", difftime(now, time0));
+#endif
 				}
 
 drop:
@@ -448,12 +481,25 @@ drop:
 
 			}
 		}
-		if (FD_ISSET(ibuf->fd, &rset)) {
 
+		now = time(NULL);
+#if DEBUG
+		dolog(LOG_INFO, "%f seconds spent in singly linked list\n", difftime(now, time0));
+#endif 
+
+
+		if (FD_ISSET(ibuf->fd, &rset)) {
+			time_t time0, now;
+
+			time0 = time(NULL);
 			if ((n = imsg_read(ibuf)) < 0 && errno != EAGAIN) {
 				dolog(LOG_ERR, "imsg read failure %s\n", strerror(errno));
 				continue;
 			}
+			now = time(NULL);
+#if DEBUG
+			dolog(LOG_INFO, "%f seconds spent in imsg_read\n", difftime(now, time0));
+#endif
 			if (n == 0) {
 				/* child died? */
 				dolog(LOG_INFO, "sigpipe on child?  forward process exiting.\n");
@@ -461,17 +507,25 @@ drop:
 			}
 
 			for (;;) {
-				if ((n = imsg_get(ibuf, &imsg)) < 0) {
-					dolog(LOG_ERR, "imsg read error: %s\n", strerror(errno));
+				time0 = time(NULL);
+				errno = 0;
+				if ((n = imsg_get(ibuf, &imsg)) <= 0) {
+					if (n != 0)
+						dolog(LOG_ERR, "imsg read error: %s\n", strerror(errno));
 					break;
 				} else {
+					now = time(NULL);
+#if DEBUG
+					dolog(LOG_INFO, "%f seconds spent in imsg_get\n", difftime(now, time0));
+#endif
+
 					if (n == 0)
 						break;
 
 					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
-					if (datalen != sizeof(struct sforward)) {
+					if (datalen != sizeof(int)) {
 						imsg_free(&imsg);
-						continue;
+						break;
 					}
 
 					switch(imsg.hdr.type) {
@@ -479,22 +533,170 @@ drop:
 #if DEBUG
 						dolog(LOG_INFO, "received UDP message from mainloop\n");
 #endif
-						forwardthis(db, cfg, -1, (struct sforward *)imsg.data);	
+						if (datalen != sizeof(int))
+							break;
+
+						memcpy(&i, imsg.data, sizeof(i));
+
+
+						sf = (struct sf_imsg *)&ptr[16];
+						sf = &sf[i];
+		
+						rdata = malloc(sizeof(struct sforward));
+						if (rdata == NULL) {
+							dolog(LOG_ERR, " cache insertion failed\n");
+							imsg_free(&imsg);
+							break;
+						}
+
+						memcpy(rdata, &sf->sf, sizeof(struct sforward));
+						time0 = time(NULL);
+
+
+#if DEBUG
+						now = time(NULL);	
+						dolog(LOG_INFO, "%f seconds lag between forward from mainloop\n", difftime(now, ((struct sforward *)rdata)->gotit));
+#endif
+
+						forwardthis(db, cfg, -1, (struct sforward *)rdata);	
+						now = time(NULL);
+#if DEBUG
+						dolog(LOG_INFO, "%f seconds spent in forwardthis udp\n", difftime(now, time0));
+#endif
+						free(rdata);
+						/* aquire lock */
+						while (ptr[0] == '*')
+							usleep(arc4random() % 300);
+						ptr[0] = '*';
+
+						sf->read = 1;
+
+						ptr[0] = ' ';	/* release */
+
 						break;
 
 					case IMSG_FORWARD_TCP:
 #if DEBUG
 						dolog(LOG_INFO, "received TCP message and descriptor\n");
 #endif
-						forwardthis(db, cfg, imsg.fd, (struct sforward *)imsg.data);
+						if (datalen != sizeof(int))
+							break;
+
+						memcpy(&i, imsg.data, sizeof(i));
+
+						sf = (struct sf_imsg *)&ptr[16];
+						sf = &sf[i];
+		
+						rdata = malloc(sizeof(struct sforward));
+						if (rdata == NULL) {
+							dolog(LOG_ERR, " cache insertion failed\n");
+							imsg_free(&imsg);
+							break;
+						}
+
+						memcpy(rdata, &sf->sf, sizeof(struct sforward));
+						time0 = time(NULL);
+						forwardthis(db, cfg, imsg.fd, (struct sforward *)rdata);
+						now = time(NULL);
+#if DEBUG
+						dolog(LOG_INFO, "%f seconds spent in forwardthis tcp\n", difftime(now, time0));
+#endif
+						free(rdata);
+						/* aquire lock */
+						while (ptr[0] == '*')
+							usleep(arc4random() % 300);
+						ptr[0] = '*';
+
+						sf->read = 1;
+
+						ptr[0] = ' ';	/* release */
 						break;
 					}
 
 					imsg_free(&imsg);
 				}
+	
+				continue;
 			} /* for (;;) */
 		} /* FD_ISSET... */
-	}
+
+		if (FD_ISSET(bpibuf->fd, &rset)) {
+			time0 = time(NULL);
+			if ((n = imsg_read(bpibuf)) < 0 && errno != EAGAIN) {
+				dolog(LOG_ERR, "imsg read failure %s\n", strerror(errno));
+				continue;
+			}
+			if (n == 0) {
+				/* child died? */
+				dolog(LOG_INFO, "sigpipe on child?  forward process biparse.ibuf exiting.\n");
+				exit(1);
+			}
+
+			for (;;) {
+				if ((n = imsg_get(bpibuf, &imsg)) < 0) {
+					dolog(LOG_ERR, "imsg read error 2: %s\n", strerror(errno));
+					break;
+				} else {
+					if (n == 0)
+						break;
+
+					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+
+					switch(imsg.hdr.type) {
+					case IMSG_RR_ATTACHED:
+						if (datalen != sizeof(int))
+							break;
+
+						memcpy(&i, imsg.data, sizeof(i));
+
+						while (cfg->shptr2[0] == '*')
+							usleep(arc4random() % 300);
+
+						cfg->shptr2[0] = '*';
+						ri = (struct rr_imsg *)&cfg->shptr2[16];
+						for (i = 0; i < SHAREDMEMSIZE; i++, ri++) {
+							if (ri->read == 0) {
+								rdata = malloc(ri->imsg.rr.buflen);
+								if (rdata == NULL) {
+									dolog(LOG_ERR, " cache insertion failed\n");
+									ri->read = 1;
+									continue;
+								}
+
+								memcpy(rdata, &ri->imsg.rr.un, ri->imsg.rr.buflen);
+
+								if ((rbt = create_rr(db, ri->imsg.rr.name, 
+										ri->imsg.rr.namelen, ri->imsg.rr.rrtype, 
+										(void *)rdata, ri->imsg.rr.ttl)) == NULL) {
+									dolog(LOG_ERR, "cache insertion failed 2\n");
+									free(rdata);
+									ri->read = 1;
+									continue;
+								}
+								flag_rr(rbt);
+
+								ri->read = 1;
+							} /* if ri->read == 0*/
+						} /* for */
+						cfg->shptr2[0] = ' ';
+
+						now = time(NULL);
+
+#if DEBUG
+						dolog(LOG_INFO, "%f seconds spent in shared memory\n", difftime(now, time0));
+#endif
+						break;
+		
+					default:
+						break;
+					}
+					imsg_free(&imsg);
+					break;
+				} /* if */
+			} /* for (;;) */
+		} /* FD_ISSET...bpibuf */
+
+	} /* for (;;) */
 
 	/* NOTREACHED */
 }
@@ -595,13 +797,17 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 		if ((count = expire_rr(db, sforward->buf, sforward->buflen, 
 			ntohs(sforward->type), now)) != 0) {
 			dolog(LOG_INFO, "Forward CACHE expired %d records\n", count);
-			goto newqueue;
+			rbt = find_rrset(db, sforward->buf, sforward->buflen);
+			if (rbt == NULL) {
+				dolog(LOG_INFO, "no such record in our cache, skip\n");
+				goto newqueue;
+			}
 		}
 		/* sforward->type is in netbyte order */
 		if (Lookup_zone(db, sforward->buf, sforward->buflen, 
 			ntohs(sforward->type), 0) != NULL) {
 			/* we have a cache */
-#if DEBUG
+#if 0
 			dolog(LOG_INFO, "replying %s type %d out of the cache\n", convert_name(sforward->buf, sforward->buflen), ntohs(sforward->type));
 #endif
 			/* build a pseudo question packet */
@@ -676,16 +882,18 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 					 * at this point the rl->reply will fail.. expire it
 					 * and fill it with dnssec data if available
 					 */
-					if (q->dnssecok == 1) {
-						expire_rr(db, q->hdr->name, q->hdr->namelen, 
+					expire_rr(db, q->hdr->name, q->hdr->namelen, 
 							ntohs(q->hdr->qtype), highexpire);
-						free_question(q);
-						goto newqueue;
-					}
-					dolog(LOG_INFO, "reply failed\n");
+					free_question(q);
+					goto newqueue;
 				}
 				break;
 			    } /* if rl->rrtype == */
+			}
+
+			if (rl->rrtype == 0) {
+				dolog(LOG_INFO, "we did not have any right answer in our cache, skip to newqueue\n");
+				goto newqueue;
 			}
 
 			free_question(q);
@@ -850,8 +1058,8 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	}
 
 	q->edns0len = sforward->edns0len;
-	if (q->edns0len > (MAX_IMSGSIZE - FWDPQHEADER))
-		q->edns0len = (MAX_IMSGSIZE - FWDPQHEADER);
+	if (q->edns0len > 16384)
+		q->edns0len = 16384;
 	
 	if (fwq->istcp == 1) {
 		p = &buf[2];
@@ -928,26 +1136,26 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 void
 returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct imsgbuf *ibuf)
 {
-	struct rbtree *rbt = NULL;
 	struct timeval tv;
 	struct dns_header *dh;
 	struct tsig *stsig = NULL;
 	struct question *q;
-	struct fwdpq *fwdpq;
+	struct fwdpq *fwdpq, *fwdpq0;
 	struct imsg imsg;
-	struct rr_imsg ri;
 
 	static char *buf = NULL;
-	char *p, *rdata;
+	char *p;
 
 	int so;
-	int sel;
+	int i; 	/* = v/r */
+	int sel, rc;
 	int len = 0;
 	int outlen;
 
 	socklen_t tolen;
 	fd_set rset;
 	ssize_t n, datalen;
+	time_t time0, now;
 
 	if (buf == NULL) {
 		buf = calloc(1, 0xffff + 2);
@@ -986,7 +1194,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	}
 
 	/* send it on to our sandbox */
-	fwdpq = (struct fwdpq *)calloc(1, rlen + FWDPQHEADER);
+	fwdpq = (struct fwdpq *)calloc(1, sizeof(struct fwdpq));
 	if (fwdpq == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 		return;
@@ -997,12 +1205,12 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	if (fwq->istcp) {
 		fwdpq->buflen = rlen;
 	} else {
-		if (rlen > (16384 - FWDPQHEADER)) {	/* leave some space for struct */
+		if (rlen > sizeof(fwdpq->buf)) {
 			dolog(LOG_INFO, "can't send packet to parser, too big\n");
 			return;
 		}
 
-		memcpy(&fwdpq->buf, p, rlen);
+		memcpy(&fwdpq->buf[0], p, rlen);
 		fwdpq->buflen = rlen;
 
 	}
@@ -1019,13 +1227,30 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		fwdpq->istcp = 1;
 	else
 		fwdpq->istcp = 0;
+	
+	/* lock */
+	while (cfg->shptr3[0] == '*')
+		usleep(arc4random() % 300);
 
-	if (imsg_compose(ibuf, IMSG_PARSE_MESSAGE, 0, 0, (fwq->istcp == 1) ? fwq->so : -1, fwdpq, fwq->istcp ? FWDPQHEADER : rlen + FWDPQHEADER) < 0) {
+	cfg->shptr3[0] = '*';
+
+	fwdpq0 = (struct fwdpq *)&cfg->shptr3[16];
+	for (i = 0; i < SHAREDMEMSIZE3; i++, fwdpq0++) {
+		if (unpack32((char *)&fwdpq0->read) == 1) {
+				memcpy(fwdpq0, fwdpq, sizeof(struct fwdpq));
+				pack32((char *)&fwdpq0->read, 0);
+				break;
+		}
+	}
+
+	if (imsg_compose(ibuf, IMSG_PARSE_MESSAGE, 0, 0, (fwq->istcp == 1) ? fwq->so : -1, &i, sizeof(i)) < 0) {
 			dolog(LOG_INFO, "imsg_compose: %s\n", strerror(errno));
 			free(fwdpq);
 			return;
 	}
 	msgbuf_write(&ibuf->w);
+
+	cfg->shptr3[0] = ' ';
 	
 	for (;;) {
 		FD_ZERO(&rset);
@@ -1042,14 +1267,19 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		}
 		if (sel == 0) {
 			dolog(LOG_ERR, "returnit internal error around select (timeout), drop\n");
-			continue;
+			return;
 		}
 
 		if (FD_ISSET(ibuf->fd, &rset)) {
-			if (((n = imsg_read(ibuf)) == -1 && errno != EAGAIN)) {
+			time0 = time(NULL);
+			if ((n = imsg_read(ibuf)) == -1 && errno != EAGAIN) {
 				dolog(LOG_ERR, "returnit internal error around imsg_read, drop\n");
 				continue;
 			}
+			now = time(NULL);
+#if DEBUG
+			dolog(LOG_INFO, "%f seconds spent in imsg_read 2\n", difftime(now, time0));
+#endif
 			if (n == 0) {
 				dolog(LOG_INFO, "imsg peer died?  shutting down\n");
 				ddd_shutdown();
@@ -1063,10 +1293,15 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 			
 
 		for (;;) {
+			time0 = time(NULL);
 			if ((n = imsg_get(ibuf, &imsg)) == -1) {
 				dolog(LOG_ERR, "returnit internal error around imsg_get, drop\n");
 				break;
 			}
+			now = time(NULL);
+#if DEBUG
+			dolog(LOG_INFO, "%f seconds spent in imsg_get\n", difftime(now, time0));
+#endif
 
 			if (n == 0) {
 #if DEBUG
@@ -1077,51 +1312,55 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		
 			datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
 			switch (imsg.hdr.type) {
+			case IMSG_PARSEERROR_MESSAGE:
+					if (datalen != sizeof(int)) {
+							dolog(LOG_ERR, "bad parserepy message, drop\n", fwdpq->rc);
+							imsg_free(&imsg);
+							free(fwdpq);
+							return;
+					}
+
+					memcpy(&rc, imsg.data, datalen);
+
+						if (rc != PARSE_RETURN_ACK) {
+							dolog(LOG_ERR, "returnit parser did not ACK this (%d), drop\n", rc);
+							imsg_free(&imsg);
+							free(fwdpq);
+							return;
+						}
+
+						imsg_free(&imsg);
+						break;
 			case IMSG_PARSEREPLY_MESSAGE:
-				memcpy(fwdpq, imsg.data, datalen);
+
+					if (datalen != sizeof(int)) {
+							dolog(LOG_ERR, "bad parsereply message, drop\n");
+							imsg_free(&imsg);
+							free(fwdpq);
+							return;
+					}
+
+					memcpy(&i, imsg.data, sizeof(int));
+
+					/* lock */
+					while (cfg->shptr3[0] == '*')
+						usleep(arc4random() % 300);
+
+					cfg->shptr3[0] = '*';
+
+					fwdpq0 = (struct fwdpq *)&cfg->shptr3[16];
+					fwdpq0 = &fwdpq0[i];
+
+					memcpy(fwdpq, fwdpq0, sizeof(struct fwdpq));
+
+					pack32((char *)&fwdpq0->read, 1);
+					cfg->shptr3[0] = ' ';
 
 				if (fwq->istcp == 1) 
 					fwq->so = imsg.fd;
 
-				if (fwdpq->rc != PARSE_RETURN_ACK) {
-					dolog(LOG_ERR, "returnit parser did not ACK this (%d), drop\n", fwdpq->rc);
-					imsg_free(&imsg);
-					break;
-				}
-
-
 				imsg_free(&imsg);
 				goto endimsg;
-				break;
-			case IMSG_RR_ATTACHED:
-				if (datalen > sizeof(ri)) {
-					dolog(LOG_ERR, "returnit RR reply was bogus\n");
-					imsg_free(&imsg);
-					break;
-				}
-
-				memcpy((void *)&ri, imsg.data, datalen);
-
-				rdata = malloc(ri.unlen);
-				if (rdata == NULL) {
-					dolog(LOG_ERR, "returnit cache insertion failed\n");
-					imsg_free(&imsg);
-					break;
-				}
-
-				memcpy(rdata, &ri.un, ri.unlen);
-
-				if ((rbt = create_rr(db, ri.name, ri.namelen, 
-						ri.rrtype, (void *)rdata, ri.ttl)) == NULL) {
-					dolog(LOG_ERR, "returnit cache insertion failed 2\n");
-					imsg_free(&imsg);
-					free(rdata);
-					break;
-				}
-
-				flag_rr(rbt);
-
-				imsg_free(&imsg);
 				break;
 			default:
 				dolog(LOG_INFO, "received unexpected IMSG\n");
@@ -1129,9 +1368,9 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 				break;
 			}
 
+			/*  back to select */
 			break;
 		}	/* for (;;) */
-		/*  back to select */
 	} /* for (;;) */
 
 endimsg:
@@ -1631,14 +1870,14 @@ check_tsig(char *buf, int len, char *mac)
 }
 
 void
-fwdparseloop(struct imsgbuf *ibuf)
+fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 {
 	int fd = ibuf->fd;
 	int sel, istcp = 0;
-	int rlen, tmp;
+	int rlen, tmp, rc, i;
 
 	struct tsig *stsig = NULL;
-	struct fwdpq *fwdpq;
+	struct fwdpq *fwdpq, *fwdpq0;
 	struct imsg imsg;
 	struct dns_header *dh;
 
@@ -1646,6 +1885,13 @@ fwdparseloop(struct imsgbuf *ibuf)
 	u_char *end, *estart;
 	fd_set rset;
 	ssize_t n, datalen;
+	int flags;
+
+	fcntl(bibuf->fd, F_GETFL, &flags, sizeof(flags));
+	flags |= O_NONBLOCK;
+	if (fcntl(bibuf->fd, F_SETFL, &flags, sizeof(flags)) < 0) {
+		dolog(LOG_INFO, "fcntl: %s\n", strerror(errno));
+	}
 
 #if __OpenBSD__
 	if (pledge("stdio sendfd recvfd", NULL) < 0) {
@@ -1656,7 +1902,7 @@ fwdparseloop(struct imsgbuf *ibuf)
 #endif
 
 
-	fwdpq = (struct fwdpq *)calloc(1, 0xffff + FWDPQHEADER);
+	fwdpq = (struct fwdpq *)calloc(1, sizeof(struct fwdpq));
 	if (fwdpq == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 		ddd_shutdown();
@@ -1690,24 +1936,32 @@ fwdparseloop(struct imsgbuf *ibuf)
 				}
 
 				datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
-	
-				if (imsg.fd != -1) {
-					istcp = 1;	
-				}
 
 				switch (imsg.hdr.type) {
 				case IMSG_PARSE_MESSAGE:
-
 					/* XXX magic numbers */
-					if (datalen > MAX_IMSGSIZE) {
-						fwdpq->rc = PARSE_RETURN_NAK;
-						imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, imsg.fd, fwdpq, sizeof(struct fwdpq));
+					if (datalen != sizeof(int)) {
+						rc = PARSE_RETURN_NAK;
+						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, imsg.fd, &rc, sizeof(int));
 						msgbuf_write(&ibuf->w);
 						break;
 					}
+					
+					memcpy(&i, imsg.data, datalen);
 
-					memcpy(fwdpq, imsg.data, datalen);
+					/* lock */
+					while (cfg->shptr3[0] == '*')
+						usleep(arc4random() % 300);
 
+					cfg->shptr3[0] = '*';
+
+					fwdpq0 = (struct fwdpq *)&cfg->shptr3[16];
+					fwdpq0 = &fwdpq0[i];
+
+					memcpy(fwdpq, fwdpq0, sizeof(struct fwdpq));
+					pack32((char *)&fwdpq0->read, 1);
+
+					cfg->shptr3[0] = ' '; 	/* unlock */
 
 					istcp = fwdpq->istcp;
 
@@ -1715,44 +1969,50 @@ fwdparseloop(struct imsgbuf *ibuf)
 						packet = malloc(fwdpq->buflen);
 						if (packet == NULL) {
 							dolog(LOG_INFO, "malloc %s\n", strerror(errno));
-							fwdpq->rc = PARSE_RETURN_NAK;
+							rc = PARSE_RETURN_NAK;
 							/* send the descriptor back to them */
-							imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, imsg.fd, fwdpq, sizeof(struct fwdpq));
+							imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, imsg.fd, &rc, sizeof(int));
 							msgbuf_write(&ibuf->w);
 							break;
 						}
 
-						if (recv(imsg.fd, packet, fwdpq->buflen, 0) < 0) {
+						if (recv(imsg.fd, packet, fwdpq->buflen, MSG_WAITALL) < 0) {
 							dolog(LOG_INFO, "recv in forward sandbox: %s\n", strerror(errno));
-							fwdpq->rc = PARSE_RETURN_NAK;
+							rc = PARSE_RETURN_NAK;
 							/* send the descriptor back to them */
-							imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, imsg.fd, fwdpq, sizeof(struct fwdpq));
+							imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, imsg.fd, &rc, sizeof(int));
 							msgbuf_write(&ibuf->w);
+							free(packet);
 							break;
 						}
+						dolog(LOG_INFO, "received %d bytes from descriptor %d\n", fwdpq->buflen, imsg.fd);
 					} else
-						packet = (u_char *)&fwdpq->buf;
+						packet = &fwdpq->buf[0];
 
 					if (istcp) {
 						tmp = fwdpq->buflen;
 					} else {
-						tmp = datalen - FWDPQHEADER;
+						tmp = fwdpq->buflen;
 					}
 
 					if (tmp < sizeof(struct dns_header)) {
 						/* SEND NAK */
-						fwdpq->rc = PARSE_RETURN_NAK;
-						imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, fwdpq, sizeof(struct fwdpq));
+						rc = PARSE_RETURN_NAK;
+						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &rc, sizeof(int));
 						msgbuf_write(&ibuf->w);
+						if (istcp)
+							free(packet);
 						break;
 					}
 					/* pjp */
 					dh = (struct dns_header *)packet;
 
 					if (! (ntohs(dh->query) & DNS_REPLY)) {
-						fwdpq->rc = PARSE_RETURN_NOTAREPLY;
-						imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, fwdpq, sizeof(struct fwdpq));
+						rc = PARSE_RETURN_NOTAREPLY;
+						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &rc, sizeof(int));
 						msgbuf_write(&ibuf->w);
+						if (istcp)
+							free(packet);
 						break;
 					}
 
@@ -1765,9 +2025,11 @@ fwdparseloop(struct imsgbuf *ibuf)
 						 * all valid answers have a
 						 * question, so this is good
 						 */
-						fwdpq->rc = PARSE_RETURN_NOQUESTION;
-						imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, fwdpq, sizeof(struct fwdpq));
+						rc = PARSE_RETURN_NOQUESTION;
+						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &rc, sizeof(int));
 						msgbuf_write(&ibuf->w);
+						if (istcp)
+							free(packet);
 						break;
 					}
 					/* insert parsing logic here */
@@ -1778,12 +2040,11 @@ fwdparseloop(struct imsgbuf *ibuf)
 							rlen = tmp;
 							end = &packet[rlen];
 
-							if (cacheit(packet, estart, end, ibuf, imsg.fd) < 0) {
-								goto skipcache;
+							if (cacheit(packet, estart, end, ibuf, bibuf, cfg->shptr2) < 0) {
+								dolog(LOG_INFO, "cacheit failed\n");
 							}
 					}
 
-skipcache:
 					/* check to see if we tsig */
 			
 					if (fwdpq->tsigcheck) {
@@ -1791,11 +2052,13 @@ skipcache:
 							stsig = check_tsig((char *)packet, rlen, fwdpq->mac);
 							if (stsig == NULL) {
 								dolog(LOG_INFO, "FORWARD parser, malformed reply packet\n");
-								fwdpq->rc = PARSE_RETURN_MALFORMED;
+								rc = PARSE_RETURN_MALFORMED;
 
-								imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, fwdpq, sizeof(struct fwdpq));
+								imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &rc, sizeof(int));
 								msgbuf_write(&ibuf->w);
 			
+								if (istcp)
+									free(packet);
 								break;
 							}
 
@@ -1803,14 +2066,32 @@ skipcache:
 					}
 
 					fwdpq->rc = PARSE_RETURN_ACK;
-					imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, fwdpq, sizeof(struct fwdpq));
+
+					cfg->shptr3[0] = '*';
+
+					fwdpq0 = (struct fwdpq *)&cfg->shptr3[16];
+					for (i = 0; i < SHAREDMEMSIZE3; i++, fwdpq0++) {
+						if (unpack32((char *)&fwdpq0->read) == 1) {
+							memcpy(fwdpq0, fwdpq, sizeof(struct fwdpq));
+							pack32((char *)&fwdpq0->read, 0);
+							break;
+						}
+					}
+
+					imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &i, sizeof(int));
 					msgbuf_write(&ibuf->w);
 
+					cfg->shptr3[0] = ' ';
+
 					free(stsig);
+
+					if (istcp)
+						free(packet);
 					break;
 				} /* switch */
 
 				imsg_free(&imsg);
+				break;
 			} /* for(;;) */
 		} /* FD_ISSET */
 	} /* for(;;) */
