@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.17 2020/07/10 10:42:27 pjp Exp $
+ * $Id: forward.c,v 1.18 2020/07/11 06:18:36 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1217,6 +1217,8 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 
 	if (fwq->tsigkey)
 		fwdpq->tsigcheck = 1;
+	else
+		fwdpq->tsigcheck = 0;
 	
 	if (cache)
 		fwdpq->cache = 1;
@@ -1314,7 +1316,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 			switch (imsg.hdr.type) {
 			case IMSG_PARSEERROR_MESSAGE:
 					if (datalen != sizeof(int)) {
-							dolog(LOG_ERR, "bad parserepy message, drop\n", fwdpq->rc);
+							dolog(LOG_ERR, "bad parserepy message, drop\n");
 							imsg_free(&imsg);
 							free(fwdpq);
 							return;
@@ -1385,7 +1387,8 @@ endimsg:
 	dh->additional--;
 	HTONS(dh->additional);
 
-	rlen = fwdpq->tsig.tsigoffset;
+	if (fwdpq->tsigcheck)
+		rlen = fwdpq->tsig.tsigoffset;
 
 	free(fwdpq);
 	
@@ -2004,7 +2007,6 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 							free(packet);
 						break;
 					}
-					/* pjp */
 					dh = (struct dns_header *)packet;
 
 					if (! (ntohs(dh->query) & DNS_REPLY)) {
