@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.18 2020/07/11 06:18:36 pjp Exp $
+ * $Id: forward.c,v 1.19 2020/07/11 10:01:56 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -228,6 +228,7 @@ extern int debug, verbose;
 extern int tsig;
 extern int dnssec;
 extern int cache;
+extern int forward;
 
 
 /*
@@ -320,6 +321,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 
 	ptr = cfg->shptr;
 
+	forward = 0; 		/* in this process we don't need forward on */
 	dolog(LOG_INFO, "FORWARD: expired %d records from non-forwarding DB\n",  expire_db(db, 1));
 
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &pi[0]) < 0) {
@@ -1138,7 +1140,6 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 {
 	struct timeval tv;
 	struct dns_header *dh;
-	struct tsig *stsig = NULL;
 	struct question *q;
 	struct fwdpq *fwdpq, *fwdpq0;
 	struct imsg imsg;
@@ -1316,7 +1317,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 			switch (imsg.hdr.type) {
 			case IMSG_PARSEERROR_MESSAGE:
 					if (datalen != sizeof(int)) {
-							dolog(LOG_ERR, "bad parserepy message, drop\n");
+							dolog(LOG_ERR, "bad parsereply message, drop\n");
 							imsg_free(&imsg);
 							free(fwdpq);
 							return;
@@ -1377,15 +1378,18 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 
 endimsg:
 				
-	if (fwdpq->tsig.have_tsig && fwdpq->tsig.tsigverified == 0) {
-		dolog(LOG_INFO, "FORWARD returnit, TSIG didn't check out error code = %d\n", stsig->tsigerrorcode);
+	if (fwq->tsigkey && (fwdpq->tsig.have_tsig == 0 || fwdpq->tsig.tsigverified == 0)) {
+		dolog(LOG_INFO, "FORWARD returnit, TSIG didn't check out error code = %d\n", fwdpq->tsig.tsigerrorcode);
 		free(fwdpq);
 		return;
 	}
 
-	NTOHS(dh->additional);
-	dh->additional--;
-	HTONS(dh->additional);
+	if (fwdpq->tsig.have_tsig) {
+		NTOHS(dh->additional);
+		if (dh->additional > 0)
+			dh->additional--;
+		HTONS(dh->additional);
+	}
 
 	if (fwdpq->tsigcheck)
 		rlen = fwdpq->tsig.tsigoffset;
@@ -1475,15 +1479,19 @@ check_tsig(char *buf, int len, char *mac)
 
 	struct dns_tsigrr *tsigrr = NULL;
 	struct dns_optrr *opt = NULL;
-	struct dns_header *hdr = (struct dns_header *)buf;
+	struct dns_header *hdr; 
 	struct tsig *rtsig;
 
+	
+	hdr = (struct dns_header *)&buf[0];
 	
 	rtsig = (void *)calloc(1, sizeof(struct tsig));
 	if (rtsig == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 		return NULL;
 	}
+
+	rtsig->tsigoffset = len;
 
 	rollback = i = sizeof(struct dns_header);
 	/* the name is parsed here */
@@ -1868,7 +1876,6 @@ check_tsig(char *buf, int len, char *mac)
 	} while (0);
 
 	/* parse type and class from the question */
-
 	return (rtsig);
 }
 
