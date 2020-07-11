@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.120 2020/07/11 15:11:41 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.121 2020/07/11 20:43:18 pjp Exp $
  */
 
 
@@ -1089,6 +1089,7 @@ main(int argc, char *argv[], char *environ[])
 		}
 
 		cfg->shptr = shptr;
+		cfg->shptrsize = shsize;
 
 		shsize = 16 + (SHAREDMEMSIZE * sizeof(struct rr_imsg));
 
@@ -1106,6 +1107,7 @@ main(int argc, char *argv[], char *environ[])
 		}
 
 		cfg->shptr2 = shptr;
+		cfg->shptr2size = shsize;
 
 		shsize = 16 + (SHAREDMEMSIZE3 * sizeof(struct fwdpq));
 
@@ -1123,6 +1125,7 @@ main(int argc, char *argv[], char *environ[])
 		}
 
 		cfg->shptr3 = shptr;
+		cfg->shptr3size = shsize;
 
 		switch (pid = fork()) {
 		case -1:
@@ -1174,6 +1177,13 @@ main(int argc, char *argv[], char *environ[])
 
 			cfg->sockcount = i;
 			cfg->db = db;
+
+			/* shptr has no business in parse process */
+			minherit(cfg->shptr, cfg->shptrsize,
+				MAP_INHERIT_NONE);
+			cfg->shptrsize = arc4random();
+			cfg->shptr2size = arc4random();
+			cfg->shptr3size = arc4random();
 
 			setproctitle("FORWARD engine");
 			forwardloop(db, cfg, ibuf, &cortex_ibuf);
@@ -1619,6 +1629,58 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	ssize_t n, datalen;
 	int ix;
 	
+	pid = fork();
+	switch (pid) {
+	case -1:
+		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
+		exit(1);
+	case 0:
+		for (i = 0; i < cfg->sockcount; i++)  {
+				close(cfg->udp[i]);
+				if (axfrport && axfrport != port)
+					close(cfg->axfr[i]);
+		}
+		tcp_ibuf = register_cortex(ibuf, MY_IMSG_TCP);
+		if (tcp_ibuf == NULL) {
+			ddd_shutdown();
+			exit(1);
+		}
+		/* shptr has no business in a tcp parse process */
+		if (forward) {
+			minherit(cfg->shptr, cfg->shptrsize,
+				MAP_INHERIT_NONE);
+			minherit(cfg->shptr2, cfg->shptr2size,
+				MAP_INHERIT_NONE);
+			minherit(cfg->shptr3, cfg->shptr3size,
+				MAP_INHERIT_NONE);
+			cfg->shptrsize = arc4random();
+			cfg->shptr2size = arc4random();
+			cfg->shptr3size = arc4random();
+		}
+
+		setproctitle("TCP engine %d", cfg->pid);
+		tcploop(cfg, tcp_ibuf, ibuf);
+		/* NOTREACHED */
+		exit(1);
+	default:
+		for (i = 0; i < cfg->sockcount; i++)  {
+				close(cfg->tcp[i]);
+		}
+		break;
+	}
+
+	/* shptr has no business in a udp parse process */
+	if (forward) {
+		minherit(cfg->shptr, cfg->shptrsize,
+			MAP_INHERIT_NONE);
+		minherit(cfg->shptr2, cfg->shptr2size,
+			MAP_INHERIT_NONE);
+		minherit(cfg->shptr3, cfg->shptr3size,
+			MAP_INHERIT_NONE);
+		cfg->shptrsize = arc4random();
+		cfg->shptr2size = arc4random();
+		cfg->shptr3size = arc4random();
+	}
 
 	sforward = (struct sforward *)calloc(1, sizeof(struct sforward));
 	if (sforward == NULL) {
@@ -1652,11 +1714,9 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
 		exit(1);
 	case 0:
+		/* close udp decriptors */
 		for (i = 0; i < cfg->sockcount; i++)  {
 				close(cfg->udp[i]);
-				close(cfg->tcp[i]);
-				if (axfrport && axfrport != port)
-					close(cfg->axfr[i]);
 		}
 		close(ibuf->fd);
 		close(udp_ibuf->fd);
@@ -1673,34 +1733,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		break;
 	}
 
-	pid = fork();
-	switch (pid) {
-	case -1:
-		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
-		exit(1);
-	case 0:
-		for (i = 0; i < cfg->sockcount; i++)  {
-				close(cfg->udp[i]);
-				if (axfrport && axfrport != port)
-					close(cfg->axfr[i]);
-		}
-		tcp_ibuf = register_cortex(ibuf, MY_IMSG_TCP);
-		if (tcp_ibuf == NULL) {
-			ddd_shutdown();
-			exit(1);
-		}
-		close(udp_ibuf->fd);
-		close(pibuf->fd);
-		setproctitle("TCP engine %d", cfg->pid);
-		tcploop(cfg, tcp_ibuf, ibuf);
-		/* NOTREACHED */
-		exit(1);
-	default:
-		for (i = 0; i < cfg->sockcount; i++)  {
-				close(cfg->tcp[i]);
-		}
-		break;
-	}
 
 
 #if __OpenBSD__

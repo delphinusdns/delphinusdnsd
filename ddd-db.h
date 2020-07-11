@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.41 2020/07/10 10:42:27 pjp Exp $
+ * $Id: ddd-db.h,v 1.42 2020/07/11 20:43:18 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -360,8 +360,11 @@ struct cfg {
 	int nth;
 	pid_t pid;
 	char *shptr;			/* shared memory 1 */
+	size_t shptrsize;
 	char *shptr2;			/* shared memory 2 */
+	size_t shptr2size;
 	char *shptr3;			/* shared memory 3 */
+	size_t shptr3size;
 	ddDB *db;			/* database */
 };
 
