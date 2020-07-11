@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.119 2020/07/10 16:42:31 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.120 2020/07/11 15:11:41 pjp Exp $
  */
 
 
@@ -1055,6 +1055,7 @@ main(int argc, char *argv[], char *environ[])
 			for (j = 0; j < i; j++) {
 				close(tcp[j]);
 				close(udp[j]);
+				close(dup[j]);
 			}
 
 			setproctitle("Replicant engine");
