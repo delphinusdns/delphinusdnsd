@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.21 2020/07/10 10:42:27 pjp Exp $
+ * $Id: ddd-dns.h,v 1.22 2020/07/12 14:44:52 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -297,28 +297,28 @@ struct parsequestion {
 };
 	
 struct sforward {
-	int family;
-	time_t gotit;
+	int family;			/* 4 */
+	time_t gotit;			/* 12 */
 
-	struct sockaddr_in from4;
-	struct sockaddr_in6 from6;
+	struct sockaddr_in from4;	/* 28 */
+	struct sockaddr_in6 from6;	/* 56 */
 
-	int oldsel;
-	uint16_t rport;
-	char buf[512];
-	int buflen;
-	struct dns_header header;
-	uint16_t type;
-	uint16_t class;
-	uint16_t edns0len;
-	int dnssecok;
+	int oldsel;			/* 60 */
+	uint16_t rport;			/* 62 */
+	char buf[512];			/* 574 */
+	int buflen;			/* 578 */
+	struct dns_header header;	/* 592 */
+	uint16_t type;			/* 594 */
+	uint16_t class;			/* 596 */
+	uint16_t edns0len;		/* 598 */
+	int dnssecok;			/* 602 */
 
-	int havemac;
-	char tsigname[256];
-	int tsignamelen;
-	uint64_t tsigtimefudge;
+	int havemac;			/* 606 */
+	char tsigname[256];		/* 862 */
+	int tsignamelen;		/* 866 */
+	uint64_t tsigtimefudge;		/* 874 */
 
-	char mac[32];
+	char mac[32];			/* 906 */
 };
 
 	

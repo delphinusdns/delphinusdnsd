@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.121 2020/07/11 20:43:18 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.122 2020/07/12 14:44:52 pjp Exp $
  */
 
 
@@ -1084,8 +1084,8 @@ main(int argc, char *argv[], char *environ[])
 		}
 
 		/* initialize */
-		for (sf = (struct sf_imsg *)&shptr[16], j = 0; j < SHAREDMEMSIZE; j++, sf++) {
-			sf->read = 1;
+		for (sf = (struct sf_imsg *)&shptr[0], j = 0; j < SHAREDMEMSIZE; j++, sf++) {
+			sf->u.s.read = 1;
 		}
 
 		cfg->shptr = shptr;
@@ -1181,7 +1181,10 @@ main(int argc, char *argv[], char *environ[])
 			/* shptr has no business in parse process */
 			minherit(cfg->shptr, cfg->shptrsize,
 				MAP_INHERIT_NONE);
+#if 0
 			cfg->shptrsize = arc4random();
+			/* disable for now */
+#endif
 			cfg->shptr2size = arc4random();
 			cfg->shptr3size = arc4random();
 
@@ -1653,7 +1656,10 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				MAP_INHERIT_NONE);
 			minherit(cfg->shptr3, cfg->shptr3size,
 				MAP_INHERIT_NONE);
+#if 0
+			/* disable for now */
 			cfg->shptrsize = arc4random();
+#endif
 			cfg->shptr2size = arc4random();
 			cfg->shptr3size = arc4random();
 		}
@@ -1677,7 +1683,10 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 			MAP_INHERIT_NONE);
 		minherit(cfg->shptr3, cfg->shptr3size,
 			MAP_INHERIT_NONE);
+#if 0
+		/* disable for now */
 		cfg->shptrsize = arc4random();
+#endif
 		cfg->shptr2size = arc4random();
 		cfg->shptr3size = arc4random();
 	}
@@ -2230,20 +2239,20 @@ forwardudp:
 							sforward->havemac = 0;
 
 						sforward->gotit = time(NULL);
-						memcpy(&sf.sf, sforward, sizeof(struct sforward));
+						memcpy(&sf.u.s.sf, sforward, sizeof(struct sforward));
 						
 						/* wait for lock */
-						while (cfg->shptr[0] == '*') {
+						while (cfg->shptr[cfg->shptrsize - 16] == '*') {
 							usleep(arc4random() % 300);
 						}
 
-						cfg->shptr[0] = '*'; /* nice semaphore eh? */
+						cfg->shptr[cfg->shptrsize - 16] = '*'; /* nice semaphore eh? */
 
-						for (sfi = (struct sf_imsg *)&cfg->shptr[16], ix = 0;
+						for (sfi = (struct sf_imsg *)&cfg->shptr[0], ix = 0;
 								 ix < SHAREDMEMSIZE; ix++, sfi++) {
-									if (unpack32((char *)&sfi->read) == 1) {
+									if (unpack32((char *)&sfi->u.s.read) == 1) {
 										memcpy(sfi, &sf, sizeof(struct sf_imsg));
-										pack32((char *)&sfi->read, 0);
+										pack32((char *)&sfi->u.s.read, 0);
 										break;
 									}
 						}
@@ -2253,7 +2262,7 @@ forwardudp:
 							goto udpout;
 						}
 
-						cfg->shptr[0] = ' ';
+						cfg->shptr[cfg->shptrsize - 16] = ' ';
 
 						imsg_compose(udp_ibuf, IMSG_FORWARD_UDP,
 							0, 0, -1, &ix, sizeof(int));
@@ -3289,20 +3298,20 @@ forwardtcp:
 							sforward->havemac = 0;
 
 						sforward->gotit = time(NULL);
-						memcpy(&sf.sf, sforward, sizeof(struct sforward));
+						memcpy(&sf.u.s.sf, sforward, sizeof(struct sforward));
 						
 						/* wait for lock */
-						while (cfg->shptr[0] == '*') {
+						while (cfg->shptr[cfg->shptrsize - 16] == '*') {
 							usleep(arc4random() % 300);
 						}
 
-						cfg->shptr[0] = '*'; /* nice semaphore eh? */
+						cfg->shptr[cfg->shptrsize - 16] = '*'; /* nice semaphore eh? */
 
-						for (sfi = (struct sf_imsg *)&cfg->shptr[16], ix = 0;
+						for (sfi = (struct sf_imsg *)&cfg->shptr[0], ix = 0;
 								 ix < SHAREDMEMSIZE; ix++, sfi++) {
-									if (unpack32((char *)&sfi->read) == 1) {
+									if (unpack32((char *)&sfi->u.s.read) == 1) {
 										memcpy(sfi, &sf, sizeof(struct sf_imsg));
-										pack32((char *)&sfi->read, 0);
+										pack32((char *)&sfi->u.s.read, 0);
 										break;
 									}
 						}
@@ -3312,7 +3321,7 @@ forwardtcp:
 							goto tcpout;
 						}
 
-						cfg->shptr[0] = ' ';
+						cfg->shptr[cfg->shptrsize - 16] = ' ';
 
 
 						imsg_compose(ibuf, IMSG_FORWARD_TCP,

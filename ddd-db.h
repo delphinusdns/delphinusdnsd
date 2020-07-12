@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.42 2020/07/11 20:43:18 pjp Exp $
+ * $Id: ddd-db.h,v 1.43 2020/07/12 14:44:52 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -469,10 +469,16 @@ struct reply_logic {
 #endif
 
 struct sf_imsg {
-	int read;
-	int len;
-	char pad[12];
-	struct sforward sf;
+	union {
+		struct {
+			int read;		/* 4 */
+			int len;		/* 8 */
+			char pad[10];		/* 18 */
+			struct sforward sf;	/* 924 */
+		} s;
+
+		char pad[1024];
+	} u;
 };
 
 struct rr_imsg {

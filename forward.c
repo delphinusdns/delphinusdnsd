@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.19 2020/07/11 10:01:56 pjp Exp $
+ * $Id: forward.c,v 1.20 2020/07/12 14:44:52 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -541,7 +541,7 @@ drop:
 						memcpy(&i, imsg.data, sizeof(i));
 
 
-						sf = (struct sf_imsg *)&ptr[16];
+						sf = (struct sf_imsg *)&ptr[0];
 						sf = &sf[i];
 		
 						rdata = malloc(sizeof(struct sforward));
@@ -551,7 +551,7 @@ drop:
 							break;
 						}
 
-						memcpy(rdata, &sf->sf, sizeof(struct sforward));
+						memcpy(rdata, &sf->u.s.sf, sizeof(struct sforward));
 						time0 = time(NULL);
 
 
@@ -567,13 +567,13 @@ drop:
 #endif
 						free(rdata);
 						/* aquire lock */
-						while (ptr[0] == '*')
+						while (ptr[cfg->shptrsize - 16] == '*')
 							usleep(arc4random() % 300);
-						ptr[0] = '*';
+						ptr[cfg->shptrsize - 16] = '*';
 
-						sf->read = 1;
+						sf->u.s.read = 1;
 
-						ptr[0] = ' ';	/* release */
+						ptr[cfg->shptrsize - 16] = ' ';	/* release */
 
 						break;
 
@@ -586,7 +586,7 @@ drop:
 
 						memcpy(&i, imsg.data, sizeof(i));
 
-						sf = (struct sf_imsg *)&ptr[16];
+						sf = (struct sf_imsg *)&ptr[0];
 						sf = &sf[i];
 		
 						rdata = malloc(sizeof(struct sforward));
@@ -596,7 +596,7 @@ drop:
 							break;
 						}
 
-						memcpy(rdata, &sf->sf, sizeof(struct sforward));
+						memcpy(rdata, &sf->u.s.sf, sizeof(struct sforward));
 						time0 = time(NULL);
 						forwardthis(db, cfg, imsg.fd, (struct sforward *)rdata);
 						now = time(NULL);
@@ -605,13 +605,13 @@ drop:
 #endif
 						free(rdata);
 						/* aquire lock */
-						while (ptr[0] == '*')
+						while (ptr[cfg->shptrsize - 16] == '*')
 							usleep(arc4random() % 300);
-						ptr[0] = '*';
+						ptr[cfg->shptrsize - 16] = '*';
 
-						sf->read = 1;
+						sf->u.s.read = 1;
 
-						ptr[0] = ' ';	/* release */
+						ptr[cfg->shptrsize - 16] = ' ';	/* release */
 						break;
 					}
 
