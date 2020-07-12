@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.122 2020/07/12 14:44:52 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.123 2020/07/12 20:23:37 pjp Exp $
  */
 
 
@@ -1085,7 +1085,7 @@ main(int argc, char *argv[], char *environ[])
 
 		/* initialize */
 		for (sf = (struct sf_imsg *)&shptr[0], j = 0; j < SHAREDMEMSIZE; j++, sf++) {
-			sf->u.s.read = 1;
+			pack32((char *)&sf->u.s.read, 1);
 		}
 
 		cfg->shptr = shptr;
@@ -1102,8 +1102,8 @@ main(int argc, char *argv[], char *environ[])
 		}
 
 		/* initialize */
-		for (ri = (struct rr_imsg *)&shptr[16], j = 0; j < SHAREDMEMSIZE; j++, ri++) {
-			ri->read = 1;
+		for (ri = (struct rr_imsg *)&shptr[0], j = 0; j < SHAREDMEMSIZE; j++, ri++) {
+			pack32((char *)&ri->u.s.read, 1);
 		}
 
 		cfg->shptr2 = shptr;
@@ -1181,12 +1181,6 @@ main(int argc, char *argv[], char *environ[])
 			/* shptr has no business in parse process */
 			minherit(cfg->shptr, cfg->shptrsize,
 				MAP_INHERIT_NONE);
-#if 0
-			cfg->shptrsize = arc4random();
-			/* disable for now */
-#endif
-			cfg->shptr2size = arc4random();
-			cfg->shptr3size = arc4random();
 
 			setproctitle("FORWARD engine");
 			forwardloop(db, cfg, ibuf, &cortex_ibuf);
@@ -1656,12 +1650,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				MAP_INHERIT_NONE);
 			minherit(cfg->shptr3, cfg->shptr3size,
 				MAP_INHERIT_NONE);
-#if 0
-			/* disable for now */
-			cfg->shptrsize = arc4random();
-#endif
-			cfg->shptr2size = arc4random();
-			cfg->shptr3size = arc4random();
 		}
 
 		setproctitle("TCP engine %d", cfg->pid);
@@ -1683,12 +1671,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 			MAP_INHERIT_NONE);
 		minherit(cfg->shptr3, cfg->shptr3size,
 			MAP_INHERIT_NONE);
-#if 0
-		/* disable for now */
-		cfg->shptrsize = arc4random();
-#endif
-		cfg->shptr2size = arc4random();
-		cfg->shptr3size = arc4random();
 	}
 
 	sforward = (struct sforward *)calloc(1, sizeof(struct sforward));
@@ -2239,7 +2221,7 @@ forwardudp:
 							sforward->havemac = 0;
 
 						sforward->gotit = time(NULL);
-						memcpy(&sf.u.s.sf, sforward, sizeof(struct sforward));
+						memcpy(&sf.sfi_sf, sforward, sizeof(struct sforward));
 						
 						/* wait for lock */
 						while (cfg->shptr[cfg->shptrsize - 16] == '*') {
@@ -3298,7 +3280,7 @@ forwardtcp:
 							sforward->havemac = 0;
 
 						sforward->gotit = time(NULL);
-						memcpy(&sf.u.s.sf, sforward, sizeof(struct sforward));
+						memcpy(&sf.sfi_sf, sforward, sizeof(struct sforward));
 						
 						/* wait for lock */
 						while (cfg->shptr[cfg->shptrsize - 16] == '*') {

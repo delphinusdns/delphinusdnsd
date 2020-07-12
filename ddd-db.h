@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.43 2020/07/12 14:44:52 pjp Exp $
+ * $Id: ddd-db.h,v 1.44 2020/07/12 20:23:37 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -443,7 +443,7 @@ struct scache {
 	uint16_t rrtype;
 	struct imsgbuf *imsgbuf;
 	struct imsgbuf *bimsgbuf;
-	char *shared;
+	struct cfg *cfg;
 };
 
 struct cache_logic {
@@ -479,26 +479,31 @@ struct sf_imsg {
 
 		char pad[1024];
 	} u;
+#define sfi_sf u.s.sf
 };
 
 struct rr_imsg {
-	int read;
-	int len;
-	char pad[12];
 	union {
 		struct  {
-			char name[DNS_MAXNAME + 1];
-			int namelen;
-			uint16_t rrtype;
-			uint32_t ttl;
-			
-			uint16_t buflen;
+			int read;				/* 4 */
+			int len;				/* 8 */
+			char pad[12];				/* 20 */
 
-			char un[7000];
-		} rr;
+			struct {
+				char name[DNS_MAXNAME + 1];	/* 256 */
+				int namelen;			/* 260 */
+				uint16_t rrtype;		/* 262 */
+				uint32_t ttl;			/* 266 */
+				
+				uint16_t buflen;		/* 268 */
+
+				char un[0];
+			} rr;					/* 288 */
+		} s;
 
 		char pad[8192];
-	} imsg;
+	} u;
+#define rri_rr u.s.rr
 }; /* end of struct rr_imsg */
 
 struct fwdpq {

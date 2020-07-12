@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.20 2020/07/12 14:44:52 pjp Exp $
+ * $Id: forward.c,v 1.21 2020/07/12 20:23:37 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -160,7 +160,7 @@ extern void 	build_reply(struct sreply *, int, char *, int, struct question *, s
 extern struct rbtree * Lookup_zone(ddDB *, char *, int, int, int);
 extern struct rbtree *  lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
 extern char *convert_name(char *, int);
-extern int	cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, char *);
+extern int	cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, struct cfg *);
 
 extern int 	reply_a(struct sreply *, ddDB *);
 extern int 	reply_aaaa(struct sreply *, ddDB *);
@@ -651,36 +651,36 @@ drop:
 
 						memcpy(&i, imsg.data, sizeof(i));
 
-						while (cfg->shptr2[0] == '*')
+						while (cfg->shptr2[cfg->shptr2size - 16] == '*')
 							usleep(arc4random() % 300);
 
-						cfg->shptr2[0] = '*';
-						ri = (struct rr_imsg *)&cfg->shptr2[16];
+						cfg->shptr2[cfg->shptr2size - 16] = '*';
+						ri = (struct rr_imsg *)&cfg->shptr2[0];
 						for (i = 0; i < SHAREDMEMSIZE; i++, ri++) {
-							if (ri->read == 0) {
-								rdata = malloc(ri->imsg.rr.buflen);
+							if (unpack32((char *)&ri->u.s.read) == 0) {
+								rdata = malloc(ri->rri_rr.buflen);
 								if (rdata == NULL) {
 									dolog(LOG_ERR, " cache insertion failed\n");
-									ri->read = 1;
+									pack32((char *)&ri->u.s.read, 1);
 									continue;
 								}
 
-								memcpy(rdata, &ri->imsg.rr.un, ri->imsg.rr.buflen);
+								memcpy(rdata, &ri->rri_rr.un, ri->rri_rr.buflen);
 
-								if ((rbt = create_rr(db, ri->imsg.rr.name, 
-										ri->imsg.rr.namelen, ri->imsg.rr.rrtype, 
-										(void *)rdata, ri->imsg.rr.ttl)) == NULL) {
+								if ((rbt = create_rr(db, ri->rri_rr.name, 
+										ri->rri_rr.namelen, ri->rri_rr.rrtype, 
+										(void *)rdata, ri->rri_rr.ttl)) == NULL) {
 									dolog(LOG_ERR, "cache insertion failed 2\n");
 									free(rdata);
-									ri->read = 1;
+									pack32((char *)&ri->u.s.read, 1);
 									continue;
 								}
 								flag_rr(rbt);
 
-								ri->read = 1;
-							} /* if ri->read == 0*/
+								pack32((char *)&ri->u.s.read, 1);
+							} /* if */
 						} /* for */
-						cfg->shptr2[0] = ' ';
+						cfg->shptr2[cfg->shptr2size - 16] = ' ';
 
 						now = time(NULL);
 
@@ -2049,7 +2049,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 							rlen = tmp;
 							end = &packet[rlen];
 
-							if (cacheit(packet, estart, end, ibuf, bibuf, cfg->shptr2) < 0) {
+							if (cacheit(packet, estart, end, ibuf, bibuf, cfg) < 0) {
 								dolog(LOG_INFO, "cacheit failed\n");
 							}
 					}

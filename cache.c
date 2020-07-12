@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: cache.c,v 1.3 2020/07/10 10:42:27 pjp Exp $
+ * $Id: cache.c,v 1.4 2020/07/12 20:23:37 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -98,8 +98,8 @@ extern int tsig;
 extern int dnssec;
 extern int cache;
 
-int cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, char *);
-struct scache * build_cache(u_char *, u_char *, u_char *, uint16_t, char *, int, uint32_t, uint16_t, struct imsgbuf *, struct imsgbuf *, char *);
+int cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, struct cfg *);
+struct scache * build_cache(u_char *, u_char *, u_char *, uint16_t, char *, int, uint32_t, uint16_t, struct imsgbuf *, struct imsgbuf *, struct cfg *);
 void transmit_rr(struct scache *, void *, int);
 
 
@@ -156,7 +156,7 @@ static struct cache_logic supported_cache[] = {
 
 
 struct scache *
-build_cache(u_char *payload, u_char *estart, u_char *end, uint16_t rdlen, char *name, int namelen, uint32_t dnsttl, uint16_t dnstype, struct imsgbuf *imsgbuf, struct imsgbuf *bimsgbuf, char *ptr)
+build_cache(u_char *payload, u_char *estart, u_char *end, uint16_t rdlen, char *name, int namelen, uint32_t dnsttl, uint16_t dnstype, struct imsgbuf *imsgbuf, struct imsgbuf *bimsgbuf, struct cfg *cfg)
 {
 	static struct scache ret;
 
@@ -171,7 +171,7 @@ build_cache(u_char *payload, u_char *estart, u_char *end, uint16_t rdlen, char *
 	ret.rrtype = dnstype;
 	ret.imsgbuf = imsgbuf;
 	ret.bimsgbuf = bimsgbuf;
-	ret.shared = ptr;
+	ret.cfg = cfg;
 
 	return (&ret);
 }
@@ -180,31 +180,35 @@ void
 transmit_rr(struct scache *scache, void *rr, int rrsize)
 {
 	struct rr_imsg ri, *pri;
-	int offset, i;
+	int i;
 
-	memcpy(ri.imsg.rr.name, scache->name, sizeof(ri.imsg.rr.name));
-	ri.imsg.rr.namelen = scache->namelen;
+	/* we don't fit */
+	if (rrsize > (sizeof(struct rr_imsg) - sizeof(ri.rri_rr)))
+		return;
 
-	ri.imsg.rr.ttl = scache->dnsttl;
-	ri.imsg.rr.rrtype = scache->rrtype;
+	memcpy(ri.rri_rr.name, scache->name, sizeof(ri.rri_rr.name));
+	ri.rri_rr.namelen = scache->namelen;
 
-	memcpy(&ri.imsg.rr.un, rr, rrsize);
-	ri.imsg.rr.buflen = rrsize;
-	ri.read = 0;
+	ri.rri_rr.ttl = scache->dnsttl;
+	ri.rri_rr.rrtype = scache->rrtype;
+
+	memcpy(&ri.rri_rr.un, rr, rrsize);
+	ri.rri_rr.buflen = rrsize;
+	ri.u.s.read = 0;
 
 	/* wait for lock */
-	while (scache->shared[0] == '*') {
+	while (scache->cfg->shptr2[scache->cfg->shptr2size - 16] == '*') {
 		usleep(arc4random() % 300);
 	}
 
-	scache->shared[0] = '*'; /* nice semaphore eh? */
+	scache->cfg->shptr2[scache->cfg->shptr2size - 16] = '*';
 
 	
-	for (pri = (struct rr_imsg *)&scache->shared[16], i = 0; 
+	for (pri = (struct rr_imsg *)&scache->cfg->shptr2[0], i = 0; 
 			i < SHAREDMEMSIZE; i++, pri++) {
-		if (unpack32((char *)&pri->read) == 1) {
+		if (unpack32((char *)&pri->u.s.read) == 1) {
 			memcpy(pri, &ri, sizeof(struct rr_imsg));
-			pack32((char *)&pri->read, 0);
+			pack32((char *)&pri->u.s.read, 0);
 			break;
 		}
 	}
@@ -213,15 +217,11 @@ transmit_rr(struct scache *scache, void *rr, int rrsize)
 		dolog(LOG_INFO, "can't find an open slot in sharedmemsize\n");
 	}
 
-	scache->shared[0] = ' ';	/* release */
-	
-	offset = i;
-
-
+	scache->cfg->shptr2[scache->cfg->shptr2size - 16] = ' ';
 }
 
 int
-cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, struct imsgbuf *bimsgbuf, char *ptr)
+cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, struct imsgbuf *bimsgbuf, struct cfg *cfg)
 {
 	struct dns_header *dh;
 	struct scache *scache;
@@ -295,7 +295,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 		
 		pb += 10;   /* skip answerd */
 	
-		scache = build_cache(pb, estart, end, rdlen, expand, elen, rrttl, rrtype, imsgbuf, bimsgbuf, ptr);
+		scache = build_cache(pb, estart, end, rdlen, expand, elen, rrttl, rrtype, imsgbuf, bimsgbuf, cfg);
 			
 		for (cr = supported_cache; cr->rrtype != 0; cr++) {
 			if (rrtype == cr->rrtype) {
