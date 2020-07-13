@@ -27,13 +27,11 @@
  */
 
 /*
- * $Id: db.c,v 1.21 2020/07/10 10:42:27 pjp Exp $
+ * $Id: db.c,v 1.22 2020/07/13 22:02:26 pjp Exp $
  */
 
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/queue.h>
-#include <sys/tree.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>

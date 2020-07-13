@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.123 2020/07/12 20:23:37 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.124 2020/07/13 22:02:26 pjp Exp $
  */
 
 
@@ -63,6 +63,8 @@
 #include <time.h>
 
 #ifdef __linux__
+#include <linux/bpf.h>
+#include <linux/filter.h>
 #include <grp.h>
 #define __USE_BSD 1
 #include <endian.h>
@@ -189,6 +191,8 @@ void 			tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 void 			parseloop(struct cfg *, struct imsgbuf *);
 struct imsgbuf * 	register_cortex(struct imsgbuf *, int);
 void			nomore_neurons(struct imsgbuf *);
+int			bind_this_res(struct addrinfo *, int);
+int			bind_this_pifap(struct ifaddrs *, int, int);
 
 /* aliases */
 
@@ -619,48 +623,16 @@ main(int argc, char *argv[], char *environ[])
 
 			res = res0;
 
-			if ((dup[i] = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0) {
-				dolog(LOG_INFO, "dup socket: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
-
-			on = 1;
-			if (setsockopt(dup[i], SOL_SOCKET, SO_REUSEPORT,
-				&on, sizeof(on)) < 0) {
-				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-			}
-        
-			if (shutdown(dup[i], SHUT_RD) < 0) {
-				dolog(LOG_INFO, "shutdown: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
+#ifdef __linux__
 			
-			if (bind(dup[i], res->ai_addr, res->ai_addrlen) < 0) {
-				dolog(LOG_INFO, "bind: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
+			udp[i] = bind_this_res(res, 0);
+			dup[i] = bind_this_res(res, 0);
+#else
+			/* first dup, then udp */
+			dup[i] = bind_this_res(res, 1);
+			udp[i] = bind_this_res(res, 0);
+#endif
 
-
-			if ((udp[i] = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0) {
-				dolog(LOG_INFO, "socket: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
-
-			on = 1;
-			if (setsockopt(udp[i], SOL_SOCKET, SO_REUSEPORT,
-				&on, sizeof(on)) < 0) {
-				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-			}
-        
-			if (bind(udp[i], res->ai_addr, res->ai_addrlen) < 0) {
-				dolog(LOG_INFO, "bind: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
 
 			if (res->ai_family == AF_INET) {
 				on = 1;
@@ -810,49 +782,14 @@ main(int argc, char *argv[], char *environ[])
 				continue;
 			}
 
-			if ((dup[i] = socket(pifap->ifa_addr->sa_family, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
-				dolog(LOG_INFO, "dup socket: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
-
-			on = 1;
-			if (setsockopt(dup[i], SOL_SOCKET, SO_REUSEPORT,
-				&on, sizeof(on)) < 0) {
-				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-			}
-        
-			if (shutdown(dup[i], SHUT_RD) < 0) {
-				dolog(LOG_INFO, "shutdown: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
-			
-			if (bind(dup[i], (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
-				dolog(LOG_INFO, "bind: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
-
-
-			if ((udp[i] = socket(pifap->ifa_addr->sa_family, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
-				dolog(LOG_INFO, "socket: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
-
-			on = 1;
-			if (setsockopt(udp[i], SOL_SOCKET, SO_REUSEPORT,
-				&on, sizeof(on)) < 0) {
-				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
-			}
-        
-			
-			if (bind(udp[i], (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
-				dolog(LOG_INFO, "bind: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
+#if __linux__
+			udp[i] = bind_this_pifap(pifap, 0, salen);
+			dup[i] = bind_this_pifap(pifap, 0, salen);
+#else
+			/* first dup, then udp */
+			dup[i] = bind_this_pifap(pifap, 1, salen);
+			udp[i] = bind_this_pifap(pifap, 0, salen);
+#endif
 
 			if (pifap->ifa_addr->sa_family == AF_INET) {
 				on = 1;
@@ -932,6 +869,7 @@ main(int argc, char *argv[], char *environ[])
 			exit(1);
 		}
 	} /* if bflag? */
+
 
 #if __OpenBSD__
 	if (unveil(DELPHINUS_RZONE_PATH, "rwc")  < 0) {
@@ -1179,8 +1117,10 @@ main(int argc, char *argv[], char *environ[])
 			cfg->db = db;
 
 			/* shptr has no business in parse process */
+#if __OpenBSD__
 			minherit(cfg->shptr, cfg->shptrsize,
 				MAP_INHERIT_NONE);
+#endif
 
 			setproctitle("FORWARD engine");
 			forwardloop(db, cfg, ibuf, &cortex_ibuf);
@@ -1644,12 +1584,14 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		}
 		/* shptr has no business in a tcp parse process */
 		if (forward) {
+#if __OpenBSD__
 			minherit(cfg->shptr, cfg->shptrsize,
 				MAP_INHERIT_NONE);
 			minherit(cfg->shptr2, cfg->shptr2size,
 				MAP_INHERIT_NONE);
 			minherit(cfg->shptr3, cfg->shptr3size,
 				MAP_INHERIT_NONE);
+#endif
 		}
 
 		setproctitle("TCP engine %d", cfg->pid);
@@ -1665,12 +1607,14 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 
 	/* shptr has no business in a udp parse process */
 	if (forward) {
+#if __OpenBSD__
 		minherit(cfg->shptr, cfg->shptrsize,
 			MAP_INHERIT_NONE);
 		minherit(cfg->shptr2, cfg->shptr2size,
 			MAP_INHERIT_NONE);
 		minherit(cfg->shptr3, cfg->shptr3size,
 			MAP_INHERIT_NONE);
+#endif
 	}
 
 	sforward = (struct sforward *)calloc(1, sizeof(struct sforward));
@@ -4334,4 +4278,115 @@ nomore_neurons(struct imsgbuf *cortex)
 
 	imsg_compose(cortex, IMSG_CRIPPLE_NEURON, 0, 0, -1, &desc, sizeof(int));
 	msgbuf_write(&cortex->w);
+}
+
+
+int
+bind_this_res(struct addrinfo *res, int shut)
+{
+	int on;
+	int so;
+
+	if ((so = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0) {
+		dolog(LOG_INFO, "socket: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+	on = 1;
+	if (setsockopt(so, SOL_SOCKET, SO_REUSEPORT,
+		&on, sizeof(on)) < 0) {
+		dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+	}
+
+	if (shut) {
+		if (shutdown(so, SHUT_RD) < 0) {
+			dolog(LOG_INFO, "shutdown: %s\n", strerror(errno));
+			ddd_shutdown();
+			exit(1);
+		}
+	}
+
+	if (bind(so, res->ai_addr, res->ai_addrlen) < 0) {
+		dolog(LOG_INFO, "bind: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+#ifdef __linux__
+	{
+		struct sock_filter code[] = {
+			BPF_STMT(BPF_RET+BPF_K, 0)
+		};
+
+		struct sock_fprog sfp = {
+			.len = 1,
+			.filter = code,
+		};
+		
+		if (setsockopt(so, SOL_SOCKET, SO_ATTACH_REUSEPORT_CBPF,
+			&sfp, sizeof(sfp)) < 0) {
+			dolog(LOG_INFO, "bpf: %s\n", strerror(errno));
+			ddd_shutdown();
+			exit(1);
+		}
+	}
+#endif
+
+	return (so);
+}
+
+int
+bind_this_pifap(struct ifaddrs *pifap, int shut, int salen)
+{
+	int on;
+	int so;
+
+	if ((so = socket(pifap->ifa_addr->sa_family, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
+		dolog(LOG_INFO, "socket: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+	on = 1;
+	if (setsockopt(so, SOL_SOCKET, SO_REUSEPORT,
+		&on, sizeof(on)) < 0) {
+		dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+	}
+
+
+	if (shut) {
+		if (shutdown(so, SHUT_RD) < 0) {
+			dolog(LOG_INFO, "shutdown: %s\n", strerror(errno));
+			ddd_shutdown();
+			exit(1);
+		}
+	}
+	
+	if (bind(so, (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
+		dolog(LOG_INFO, "bind: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#ifdef __linux__
+	{
+		struct sock_filter code[] = {
+			BPF_STMT(BPF_RET+BPF_K, 0),
+		};
+
+		struct sock_fprog sfp = {
+			.len = 1,
+			.filter = code,
+		};
+		
+		if (setsockopt(so, SOL_SOCKET, SO_ATTACH_REUSEPORT_CBPF,
+			&sfp, sizeof(sfp)) < 0) {
+			dolog(LOG_INFO, "bpf: %s\n", strerror(errno));
+			ddd_shutdown();
+			exit(1);
+		}
+	}
+#endif
+
+	return (so);
 }

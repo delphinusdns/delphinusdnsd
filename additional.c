@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.37 2020/07/06 07:17:40 pjp Exp $
+ * $Id: additional.c,v 1.38 2020/07/13 22:02:26 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -421,6 +421,9 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	char tsigkey[512];
 	time_t now;
 	static int priordigest = 1;
+#ifdef __linux__
+	uint64_t tmp64;
+#endif
 
 	pseudo_packet = malloc(replylen);
 	if (pseudo_packet == NULL) {
@@ -428,6 +431,9 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	}
 
 	now = time(NULL);
+#ifdef __linux__
+	tmp64 = now;
+#endif
 	rollback = offset;
 
 	if (envelope > 1 || envelope < -1) {
@@ -528,12 +534,20 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 
 	answer = (struct dns_tsigrr *)&reply[offset];
 	if (envelope > 1 || envelope < -1) {
+#ifdef __linux__
+		answer->timefudge = htobe64(((u_int64_t)tmp64 << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+#else
 		answer->timefudge = htobe64(((u_int64_t)now << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+#endif
 	} else {
 		if (request == 0 || envelope == 1) {
 			answer->timefudge = question->tsig.tsig_timefudge;
 		} else {
+#ifdef __linux__
+			answer->timefudge = htobe64((tmp64 << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+#else
 			answer->timefudge = htobe64((now << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+#endif
 		}
 	}
 
@@ -568,7 +582,11 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	if (request == 0 || envelope == 1) 
 		ppanswer->timefudge = question->tsig.tsig_timefudge;
 	else
+#ifdef __linux__
+		ppanswer->timefudge = htobe64(((u_int64_t)tmp64 << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+#else
 		ppanswer->timefudge = htobe64(((u_int64_t)now << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+#endif
 	ppoffset += 8;
 
 

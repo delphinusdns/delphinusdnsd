@@ -27,12 +27,11 @@
  */
 
 /* 
- * $Id: cache.c,v 1.4 2020/07/12 20:23:37 pjp Exp $
+ * $Id: cache.c,v 1.5 2020/07/13 22:02:26 pjp Exp $
  */
 
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/queue.h>
 #include <sys/uio.h>
 #include <sys/select.h>
 
@@ -48,7 +47,6 @@
 #include <syslog.h>
 
 #include <unistd.h>
-#include <imsg.h>
 
 #ifdef __linux__
 #include <grp.h>

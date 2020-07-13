@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.103 2020/07/08 12:29:02 pjp Exp $
+ * $Id: parse.y,v 1.104 2020/07/13 22:02:26 pjp Exp $
  */
 
 %{
@@ -262,9 +262,6 @@ int 		drop_privs(char *, struct passwd *);
 %token <v.string> IPV6
 %token <v.string> SLASH
 %token <v.string> QUOTEDSTRING
-%token <v.string> DESTINATION
-%token <v.string> INCOMINGTSIG
-%token <v.string> CACHE
 
 %token <v.intval> NUMBER
 
@@ -1454,7 +1451,9 @@ forwardstatement	:	INCOMINGTSIG STRING SEMICOLON CRLF
 					inet_pton(AF_INET6, $2, &sin6->sin6_addr);
 					sin6->sin6_family = AF_INET6;
 					sin6->sin6_port = htons($4);
+#ifndef __linux__
 					sin6->sin6_len = sizeof(struct sockaddr_in6);
+#endif
 					insert_forward(AF_INET6, &sso, $4, $6);
 				} else {
 					inet_pton(AF_INET, $2, &sin->sin_addr);

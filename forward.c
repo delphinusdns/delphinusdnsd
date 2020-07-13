@@ -27,12 +27,11 @@
  */
 
 /* 
- * $Id: forward.c,v 1.21 2020/07/12 20:23:37 pjp Exp $
+ * $Id: forward.c,v 1.22 2020/07/13 22:02:26 pjp Exp $
  */
 
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/queue.h>
 #include <sys/uio.h>
 #include <sys/select.h>
 #include <sys/mman.h>
@@ -51,7 +50,6 @@
 
 #include <unistd.h>
 #include <fcntl.h>
-#include <imsg.h>
 
 #ifdef __linux__
 #include <grp.h>
@@ -1897,10 +1895,14 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 	ssize_t n, datalen;
 	int flags;
 
-	fcntl(bibuf->fd, F_GETFL, &flags, sizeof(flags));
-	flags |= O_NONBLOCK;
-	if (fcntl(bibuf->fd, F_SETFL, &flags, sizeof(flags)) < 0) {
+	flags = fcntl(bibuf->fd, F_GETFL);
+	if (flags < 0) {
 		dolog(LOG_INFO, "fcntl: %s\n", strerror(errno));
+	} else {
+		flags |= O_NONBLOCK;
+		if (fcntl(bibuf->fd, F_SETFL, &flags, sizeof(flags)) < 0) {
+			dolog(LOG_INFO, "fcntl: %s\n", strerror(errno));
+		}
 	}
 
 #if __OpenBSD__
