@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.22 2020/07/12 14:44:52 pjp Exp $
+ * $Id: ddd-dns.h,v 1.23 2020/07/14 07:00:18 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -243,18 +243,18 @@ struct dns_question_hdr {
 #define DNS_TLSA_SIZE_SHA512	64	/* RFC 6698 */
 
 struct tsig {
-	int have_tsig;
-	int tsigverified;
-	int tsigerrorcode;
-	char tsigalg[DNS_MAXNAME];
-	int tsigalglen;
-	char tsigkey[DNS_MAXNAME];
-	int tsigkeylen;
-	char tsigmac[32];
-	int tsigmaclen;
-	u_int64_t tsig_timefudge;
-	u_int16_t tsigorigid;
-	int tsigoffset;
+	int have_tsig;				/* 4 */
+	int tsigverified;			/* 8 */
+	int tsigerrorcode;			/* 12 */
+	char tsigalg[DNS_MAXNAME];		/* 267 */
+	int tsigalglen;				/* 271 */
+	char tsigkey[DNS_MAXNAME];		/* 526 */
+	int tsigkeylen;				/* 530 */
+	char tsigmac[32];			/* 562 */
+	int tsigmaclen;				/* 566 */
+	u_int64_t tsig_timefudge;		/* 574 */
+	u_int16_t tsigorigid;			/* 576 */
+	int tsigoffset;				/* 580 */
 };
 
 #define DEFAULT_TSIG_FUDGE	300

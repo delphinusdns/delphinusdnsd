@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.44 2020/07/12 20:23:37 pjp Exp $
+ * $Id: ddd-db.h,v 1.45 2020/07/14 07:00:18 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -507,14 +507,14 @@ struct rr_imsg {
 }; /* end of struct rr_imsg */
 
 struct fwdpq {
-	int read;
-	int rc;
-	int istcp;
-	int cache;
-	int tsigcheck;
-	struct tsig tsig;
-	char mac[32];
-	int buflen;
+	int read;			/* 4 */
+	int rc;				/* 8 */
+	int istcp;			/* 12 */
+	int cache;			/* 16 */
+	int tsigcheck;			/* 20 */
+	struct tsig tsig;		/* 600 */
+	char mac[32];			/* 632 */
+	int buflen;			/* 636 */
 
 	char buf[16384];
 };
