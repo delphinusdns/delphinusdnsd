@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.24 2020/07/14 16:14:35 pjp Exp $
+ * $Id: forward.c,v 1.25 2020/07/14 16:46:32 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -948,7 +948,7 @@ newqueue:
 			memcpy(&fwq1->oldhost4, &sforward->from4, sizeof(struct sockaddr_in));
 			break;
 		case AF_INET6:
-			memcpy(&fwq1->oldhost6, &sforward->from6, sizeof(struct sockaddr_in));
+			memcpy(&fwq1->oldhost6, &sforward->from6, sizeof(struct sockaddr_in6));
 			break;
 		}
 
@@ -1459,7 +1459,7 @@ endimsg:
 			if (sendto(so, buf, len, 0, (struct sockaddr *)&fwq->oldhost4, tolen) < 0)
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			break;
-		default:
+		case AF_INET6:
 			tolen = sizeof(struct sockaddr_in6);
 			if (sendto(so, buf, len, 0, (struct sockaddr *)&fwq->oldhost6, tolen) < 0)
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
