@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.124 2020/07/13 22:02:26 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.125 2020/07/14 14:46:23 pjp Exp $
  */
 
 
@@ -334,7 +334,7 @@ main(int argc, char *argv[], char *environ[])
 	struct imsgbuf *ibuf;
 	struct rr_imsg *ri = NULL;
 	struct sf_imsg *sf = NULL;
-	struct fwdpq *fwdpq = NULL;
+	struct pkt_imsg *pi = NULL;
 
 	static ddDB *db;
 	
@@ -1047,7 +1047,7 @@ main(int argc, char *argv[], char *environ[])
 		cfg->shptr2 = shptr;
 		cfg->shptr2size = shsize;
 
-		shsize = 16 + (SHAREDMEMSIZE3 * sizeof(struct fwdpq));
+		shsize = 16 + (SHAREDMEMSIZE3 * sizeof(struct pkt_imsg));
 
 		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
 			MAP_ANON, -1, 0);
@@ -1058,8 +1058,8 @@ main(int argc, char *argv[], char *environ[])
 		}
 
 		/* initialize */
-		for (fwdpq = (struct fwdpq *)&shptr[16], j = 0; j < SHAREDMEMSIZE3; j++, fwdpq++) {
-			pack32((char *)&fwdpq->read, 1);
+		for (pi = (struct pkt_imsg *)&shptr[0], j = 0; j < SHAREDMEMSIZE3; j++, pi++) {
+			pack32((char *)&pi->pkt_s.read, 1);
 		}
 
 		cfg->shptr3 = shptr;

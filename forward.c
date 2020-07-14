@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.22 2020/07/13 22:02:26 pjp Exp $
+ * $Id: forward.c,v 1.23 2020/07/14 14:46:23 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1139,7 +1139,8 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	struct timeval tv;
 	struct dns_header *dh;
 	struct question *q;
-	struct fwdpq *fwdpq, *fwdpq0;
+	static struct pkt_imsg *pi = NULL;
+	struct pkt_imsg *pi0;
 	struct imsg imsg;
 
 	static char *buf = NULL;
@@ -1193,65 +1194,68 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	}
 
 	/* send it on to our sandbox */
-	fwdpq = (struct fwdpq *)calloc(1, sizeof(struct fwdpq));
-	if (fwdpq == NULL) {
-		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-		return;
+	if (pi == NULL) {
+		pi = (struct pkt_imsg *)calloc(1, sizeof(struct pkt_imsg));
+		if (pi == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			return;
+		}
+	} else {
+		memset(pi, 0, sizeof(struct pkt_imsg));
 	}
 
-	memcpy(&fwdpq->mac, &fwq->mac, sizeof(fwdpq->mac));
+	memcpy(&pi->pkt_s.mac, &fwq->mac, sizeof(pi->pkt_s.mac));
 
 	if (fwq->istcp) {
-		fwdpq->buflen = rlen;
+		pack32((char *)&pi->pkt_s.buflen, rlen);
 	} else {
-		if (rlen > sizeof(fwdpq->buf)) {
-			dolog(LOG_INFO, "can't send packet to parser, too big\n");
+		if (rlen > (sizeof(struct pkt_imsg) - sizeof(pi->pkt_s))) {
+			dolog(LOG_INFO, "can't send UDP packet to parser, too big\n");
 			return;
 		}
 
-		memcpy(&fwdpq->buf[0], p, rlen);
-		fwdpq->buflen = rlen;
-
+		memcpy(&pi->pkt_s.buf, p, rlen);
+		pack32((char *)&pi->pkt_s.buflen, rlen);
 	}
 
 	if (fwq->tsigkey)
-		fwdpq->tsigcheck = 1;
+		pack32((char *)&pi->pkt_s.tsigcheck, 1);
 	else
-		fwdpq->tsigcheck = 0;
+		pack32((char *)&pi->pkt_s.tsigcheck, 0);
 	
 	if (cache)
-		fwdpq->cache = 1;
+		pack32((char *)&pi->pkt_s.cache, 1);
 	else
-		fwdpq->cache = 0;
+		pack32((char *)&pi->pkt_s.cache, 0);
 
 	if (fwq->istcp)
-		fwdpq->istcp = 1;
+		pack32((char *)&pi->pkt_s.istcp, 1);
 	else
-		fwdpq->istcp = 0;
+		pack32((char *)&pi->pkt_s.istcp, 0);
 	
 	/* lock */
-	while (cfg->shptr3[0] == '*')
+	while (cfg->shptr3[cfg->shptr3size - 16] == '*')
 		usleep(arc4random() % 300);
 
-	cfg->shptr3[0] = '*';
+	cfg->shptr3[cfg->shptr3size - 16] = '*';
 
-	fwdpq0 = (struct fwdpq *)&cfg->shptr3[16];
-	for (i = 0; i < SHAREDMEMSIZE3; i++, fwdpq0++) {
-		if (unpack32((char *)&fwdpq0->read) == 1) {
-				memcpy(fwdpq0, fwdpq, sizeof(struct fwdpq));
-				pack32((char *)&fwdpq0->read, 0);
+	pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
+	for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
+		if (unpack32((char *)&pi0->pkt_s.read) == 1) {
+				memcpy(pi0, pi, sizeof(struct pkt_imsg));
+				pack32((char *)&pi0->pkt_s.read, 0);
 				break;
 		}
 	}
 
 	if (imsg_compose(ibuf, IMSG_PARSE_MESSAGE, 0, 0, (fwq->istcp == 1) ? fwq->so : -1, &i, sizeof(i)) < 0) {
 			dolog(LOG_INFO, "imsg_compose: %s\n", strerror(errno));
-			free(fwdpq);
+			cfg->shptr3[cfg->shptr3size - 16] = ' ';
 			return;
 	}
 	msgbuf_write(&ibuf->w);
 
-	cfg->shptr3[0] = ' ';
+	cfg->shptr3[cfg->shptr3size - 16] = ' ';
 	
 	for (;;) {
 		FD_ZERO(&rset);
@@ -1317,7 +1321,6 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 					if (datalen != sizeof(int)) {
 							dolog(LOG_ERR, "bad parsereply message, drop\n");
 							imsg_free(&imsg);
-							free(fwdpq);
 							return;
 					}
 
@@ -1326,7 +1329,6 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 						if (rc != PARSE_RETURN_ACK) {
 							dolog(LOG_ERR, "returnit parser did not ACK this (%d), drop\n", rc);
 							imsg_free(&imsg);
-							free(fwdpq);
 							return;
 						}
 
@@ -1337,25 +1339,24 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 					if (datalen != sizeof(int)) {
 							dolog(LOG_ERR, "bad parsereply message, drop\n");
 							imsg_free(&imsg);
-							free(fwdpq);
 							return;
 					}
 
 					memcpy(&i, imsg.data, sizeof(int));
 
 					/* lock */
-					while (cfg->shptr3[0] == '*')
+					while (cfg->shptr3[cfg->shptr3size - 16] == '*')
 						usleep(arc4random() % 300);
 
-					cfg->shptr3[0] = '*';
+					cfg->shptr3[cfg->shptr3size - 16] = '*';
 
-					fwdpq0 = (struct fwdpq *)&cfg->shptr3[16];
-					fwdpq0 = &fwdpq0[i];
+					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
+					pi0 = &pi0[i];
 
-					memcpy(fwdpq, fwdpq0, sizeof(struct fwdpq));
+					memcpy(pi, pi0, sizeof(struct pkt_imsg));
 
-					pack32((char *)&fwdpq0->read, 1);
-					cfg->shptr3[0] = ' ';
+					pack32((char *)&pi0->pkt_s.read, 1);
+					cfg->shptr3[cfg->shptr3size - 16] = ' ';
 
 				if (fwq->istcp == 1) 
 					fwq->so = imsg.fd;
@@ -1376,23 +1377,22 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 
 endimsg:
 				
-	if (fwq->tsigkey && (fwdpq->tsig.have_tsig == 0 || fwdpq->tsig.tsigverified == 0)) {
-		dolog(LOG_INFO, "FORWARD returnit, TSIG didn't check out error code = %d\n", fwdpq->tsig.tsigerrorcode);
-		free(fwdpq);
+	if (fwq->tsigkey && (unpack32((char *)&pi->pkt_s.tsig.have_tsig) == 0 \
+		|| unpack32((char *)&pi->pkt_s.tsig.tsigverified) == 0)) {
+		dolog(LOG_INFO, "FORWARD returnit, TSIG didn't check out error code = %d\n", unpack32((char *)&pi->pkt_s.tsig.tsigerrorcode));
 		return;
 	}
 
-	if (fwdpq->tsig.have_tsig) {
+	if (unpack32((char *)&pi->pkt_s.tsig.have_tsig) == 1) {
 		NTOHS(dh->additional);
 		if (dh->additional > 0)
 			dh->additional--;
 		HTONS(dh->additional);
 	}
 
-	if (fwdpq->tsigcheck)
-		rlen = fwdpq->tsig.tsigoffset;
+	if (unpack32((char *)&pi->pkt_s.tsigcheck) == 1)
+		rlen = unpack32((char *)&pi->pkt_s.tsig.tsigoffset);
 
-	free(fwdpq);
 	
 	/* add new tsig if needed */
 	pack16((char *)&dh->id, fwq->oldid);
@@ -1885,7 +1885,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 	int rlen, tmp, rc, i;
 
 	struct tsig *stsig = NULL;
-	struct fwdpq *fwdpq, *fwdpq0;
+	struct pkt_imsg *pi, *pi0;
 	struct imsg imsg;
 	struct dns_header *dh;
 
@@ -1914,8 +1914,8 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 #endif
 
 
-	fwdpq = (struct fwdpq *)calloc(1, sizeof(struct fwdpq));
-	if (fwdpq == NULL) {
+	pi = (struct pkt_imsg *)calloc(1, sizeof(struct pkt_imsg));
+	if (pi == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 		ddd_shutdown();
 		exit(1);
@@ -1962,23 +1962,23 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					memcpy(&i, imsg.data, datalen);
 
 					/* lock */
-					while (cfg->shptr3[0] == '*')
+					while (cfg->shptr3[cfg->shptr3size - 16] == '*')
 						usleep(arc4random() % 300);
 
-					cfg->shptr3[0] = '*';
+					cfg->shptr3[cfg->shptr3size - 16] = '*';
 
-					fwdpq0 = (struct fwdpq *)&cfg->shptr3[16];
-					fwdpq0 = &fwdpq0[i];
+					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
+					pi0 = &pi0[i];
 
-					memcpy(fwdpq, fwdpq0, sizeof(struct fwdpq));
-					pack32((char *)&fwdpq0->read, 1);
+					memcpy(pi, pi0, sizeof(struct pkt_imsg));
+					pack32((char *)&pi0->pkt_s.read, 1);
 
-					cfg->shptr3[0] = ' '; 	/* unlock */
+					cfg->shptr3[cfg->shptr3size - 16] = ' ';
 
-					istcp = fwdpq->istcp;
+					istcp = unpack32((char *)&pi->pkt_s.istcp);
 
 					if (istcp) {
-						packet = malloc(fwdpq->buflen);
+						packet = malloc(unpack32((char *)&pi->pkt_s.buflen));
 						if (packet == NULL) {
 							dolog(LOG_INFO, "malloc %s\n", strerror(errno));
 							rc = PARSE_RETURN_NAK;
@@ -1988,7 +1988,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 							break;
 						}
 
-						if (recv(imsg.fd, packet, fwdpq->buflen, MSG_WAITALL) < 0) {
+						if (recv(imsg.fd, packet, unpack32((char *)&pi->pkt_s.buflen), MSG_WAITALL) < 0) {
 							dolog(LOG_INFO, "recv in forward sandbox: %s\n", strerror(errno));
 							rc = PARSE_RETURN_NAK;
 							/* send the descriptor back to them */
@@ -1997,14 +1997,14 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 							free(packet);
 							break;
 						}
-						dolog(LOG_INFO, "received %d bytes from descriptor %d\n", fwdpq->buflen, imsg.fd);
+						dolog(LOG_INFO, "received %d bytes from descriptor %d\n", unpack32((char *)&pi->pkt_s.buflen), imsg.fd);
 					} else
-						packet = &fwdpq->buf[0];
+						packet = &pi->pkt_s.buf[0];
 
 					if (istcp) {
-						tmp = fwdpq->buflen;
+						tmp = unpack32((char *)&pi->pkt_s.buflen);
 					} else {
-						tmp = fwdpq->buflen;
+						tmp = unpack32((char *)&pi->pkt_s.buflen);
 					}
 
 					if (tmp < sizeof(struct dns_header)) {
@@ -2046,7 +2046,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					/* insert parsing logic here */
 
 					/* check for cache */
-					if (fwdpq->cache) {
+					if (unpack32((char *)&pi->pkt_s.cache)) {
 							estart = packet;
 							rlen = tmp;
 							end = &packet[rlen];
@@ -2058,9 +2058,9 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 					/* check to see if we tsig */
 			
-					if (fwdpq->tsigcheck) {
+					if (unpack32((char *)&pi->pkt_s.tsigcheck)) {
 							rlen = tmp;
-							stsig = check_tsig((char *)packet, rlen, fwdpq->mac);
+							stsig = check_tsig((char *)packet, rlen, pi->pkt_s.mac);
 							if (stsig == NULL) {
 								dolog(LOG_INFO, "FORWARD parser, malformed reply packet\n");
 								rc = PARSE_RETURN_MALFORMED;
@@ -2073,18 +2073,21 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 								break;
 							}
 
-							memcpy(&fwdpq->tsig, stsig, sizeof(struct tsig));
+							memcpy(&pi->pkt_s.tsig, stsig, sizeof(struct tsig));
 					}
 
-					fwdpq->rc = PARSE_RETURN_ACK;
+					pack32((char *)&pi->pkt_s.rc, PARSE_RETURN_ACK);
 
-					cfg->shptr3[0] = '*';
+					while (cfg->shptr3[cfg->shptr3size - 16] == '*')
+						usleep(arc4random() % 300);
 
-					fwdpq0 = (struct fwdpq *)&cfg->shptr3[16];
-					for (i = 0; i < SHAREDMEMSIZE3; i++, fwdpq0++) {
-						if (unpack32((char *)&fwdpq0->read) == 1) {
-							memcpy(fwdpq0, fwdpq, sizeof(struct fwdpq));
-							pack32((char *)&fwdpq0->read, 0);
+					cfg->shptr3[cfg->shptr3size - 16] = '*';
+
+					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
+					for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
+						if (unpack32((char *)&pi0->pkt_s.read) == 1) {
+							memcpy(pi0, pi, sizeof(struct pkt_imsg));
+							pack32((char *)&pi0->pkt_s.read, 0);
 							break;
 						}
 					}
@@ -2092,7 +2095,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &i, sizeof(int));
 					msgbuf_write(&ibuf->w);
 
-					cfg->shptr3[0] = ' ';
+					cfg->shptr3[cfg->shptr3size - 16] = ' ';
 
 					free(stsig);
 

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.45 2020/07/14 07:00:18 pjp Exp $
+ * $Id: ddd-db.h,v 1.46 2020/07/14 14:46:23 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -506,18 +506,24 @@ struct rr_imsg {
 #define rri_rr u.s.rr
 }; /* end of struct rr_imsg */
 
-struct fwdpq {
-	int read;			/* 4 */
-	int rc;				/* 8 */
-	int istcp;			/* 12 */
-	int cache;			/* 16 */
-	int tsigcheck;			/* 20 */
-	struct tsig tsig;		/* 600 */
-	char mac[32];			/* 632 */
-	int buflen;			/* 636 */
+struct pkt_imsg {
+	union {
+		struct {
+			int read;
+			int rc;
+			int istcp;
+			int cache;
+			int tsigcheck;
+			struct tsig tsig;
+			char mac[32];
+			int buflen;
+			char buf[0];			
+		} s;
 
-	char buf[16384];
-};
+		char buf[16384];
+	} u;
+#define pkt_s u.s
+};							/* 16384 */
 
 
 #define	SHAREDMEMSIZE	400
