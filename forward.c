@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.23 2020/07/14 14:46:23 pjp Exp $
+ * $Id: forward.c,v 1.24 2020/07/14 16:14:35 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -340,6 +340,15 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		ddd_shutdown();
 		exit(1);
 	case 0:
+#ifndef __OpenBSD__
+                /* OpenBSD has minherit() */
+                if (munmap(cfg->shptr, cfg->shptrsize) == -1) {
+                        dolog(LOG_INFO, "unmapping shptr failed: %s\n", \
+                                strerror(errno));
+                }
+#endif
+		cfg->shptrsize = 0;
+
 		for (i = 0; i < cfg->sockcount; i++)
 			close(cfg->dup[i]);
 

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.125 2020/07/14 14:46:23 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.126 2020/07/14 16:14:35 pjp Exp $
  */
 
 
@@ -1011,6 +1011,8 @@ main(int argc, char *argv[], char *environ[])
 	/* start our forwarding process */
 	
 	if (forward) {	
+		/* initialize the only global shared memory segment */
+
 		shsize = 16 + (SHAREDMEMSIZE * sizeof(struct sf_imsg));
 
 		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
@@ -1029,41 +1031,6 @@ main(int argc, char *argv[], char *environ[])
 		cfg->shptr = shptr;
 		cfg->shptrsize = shsize;
 
-		shsize = 16 + (SHAREDMEMSIZE * sizeof(struct rr_imsg));
-
-		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
-			MAP_ANON, -1, 0);
-
-		if (shptr == MAP_FAILED) {
-			dolog(LOG_ERR, "failed to setup mmap segment, exit\n");
-			exit(1);
-		}
-
-		/* initialize */
-		for (ri = (struct rr_imsg *)&shptr[0], j = 0; j < SHAREDMEMSIZE; j++, ri++) {
-			pack32((char *)&ri->u.s.read, 1);
-		}
-
-		cfg->shptr2 = shptr;
-		cfg->shptr2size = shsize;
-
-		shsize = 16 + (SHAREDMEMSIZE3 * sizeof(struct pkt_imsg));
-
-		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
-			MAP_ANON, -1, 0);
-
-		if (shptr == MAP_FAILED) {
-			dolog(LOG_ERR, "failed to setup mmap segment, exit\n");
-			exit(1);
-		}
-
-		/* initialize */
-		for (pi = (struct pkt_imsg *)&shptr[0], j = 0; j < SHAREDMEMSIZE3; j++, pi++) {
-			pack32((char *)&pi->pkt_s.read, 1);
-		}
-
-		cfg->shptr3 = shptr;
-		cfg->shptr3size = shsize;
 
 		switch (pid = fork()) {
 		case -1:
@@ -1076,6 +1043,43 @@ main(int argc, char *argv[], char *environ[])
 				ddd_shutdown();
 				exit(1);
 			}
+
+			/* initialize shared memory for forward here */
+			shsize = 16 + (SHAREDMEMSIZE * sizeof(struct rr_imsg));
+
+			shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
+				MAP_ANON, -1, 0);
+
+			if (shptr == MAP_FAILED) {
+				dolog(LOG_ERR, "failed to setup mmap segment, exit\n");
+				exit(1);
+			}
+
+			/* initialize */
+			for (ri = (struct rr_imsg *)&shptr[0], j = 0; j < SHAREDMEMSIZE; j++, ri++) {
+				pack32((char *)&ri->u.s.read, 1);
+			}
+
+			cfg->shptr2 = shptr;
+			cfg->shptr2size = shsize;
+
+			shsize = 16 + (SHAREDMEMSIZE3 * sizeof(struct pkt_imsg));
+
+			shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
+				MAP_ANON, -1, 0);
+
+			if (shptr == MAP_FAILED) {
+				dolog(LOG_ERR, "failed to setup mmap segment, exit\n");
+				exit(1);
+			}
+
+			/* initialize */
+			for (pi = (struct pkt_imsg *)&shptr[0], j = 0; j < SHAREDMEMSIZE3; j++, pi++) {
+				pack32((char *)&pi->pkt_s.read, 1);
+			}
+
+			cfg->shptr3 = shptr;
+			cfg->shptr3size = shsize;
 
 			/* chroot to the drop priv user home directory */
 #ifdef DEFAULT_LOCATION
@@ -1587,10 +1591,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 #if __OpenBSD__
 			minherit(cfg->shptr, cfg->shptrsize,
 				MAP_INHERIT_NONE);
-			minherit(cfg->shptr2, cfg->shptr2size,
-				MAP_INHERIT_NONE);
-			minherit(cfg->shptr3, cfg->shptr3size,
-				MAP_INHERIT_NONE);
 #endif
 		}
 
@@ -1609,10 +1609,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	if (forward) {
 #if __OpenBSD__
 		minherit(cfg->shptr, cfg->shptrsize,
-			MAP_INHERIT_NONE);
-		minherit(cfg->shptr2, cfg->shptr2size,
-			MAP_INHERIT_NONE);
-		minherit(cfg->shptr3, cfg->shptr3size,
 			MAP_INHERIT_NONE);
 #endif
 	}
@@ -1649,6 +1645,14 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
 		exit(1);
 	case 0:
+#ifndef __OpenBSD__
+		/* OpenBSD has minherit() */
+		if (munmap(cfg->shptr, cfg->shptrsize) == -1) {
+			dolog(LOG_INFO, "unmapping shptr failed: %s\n", \
+				strerror(errno));
+		}
+#endif
+		cfg->shptrsize = 0;
 		/* close udp decriptors */
 		for (i = 0; i < cfg->sockcount; i++)  {
 				close(cfg->udp[i]);
@@ -2676,6 +2680,14 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
 		exit(1);
 	case 0:
+#ifndef __OpenBSD__
+		/* OpenBSD has minherit() */
+		if (munmap(cfg->shptr, cfg->shptrsize) == -1) {
+			dolog(LOG_INFO, "unmapping shptr failed: %s\n", \
+				strerror(errno));
+		}
+#endif
+		cfg->shptrsize = 0;
 		for (i = 0; i < cfg->sockcount; i++)  {
 				close(cfg->tcp[i]);
 		}
