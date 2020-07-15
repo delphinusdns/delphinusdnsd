@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.25 2020/07/14 16:46:32 pjp Exp $
+ * $Id: forward.c,v 1.26 2020/07/15 16:51:42 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -315,7 +315,6 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	pid_t pid;
 
 	char *ptr;
-	time_t now, time0;
 
 	ptr = cfg->shptr;
 
@@ -420,13 +419,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		}
 		if (sel == 0) {
 			if (cache) {
-				time0 = time(NULL);
 				count = expire_db(db, 0);
-
-				now = time(NULL);
-#if DEBUG
-				dolog(LOG_INFO, "%f seconds spent in expire_db()\n", difftime(now, time0));
-#endif
 				if (count)
 					dolog(LOG_INFO, "Forward CACHE expire_db: expired %d RR's\n", count);
 			}
@@ -434,7 +427,6 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		}
 
 		
-		time0 = time(NULL);
 		SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwqp) {
 			if (FD_ISSET(fwq1->so, &rset)) {
 				if (fwq1->istcp) {
@@ -455,23 +447,13 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					if (len <= 0) 
 						goto drop;
 
-					time0 = time(NULL);
 					returnit(db, cfg, fwq1, buf, len, pibuf);
-					now = time(NULL);
-#if DEBUG
-					dolog(LOG_INFO, "%f seconds spent in returnit tcp\n", difftime(now, time0));
-#endif
 				} else {
 					len = recv(fwq1->so, buf, 0xffff, 0);
 					if (len < 0) 
 						goto drop;
 
-					time0 = time(NULL);
 					returnit(db, cfg, fwq1, buf, len, pibuf);
-					now = time(NULL);
-#if DEBUG
-					dolog(LOG_INFO, "%f seconds spent in returnit udp\n", difftime(now, time0));
-#endif
 				}
 
 drop:
@@ -491,24 +473,12 @@ drop:
 			}
 		}
 
-		now = time(NULL);
-#if DEBUG
-		dolog(LOG_INFO, "%f seconds spent in singly linked list\n", difftime(now, time0));
-#endif 
-
-
 		if (FD_ISSET(ibuf->fd, &rset)) {
-			time_t time0, now;
-
-			time0 = time(NULL);
 			if ((n = imsg_read(ibuf)) < 0 && errno != EAGAIN) {
 				dolog(LOG_ERR, "imsg read failure %s\n", strerror(errno));
 				continue;
 			}
-			now = time(NULL);
-#if DEBUG
-			dolog(LOG_INFO, "%f seconds spent in imsg_read\n", difftime(now, time0));
-#endif
+
 			if (n == 0) {
 				/* child died? */
 				dolog(LOG_INFO, "sigpipe on child?  forward process exiting.\n");
@@ -516,18 +486,12 @@ drop:
 			}
 
 			for (;;) {
-				time0 = time(NULL);
 				errno = 0;
 				if ((n = imsg_get(ibuf, &imsg)) <= 0) {
 					if (n != 0)
 						dolog(LOG_ERR, "imsg read error: %s\n", strerror(errno));
 					break;
 				} else {
-					now = time(NULL);
-#if DEBUG
-					dolog(LOG_INFO, "%f seconds spent in imsg_get\n", difftime(now, time0));
-#endif
-
 					if (n == 0)
 						break;
 
@@ -559,19 +523,9 @@ drop:
 						}
 
 						memcpy(rdata, &sf->u.s.sf, sizeof(struct sforward));
-						time0 = time(NULL);
 
-
-#if DEBUG
-						now = time(NULL);	
-						dolog(LOG_INFO, "%f seconds lag between forward from mainloop\n", difftime(now, ((struct sforward *)rdata)->gotit));
-#endif
 
 						forwardthis(db, cfg, -1, (struct sforward *)rdata);	
-						now = time(NULL);
-#if DEBUG
-						dolog(LOG_INFO, "%f seconds spent in forwardthis udp\n", difftime(now, time0));
-#endif
 						free(rdata);
 						/* aquire lock */
 						while (ptr[cfg->shptrsize - 16] == '*')
@@ -604,12 +558,7 @@ drop:
 						}
 
 						memcpy(rdata, &sf->u.s.sf, sizeof(struct sforward));
-						time0 = time(NULL);
 						forwardthis(db, cfg, imsg.fd, (struct sforward *)rdata);
-						now = time(NULL);
-#if DEBUG
-						dolog(LOG_INFO, "%f seconds spent in forwardthis tcp\n", difftime(now, time0));
-#endif
 						free(rdata);
 						/* aquire lock */
 						while (ptr[cfg->shptrsize - 16] == '*')
@@ -630,7 +579,6 @@ drop:
 		} /* FD_ISSET... */
 
 		if (FD_ISSET(bpibuf->fd, &rset)) {
-			time0 = time(NULL);
 			if ((n = imsg_read(bpibuf)) < 0 && errno != EAGAIN) {
 				dolog(LOG_ERR, "imsg read failure %s\n", strerror(errno));
 				continue;
@@ -689,11 +637,6 @@ drop:
 						} /* for */
 						cfg->shptr2[cfg->shptr2size - 16] = ' ';
 
-						now = time(NULL);
-
-#if DEBUG
-						dolog(LOG_INFO, "%f seconds spent in shared memory\n", difftime(now, time0));
-#endif
 						break;
 		
 					default:
@@ -1164,7 +1107,6 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	socklen_t tolen;
 	fd_set rset;
 	ssize_t n, datalen;
-	time_t time0, now;
 
 	if (buf == NULL) {
 		buf = calloc(1, 0xffff + 2);
@@ -1285,15 +1227,10 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		}
 
 		if (FD_ISSET(ibuf->fd, &rset)) {
-			time0 = time(NULL);
 			if ((n = imsg_read(ibuf)) == -1 && errno != EAGAIN) {
 				dolog(LOG_ERR, "returnit internal error around imsg_read, drop\n");
 				continue;
 			}
-			now = time(NULL);
-#if DEBUG
-			dolog(LOG_INFO, "%f seconds spent in imsg_read 2\n", difftime(now, time0));
-#endif
 			if (n == 0) {
 				dolog(LOG_INFO, "imsg peer died?  shutting down\n");
 				ddd_shutdown();
@@ -1307,16 +1244,10 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 			
 
 		for (;;) {
-			time0 = time(NULL);
 			if ((n = imsg_get(ibuf, &imsg)) == -1) {
 				dolog(LOG_ERR, "returnit internal error around imsg_get, drop\n");
 				break;
 			}
-			now = time(NULL);
-#if DEBUG
-			dolog(LOG_INFO, "%f seconds spent in imsg_get\n", difftime(now, time0));
-#endif
-
 			if (n == 0) {
 #if DEBUG
 				dolog(LOG_INFO, "n == 0, odd...\n");
