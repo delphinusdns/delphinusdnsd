@@ -45,7 +45,7 @@ Here is a sample
 .Nm
 file:
 .Bd -literal
-version "9";
+version "1";
 options "cool stuff" {
 	interface "lo0";
 	interface "em0";
@@ -90,7 +90,7 @@ Here is a sample
 .Nm
 file suited for DNSSEC:
 .Bd -literal
-version "9";
+version "1";
 options "some options" {
         ratelimit-pps 12;
         bind 127.0.0.1;
@@ -99,7 +99,7 @@ options "some options" {
         port 32253;
         log;
         dnssec;
-        versionstring "delphinusdnsd 1.4.0";
+        versionstring "delphinusdnsd 1.5.0";
 }
 axfr-for "these hosts" {
         ::1/128;
@@ -128,7 +128,7 @@ as taken from a
 .Xr delphinusdnsd 
 with only one zone:
 .Bd -literal
-version "9";
+version "1";
 
 options "arrowhead" {
         ratelimit-pps 12;

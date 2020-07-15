@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.104 2020/07/13 22:02:26 pjp Exp $
+ * $Id: parse.y,v 1.105 2020/07/15 15:09:24 pjp Exp $
  */
 
 %{
@@ -156,7 +156,7 @@ SLIST_HEAD(mzones ,mzone)	mzones = SLIST_HEAD_INITIALIZER(mzones);
 #define NO_RZONEFILE	0
 #define RZONEFILE	1
 
-#define DELPHINUSVERSION	9
+#define DELPHINUSVERSION	1
 
 #define CONFIG_START            0x1
 #define CONFIG_VERSION          0x2
