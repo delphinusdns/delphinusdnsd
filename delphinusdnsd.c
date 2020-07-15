@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.126 2020/07/14 16:14:35 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.127 2020/07/15 07:39:38 pjp Exp $
  */
 
 
@@ -4311,6 +4311,7 @@ bind_this_res(struct addrinfo *res, int shut)
 		dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 	}
 
+#ifndef __FreeBSD__
 	if (shut) {
 		if (shutdown(so, SHUT_RD) < 0) {
 			dolog(LOG_INFO, "shutdown: %s\n", strerror(errno));
@@ -4318,6 +4319,7 @@ bind_this_res(struct addrinfo *res, int shut)
 			exit(1);
 		}
 	}
+#endif
 
 	if (bind(so, res->ai_addr, res->ai_addrlen) < 0) {
 		dolog(LOG_INFO, "bind: %s\n", strerror(errno));
@@ -4367,6 +4369,7 @@ bind_this_pifap(struct ifaddrs *pifap, int shut, int salen)
 	}
 
 
+#ifndef __FreeBSD__
 	if (shut) {
 		if (shutdown(so, SHUT_RD) < 0) {
 			dolog(LOG_INFO, "shutdown: %s\n", strerror(errno));
@@ -4374,6 +4377,7 @@ bind_this_pifap(struct ifaddrs *pifap, int shut, int salen)
 			exit(1);
 		}
 	}
+#endif
 	
 	if (bind(so, (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
 		dolog(LOG_INFO, "bind: %s\n", strerror(errno));
