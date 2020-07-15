@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.105 2020/07/15 15:09:24 pjp Exp $
+ * $Id: parse.y,v 1.106 2020/07/15 20:27:15 pjp Exp $
  */
 
 %{
@@ -99,7 +99,7 @@ extern int	insert_tsig_key(char *, int, char *, int);
 extern void 	ddd_shutdown(void);
 extern int 	mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int 	mybase64_decode(char const *, u_char *, size_t);
-extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t);
+extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int display_rr(struct rrset *rrset);
@@ -2194,7 +2194,7 @@ fill_cname(ddDB *db, char *name, char *type, int myttl, char *hostname)
 
 	free(myname);
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_CNAME, cname, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_CNAME, cname, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2246,7 +2246,7 @@ fill_ptr(ddDB *db, char *name, char *type, int myttl, char *hostname)
 
 	free(myname);
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_PTR, ptr, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_PTR, ptr, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2296,7 +2296,7 @@ fill_dnskey(ddDB *db, char *name, char *type, u_int32_t myttl, u_int16_t flags, 
 	dnskey->publickey_len = ret;
 	
 	
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_DNSKEY, dnskey, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_DNSKEY, dnskey, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2392,7 +2392,7 @@ fill_rrsig(ddDB *db, char *name, char *type, u_int32_t myttl, char *typecovered,
 
 	rrsig->signature_len = ret;
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_RRSIG, rrsig, original_ttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_RRSIG, rrsig, original_ttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2457,7 +2457,7 @@ fill_ds(ddDB *db, char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_i
 	ret = hex2bin(digest, strlen(digest), ds->digest);
 	ds->digestlen = ret;
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_DS, ds, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_DS, ds, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2531,7 +2531,7 @@ fill_nsec3(ddDB *db, char *name, char *type, u_int32_t myttl, u_int8_t algorithm
 	printf(";nsec3->bitmap == \"%s\", nsec3->bitmap_len == %d\n", bitmap, nsec3->bitmap_len);
 #endif
 	
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NSEC3, nsec3, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NSEC3, nsec3, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2574,7 +2574,7 @@ fill_nsec3param(ddDB *db, char *name, char *type, u_int32_t myttl, u_int8_t algo
 		nsec3param->saltlen = (strlen(salt) / 2);
 		hex2bin(salt, strlen(salt), nsec3param->salt);
 	}
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NSEC3PARAM, nsec3param, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NSEC3PARAM, nsec3param, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2626,7 +2626,7 @@ fill_nsec(ddDB *db, char *name, char *type, u_int32_t myttl, char *domainname, c
 
 	create_nsec_bitmap(bitmap, nsec->bitmap, (int *)&nsec->bitmap_len);
 	
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NSEC, nsec, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NSEC, nsec, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2694,7 +2694,7 @@ fill_naptr(ddDB *db, char *name, char *type, int myttl, int order, int preferenc
 	memcpy(&naptr->replacement, naptrname, naptr_namelen);
 	naptr->replacementlen = naptr_namelen;
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NAPTR, naptr, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NAPTR, naptr, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2766,7 +2766,7 @@ fill_txt(ddDB *db, char *name, char *type, int myttl, char *msg)
 	memcpy(&txt->txt, tmp, len);
 	txt->txtlen = len;
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_TXT, txt, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_TXT, txt, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2833,7 +2833,7 @@ fill_tlsa(ddDB *db, char *name, char *type, int myttl, uint8_t usage, uint8_t se
 
 
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_TLSA, tlsa, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_TLSA, tlsa, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2890,7 +2890,7 @@ fill_sshfp(ddDB *db, char *name, char *type, int myttl, int alg, int fptype, cha
 	ret = hex2bin(fingerprint, strlen(fingerprint), sshfp->fingerprint);
 
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_SSHFP, sshfp, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_SSHFP, sshfp, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2948,7 +2948,7 @@ fill_srv(ddDB *db, char *name, char *type, int myttl, int priority, int weight, 
 
 	free (srvname);
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_SRV, srv, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_SRV, srv, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2998,7 +2998,7 @@ fill_mx(ddDB *db, char *name, char *type, int myttl, int priority, char *mxhost)
 	free (mxname);
 
 	
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_MX, mx, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_MX, mx, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -3042,7 +3042,7 @@ fill_a(ddDB *db, char *name, char *type, int myttl, char *a)
 		return (-1);
 	}
 		
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_A, sa, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_A, sa, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -3088,7 +3088,7 @@ fill_aaaa(ddDB *db, char *name, char *type, int myttl, char *aaaa)
 			return -1;
 	}
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_AAAA, saaaa, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_AAAA, saaaa, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -3173,7 +3173,7 @@ fill_ns(ddDB *db, char *name, char *type, int myttl, char *nameserver)
 
 	ns->ns_type = nstype; 
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NS, ns, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_NS, ns, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -3254,7 +3254,7 @@ fill_soa(ddDB *db, char *name, char *type, int myttl, char *auth, char *contact,
 	soa->expire = expire;
 	soa->minttl = ttl;
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_SOA, soa, myttl);
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_SOA, soa, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;

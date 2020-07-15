@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.22 2020/07/13 22:02:26 pjp Exp $
+ * $Id: db.c,v 1.23 2020/07/15 20:27:15 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -63,7 +63,7 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl);
+struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
 struct rbtree * find_rrset(ddDB *db, char *name, int len);
 struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
@@ -177,7 +177,7 @@ dddbclose(ddDB *db)
 }
 
 struct rbtree *
-create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl)
+create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, uint16_t rdlen)
 {
 	ddDBT key, data;
 	struct rbtree *rbt = NULL;
@@ -254,6 +254,7 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl)
 		break;
 	}
 	myrr->changed = time(NULL);
+	myrr->rdlen = rdlen;
 
 	rrset->ttl = ttl;
 

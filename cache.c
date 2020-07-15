@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: cache.c,v 1.5 2020/07/13 22:02:26 pjp Exp $
+ * $Id: cache.c,v 1.6 2020/07/15 20:27:15 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -118,6 +118,7 @@ int cache_tlsa(struct scache *);
 int cache_srv(struct scache *);
 int cache_naptr(struct scache *);
 int cache_soa(struct scache *);
+int cache_generic(struct scache *);
 
 
 /* The following alias helps with bounds checking all input, needed! */
@@ -303,6 +304,9 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 				
 				break;
 			}
+		}
+		if (cr->rrtype == 0) {
+			cache_generic(scache);
 		}
 
 		pb += rdlen;
@@ -841,5 +845,32 @@ cache_naptr(struct scache *scache)
 		q = save;
 	}
 
+	return (q - scache->estart);
+}
+
+int 
+cache_generic(struct scache *scache)
+{
+	u_char *p = scache->payload;
+	u_char *q = p;
+
+	switch (scache->rrtype) {
+	case 18: /* AFSDB */ case 42: /* APL */ case 257: /* CAA */
+	case 60: /* CDNSKEY */ case 59: /* CDS */ case 37: /* CERT */
+	case 62: /* CSYNC */ case 49: /* DHCID */ case 39: /* DNAME */
+	case 108: /* EUI48 */ case 109: /* EUI64 */ case 13: /* HINFO */
+	case 55: /* HIP */ case 45: /* IPSECKEY */ case 25: /* KEY */
+	case 36: /* KX */ case 29: /* LOC */ case 61: /* OPENPGPKEY */
+	case 17: /* RP */ case 24: /* SIG */ case 53: /* SMIMEA */
+	case 249: /* TKEY */ case 256: /* URI */ 
+		break;
+	default:
+		/* we don't cache unsupported types */
+		return -1;
+	}
+
+	transmit_rr(scache, (void*)scache->payload, scache->rdlen);
+
+	q += scache->rdlen;
 	return (q - scache->estart);
 }

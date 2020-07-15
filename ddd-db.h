@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.46 2020/07/14 14:46:23 pjp Exp $
+ * $Id: ddd-db.h,v 1.47 2020/07/15 20:27:15 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -302,6 +302,7 @@ typedef struct __dddb {
 
 struct rr {
 	void *rdata;
+	uint16_t rdlen;
 	time_t changed;
 	TAILQ_ENTRY(rr) entries;
 };

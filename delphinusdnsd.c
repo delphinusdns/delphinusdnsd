@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.127 2020/07/15 07:39:38 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.128 2020/07/15 20:27:15 pjp Exp $
  */
 
 
@@ -165,7 +165,6 @@ extern void 	ddd_shutdown(void);
 extern int 	get_record_size(ddDB *, char *, int);
 extern struct question		*build_question(char *, int, int, char *);
 extern int			free_question(struct question *);
-extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int 	add_rr(struct rbtree *, char *, int, u_int16_t, void *);

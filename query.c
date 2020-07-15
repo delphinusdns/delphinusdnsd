@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: query.c,v 1.6 2020/07/08 12:29:02 pjp Exp $
+ * $Id: query.c,v 1.7 2020/07/15 20:27:15 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -135,7 +135,6 @@ extern int	check_ent(char *, int);
 extern struct question          *build_question(char *, int, int, char *);
 struct rrtab    *rrlookup(char *);
 
-extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);

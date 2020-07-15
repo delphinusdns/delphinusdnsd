@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.66 2020/07/08 12:29:02 pjp Exp $
+ * $Id: util.c,v 1.67 2020/07/15 20:27:15 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -128,7 +128,6 @@ extern int zonecount;
 
 extern void 	dolog(int, char *, ...);
 
-extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);

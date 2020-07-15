@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dnssec.c,v 1.27 2020/07/08 12:29:02 pjp Exp $
+ * $Id: dnssec.c,v 1.28 2020/07/15 20:27:15 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -104,7 +104,6 @@ extern int              free_question(struct question *);
 extern int		check_ent(char *, int);
 extern int 		memcasecmp(u_char *, u_char *, int);
 
-extern struct rbtree * create_rr(ddDB *db, char *name, int len, int type, void *rdata);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.26 2020/07/15 16:51:42 pjp Exp $
+ * $Id: forward.c,v 1.27 2020/07/15 20:27:15 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -180,7 +180,8 @@ extern int	reply_ds(struct sreply *, ddDB *);
 extern int	reply_nsec(struct sreply *, ddDB *);
 extern int	reply_nsec3(struct sreply *, ddDB *);
 extern int	reply_nsec3param(struct sreply *, ddDB *);
-extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t);
+extern int	reply_generic(struct sreply *, ddDB *);
+extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
 extern void flag_rr(struct rbtree *rbt);
 extern struct rbtree * find_rrset(ddDB *, char *, int);
 
@@ -624,7 +625,7 @@ drop:
 
 								if ((rbt = create_rr(db, ri->rri_rr.name, 
 										ri->rri_rr.namelen, ri->rri_rr.rrtype, 
-										(void *)rdata, ri->rri_rr.ttl)) == NULL) {
+										(void *)rdata, ri->rri_rr.ttl, ri->rri_rr.buflen)) == NULL) {
 									dolog(LOG_ERR, "cache insertion failed 2\n");
 									free(rdata);
 									pack32((char *)&ri->u.s.read, 1);
@@ -844,8 +845,38 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 			}
 
 			if (rl->rrtype == 0) {
-				dolog(LOG_INFO, "we did not have any right answer in our cache, skip to newqueue\n");
-				goto newqueue;
+				/* https://en.wikipedia.org/wiki/List_of_DNS_record_types */
+				switch (ntohs(q->hdr->qtype)) {
+					/* FALLTHROUGH for all listed */
+				case 18: /* AFSDB */ case 42: /* APL */ case 257: /* CAA */
+				case 60: /* CDNSKEY */ case 59: /* CDS */ case 37: /* CERT */
+				case 62: /* CSYNC */ case 49: /* DHCID */ case 39: /* DNAME */
+				case 108: /* EUI48 */ case 109: /* EUI64 */ case 13: /* HINFO */
+				case 55: /* HIP */ case 45: /* IPSECKEY */ case 25: /* KEY */
+				case 36: /* KX */ case 29: /* LOC */ case 61: /* OPENPGPKEY */
+				case 17: /* RP */ case 24: /* SIG */ case 53: /* SMIMEA */
+				case 249: /* TKEY */ case 256: /* URI */ 
+#if DEBUG
+					dolog(LOG_INFO, "replying generic RR %d\n", 
+						ntohs(q->hdr->qtype));
+#endif
+					if (reply_generic(&sreply, cfg->db) < 0) {
+						expire_rr(db, q->hdr->name, q->hdr->namelen, 
+							ntohs(q->hdr->qtype), highexpire);
+						free_question(q);
+						goto newqueue;
+					} 
+						
+					break;
+				default:
+						dolog(LOG_INFO, 
+							"no answer in our cache, skip to newqueue\n");
+						free_question(q);
+						goto newqueue;
+						break;
+				}
+
+				/* NOTREACHED */
 			}
 
 			free_question(q);
