@@ -11,6 +11,8 @@ Changes in RELEASE_1_5 from RELEASE_1_4
   tcp-on-any-only option.
 - conform to RFC 2181 section 5.2, but keep exception for RRSIG per RFC 4034
 - added a "cortex" process for IPC between the processes
+- added a forwarding mode
+- changed the config file version from 9 back to 1
 
 Changes in RELEASE_1_4 from RELEASE_1_3
 
