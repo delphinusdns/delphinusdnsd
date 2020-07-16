@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.128 2020/07/15 20:27:15 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.129 2020/07/16 06:35:55 pjp Exp $
  */
 
 
@@ -2149,7 +2149,7 @@ forwardudp:
 							break;
 						}
 						
-						memcpy(&sforward->buf, question->hdr->name, question->hdr->namelen);
+						memcpy(&sforward->buf, question->hdr->original_name, question->hdr->namelen);
 						sforward->buflen = question->hdr->namelen;
 		
 						memcpy((char *)&sforward->header, buf, sizeof(struct dns_header));
@@ -3639,6 +3639,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 					}
 					
 					memcpy(pq.name, question->hdr->name, question->hdr->namelen);
+					memcpy(pq.original_name, question->hdr->original_name, question->hdr->namelen);
 					pq.namelen = question->hdr->namelen;
 					pq.qtype = question->hdr->qtype;
 					pq.qclass = question->hdr->qclass;
@@ -3705,13 +3706,24 @@ convert_question(struct parsequestion *pq, int authoritative)
 		return NULL;
 	}
 	
-	q->hdr->name = strdup(pq->name);
+	q->hdr->name = calloc(1, pq->namelen);
 	if (q->hdr->name == NULL) {
-		dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 		free(q->hdr);
 		free(q);
 		return NULL;
 	}
+	memcpy(q->hdr->name, pq->name, pq->namelen);
+
+	q->hdr->original_name = calloc(1, pq->namelen);
+	if (q->hdr->original_name == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		free(q->hdr->name);
+		free(q->hdr);
+		free(q);
+		return NULL;
+	}
+	memcpy(q->hdr->original_name, pq->original_name, pq->namelen);
 		
 	q->hdr->namelen = pq->namelen;
 	q->hdr->qtype = pq->qtype;
@@ -3720,6 +3732,8 @@ convert_question(struct parsequestion *pq, int authoritative)
 	q->converted_name = strdup(pq->converted_name);
 	if (q->converted_name == NULL) {
 		dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+		free(q->hdr->name);
+		free(q->hdr->original_name);
 		free(q->hdr);
 		free(q);
 		return NULL;

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.27 2020/07/15 20:27:15 pjp Exp $
+ * $Id: forward.c,v 1.28 2020/07/16 06:35:55 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -47,6 +47,7 @@
 #include <string.h>
 #include <errno.h>
 #include <syslog.h>
+#include <ctype.h>
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -98,6 +99,8 @@ struct forwardentry {
 SLIST_HEAD(, forwardqueue) fwqhead;
 
 struct forwardqueue {
+	char dnsname[DNS_MAXNAME];		/* the request name */
+	char dnsnamelen;			/* the len of dnsname */
 	uint32_t longid;			/* a long identifier */
 	time_t time;				/* time created */
 	struct sockaddr_storage host;		/* remote host to query */
@@ -135,6 +138,8 @@ struct tsig * check_tsig(char *, int, char *);
 void	fwdparseloop(struct imsgbuf *, struct imsgbuf *, struct cfg *);
 void	changeforwarder(struct forwardqueue *);
 void 	stirforwarders(void);
+void	randomize_dnsname(char *buf, int len);
+void	lower_dnsname(char *buf, int len);
 
 extern void 	dolog(int, char *, ...);
 extern void      pack(char *, char *, int);
@@ -666,6 +671,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 
 	char buf[512];
 	char replystring[DNS_MAXNAME + 1];
+	char savednsname[DNS_MAXNAME];
 	static char *replybuf = NULL;
 	int len, slen;
 
@@ -745,6 +751,10 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 
 		if (! cache)
 			goto newqueue;
+	
+		/* set our name to lower case for db work */
+		memcpy(&savednsname, sforward->buf, sforward->buflen);
+		lower_dnsname(sforward->buf, sforward->buflen);
 
 		/* check cache and expire it, then send if it remains */
 		if ((count = expire_rr(db, sforward->buf, sforward->buflen, 
@@ -768,7 +778,8 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 			pack16((char *)&dh->id, sforward->header.id);
 			p = (char *)&dh[1];
 
-			pack(p, sforward->buf, sforward->buflen);
+			/* make sure we reply as it was given */
+			pack(p, savednsname, sforward->buflen);
 			p += sforward->buflen;
 			pack16(p, sforward->type);
 			p += sizeof(uint16_t);
@@ -793,11 +804,11 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 			}
 			
 			if (sforward->havemac)
-				q = build_fake_question(sforward->buf, sforward->buflen,
+				q = build_fake_question(savednsname, sforward->buflen,
 					sforward->type, sforward->tsigname, 
 					sforward->tsignamelen);
 			else
-				q = build_fake_question(sforward->buf, sforward->buflen,
+				q = build_fake_question(savednsname, sforward->buflen,
 					sforward->type, NULL, 0);
 		
 
@@ -885,8 +896,13 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 		}
 
 		/* create a new queue and send it */
-
 newqueue:
+		/*
+		 * we're out of cache territory, let's mutilate our
+		 * our dns question a little bit...
+		 */
+
+		randomize_dnsname(sforward->buf, sforward->buflen);
 
 		TAILQ_FOREACH(fw2, &forwardhead, forward_entry) {
 			if (fw2->active == 1)
@@ -914,6 +930,9 @@ newqueue:
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			return;
 		}
+		memcpy(&fwq1->dnsname, sforward->buf, sforward->buflen);
+		fwq1->dnsnamelen = sforward->buflen;
+
 		fwq1->oldfamily = sforward->family;
 		fwq1->oldsel = sforward->oldsel;
 
@@ -1173,6 +1192,17 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		/* returned packet ID does not match */
 		dolog(LOG_INFO, "FORWARD returnit, returned packet ID does not match %d vs %d\n", ntohs(dh->id), fwq->id);
 		return;
+	}
+
+	if (rlen < (sizeof(struct dns_header) + fwq->dnsnamelen)) {
+		/* the packet size can't fit the question name */
+		dolog(LOG_INFO, "FORWARD returnit, question name can't fit in packet thus it gets dropped\n");
+		return;
+	} else {
+		if (memcasecmp((char *)&dh[1], fwq->dnsname, fwq->dnsnamelen) != 0) {
+			dolog(LOG_INFO, "reply for a question we didn't send, drop\n");
+			return;
+		}
 	}
 
 	/* send it on to our sandbox */
@@ -2126,4 +2156,58 @@ stirforwarders(void)
 		
 		count++;
 	}
+}
+
+/* https://tools.ietf.org/html/draft-vixie-dnsext-dns0x20-00 */
+
+void
+randomize_dnsname(char *buf, int len)
+{
+	char randompad[DNS_MAXNAME];
+	char *p, *q;
+	int offset, labellen;
+	int i;
+	char ch;
+
+	if (len > sizeof(randompad))
+		return;
+
+	arc4random_buf(randompad, sizeof(randompad));
+
+	q = &buf[0];
+	for (p = q, offset = 0; *p != 0; p = (p + *p + 1), offset += (*p + 1)) {
+		if (offset > DNS_MAXNAME)
+			return;	
+
+		labellen = *p;
+		for (i = 1; i < (1 + labellen); i++) {
+			ch = q[offset + i];
+			q[offset + i] = (randompad[offset + i] & 1) ? toupper(ch) : ch;
+		}
+	}
+
+	return;
+}
+
+void
+lower_dnsname(char *buf, int len)
+{
+	char *p, *q;
+	int offset, labellen;
+	int i;
+	char ch;
+
+	q = &buf[0];
+	for (p = q, offset = 0; *p != 0; p = (p + *p + 1), offset += (*p + 1)) {
+		if (offset > DNS_MAXNAME)
+			return;	
+
+		labellen = *p;
+		for (i = 1; i < (1 + labellen); i++) {
+			ch = tolower(q[offset + i]);
+			q[offset + i] = ch;
+		}
+	}
+
+	return;
 }

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.23 2020/07/14 07:00:18 pjp Exp $
+ * $Id: ddd-dns.h,v 1.24 2020/07/16 06:35:55 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -99,6 +99,7 @@ struct dns_tsigrr {
 /* RFC 1035 - page 28 */
 struct dns_question_hdr {
 	char *name;
+	char *original_name;
 	u_int namelen;
 	u_int16_t qtype;
 	u_int16_t qclass;
@@ -274,6 +275,7 @@ struct question {
 
 struct parsequestion {
 	char name[DNS_MAXNAME];
+	char original_name[DNS_MAXNAME];
 	u_int namelen;
 	u_int16_t qtype;
 	u_int16_t qclass;

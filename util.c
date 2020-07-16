@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.67 2020/07/15 20:27:15 pjp Exp $
+ * $Id: util.c,v 1.68 2020/07/16 06:35:55 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -809,11 +809,20 @@ build_fake_question(char *name, int namelen, u_int16_t type, char *tsigkey, int 
 		free(q);
 		return NULL;
 	}
+	q->hdr->original_name = (void *) calloc(1, q->hdr->namelen);
+	if (q->hdr->original_name == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		free(q->hdr->name);
+		free(q->hdr);
+		free(q);
+		return NULL;
+	}
 	q->converted_name = NULL;
 
 	/* fill our name into the dns header struct */
 	
 	memcpy(q->hdr->name, name, q->hdr->namelen);
+	memcpy(q->hdr->original_name, name, q->hdr->namelen);
 	
 	q->hdr->qtype = type;
 	q->hdr->qclass = htons(DNS_CLASS_IN);
@@ -824,6 +833,7 @@ build_fake_question(char *name, int namelen, u_int16_t type, char *tsigkey, int 
 
 		if (tsigkeylen > sizeof(q->tsig.tsigkey)) {
 			free(q->hdr->name);
+			free(q->hdr->original_name);
 			free(q->hdr);
 			free(q);
 			return NULL;
@@ -1021,10 +1031,19 @@ build_question(char *buf, int len, int additional, char *mac)
 		free(q);
 		return NULL;
 	}
+	q->hdr->original_name = (void *)calloc(1, q->hdr->namelen);
+	if (q->hdr->original_name == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		free(q->hdr->name);
+		free(q->hdr);
+		free(q);
+		return NULL;
+	}
 	q->converted_name = (void *)calloc(1, namelen + num_label + 2);
 	if (q->converted_name == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));	
 		free(q->hdr->name);
+		free(q->hdr->original_name);
 		free(q->hdr);
 		free(q);
 		return NULL;
@@ -1444,8 +1463,9 @@ build_question(char *buf, int len, int additional, char *mac)
 	/* fill our name into the dns header struct */
 		
 	memcpy(q->hdr->name, &buf[sizeof(struct dns_header)], q->hdr->namelen);
+	memcpy(q->hdr->original_name, &buf[sizeof(struct dns_header)], q->hdr->namelen);
 	
-	/* make it lower case */
+	/* make hdr->name lower case */
 
 	for (i = 0; i < q->hdr->namelen; i++) {
 		int c0;
@@ -1488,6 +1508,7 @@ int
 free_question(struct question *q)
 {
 	free(q->hdr->name);
+	free(q->hdr->original_name);
 	free(q->hdr);
 	free(q->converted_name);
 	free(q);
