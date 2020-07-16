@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.72 2020/07/16 13:33:53 pjp Exp $
+ * $Id: util.c,v 1.73 2020/07/16 14:37:55 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1009,6 +1009,9 @@ build_question(char *buf, int len, int additional, char *mac)
 		free(q);
 		return NULL;
 	}
+
+	/* XXX the below line can fail */
+	(void)lower_dnsname(expand, elen);
 
 	if ((q->converted_name = convert_name(expand, elen)) == NULL) {
 		dolog(LOG_INFO, "error in convert_name()\n");
