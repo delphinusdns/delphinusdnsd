@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.70 2020/07/16 09:03:20 pjp Exp $
+ * $Id: util.c,v 1.71 2020/07/16 12:02:38 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -90,8 +90,8 @@ void 	pack8(char *, u_int8_t);
 uint32_t unpack32(char *);
 uint16_t unpack16(char *);
 void 	unpack(char *, char *, int);
-void lower_dnsname(char *, int); 
-void randomize_dnsname(char *, int);
+int lower_dnsname(char *, int); 
+int randomize_dnsname(char *, int);
 
 int label_count(char *);
 char * dns_label(char *, int *);
@@ -158,6 +158,7 @@ extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
 extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
 extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int);
+extern char *convert_name(char *, int);
 
 
 /* internals */
@@ -826,7 +827,14 @@ build_fake_question(char *name, int namelen, u_int16_t type, char *tsigkey, int 
 	memcpy(q->hdr->original_name, name, q->hdr->namelen);
 	memcpy(q->hdr->name, name, q->hdr->namelen);
 
-	lower_dnsname(q->hdr->name, q->hdr->namelen);
+	if (lower_dnsname(q->hdr->name, q->hdr->namelen) == -1) {
+		free(q->hdr->original_name);
+		free(q->hdr->name);
+		free(q->hdr);
+		free(q);
+		return NULL;
+	}
+		
 	
 	q->hdr->qtype = type;
 	q->hdr->qclass = htons(DNS_CLASS_IN);
@@ -836,8 +844,8 @@ build_fake_question(char *name, int namelen, u_int16_t type, char *tsigkey, int 
 		int alglen;
 
 		if (tsigkeylen > sizeof(q->tsig.tsigkey)) {
-			free(q->hdr->name);
 			free(q->hdr->original_name);
+			free(q->hdr->name);
 			free(q->hdr);
 			free(q);
 			return NULL;
@@ -935,14 +943,15 @@ build_question(char *buf, int len, int additional, char *mac)
 {
 	char pseudo_packet[4096];		/* for tsig */
 	u_int rollback, i;
-	u_int namelen = 0;
 	u_int16_t qtype, qclass;
 	u_int32_t ttl;
 	u_int64_t timefudge;
-	int num_label;
+	int elen = 0;
 
-	char *p, *end_name = NULL;
+	char *end_name = NULL;
+	char *pb = NULL;
 	char *o;
+	char expand[DNS_MAXNAME + 1];
 
 	struct dns_tsigrr *tsigrr = NULL;
 	struct dns_optrr *opt = NULL;
@@ -950,63 +959,20 @@ build_question(char *buf, int len, int additional, char *mac)
 	struct dns_header *hdr = (struct dns_header *)buf;
 
 	/* find the end of name */
-	for (i = sizeof(struct dns_header); i < len; i++) {
-		/* XXX */
-		if (buf[i] == 0) {
-			end_name = &buf[i];			
-			break;
-		}
-	}
-
-	/* 
-	 * implies i >= len , because end_name still points to NULL and not
-	 * &buf[i]
-	 */
-
+	elen = 0;
+	memset(&expand, 0, sizeof(expand));
+	end_name = expand_compression((u_char *)&buf[sizeof(struct dns_header)], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
 	if (end_name == NULL) {
-		dolog(LOG_INFO, "query name is not null terminated\n");
+		dolog(LOG_ERR, "expand_compression() failed, bad formatted question name\n");
 		return NULL;
 	}
 
-	/* parse the size of the name */
-	for (i = sizeof(struct dns_header), num_label = 0; i < len && &buf[i] < end_name;) {
-		u_int labellen;
-
-		++num_label;
-		
-		labellen = (u_int)buf[i];	
-
-		/* 
-		 * do some checks on the label, if it's 0 or over 63 it's
-		 * illegal, also if it reaches beyond the entire name it's
-		 * also illegal.
-		 */
-		if (labellen == 0) {
-			dolog(LOG_INFO, "illegal label len (0)\n");
-			return NULL;
-		}
-		if (labellen > DNS_MAXLABEL) {
-			dolog(LOG_INFO, "illegal label len (> 63)\n");
-			return NULL;
-		}
-		if (labellen > (end_name - &buf[i])) {
-			dolog(LOG_INFO, "label len extends beyond name\n");
-			return NULL;
-		}
-
-		i += (labellen + 1);
-		namelen += labellen;
-	}
-	
-	if (&buf[i] != end_name || i >= len) {
-		dolog(LOG_INFO, "query name is maliciously malformed\n");
+	if ((end_name - buf) < elen) {
+		dolog(LOG_ERR, "compression in question #1\n");
 		return NULL;
 	}
 
-	if (i > DNS_MAXNAME) {
-		dolog(LOG_INFO, "query name is too long (%u)\n", i);
-		return NULL;
-	}
+	i = (end_name - &buf[0]);
 
 	
 	/* check if there is space for qtype and qclass */
@@ -1027,7 +993,7 @@ build_question(char *buf, int len, int additional, char *mac)
 		free(q);
 		return NULL;
 	}
-	q->hdr->namelen = (end_name - &buf[sizeof(struct dns_header)]) + 1;	/* XXX */
+	q->hdr->namelen = (end_name - &buf[sizeof(struct dns_header)]);
 	q->hdr->name = (void *) calloc(1, q->hdr->namelen);
 	if (q->hdr->name == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
@@ -1043,9 +1009,9 @@ build_question(char *buf, int len, int additional, char *mac)
 		free(q);
 		return NULL;
 	}
-	q->converted_name = (void *)calloc(1, namelen + num_label + 2);
-	if (q->converted_name == NULL) {
-		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));	
+
+	if ((q->converted_name = convert_name(expand, elen)) == NULL) {
+		dolog(LOG_INFO, "error in convert_name()\n");
 		free(q->hdr->name);
 		free(q->hdr->original_name);
 		free(q->hdr);
@@ -1053,54 +1019,12 @@ build_question(char *buf, int len, int additional, char *mac)
 		return NULL;
 	}
 
-	p = q->converted_name;
-
-	/* 
-	 * parse the name again this time filling the labels 
-	 * XXX this is expensive going over the buffer twice
-	 */
-	for (i = sizeof(struct dns_header); i < len && &buf[i] < end_name;) {
-		u_int labelend;
-
-
-		/* check for compression */
-		if ((buf[i] & 0xc0) == 0xc0) {
-			dolog(LOG_INFO, "question has compressed name, drop\n");
-			free_question(q);
-			return NULL;	/* XXX should say error */
-		}
-
-		labelend = (u_int)buf[i] + 1 + i; /* i = offset, plus contents of buf[i], + 1 */
-
-		/* 
- 		 * i is reused here to count every character, this is not 
-		 * a bug!
-		 */
-
-		for (i++; i < labelend; i++) {
-			int c0; 
-
-			c0 = buf[i];
-			*p++ = tolower(c0);
-		}
-
-		*p++ = '.';
-	}
-
-	/* XXX */
-	if (&buf[sizeof(struct dns_header)] == end_name) 
-		*p++ = '.';
-
-	*p = '\0';
-	i += (2 * sizeof(u_int16_t)) + 1;	/* trailing NUL and type,class*/
+	i += (2 * sizeof(u_int16_t)); 	/* type,class*/
 
 	/* in IXFR an additional SOA entry is tacked on, we want to skip this */
 	do {
 		u_int16_t val16;
 		u_int32_t val32;
-		char *pb = NULL;
-		char expand[DNS_MAXNAME + 1];
-		int elen;
 
 		rollback = i;
 
@@ -1471,20 +1395,20 @@ build_question(char *buf, int len, int additional, char *mac)
 	
 	/* make hdr->name lower case */
 
-	for (i = 0; i < q->hdr->namelen; i++) {
-		int c0;
-
-		c0 = q->hdr->name[i];
-		if (isalpha(c0)) {
-			q->hdr->name[i] = tolower(c0);
-		}
+	if (lower_dnsname(q->hdr->name, q->hdr->namelen) == -1) {
+		dolog(LOG_INFO, "lower_dnsname failed\n");
+		free(q->hdr->name);
+		free(q->hdr->original_name);
+		free(q->hdr);
+		free(q);
+		return NULL;
 	}
 
 	/* parse type and class from the question */
 
-	o = (end_name + 1);
+	o = (end_name);
 	qtype = unpack16(o);
-	o = (end_name + sizeof(uint16_t) + 1);
+	o = (end_name + sizeof(uint16_t));
 	qclass = unpack16(o);
 
 	memcpy((char *)&q->hdr->qtype, (char *)&qtype, sizeof(u_int16_t));
@@ -2330,54 +2254,80 @@ unpack(char *buf, char *input, int len)
 }
 
 /* https://tools.ietf.org/html/draft-vixie-dnsext-dns0x20-00 */
-void
+int
 randomize_dnsname(char *buf, int len)
 {
+	char save[DNS_MAXNAME];
 	char randompad[DNS_MAXNAME];
 	char *p, *q;
-	int offset, labellen;
+	uint offset, labellen;
 	int i;
 	char ch;
 
-	if (len > sizeof(randompad))
-		return;
+	if (len > sizeof(save))
+		return (-1);
 
+	memcpy(save, buf, len);
 	arc4random_buf(randompad, sizeof(randompad));
 
 	q = &buf[0];
-	for (p = q, offset = 0; *p != 0; offset += (*p + 1), p += (*p + 1)) {
-		if (offset > DNS_MAXNAME)
-			return;	
-
+	for (p = q, offset = 0; offset <= len && *p != 0; offset += (*p + 1), p += (*p + 1)) {
 		labellen = *p;
+
+		if (labellen > DNS_MAXLABEL)
+			goto err;	
+
 		for (i = 1; i < (1 + labellen); i++) {
 			ch = q[offset + i];
 			q[offset + i] = (randompad[offset + i] & 1) ? toupper(ch) : ch;
 		}
 	}
 
-	return;
+	if (offset > len)
+		goto err;
+
+	return (0);
+
+err:
+	/* error condition, restore original buf */
+	memcpy(buf, save, len);
+	return (-1);
 }
 
-void
+int
 lower_dnsname(char *buf, int len)
 {
 	char *p, *q;
-	int offset, labellen;
+	char save[DNS_MAXNAME];
+	uint offset, labellen;
 	int i;
 	char ch;
 
-	q = &buf[0];
-	for (p = q, offset = 0; *p != 0; offset += (*p + 1), p += (*p + 1)) {
-		if (offset > DNS_MAXNAME)
-			return;	
+	if (len > sizeof(save))
+		return (-1);
 
+	memcpy(save, buf, len);
+
+	q = &buf[0];
+	for (p = q, offset = 0; offset <= len && *p != 0; offset += (*p + 1), p += (*p + 1)) {
 		labellen = *p;
+		if (labellen > DNS_MAXLABEL)
+			goto err;	
+
 		for (i = 1; i < (1 + labellen); i++) {
 			ch = tolower(q[offset + i]);
 			q[offset + i] = ch;
 		}
 	}
 
-	return;
+	if (offset > len)
+		goto err;
+
+	return (0);
+
+err:
+	/* restore the old */
+
+	memcpy(buf, save, len);
+	return (-1);
 }

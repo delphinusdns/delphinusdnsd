@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.32 2020/07/16 09:11:36 pjp Exp $
+ * $Id: forward.c,v 1.33 2020/07/16 12:02:38 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -188,8 +188,8 @@ extern int	reply_generic(struct sreply *, ddDB *);
 extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
 extern void flag_rr(struct rbtree *rbt);
 extern struct rbtree * find_rrset(ddDB *, char *, int);
-extern void	randomize_dnsname(char *buf, int len);
-extern void	lower_dnsname(char *buf, int len);
+extern int	randomize_dnsname(char *buf, int len);
+extern int	lower_dnsname(char *buf, int len);
 
 /*
  * XXX everything but txt and naptr, works...
@@ -629,7 +629,12 @@ drop:
 
 								memcpy(rdata, &ri->rri_rr.un, ri->rri_rr.buflen);
 
-								lower_dnsname(ri->rri_rr.name, ri->rri_rr.namelen);
+								if (lower_dnsname(ri->rri_rr.name, ri->rri_rr.namelen) == -1) {
+									dolog(LOG_INFO, "lower_dnsname failed\n");
+									free (rdata);
+									pack32((char *)&ri->u.s.read, 1);
+									continue;
+								}
 
 								if ((rbt = create_rr(db, ri->rri_rr.name, 
 										ri->rri_rr.namelen, ri->rri_rr.rrtype, 
@@ -757,7 +762,10 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	
 		/* set our name to lower case for db work */
 		memcpy(&savednsname, sforward->buf, sforward->buflen);
-		lower_dnsname(sforward->buf, sforward->buflen);
+		if (lower_dnsname(sforward->buf, sforward->buflen) == -1) {
+			dolog(LOG_INFO, "lower_dnsname failed, drop\n");
+			return;
+		}
 
 		/* check cache and expire it, then send if it remains */
 		if ((count = expire_rr(db, sforward->buf, sforward->buflen, 
@@ -934,7 +942,11 @@ newqueue:
 		}
 		memcpy(&fwq1->orig_dnsname, sforward->buf, sforward->buflen);
 
-		randomize_dnsname(sforward->buf, sforward->buflen);
+		if (randomize_dnsname(sforward->buf, sforward->buflen) == -1) {
+			dolog(LOG_INFO, "randomize_dnsname failed\n");
+			free (fwq1);
+			return;
+		}
 
 		memcpy(&fwq1->dnsname, sforward->buf, sforward->buflen);
 		fwq1->dnsnamelen = sforward->buflen;

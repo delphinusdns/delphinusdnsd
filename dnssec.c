@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dnssec.c,v 1.28 2020/07/15 20:27:15 pjp Exp $
+ * $Id: dnssec.c,v 1.29 2020/07/16 12:02:38 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -499,7 +499,7 @@ convert_name(char *name, int namelen)
 	int plen;
 	int i;
 
-	if (namelen == 0)
+	if (namelen <= 0)
 		return NULL;
 
 	ret = calloc(namelen + 1, 1);
@@ -513,15 +513,18 @@ convert_name(char *name, int namelen)
 	p = name;
 	plen = namelen;
 
-        while (*p != 0) {
-		if (*p > 63)
-			break;
+        while (plen >= 0 && *p != 0) {
+		if (*p > DNS_MAXLABEL) {
+			dolog(LOG_INFO, "compression in dns name\n");
+			free (ret);
+			return NULL;
+		}
 		for (i = 0; i < *p; i++) {
 			*p0++ = p[i + 1];
 		}
 		*p0++ = '.';
         	plen -= (*p + 1);
-                p = (p + (*p + 1));
+                p += (*p + 1);
 	}
 
 	return (ret);
