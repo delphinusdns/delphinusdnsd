@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.31 2020/07/16 09:03:20 pjp Exp $
+ * $Id: forward.c,v 1.32 2020/07/16 09:11:36 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1207,7 +1207,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		dolog(LOG_INFO, "FORWARD returnit, question name can't fit in packet thus it gets dropped\n");
 		return;
 	} else {
-		if (memcasecmp((char *)&dh[1], fwq->dnsname, fwq->dnsnamelen) != 0) {
+		if (memcmp((char *)&dh[1], fwq->dnsname, fwq->dnsnamelen) != 0) {
 			dolog(LOG_INFO, "reply for a question we didn't send, drop\n");
 			return;
 		}
