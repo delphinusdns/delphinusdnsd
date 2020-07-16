@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.69 2020/07/16 07:27:32 pjp Exp $
+ * $Id: util.c,v 1.70 2020/07/16 09:03:20 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -824,9 +824,9 @@ build_fake_question(char *name, int namelen, u_int16_t type, char *tsigkey, int 
 	/* fill our name into the dns header struct */
 	
 	memcpy(q->hdr->original_name, name, q->hdr->namelen);
-
-	lower_dnsname(name, namelen);
 	memcpy(q->hdr->name, name, q->hdr->namelen);
+
+	lower_dnsname(q->hdr->name, q->hdr->namelen);
 	
 	q->hdr->qtype = type;
 	q->hdr->qclass = htons(DNS_CLASS_IN);

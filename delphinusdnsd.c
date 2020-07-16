@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.129 2020/07/16 06:35:55 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.130 2020/07/16 09:03:20 pjp Exp $
  */
 
 
@@ -3215,7 +3215,7 @@ forwardtcp:
 							break;
 						}
 						
-						memcpy(&sforward->buf, question->hdr->name, question->hdr->namelen);
+						memcpy(&sforward->buf, question->hdr->original_name, question->hdr->namelen);
 						sforward->buflen = question->hdr->namelen;
 		
 						memcpy((char *)&sforward->header, pbuf, sizeof(struct dns_header));

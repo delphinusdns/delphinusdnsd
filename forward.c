@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.30 2020/07/16 07:27:32 pjp Exp $
+ * $Id: forward.c,v 1.31 2020/07/16 09:03:20 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -99,6 +99,7 @@ struct forwardentry {
 SLIST_HEAD(, forwardqueue) fwqhead;
 
 struct forwardqueue {
+	char orig_dnsname[DNS_MAXNAME];		/* what we reply with */
 	char dnsname[DNS_MAXNAME];		/* the request name */
 	char dnsnamelen;			/* the len of dnsname */
 	uint32_t longid;			/* a long identifier */
@@ -904,7 +905,6 @@ newqueue:
 		 * our dns question a little bit...
 		 */
 
-		randomize_dnsname(sforward->buf, sforward->buflen);
 
 		TAILQ_FOREACH(fw2, &forwardhead, forward_entry) {
 			if (fw2->active == 1)
@@ -932,6 +932,10 @@ newqueue:
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			return;
 		}
+		memcpy(&fwq1->orig_dnsname, sforward->buf, sforward->buflen);
+
+		randomize_dnsname(sforward->buf, sforward->buflen);
+
 		memcpy(&fwq1->dnsname, sforward->buf, sforward->buflen);
 		fwq1->dnsnamelen = sforward->buflen;
 
@@ -1030,8 +1034,10 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 {
 	struct dns_header *dh;
 	struct question *q;
+
 	char *buf, *p, *packet;
 	char *tsigname;
+
 	int len = 0, outlen;
 	int tsignamelen = 0;
 
@@ -1053,7 +1059,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 		tsignamelen = 0;
 	}
 
-	q = build_fake_question(sforward->buf, sforward->buflen, sforward->type, tsigname, tsignamelen);
+	q = build_fake_question(fwq->orig_dnsname, fwq->dnsnamelen, sforward->type, tsigname, tsignamelen);
 
 	if (q == NULL) {
 		dolog(LOG_INFO, "build_fake_question failed\n");
@@ -1206,6 +1212,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 			return;
 		}
 	}
+
 
 	/* send it on to our sandbox */
 	if (pi == NULL) {
@@ -1405,9 +1412,12 @@ endimsg:
 	SET_DNS_RECURSION(dh);
 	SET_DNS_RECURSION_AVAIL(dh);
 	HTONS(dh->query);
+
+	/* restore any possible 0x20 caseings, must be after TSIG checks  */
+	memcpy((char *)&dh[1], fwq->orig_dnsname, fwq->dnsnamelen);
 	
 	if (fwq->haveoldmac) {
-		q = build_fake_question(p, rlen, DNS_TYPE_A, fwq->oldkeyname, fwq->oldkeynamelen);
+		q = build_fake_question(fwq->orig_dnsname, fwq->dnsnamelen, DNS_TYPE_A, fwq->oldkeyname, fwq->oldkeynamelen);
 
 		if (q == NULL) {
 			dolog(LOG_INFO, "build_fake_question failed\n");
