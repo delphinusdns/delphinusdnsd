@@ -159,7 +159,7 @@ Syntax for
 in BNF:
 .Bd -literal
 line = ( version | axfrport | include | zinclude | zone | region | 
-	axfr | mzone | whitelist | filter | recurse | comment | 
+	axfr | mzone | passlist | filter | recurse | comment | 
 		options )
 
 version = "version" ("number") ;
@@ -193,7 +193,7 @@ optnotifybind = "notifybind" cidr-address ;
 
 mzone = "mzone" ("string") [ "{" mzonelist "}" ]
 
-whitelist = "whitelist" ("string") [ "{" cidrlist "}" ]
+passlist = "passlist" ("string") [ "{" cidrlist "}" ]
 
 filter = "filter" ("string") [ "{" cidrlist "}" ]
 
