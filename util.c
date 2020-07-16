@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2002-2018 Peter J. Philipp
+ * Copyright (c) 2002-2020 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.71 2020/07/16 12:02:38 pjp Exp $
+ * $Id: util.c,v 1.72 2020/07/16 13:33:53 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1489,6 +1489,10 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 				save = p + 2;
 			}
 			offset = unpack16(p);
+			/* offsets into the dns header are a nono */
+			if ((ntohs(offset) & (~0xc000)) < sizeof(struct dns_header))
+				return NULL;
+
 			/* do not allow forwards jumping */
 			if ((p - estart) <= (ntohs(offset) & (~0xc000))) {
 				return NULL;
