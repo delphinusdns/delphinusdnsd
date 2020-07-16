@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.130 2020/07/16 09:03:20 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.131 2020/07/16 17:54:03 pjp Exp $
  */
 
 
@@ -117,14 +117,14 @@ extern void 	dolog(int, char *, ...);
 extern int     	find_axfr(struct sockaddr_storage *, int);
 extern int 	find_filter(struct sockaddr_storage *, int);
 extern u_int8_t find_region(struct sockaddr_storage *, int);
-extern int 	find_whitelist(struct sockaddr_storage *, int);
+extern int 	find_passlist(struct sockaddr_storage *, int);
 extern int      find_tsig(struct sockaddr_storage *, int);
 extern char *	get_dns_type(int, int);
 extern void 	init_dnssec(void);
 extern void 	init_region(void);
 extern int	init_entlist(ddDB *);
 extern void 	init_filter(void);
-extern void 	init_whitelist(void);
+extern void 	init_passlist(void);
 extern void 	init_tsig(void);
 extern void 	init_notifyddd(void);
 extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
@@ -257,7 +257,7 @@ extern char *__progname;
 extern int axfrport;
 extern int ratelimit;
 extern int ratelimit_packets_per_second;
-extern int whitelist;
+extern int passlist;
 extern int tsig;
 extern int dnssec;
 extern int raxfrflag;
@@ -551,7 +551,7 @@ main(int argc, char *argv[], char *environ[])
 		
 	init_region();
 	init_filter();
-	init_whitelist();
+	init_passlist();
 	init_dnssec();
 	init_tsig();
 	TAILQ_INIT(&tcphead);
@@ -1516,7 +1516,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	int lzerrno;
 	int filter = 0;
 	int rcheck = 0;
-	int blacklist = 1;
+	int blocklist = 1;
 	int require_tsig = 0;
 	int sp; 
 	pid_t idata;
@@ -1801,8 +1801,8 @@ axfrentry:
 					aregion = find_region((struct sockaddr_storage *)sin6, AF_INET6);
 					filter = 0;
 					filter = find_filter((struct sockaddr_storage *)sin6, AF_INET6);
-					if (whitelist) {
-						blacklist = find_whitelist((struct sockaddr_storage *)sin6, AF_INET6);
+					if (passlist) {
+						blocklist = find_passlist((struct sockaddr_storage *)sin6, AF_INET6);
 					}
 					
 					require_tsig = 0;
@@ -1825,8 +1825,8 @@ axfrentry:
 					aregion = find_region((struct sockaddr_storage *)sin, AF_INET);
 					filter = 0;
 					filter = find_filter((struct sockaddr_storage *)sin, AF_INET);
-					if (whitelist) {
-						blacklist = find_whitelist((struct sockaddr_storage *)sin, AF_INET);
+					if (passlist) {
+						blocklist = find_passlist((struct sockaddr_storage *)sin, AF_INET);
 					}
 
 					require_tsig = 0;
@@ -1854,12 +1854,12 @@ axfrentry:
 					goto drop;
 				}
 
-				if (whitelist && blacklist == 0) {
+				if (passlist && blocklist == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 					slen = reply_refused(&sreply, NULL);
 
-					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, whitelist policy\n", so, cfg->ident[i], address, received_ttl, aregion);
+					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, passlist policy\n", so, cfg->ident[i], address, received_ttl, aregion);
 					goto drop;
 				}
 
@@ -2610,7 +2610,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	int type0, type1;
 	int lzerrno;
 	int filter = 0;
-	int blacklist = 1;
+	int blocklist = 1;
 	int require_tsig = 0;
 	int axfr_acl = 0;
 	int sp; 
@@ -2794,8 +2794,8 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					inet_ntop(AF_INET6, (void *)&sin6->sin6_addr, (char *)&address, sizeof(address));
 					aregion = find_region((struct sockaddr_storage *)sin6, AF_INET6);
 					filter = find_filter((struct sockaddr_storage *)sin6, AF_INET6);
-					if (whitelist) {
-						blacklist = find_whitelist((struct sockaddr_storage *)sin6, AF_INET6);
+					if (passlist) {
+						blocklist = find_passlist((struct sockaddr_storage *)sin6, AF_INET6);
 					}
 					axfr_acl = find_axfr((struct sockaddr_storage *)sin6, AF_INET6);
 
@@ -2811,8 +2811,8 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					inet_ntop(AF_INET, (void *)&sin->sin_addr, (char *)&address, sizeof(address));
 					aregion = find_region((struct sockaddr_storage *)sin, AF_INET);
 					filter = find_filter((struct sockaddr_storage *)sin, AF_INET);
-					if (whitelist) {
-						blacklist = find_whitelist((struct sockaddr_storage *)sin, AF_INET);
+					if (passlist) {
+						blocklist = find_passlist((struct sockaddr_storage *)sin, AF_INET);
 					}
 					axfr_acl = find_axfr((struct sockaddr_storage *)sin, AF_INET);
 					
@@ -2837,8 +2837,8 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					continue;
 				}
 
-				if (whitelist && blacklist == 0) {
-					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, whitelist policy\n", so, cfg->ident[i], address);
+				if (passlist && blocklist == 0) {
+					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, passlist policy\n", so, cfg->ident[i], address);
 					close(so);
 					continue;
 				}

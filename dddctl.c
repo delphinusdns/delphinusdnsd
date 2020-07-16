@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.111 2020/07/08 12:29:02 pjp Exp $
+ * $Id: dddctl.c,v 1.112 2020/07/16 17:54:03 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -106,7 +106,7 @@ int	count_db(ddDB *);
 /* glue */
 int insert_axfr(char *, char *);
 int insert_filter(char *, char *);
-int insert_whitelist(char *, char *);
+int insert_passlist(char *, char *);
 int insert_notifyddd(char *, char *);
 int insert_forward(struct sockaddr_storage *, uint16_t, char *);
 
@@ -115,7 +115,7 @@ int illdestination;
 int *ptr = &illdestination;
 
 int notify = 0;
-int whitelist = 0;
+int passlist = 0;
 int bcount = 0;
 char *bind_list[255];
 char *interface_list[255];
@@ -215,7 +215,7 @@ insert_filter(char *address, char *prefixlen)
 }
 
 int
-insert_whitelist(char *address, char *prefixlen)
+insert_passlist(char *address, char *prefixlen)
 {
 	return 0;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2018 Peter J. Philipp
+ * Copyright (c) 2014-2020 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: whitelist.c,v 1.6 2019/06/06 14:56:08 pjp Exp $
+ * $Id: passlist.c,v 1.1 2020/07/16 17:54:03 pjp Exp $
  */
 
 
@@ -66,9 +66,9 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-int	find_whitelist(struct sockaddr_storage *, int);
-void	init_whitelist(void);
-int	insert_whitelist(char *, char *);
+int	find_passlist(struct sockaddr_storage *, int);
+void	init_passlist(void);
+int	insert_passlist(char *, char *);
 
 extern void 		dolog(int, char *, ...);
 extern in_addr_t 	getmask(int);
@@ -76,37 +76,37 @@ extern int 		getmask6(int, struct sockaddr_in6 *);
 
 extern int debug, verbose;
 
-int whitelist = 0;		/* whitelist is off by default */
+int passlist = 0;		/* passlist is off by default */
 
-SLIST_HEAD(listhead, whitelistentry) whitelisthead;
+SLIST_HEAD(listhead, passlistentry) passlisthead;
 
-static struct whitelistentry {
+static struct passlistentry {
 	char name[INET6_ADDRSTRLEN];
 	int family;
 	struct sockaddr_storage hostmask;
 	struct sockaddr_storage netmask;
 	u_int8_t prefixlen;
-	SLIST_ENTRY(whitelistentry) whitelist_entry;
+	SLIST_ENTRY(passlistentry) passlist_entry;
 } *wln2, *wlnp;
 
 
 /*
- * INIT_FILTER - initialize the whitelist singly linked list
+ * INIT_PASSLIST - initialize the passlist singly linked list
  */
 
 void
-init_whitelist(void)
+init_passlist(void)
 {
-	SLIST_INIT(&whitelisthead);
+	SLIST_INIT(&passlisthead);
 	return;
 }
 
 /*
- * INSERT_FILTER - insert an address and prefixlen into the whitelist slist
+ * INSERT_PASSLIST - insert an address and prefixlen into the passlist slist
  */
 
 int
-insert_whitelist(char *address, char *prefixlen)
+insert_passlist(char *address, char *prefixlen)
 {
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
@@ -114,7 +114,7 @@ insert_whitelist(char *address, char *prefixlen)
 	int ret;
 
 	pnum = atoi(prefixlen);
-	wln2 = malloc(sizeof(struct whitelistentry));      /* Insert after. */
+	wln2 = malloc(sizeof(struct passlistentry));      /* Insert after. */
 
 	if (strchr(address, ':') != NULL) {
 		wln2->family = AF_INET6;
@@ -140,19 +140,19 @@ insert_whitelist(char *address, char *prefixlen)
 
 	}
 
-	SLIST_INSERT_HEAD(&whitelisthead, wln2, whitelist_entry);
+	SLIST_INSERT_HEAD(&passlisthead, wln2, passlist_entry);
 
 	return (0);
 }
 
 /*
- * FIND_FILTER - walk the whitelist list and find the correponding network 
+ * FIND_PASSLIST - walk the passlist list and find the correponding network 
  *		   if a network matches return 1, if no match is found return
  *		   0.
  */
 
 int
-find_whitelist(struct sockaddr_storage *sst, int family)
+find_passlist(struct sockaddr_storage *sst, int family)
 {
 	struct sockaddr_in *sin, *sin0;
 	struct sockaddr_in6 *sin6, *sin60, *sin61;
@@ -164,7 +164,7 @@ find_whitelist(struct sockaddr_storage *sst, int family)
 	u_int32_t *hm[4], *nm[4], *a6[4];
 #endif
 
-	SLIST_FOREACH(wlnp, &whitelisthead, whitelist_entry) {
+	SLIST_FOREACH(wlnp, &passlisthead, passlist_entry) {
 		if (wlnp->family == AF_INET) {
 			if (family != AF_INET)
 				continue;

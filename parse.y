@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.106 2020/07/15 20:27:15 pjp Exp $
+ * $Id: parse.y,v 1.107 2020/07/16 17:54:03 pjp Exp $
  */
 
 %{
@@ -93,7 +93,7 @@ extern int 	insert_axfr(char *, char *);
 extern int 	insert_notifyddd(char *, char *);
 extern int 	insert_filter(char *, char *);
 extern int	insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
-extern int 	insert_whitelist(char *, char *);
+extern int 	insert_passlist(char *, char *);
 extern int	insert_tsig(char *, char *);
 extern int	insert_tsig_key(char *, int, char *, int);
 extern void 	ddd_shutdown(void);
@@ -106,7 +106,7 @@ extern int display_rr(struct rrset *rrset);
 extern void flag_rr(struct rbtree *);
 extern int pull_rzone(struct rzone *, time_t);
 
-extern int whitelist;
+extern int passlist;
 extern int tsig;
 extern int notify;
 extern int errno;
@@ -251,7 +251,7 @@ int 		drop_privs(char *, struct passwd *);
 %token VERSION OBRACE EBRACE REGION RZONE AXFRFOR 
 %token DOT COLON TEXT WOF INCLUDE ZONE COMMA CRLF 
 %token ERROR AXFRPORT OPTIONS FILTER MZONE
-%token WHITELIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
+%token PASSLIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
 %token INCOMINGTSIG DESTINATION CACHE
 
@@ -285,7 +285,7 @@ cmd	:
 	| zone
 	| region CRLF
 	| axfr CRLF
-	| whitelist CRLF
+	| passlist CRLF
 	| tsig CRLF
 	| filter CRLF
 	| forward CRLF
@@ -1346,10 +1346,10 @@ tsigstatement	:	ipcidr SEMICOLON CRLF
 			| comment CRLF
 			;	
 
-/* whitelist "these hosts" { .. } */
+/* passlist "these hosts" { .. } */
 
-whitelist:
-	WHITELIST whitelistlabel whitelistcontent
+passlist:
+	PASSLIST passlistlabel passlistcontent
 	{
 		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
                         dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
@@ -1358,21 +1358,21 @@ whitelist:
 	}
 	;
 
-whitelistlabel:
+passlistlabel:
 	QUOTEDSTRING
 	;
 
-whitelistcontent:
-			OBRACE whiteliststatements EBRACE 
-			| OBRACE CRLF whiteliststatements EBRACE 
+passlistcontent:
+			OBRACE passliststatements EBRACE 
+			| OBRACE CRLF passliststatements EBRACE 
 			;
 
-whiteliststatements 	:  		
-				whiteliststatements whiteliststatement 
-				| whiteliststatement 
+passliststatements 	:  		
+				passliststatements passliststatement 
+				| passliststatement 
 				;
 
-whiteliststatement	:	ipcidr SEMICOLON CRLF
+passliststatement	:	ipcidr SEMICOLON CRLF
 			{
 					char prefixlength[INET_ADDRSTRLEN];
 					char *dst;
@@ -1383,15 +1383,15 @@ whiteliststatement	:	ipcidr SEMICOLON CRLF
 								return (-1);
 							}
 
-							if (insert_whitelist(dst, prefixlength) < 0) {
-								dolog(LOG_ERR, "insert_whitelist, line %d\n", file->lineno);
+							if (insert_passlist(dst, prefixlength) < 0) {
+								dolog(LOG_ERR, "insert_passlist, line %d\n", file->lineno);
 								return (-1);
 							}
 			
 							if (debug)
-								printf("whitelist inserted %s address\n", $1);
+								printf("passlist inserted %s address\n", $1);
 			
-							whitelist = 1;
+							passlist = 1;
 
 							free (dst);
 					}
@@ -1671,12 +1671,12 @@ struct tab cmdtab[] = {
 	{ "notifybind", NOTIFYBIND, 0},
 	{ "notifydest", NOTIFYDEST, 0},
 	{ "options", OPTIONS, 0 },
+	{ "passlist", PASSLIST, STATE_IP },
 	{ "port", PORT, 0},
 	{ "region", REGION, STATE_IP },
 	{ "rzone", RZONE, 0 },
 	{ "tsig", TSIG, 0 },
 	{ "tsig-auth", TSIGAUTH, 0 }, 
-	{ "whitelist", WHITELIST, STATE_IP },
 	{ "wildcard-only-for", WOF, STATE_IP },
 	{ "version", VERSION, 0 },
 	{ "zinclude", ZINCLUDE, 0 },

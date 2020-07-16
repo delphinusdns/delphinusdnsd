@@ -27,11 +27,11 @@
  */
 
 /* 
- * $Id: ent.c,v 1.10 2019/06/06 14:56:08 pjp Exp $
+ * $Id: ent.c,v 1.11 2020/07/16 17:54:03 pjp Exp $
  */
 
 /*
- * this file is based on whitelist.c
+ * this file is based on passlist.c
  */
 
 #include <sys/types.h>
