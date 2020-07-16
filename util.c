@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.68 2020/07/16 06:35:55 pjp Exp $
+ * $Id: util.c,v 1.69 2020/07/16 07:27:32 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -90,6 +90,8 @@ void 	pack8(char *, u_int8_t);
 uint32_t unpack32(char *);
 uint16_t unpack16(char *);
 void 	unpack(char *, char *, int);
+void lower_dnsname(char *, int); 
+void randomize_dnsname(char *, int);
 
 int label_count(char *);
 char * dns_label(char *, int *);
@@ -821,8 +823,10 @@ build_fake_question(char *name, int namelen, u_int16_t type, char *tsigkey, int 
 
 	/* fill our name into the dns header struct */
 	
-	memcpy(q->hdr->name, name, q->hdr->namelen);
 	memcpy(q->hdr->original_name, name, q->hdr->namelen);
+
+	lower_dnsname(name, namelen);
+	memcpy(q->hdr->name, name, q->hdr->namelen);
 	
 	q->hdr->qtype = type;
 	q->hdr->qclass = htons(DNS_CLASS_IN);
@@ -2323,4 +2327,57 @@ void
 unpack(char *buf, char *input, int len)
 {
 	memcpy(buf, input, len);
+}
+
+/* https://tools.ietf.org/html/draft-vixie-dnsext-dns0x20-00 */
+void
+randomize_dnsname(char *buf, int len)
+{
+	char randompad[DNS_MAXNAME];
+	char *p, *q;
+	int offset, labellen;
+	int i;
+	char ch;
+
+	if (len > sizeof(randompad))
+		return;
+
+	arc4random_buf(randompad, sizeof(randompad));
+
+	q = &buf[0];
+	for (p = q, offset = 0; *p != 0; offset += (*p + 1), p += (*p + 1)) {
+		if (offset > DNS_MAXNAME)
+			return;	
+
+		labellen = *p;
+		for (i = 1; i < (1 + labellen); i++) {
+			ch = q[offset + i];
+			q[offset + i] = (randompad[offset + i] & 1) ? toupper(ch) : ch;
+		}
+	}
+
+	return;
+}
+
+void
+lower_dnsname(char *buf, int len)
+{
+	char *p, *q;
+	int offset, labellen;
+	int i;
+	char ch;
+
+	q = &buf[0];
+	for (p = q, offset = 0; *p != 0; offset += (*p + 1), p += (*p + 1)) {
+		if (offset > DNS_MAXNAME)
+			return;	
+
+		labellen = *p;
+		for (i = 1; i < (1 + labellen); i++) {
+			ch = tolower(q[offset + i]);
+			q[offset + i] = ch;
+		}
+	}
+
+	return;
 }

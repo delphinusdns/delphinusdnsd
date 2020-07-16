@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.29 2020/07/16 07:13:13 pjp Exp $
+ * $Id: forward.c,v 1.30 2020/07/16 07:27:32 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -138,8 +138,6 @@ struct tsig * check_tsig(char *, int, char *);
 void	fwdparseloop(struct imsgbuf *, struct imsgbuf *, struct cfg *);
 void	changeforwarder(struct forwardqueue *);
 void 	stirforwarders(void);
-void	randomize_dnsname(char *buf, int len);
-void	lower_dnsname(char *buf, int len);
 
 extern void 	dolog(int, char *, ...);
 extern void      pack(char *, char *, int);
@@ -189,6 +187,8 @@ extern int	reply_generic(struct sreply *, ddDB *);
 extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
 extern void flag_rr(struct rbtree *rbt);
 extern struct rbtree * find_rrset(ddDB *, char *, int);
+extern void	randomize_dnsname(char *buf, int len);
+extern void	lower_dnsname(char *buf, int len);
 
 /*
  * XXX everything but txt and naptr, works...
@@ -806,11 +806,11 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 			}
 			
 			if (sforward->havemac)
-				q = build_fake_question(sforward->buf, sforward->buflen,
+				q = build_fake_question(savednsname, sforward->buflen,
 					sforward->type, sforward->tsigname, 
 					sforward->tsignamelen);
 			else
-				q = build_fake_question(sforward->buf, sforward->buflen,
+				q = build_fake_question(savednsname, sforward->buflen,
 					sforward->type, NULL, 0);
 		
 
@@ -2158,58 +2158,4 @@ stirforwarders(void)
 		
 		count++;
 	}
-}
-
-/* https://tools.ietf.org/html/draft-vixie-dnsext-dns0x20-00 */
-
-void
-randomize_dnsname(char *buf, int len)
-{
-	char randompad[DNS_MAXNAME];
-	char *p, *q;
-	int offset, labellen;
-	int i;
-	char ch;
-
-	if (len > sizeof(randompad))
-		return;
-
-	arc4random_buf(randompad, sizeof(randompad));
-
-	q = &buf[0];
-	for (p = q, offset = 0; *p != 0; offset += (*p + 1), p += (*p + 1)) {
-		if (offset > DNS_MAXNAME)
-			return;	
-
-		labellen = *p;
-		for (i = 1; i < (1 + labellen); i++) {
-			ch = q[offset + i];
-			q[offset + i] = (randompad[offset + i] & 1) ? toupper(ch) : ch;
-		}
-	}
-
-	return;
-}
-
-void
-lower_dnsname(char *buf, int len)
-{
-	char *p, *q;
-	int offset, labellen;
-	int i;
-	char ch;
-
-	q = &buf[0];
-	for (p = q, offset = 0; *p != 0; offset += (*p + 1), p += (*p + 1)) {
-		if (offset > DNS_MAXNAME)
-			return;	
-
-		labellen = *p;
-		for (i = 1; i < (1 + labellen); i++) {
-			ch = tolower(q[offset + i]);
-			q[offset + i] = ch;
-		}
-	}
-
-	return;
 }
