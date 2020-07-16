@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.28 2020/07/16 06:35:55 pjp Exp $
+ * $Id: forward.c,v 1.29 2020/07/16 07:13:13 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -628,6 +628,8 @@ drop:
 
 								memcpy(rdata, &ri->rri_rr.un, ri->rri_rr.buflen);
 
+								lower_dnsname(ri->rri_rr.name, ri->rri_rr.namelen);
+
 								if ((rbt = create_rr(db, ri->rri_rr.name, 
 										ri->rri_rr.namelen, ri->rri_rr.rrtype, 
 										(void *)rdata, ri->rri_rr.ttl, ri->rri_rr.buflen)) == NULL) {
@@ -804,11 +806,11 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 			}
 			
 			if (sforward->havemac)
-				q = build_fake_question(savednsname, sforward->buflen,
+				q = build_fake_question(sforward->buf, sforward->buflen,
 					sforward->type, sforward->tsigname, 
 					sforward->tsignamelen);
 			else
-				q = build_fake_question(savednsname, sforward->buflen,
+				q = build_fake_question(sforward->buf, sforward->buflen,
 					sforward->type, NULL, 0);
 		
 
@@ -2175,7 +2177,7 @@ randomize_dnsname(char *buf, int len)
 	arc4random_buf(randompad, sizeof(randompad));
 
 	q = &buf[0];
-	for (p = q, offset = 0; *p != 0; p = (p + *p + 1), offset += (*p + 1)) {
+	for (p = q, offset = 0; *p != 0; offset += (*p + 1), p += (*p + 1)) {
 		if (offset > DNS_MAXNAME)
 			return;	
 
@@ -2198,7 +2200,7 @@ lower_dnsname(char *buf, int len)
 	char ch;
 
 	q = &buf[0];
-	for (p = q, offset = 0; *p != 0; p = (p + *p + 1), offset += (*p + 1)) {
+	for (p = q, offset = 0; *p != 0; offset += (*p + 1), p += (*p + 1)) {
 		if (offset > DNS_MAXNAME)
 			return;	
 

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: cache.c,v 1.6 2020/07/15 20:27:15 pjp Exp $
+ * $Id: cache.c,v 1.7 2020/07/16 07:13:13 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -89,6 +89,7 @@ extern void     pack32(char *, u_int32_t);
 extern void     unpack(char *, char *, int);
 extern uint16_t unpack16(char *);
 extern uint32_t unpack32(char *);
+extern void lower_dnsname(char *, int);
 
 
 extern int debug, verbose;
@@ -187,6 +188,8 @@ transmit_rr(struct scache *scache, void *rr, int rrsize)
 
 	memcpy(ri.rri_rr.name, scache->name, sizeof(ri.rri_rr.name));
 	ri.rri_rr.namelen = scache->namelen;
+
+	lower_dnsname(ri.rri_rr.name, ri.rri_rr.namelen);
 
 	ri.rri_rr.ttl = scache->dnsttl;
 	ri.rri_rr.rrtype = scache->rrtype;
