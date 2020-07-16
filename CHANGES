@@ -11,10 +11,10 @@ Changes in RELEASE_1_5 from RELEASE_1_4
   tcp-on-any-only option.
 - conform to RFC 2181 section 5.2, but keep exception for RRSIG per RFC 4034
 - added a "cortex" process for IPC between the processes
-- added a forwarding mode
+- added a forwarding mode (with cache)
 - changed the config file version from 9 back to 1
 
-Changes in RELEASE_1_4 from RELEASE_1_3
+[2019] Changes in RELEASE_1_4 from RELEASE_1_3
 
 - dddctl can now count records in configtest
 - dddctl can axfr zones, and query other dns data
@@ -39,7 +39,7 @@ Changes in RELEASE_1_4 from RELEASE_1_3
   per domain name.
 
 
-Changes in RELEASE_1_3 from RELEASE_1_2
+[2018] Changes in RELEASE_1_3 from RELEASE_1_2
 - created a "zinclude" config, which will only allow zone files to be 
 	included and nothing else inside that. 
 - created a manpage for dddctl
@@ -50,7 +50,7 @@ Changes in RELEASE_1_3 from RELEASE_1_2
 - fixed ENT's with DNSSEC (missing NSEC3 in ENT's, RFC 7129).
 - added regressions for the developing platform (OpenBSD)
 
-Changes in RELEASE_1_2 from RELEASE_1_1
+[2017] Changes in RELEASE_1_2 from RELEASE_1_1
 
 - remove SPF support (deprecated RFC 7208 section 3.1)
 - add TLSA anyreply support (affects AXFR)
@@ -62,7 +62,7 @@ Changes in RELEASE_1_2 from RELEASE_1_1
 - move to imsg functions with privsep for IPC messaging
 - OpenBSD delphinusdnsd is pledged
 
-Changes in RELEASE_1_1 from RELEASE_1_0
+[2016] Changes in RELEASE_1_1 from RELEASE_1_0
 
 - dd-convert.c written to replace dd-convert.rb.  It now supports TLSA RR's as
 an added bonus.  This utility does not rely on any external (BIND) tools except
@@ -72,7 +72,7 @@ for the linkage against openssl/libressl.
 - RFC 8020 compliance with empty non-terminal names starting this release
 - Linux now depends on libbsd
 
-Changes in RELEASE_1_0 from BETA_9
+[2015] Changes in RELEASE_1_0 from BETA_9
 
 - name change from wildcarddnsd to delphinusdnsd
 - fixed the long standing bug that assumed one time to live for all RRSETs in a domain name (ttl fix)
@@ -87,7 +87,7 @@ Changes in RELEASE_1_0 from BETA_9
 - Linux now relies on libressl 2.2.4 library, details in the configure
 - some bug fixes
 
-Changes in BETA_9 from BETA_8
+[2014] Changes in BETA_9 from BETA_8
 
 - we have replaced parse.c with parse.y
 - Linux now relies on the libressl 2.1.1 library, details in the configure
@@ -109,12 +109,12 @@ Changes in BETA_9 from BETA_8
   log message.
 
 
-Changes in BETA_8 from BETA_7
+[2013] Changes in BETA_8 from BETA_7
 
 - we have a non-forking debug mode now with verbosity flag
 - make W compile and run on the Raspberry Pi (great projects with this)
 
-Changes in BETA_7 from BETA_6
+[2013] Changes in BETA_7 from BETA_6
 
 - remote (sys)-logging feature with HMAC message verification
 - change to Berkeley DB 4.6+ on BSD hosts (Linux had it already)
@@ -126,7 +126,7 @@ Changes in BETA_7 from BETA_6
 - left sourceforge.net around August 14, 2012
 - Mac OS X compiles now, but has not been tested with queries
 
-Changes in BETA_6 from BETA_5
+[2011] Changes in BETA_6 from BETA_5
 
 - Addition of the utterly broken recursive lookup code
 - conf file is at version 4 now
