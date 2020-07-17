@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.107 2020/07/16 17:54:03 pjp Exp $
+ * $Id: parse.y,v 1.108 2020/07/17 05:40:19 pjp Exp $
  */
 
 %{
@@ -113,6 +113,7 @@ extern int errno;
 extern int debug;
 extern int forward;
 extern int forwardtsig;
+extern int strictx20i;
 extern int cache;
 extern int zonecount;
 extern int verbose;
@@ -253,7 +254,7 @@ int 		drop_privs(char *, struct passwd *);
 %token ERROR AXFRPORT OPTIONS FILTER MZONE
 %token PASSLIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
-%token INCOMINGTSIG DESTINATION CACHE
+%token INCOMINGTSIG DESTINATION CACHE STRICTX20
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -1476,6 +1477,15 @@ forwardstatement	:	INCOMINGTSIG STRING SEMICOLON CRLF
 	
 				free ($2);
 			}
+			| STRICTX20 STRING SEMICOLON CRLF
+			{
+				if (strcmp($2, "no") == 0 ||
+					strcmp($2, "off") == 0)
+
+					strictx20i = 0;
+	
+				free ($2);
+			}
 			| comment CRLF
 			;	
 
@@ -1675,6 +1685,7 @@ struct tab cmdtab[] = {
 	{ "port", PORT, 0},
 	{ "region", REGION, STATE_IP },
 	{ "rzone", RZONE, 0 },
+	{ "strictx20", STRICTX20, 0},
 	{ "tsig", TSIG, 0 },
 	{ "tsig-auth", TSIGAUTH, 0 }, 
 	{ "wildcard-only-for", WOF, STATE_IP },

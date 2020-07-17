@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.33 2020/07/16 12:02:38 pjp Exp $
+ * $Id: forward.c,v 1.34 2020/07/17 05:40:19 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -234,6 +234,7 @@ extern int tsig;
 extern int dnssec;
 extern int cache;
 extern int forward;
+extern int strictx20i;
 
 
 /*
@@ -1219,9 +1220,17 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		dolog(LOG_INFO, "FORWARD returnit, question name can't fit in packet thus it gets dropped\n");
 		return;
 	} else {
-		if (memcmp((char *)&dh[1], fwq->dnsname, fwq->dnsnamelen) != 0) {
-			dolog(LOG_INFO, "reply for a question we didn't send, drop\n");
-			return;
+		if (strictx20i) {
+			if (memcmp((char *)&dh[1], fwq->dnsname, fwq->dnsnamelen) != 0) {
+				dolog(LOG_INFO, "reply for a question we didn't send, drop\n");
+				return;
+			}
+		} else {
+			if (memcasecmp((char *)&dh[1], fwq->dnsname, fwq->dnsnamelen) != 0) {
+				dolog(LOG_INFO, "reply for a question we didn't send, drop\n");
+				return;
+			}
+
 		}
 	}
 

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.112 2020/07/16 17:54:03 pjp Exp $
+ * $Id: dddctl.c,v 1.113 2020/07/17 05:40:18 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -83,6 +83,7 @@ int debug = 0;
 int verbose = 0;
 int forward = 0;
 int forwardtsig = 0;
+int strictx20i = 1;
 int zonecount = 0;
 int cache = 0;
 extern int dnssec;

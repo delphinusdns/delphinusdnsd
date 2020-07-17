@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.131 2020/07/16 17:54:03 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.132 2020/07/17 05:40:19 pjp Exp $
  */
 
 
@@ -278,6 +278,7 @@ int bcount = 0;
 int icount = 0;
 int forward = 0;
 int forwardtsig = 0;
+int strictx20i = 1;
 int zonecount = 0;
 int cache = 0;
 u_int16_t port = 53;
