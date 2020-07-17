@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 19, 2019
+.Dd July 17, 2020
 .Dt DELPHINUSDNS.CONF 5
 .Os 
 .Sh NAME
@@ -122,6 +122,29 @@ zinclude "/etc/delphinusdns/centroid.eu.signed";
 Then the included files are output of
 .Xr dddctl 8
 .Pp
+A forwarding-only config may look like this:
+.Bd -literal
+version "1";
+
+options "this mess" {
+        interface "em0";
+        interface "lo0";
+        port 8053;
+        versionstring "";
+        dnssec;
+}
+
+tsig-auth secret "9qD4Qi4ghqFR1xm0fIwGF9t0aLx+SZWVEPAqEvysZFg=";
+tsig "these hosts" {
+        0.0.0.0/0;
+}
+
+forward "to these hosts" {
+        incoming-tsig yes;
+        destination 127.0.0.1 port 5353 key NOKEY;
+}
+.Ed
+.Pp
 Finally below is a sample replicant 
 .Nm
 as taken from a 
@@ -160,7 +183,7 @@ in BNF:
 .Bd -literal
 line = ( version | axfrport | include | zinclude | zone | region | 
 	axfr | mzone | passlist | filter | recurse | comment | 
-		options )
+		options | forward )
 
 version = "version" ("number") ;
 
@@ -203,14 +226,24 @@ base64-string = (string)
 tsig-auth = "tsig-auth" (string) ("base64-string") ;
 tsig = "tsig" ("string") [ "{" cidrlist "}" ]
 
+rzone = "rzone" ("string") [ "{" rzonelist "}" ]
 rzonelist = ( opttsig | optmaster | optmasterport | optrzonename | optfilename )
+
 opttsig = "tsigkey" ("string") ;
 optmaster = "master" ("cidr-address") ;
 optmasterport = "masterport"  (number) ;
 optrzonename = "zonename" ("string") ;
 optfilename = "filename" ("string") ;
 
-rzone = "rzone" ("string") [ "{" rzonelist "}" ]
+
+forward = "forward" ("string") [ "{" forwardlist "}" ]
+forwardlist = ( optdestination | optstrictx20 | optcache | optincomingtsig )
+
+optdestination = "destination" ("cidr-address") "port" ("integer") "key" 
+			(string | "NOKEY") ;
+optstrictx20 = "strictx20" ("yes" | "no") ;
+optcache =  "cache" ("yes" | "no") ;
+optincomingtsig = "incoming-tsig" ("yes" | "no") ;
 
 comment = ( ; | pound ) line
 
