@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.107 2020/07/15 20:27:15 pjp Exp $
+ * $Id: reply.c,v 1.108 2020/07/18 16:49:51 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -144,9 +144,9 @@ int 		reply_notauth(struct sreply *, ddDB *);
 int		reply_notify(struct sreply *, ddDB *);
 struct rbtree * find_nsec(char *name, int namelen, struct rbtree *, ddDB *db);
 int 		nsec_comp(const void *a, const void *b);
-char * 		convert_name(char *name, int namelen);
 int 		count_dots(char *name);
 char * 		base32hex_encode(u_char *input, int len);
+void 		set_reply_flags(struct dns_header *, struct question *);
 
 extern int debug, verbose, dnssec, tcpanyonly;
 extern char *versionstring;
@@ -221,19 +221,7 @@ reply_a(struct sreply *sreply, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -435,19 +423,7 @@ reply_nsec3param(struct sreply *sreply, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -662,19 +638,7 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -883,24 +847,12 @@ reply_nsec(struct sreply *sreply, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -1096,24 +1048,12 @@ reply_ds(struct sreply *sreply, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->nsrr = 0;
@@ -1310,24 +1250,12 @@ reply_dnskey(struct sreply *sreply, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -1510,24 +1438,12 @@ reply_rrsig(struct sreply *sreply, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->nsrr = 0;
@@ -1653,24 +1569,12 @@ reply_aaaa(struct sreply *sreply, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-	
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -1859,24 +1763,12 @@ reply_mx(struct sreply *sreply, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-	
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -2214,11 +2106,13 @@ reply_ns(struct sreply *sreply, ddDB *db)
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 	
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	/* no set_reply_flags here, it differs */
+
 	SET_DNS_REPLY(odh);
 	
 	if (! delegation && q->aa)
@@ -2610,25 +2504,13 @@ reply_cname(struct sreply *sreply, ddDB *db)
 	/* copy question to reply */
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
 
-	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	/* blank query */
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -2963,26 +2845,13 @@ reply_ptr(struct sreply *sreply, ddDB *db)
 
 	/* copy question to reply */
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-	
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-
-	HTONS(odh->query);
+	/* blank query */
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -3166,25 +3035,13 @@ reply_soa(struct sreply *sreply, ddDB *db)
 
 	/* copy question to reply */
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-	
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	NTOHS(odh->query);
+	/* blank query */
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -3431,25 +3288,13 @@ reply_txt(struct sreply *sreply, ddDB *db)
 
 	/* copy question to reply */
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-	
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	/* blank query */
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -3636,25 +3481,13 @@ reply_version(struct sreply *sreply, ddDB *db)
 
 	/* copy question to reply */
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-	
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	/* blank query */
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -3778,24 +3611,12 @@ reply_tlsa(struct sreply *sreply, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-	
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -3982,24 +3803,12 @@ reply_sshfp(struct sreply *sreply, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-	
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -4186,24 +3995,12 @@ reply_naptr(struct sreply *sreply, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-	
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -4423,24 +4220,12 @@ reply_srv(struct sreply *sreply, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-	
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -4745,27 +4530,15 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 
 	/* copy question to reply */
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4); 
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-
+	/* blank query */
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 	SET_DNS_RCODE_NAMEERR(odh);
-
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-	
-	NTOHS(odh->query);
+	HTONS(odh->query);
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = 0;
@@ -5092,24 +4865,9 @@ reply_refused(struct sreply *sreply, ddDB *db)
 	outlen += (sizeof(struct dns_header) + q->hdr->namelen + 4); 
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-
-	SET_DNS_REPLY(odh);
 	SET_DNS_RCODE_REFUSED(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	if (q->notify)
-		SET_DNS_NOTIFY(odh);
-
-	HTONS(odh->query);		
+	HTONS(odh->query);
+	set_reply_flags(odh, q);
 
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -5440,18 +5198,9 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == 0) {
 		memcpy(reply, buf, len);
+
 		memset((char *)&odh->query, 0, sizeof(u_int16_t));
-
-		SET_DNS_REPLY(odh);
-
-		if (q->rd) {
-			SET_DNS_RECURSION(odh);
-				
-			if (! q->aa)
-				SET_DNS_RECURSION_AVAIL(odh);
-		}
-
-		HTONS(odh->query);		
+		set_reply_flags(odh, q);
 
 		if (istcp) {
 			char *tmpbuf;
@@ -5482,25 +5231,13 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 	
 	/* copy question to reply */
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4); 
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	NTOHS(odh->query);
+	/* blank query */
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = 0;
@@ -5756,25 +5493,13 @@ reply_any(struct sreply *sreply, ddDB *db)
 
 	/* copy question to reply */
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-	
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	NTOHS(odh->query);
+	/* blank query */
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = 0;
@@ -7132,24 +6857,12 @@ reply_generic(struct sreply *sreply, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	SET_DNS_REPLY(odh);
-
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-
-	if (q->rd) {
-		SET_DNS_RECURSION(odh);
-			
-		if (! q->aa)
-			SET_DNS_RECURSION_AVAIL(odh);
-	}
-
-	HTONS(odh->query);
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -7276,4 +6989,24 @@ out:
 #endif
 	
 	return (retlen);
+}
+
+void
+set_reply_flags(struct dns_header *odh, struct question *q)
+{
+	NTOHS(odh->query);		/* just in case */
+
+	SET_DNS_REPLY(odh);
+
+	if (q->aa)
+		SET_DNS_AUTHORITATIVE(odh);
+
+	if (q->rd) {
+		SET_DNS_RECURSION(odh);
+			
+		if (! q->aa)
+			SET_DNS_RECURSION_AVAIL(odh);
+	}
+
+	HTONS(odh->query);
 }
