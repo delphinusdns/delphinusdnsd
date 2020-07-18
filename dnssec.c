@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dnssec.c,v 1.29 2020/07/16 12:02:38 pjp Exp $
+ * $Id: dnssec.c,v 1.30 2020/07/18 10:49:25 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -401,6 +401,7 @@ find_nsec(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
 	if (rrp == NULL) {
+		free(nsecname);
 		free(humanname);
 		return (NULL);
 	}
@@ -434,12 +435,14 @@ find_nsec(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 
 		rbt0 = find_rrset(db, tmpname, tmplen);
 		if (rbt0 == NULL) {
+			free (nsecname);
 			free (humanname);
 			free (table);
 			return (NULL);
 		}
 
 		if ((rrset = find_rr(rbt0, DNS_TYPE_NSEC)) == NULL) {
+			free (nsecname);
 			free (humanname);
 			free (table);
 			return (NULL);
