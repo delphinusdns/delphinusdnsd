@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.34 2020/07/17 05:40:19 pjp Exp $
+ * $Id: forward.c,v 1.35 2020/07/18 10:44:11 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -161,7 +161,6 @@ extern int 	expire_db(ddDB *, int);
 extern void 	build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, char *);
 extern struct rbtree * Lookup_zone(ddDB *, char *, int, int, int);
 extern struct rbtree *  lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
-extern char *convert_name(char *, int);
 extern int	cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, struct cfg *);
 
 extern int 	reply_a(struct sreply *, ddDB *);
@@ -782,9 +781,6 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 		if (Lookup_zone(db, sforward->buf, sforward->buflen, 
 			ntohs(sforward->type), 0) != NULL) {
 			/* we have a cache */
-#if 0
-			dolog(LOG_INFO, "replying %s type %d out of the cache\n", convert_name(sforward->buf, sforward->buflen), ntohs(sforward->type));
-#endif
 			/* build a pseudo question packet */
 			dh = (struct dns_header *)&buf[0];
 			pack16((char *)&dh->id, sforward->header.id);
