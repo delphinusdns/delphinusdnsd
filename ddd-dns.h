@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.24 2020/07/16 06:35:55 pjp Exp $
+ * $Id: ddd-dns.h,v 1.25 2020/07/18 14:10:16 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -118,6 +118,8 @@ struct dns_question_hdr {
 #define DNS_TRUNC	0x200	/* Truncated (TC) */
 #define DNS_RECURSE	0x100	/* if set Recursion Desired (RD) */
 #define DNS_RECAVAIL	0x80	/* if set Recursion Available (RA) */
+#define DNS_AD		0x20	/* if set, Authentic Data (AD), RFC 2535 */
+#define DNS_CD		0x10	/* if set, Checking Disabled (CD), RFC 2535 */
 #define DNS_BADVERS	0x10	/* RCODE (16) BADVERS RFC 2671 p. 6 */
 #define DNS_NOTZONE	0xA	/* RCODE - Not within zone section RFC 2136 */
 #define DNS_NOTAUTH	0x9	/* RCODE - Not Authenticated RFC 2845 */
@@ -150,6 +152,8 @@ struct dns_question_hdr {
 #define SET_DNS_TRUNCATION(x)		((x)->query |= (DNS_TRUNC))
 #define SET_DNS_RECURSION(x)		((x)->query |= (DNS_RECURSE))
 #define SET_DNS_RECURSION_AVAIL(x)	((x)->query |= (DNS_RECAVAIL))
+#define SET_DNS_AUTHENTIC_DATA(x)	((x)->query |= (DNS_AD))
+#define SET_DNS_CHECKING_DISABLED(x)	((x)->query |= (DNS_CD))
 #define SET_DNS_RCODE_REFUSED(x)	((x)->query |= (DNS_REFUSED))
 #define SET_DNS_RCODE_NOTIMPL(x)	((x)->query |= (DNS_NOTIMPL))
 #define SET_DNS_RCODE_NAMEERR(x)	((x)->query |= (DNS_NAMEERR))
@@ -165,6 +169,8 @@ struct dns_question_hdr {
 #define UNSET_DNS_TRUNCATION(x)		((x)->query &= ~(DNS_TRUNC))
 #define UNSET_DNS_RECURSION(x)		((x)->query &= ~(DNS_RECURSE))
 #define UNSET_DNS_RECURSION_AVAIL(x)	((x)->query &= ~(DNS_RECAVAIL))
+#define UNSET_DNS_AUTHENTIC_DATA(x)	((x)->query &= ~(DNS_AD))
+#define UNSET_DNS_CHECKING_DISABLED(x)	((x)->query &= ~(DNS_CD))
 #define UNSET_DNS_RCODE_REFUSED(x)	((x)->query &= ~(DNS_REFUSED))
 #define UNSET_DNS_RCODE_NOTIMPL(x)	((x)->query &= ~(DNS_NOTIMPL))
 #define UNSET_DNS_RCODE_NAMEERR(x)	((x)->query &= ~(DNS_NAMEERR))

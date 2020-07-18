@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.35 2020/07/18 10:44:11 pjp Exp $
+ * $Id: forward.c,v 1.36 2020/07/18 14:10:16 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -644,7 +644,9 @@ drop:
 									pack32((char *)&ri->u.s.read, 1);
 									continue;
 								}
-								flag_rr(rbt);
+	
+								if (unpack32((char *)&ri->rri_rr.authentic) == 1) 
+									flag_rr(rbt);
 
 								pack32((char *)&ri->u.s.read, 1);
 							} /* if */
@@ -1930,7 +1932,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 		dolog(LOG_INFO, "fcntl: %s\n", strerror(errno));
 	} else {
 		flags |= O_NONBLOCK;
-		if (fcntl(bibuf->fd, F_SETFL, &flags, sizeof(flags)) < 0) {
+		if (fcntl(bibuf->fd, F_SETFL, &flags) < 0) {
 			dolog(LOG_INFO, "fcntl: %s\n", strerror(errno));
 		}
 	}

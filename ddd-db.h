@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.47 2020/07/15 20:27:15 pjp Exp $
+ * $Id: ddd-db.h,v 1.48 2020/07/18 14:10:16 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -442,6 +442,7 @@ struct scache {
 	int namelen;
 	uint32_t dnsttl;
 	uint16_t rrtype;
+	int authentic;
 	struct imsgbuf *imsgbuf;
 	struct imsgbuf *bimsgbuf;
 	struct cfg *cfg;
@@ -495,11 +496,12 @@ struct rr_imsg {
 				int namelen;			/* 260 */
 				uint16_t rrtype;		/* 262 */
 				uint32_t ttl;			/* 266 */
+				int authentic;	
 				
-				uint16_t buflen;		/* 268 */
+				uint16_t buflen;		
 
 				char un[0];
-			} rr;					/* 288 */
+			} rr;				
 		} s;
 
 		char pad[8192];

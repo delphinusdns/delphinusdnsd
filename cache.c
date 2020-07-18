@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: cache.c,v 1.8 2020/07/16 12:02:38 pjp Exp $
+ * $Id: cache.c,v 1.9 2020/07/18 14:10:16 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -98,7 +98,7 @@ extern int dnssec;
 extern int cache;
 
 int cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, struct cfg *);
-struct scache * build_cache(u_char *, u_char *, u_char *, uint16_t, char *, int, uint32_t, uint16_t, struct imsgbuf *, struct imsgbuf *, struct cfg *);
+struct scache * build_cache(u_char *, u_char *, u_char *, uint16_t, char *, int, uint32_t, uint16_t, struct imsgbuf *, struct imsgbuf *, struct cfg *, int);
 void transmit_rr(struct scache *, void *, int);
 
 
@@ -156,7 +156,7 @@ static struct cache_logic supported_cache[] = {
 
 
 struct scache *
-build_cache(u_char *payload, u_char *estart, u_char *end, uint16_t rdlen, char *name, int namelen, uint32_t dnsttl, uint16_t dnstype, struct imsgbuf *imsgbuf, struct imsgbuf *bimsgbuf, struct cfg *cfg)
+build_cache(u_char *payload, u_char *estart, u_char *end, uint16_t rdlen, char *name, int namelen, uint32_t dnsttl, uint16_t dnstype, struct imsgbuf *imsgbuf, struct imsgbuf *bimsgbuf, struct cfg *cfg, int authentic)
 {
 	static struct scache ret;
 
@@ -172,6 +172,7 @@ build_cache(u_char *payload, u_char *estart, u_char *end, uint16_t rdlen, char *
 	ret.imsgbuf = imsgbuf;
 	ret.bimsgbuf = bimsgbuf;
 	ret.cfg = cfg;
+	ret.authentic = authentic;
 
 	return (&ret);
 }
@@ -196,6 +197,8 @@ transmit_rr(struct scache *scache, void *rr, int rrsize)
 
 	ri.rri_rr.ttl = scache->dnsttl;
 	ri.rri_rr.rrtype = scache->rrtype;
+	ri.rri_rr.authentic = scache->authentic;	
+	
 
 	memcpy(&ri.rri_rr.un, rr, rrsize);
 	ri.rri_rr.buflen = rrsize;
@@ -240,9 +243,14 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 	uint32_t rrttl;
 	
 	struct cache_logic *cr;
+	int authentic = 0;
 
 	dh = (struct dns_header *)payload;
 	p += sizeof(struct dns_header);	/* skip dns_header */
+
+	/* if the data sent back is authentic by the resolver set dnssecok */
+	if (ntohs(dh->query) & DNS_AD)
+		authentic = 1;
 	
 	elen = 0,
 	memset(&expand, 0, sizeof(expand));
@@ -300,7 +308,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 		
 		pb += 10;   /* skip answerd */
 	
-		scache = build_cache(pb, estart, end, rdlen, expand, elen, rrttl, rrtype, imsgbuf, bimsgbuf, cfg);
+		scache = build_cache(pb, estart, end, rdlen, expand, elen, rrttl, rrtype, imsgbuf, bimsgbuf, cfg, authentic);
 			
 		for (cr = supported_cache; cr->rrtype != 0; cr++) {
 			if (rrtype == cr->rrtype) {
