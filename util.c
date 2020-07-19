@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.74 2020/07/19 08:02:13 pjp Exp $
+ * $Id: util.c,v 1.75 2020/07/19 13:50:06 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -980,7 +980,23 @@ build_question(char *buf, int len, int additional, char *mac)
 		dolog(LOG_INFO, "question rr is truncated\n");
 		return NULL;
 	}
-		
+	/* check the class type so that $IP is erroring earlier */
+
+	o = (end_name + sizeof(uint16_t));
+	qclass = ntohs(unpack16(o));
+
+	switch (qclass) {
+	case DNS_CLASS_ANY:
+	case DNS_CLASS_NONE:
+	case DNS_CLASS_HS:
+	case DNS_CLASS_CH:
+	case DNS_CLASS_IN:
+		break;
+	default:
+		dolog(LOG_INFO, "unsupported class %d\n", qclass);
+		return NULL;
+		break;
+	}
 	
 	q = (void *)calloc(1, sizeof(struct question));
 	if (q == NULL) {

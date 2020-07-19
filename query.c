@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: query.c,v 1.8 2020/07/16 17:54:03 pjp Exp $
+ * $Id: query.c,v 1.9 2020/07/19 13:50:06 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -87,7 +87,7 @@ int bytes_received;
 int	dig(int argc, char *argv[]);
 int	command_socket(char *);
 int 	connect_server(char *, int, u_int32_t);
-int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *, u_int16_t, int *, int*);
+int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *, u_int16_t, int *, int*, uint16_t);
 int	notglue(ddDB *, struct rbtree *, char *);
 
 
@@ -212,14 +212,18 @@ dig(int argc, char *argv[])
 	char *yopt, *tsigpass = NULL, *tsigkey = NULL;
 	u_int32_t format = 0;
 	u_int16_t port = 53;
+	uint16_t class = DNS_CLASS_IN;
 	int ch, so, ms;
 	int type = DNS_TYPE_A;
 	int segment = 0;
 	int answers = 0;
 	int additionalcount = 0;
 
-	while ((ch = getopt(argc, argv, "@:DIP:TZp:Q:y:")) != -1) {
+	while ((ch = getopt(argc, argv, "c:@:DIP:TZp:Q:y:")) != -1) {
 		switch (ch) {
+		case 'c':
+			class = atoi(optarg);
+			break;
 		case '@':
 		case 'Q':
 			nameserver = optarg;
@@ -339,7 +343,7 @@ dig(int argc, char *argv[])
 		}
 				
 	} else {
-		if (lookup_name(f, so, domainname, type, &mysoa, format, nameserver, port, &answers, &additionalcount) < 0) {
+		if (lookup_name(f, so, domainname, type, &mysoa, format, nameserver, port, &answers, &additionalcount, class) < 0) {
 			/* XXX maybe a packet dump here? */
 			exit(1);
 		}
@@ -421,7 +425,7 @@ connect_server(char *nameserver, int port, u_int32_t format)
 }
 
 int
-lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mysoa, u_int32_t format, char *nameserver, u_int16_t port, int *answers, int *additionalcount)
+lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mysoa, u_int32_t format, char *nameserver, u_int16_t port, int *answers, int *additionalcount, uint16_t qclass)
 {
 	int len, i, tmp32;
 	int numansw, numaddi, numauth;
@@ -494,7 +498,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	pack16(&query[totallen], type);
 	totallen += sizeof(u_int16_t);
 	
-	class = htons(DNS_CLASS_IN);
+	class = htons(qclass);
 	pack16(&query[totallen], class);
 	totallen += sizeof(u_int16_t);
 
@@ -581,7 +585,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 			exit(1);
 		}
 
-		ret = lookup_name(f, so, zonename, myrrtype, mysoa, format, nameserver, port, answers, additionalcount);
+		ret = lookup_name(f, so, zonename, myrrtype, mysoa, format, nameserver, port, answers, additionalcount, qclass);
 		close(so);
 		return (ret);
 	}
