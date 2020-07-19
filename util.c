@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.73 2020/07/16 14:37:55 pjp Exp $
+ * $Id: util.c,v 1.74 2020/07/19 08:02:13 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1117,7 +1117,6 @@ build_question(char *buf, int len, int additional, char *mac)
 			q->dnssecok = 1;
 
 		i += 11 + ntohs(opt->rdlen);
-		// i += sizeof(struct dns_optrr);
 		additional--;
 	} while (0);
 	/* check for TSIG rr */
@@ -1155,7 +1154,7 @@ build_question(char *buf, int len, int additional, char *mac)
 		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
 		if (pb == NULL) {
 			free_question(q);
-			dolog(LOG_INFO, "expand_compression() failed\n");
+			dolog(LOG_INFO, "expand_compression() failed, tsig keyname\n");
 			return NULL;
 		}
 		i = (pb - buf);
@@ -1228,7 +1227,7 @@ build_question(char *buf, int len, int additional, char *mac)
 		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
 		if (pb == NULL) {
 			free_question(q);
-			dolog(LOG_INFO, "expand_compression() failed 2\n");
+			dolog(LOG_INFO, "expand_compression() failed, tsig algorithm name\n");
 			return NULL;
 		}
 		i = (pb - buf);
