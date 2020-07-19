@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dnssec.c,v 1.30 2020/07/18 10:49:25 pjp Exp $
+ * $Id: dnssec.c,v 1.31 2020/07/19 07:09:02 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -508,6 +508,12 @@ convert_name(char *name, int namelen)
 	ret = calloc(namelen + 1, 1);
 	if (ret == NULL) {
 		return NULL;
+	}
+
+	/* short circuit root */
+	if (namelen == 1 && name[1] == '\0') {
+		ret[0] = '.';
+		return (ret);
 	}
 
 	memcpy(ret, name + 1, namelen - 1);
