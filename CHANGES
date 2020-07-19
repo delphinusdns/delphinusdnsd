@@ -13,6 +13,9 @@ Changes in RELEASE_1_5 from RELEASE_1_4
 - added a "cortex" process for IPC between the processes
 - added a forwarding mode (with cache)
 - changed the config file version from 9 back to 1
+- changed how a question gets parsed (build_question()), hopeing to get
+  more security out of this
+- in dddctl query allow a class to be specified (-c)
 
 [2019] Changes in RELEASE_1_4 from RELEASE_1_3
 
