@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.48 2020/07/18 14:10:16 pjp Exp $
+ * $Id: ddd-db.h,v 1.49 2020/07/20 13:03:37 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -231,6 +231,28 @@ struct ptr {
 struct txt {
         char txt[1024];                  	/* TXT string */
         int txtlen;                             /* len of TXT */
+} __attribute__((packed));
+
+struct hinfo {
+	char cpu[255];
+	int cpulen;
+	char os[255];
+	int oslen;
+} __attribute__((packed));
+
+struct rp {
+	char mbox[DNS_MAXNAME];
+	int mboxlen;
+	char txt[DNS_MAXNAME];
+	int txtlen;
+} __attribute__((packed));
+
+struct caa {
+	uint8_t flags;
+	char tag[DNS_MAXNAME];
+	int taglen;
+	char value[1024];	/* something reasonable, could be 65000! */
+	int valuelen;
 } __attribute__((packed));
 
 struct a {

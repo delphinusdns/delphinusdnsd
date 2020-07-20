@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.25 2020/07/18 14:10:16 pjp Exp $
+ * $Id: ddd-dns.h,v 1.26 2020/07/20 13:03:37 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -188,13 +188,15 @@ struct dns_question_hdr {
 
 /* DNS types - RFC 1035 page 12 */
 
-#define DNS_TYPE_A	1
+#define DNS_TYPE_A	1		/* start of RFC 1035 */
 #define DNS_TYPE_NS	2
 #define DNS_TYPE_CNAME	5
 #define DNS_TYPE_SOA	6
 #define DNS_TYPE_PTR	12
+#define DNS_TYPE_HINFO	13
 #define DNS_TYPE_MX	15
-#define DNS_TYPE_TXT	16
+#define DNS_TYPE_TXT	16		/* end of RFC 1035 */
+#define DNS_TYPE_RP	17		/* RFC 1183 */
 
 #define DNS_TYPE_AAAA	28 		/* quad A - RFC 3596 */
 
@@ -215,6 +217,7 @@ struct dns_question_hdr {
 #define DNS_TYPE_IXFR	251		/* RFC 1995, page 2  */
 #define DNS_TYPE_AXFR	252		/* RFC 5936, page 10 */
 #define DNS_TYPE_ANY	255
+#define DNS_TYPE_CAA	257		/* RFC 8659 */
 
 /* DNS types 0xff00 -> 0xfffe (private use) RFC 5395, page 8 */
 
