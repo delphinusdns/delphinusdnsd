@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.108 2020/07/18 16:49:51 pjp Exp $
+ * $Id: reply.c,v 1.109 2020/07/20 08:26:53 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -146,7 +146,7 @@ struct rbtree * find_nsec(char *name, int namelen, struct rbtree *, ddDB *db);
 int 		nsec_comp(const void *a, const void *b);
 int 		count_dots(char *name);
 char * 		base32hex_encode(u_char *input, int len);
-void 		set_reply_flags(struct dns_header *, struct question *);
+void 		set_reply_flags(struct rbtree *, struct dns_header *, struct question *);
 
 extern int debug, verbose, dnssec, tcpanyonly;
 extern char *versionstring;
@@ -221,7 +221,7 @@ reply_a(struct sreply *sreply, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -423,7 +423,7 @@ reply_nsec3param(struct sreply *sreply, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -638,7 +638,7 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -852,7 +852,7 @@ reply_nsec(struct sreply *sreply, ddDB *db)
 	rollback = outlen;
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -1053,7 +1053,7 @@ reply_ds(struct sreply *sreply, ddDB *db)
 	rollback = outlen;
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->nsrr = 0;
@@ -1255,7 +1255,7 @@ reply_dnskey(struct sreply *sreply, ddDB *db)
 	rollback = outlen;
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -1443,7 +1443,7 @@ reply_rrsig(struct sreply *sreply, ddDB *db)
 	rollback = outlen;
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->nsrr = 0;
@@ -1574,7 +1574,7 @@ reply_aaaa(struct sreply *sreply, ddDB *db)
 	rollback = outlen;
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -1768,7 +1768,7 @@ reply_mx(struct sreply *sreply, ddDB *db)
 	rollback = outlen;
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -2510,7 +2510,7 @@ reply_cname(struct sreply *sreply, ddDB *db)
 
 	/* blank query */
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -2851,7 +2851,7 @@ reply_ptr(struct sreply *sreply, ddDB *db)
 
 	/* blank query */
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -3041,7 +3041,7 @@ reply_soa(struct sreply *sreply, ddDB *db)
 
 	/* blank query */
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -3294,7 +3294,7 @@ reply_txt(struct sreply *sreply, ddDB *db)
 
 	/* blank query */
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -3487,7 +3487,7 @@ reply_version(struct sreply *sreply, ddDB *db)
 
 	/* blank query */
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(NULL, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(1);
@@ -3616,7 +3616,7 @@ reply_tlsa(struct sreply *sreply, ddDB *db)
 	rollback = outlen;
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -3808,7 +3808,7 @@ reply_sshfp(struct sreply *sreply, ddDB *db)
 	rollback = outlen;
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -4000,7 +4000,7 @@ reply_naptr(struct sreply *sreply, ddDB *db)
 	rollback = outlen;
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -4225,7 +4225,7 @@ reply_srv(struct sreply *sreply, ddDB *db)
 	rollback = outlen;
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -4538,7 +4538,7 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 	SET_DNS_RCODE_NAMEERR(odh);
 	HTONS(odh->query);
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = 0;
@@ -4867,7 +4867,7 @@ reply_refused(struct sreply *sreply, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 	SET_DNS_RCODE_REFUSED(odh);
 	HTONS(odh->query);
-	set_reply_flags(odh, q);
+	set_reply_flags(NULL, odh, q);
 
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -5200,7 +5200,7 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 		memcpy(reply, buf, len);
 
 		memset((char *)&odh->query, 0, sizeof(u_int16_t));
-		set_reply_flags(odh, q);
+		set_reply_flags(rbt, odh, q);
 
 		if (istcp) {
 			char *tmpbuf;
@@ -5237,7 +5237,7 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 
 	/* blank query */
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = 0;
@@ -5499,7 +5499,7 @@ reply_any(struct sreply *sreply, ddDB *db)
 
 	/* blank query */
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(NULL, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = 0;
@@ -6862,7 +6862,7 @@ reply_generic(struct sreply *sreply, ddDB *db)
 	rollback = outlen;
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-	set_reply_flags(odh, q);
+	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
 	odh->answer = htons(0);
@@ -6992,7 +6992,7 @@ out:
 }
 
 void
-set_reply_flags(struct dns_header *odh, struct question *q)
+set_reply_flags(struct rbtree *rbt, struct dns_header *odh, struct question *q)
 {
 	NTOHS(odh->query);		/* just in case */
 
@@ -7004,8 +7004,14 @@ set_reply_flags(struct dns_header *odh, struct question *q)
 	if (q->rd) {
 		SET_DNS_RECURSION(odh);
 			
-		if (! q->aa)
+		if (! q->aa) {
 			SET_DNS_RECURSION_AVAIL(odh);
+
+			if (rbt && dnssec && q->dnssecok && 
+					(rbt->flags & RBT_DNSSEC)) {
+				SET_DNS_AUTHENTIC_DATA(odh);
+			}
+		}
 	}
 
 	HTONS(odh->query);

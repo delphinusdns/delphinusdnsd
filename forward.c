@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.36 2020/07/18 14:10:16 pjp Exp $
+ * $Id: forward.c,v 1.37 2020/07/20 08:26:53 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -833,12 +833,22 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 			rbt = lookup_zone(db, q, &returnval, &lzerrno, (char *)&replystring, sizeof(replystring));
 			if (rbt == NULL) {
 				dolog(LOG_INFO, "lookup_zone failed\n");
+				free_question(q);
 				goto newqueue;
 			}
 			
 			q->edns0len = sforward->edns0len;
 			if (dnssec && sforward->dnssecok)
 				q->dnssecok = 1;
+
+			/* we have a cache but it's not DNSSEC'ed */
+			if (q->dnssecok && ! (rbt->flags & RBT_DNSSEC)) {
+				/* expire the record and grab it anew */
+				expire_rr(db, sforward->buf, sforward->buflen, 
+					ntohs(sforward->type), highexpire);
+				free_question(q);
+				goto newqueue;
+			}
 
 			build_reply(&sreply, 
 				(istcp ? so : cfg->dup[sforward->oldsel]),
