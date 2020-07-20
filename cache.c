@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: cache.c,v 1.9 2020/07/18 14:10:16 pjp Exp $
+ * $Id: cache.c,v 1.10 2020/07/20 08:41:31 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -271,8 +271,8 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 
 	rrtype = ntohs(unpack16(pb));	
 
-	/* caching and ANY question is a nono */
-	if (rrtype == DNS_TYPE_ANY) {
+	/* caching ANY or RRSIG is a nono */
+	if (rrtype == DNS_TYPE_ANY || rrtype == DNS_TYPE_RRSIG) {
 		return -1;
 	}
 	
