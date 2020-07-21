@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.49 2020/07/20 13:03:37 pjp Exp $
+ * $Id: ddd-db.h,v 1.50 2020/07/21 18:19:58 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -363,8 +363,8 @@ struct cfg {
 	int udp[DEFAULT_SOCKET];	/* udp sockets */
 	int tcp[DEFAULT_SOCKET];	/* tcp socket */
 	int axfr[DEFAULT_SOCKET];	/* axfr udp socket */
-	int dup[DEFAULT_SOCKET];	/* dup sockets */
 	char *ident[DEFAULT_SOCKET];	/* identification of interface */
+	struct sockaddr_storage ss[DEFAULT_SOCKET];	/* some addr storage */
 	struct my_imsg {
 		int imsg_fds[2];
 	} my_imsg[100];
@@ -378,7 +378,10 @@ struct cfg {
 #define MY_IMSG_UDP		7
 #define MY_IMSG_FORWARD		8
 #define MY_IMSG_MAX		9
-	int recurse;			/* recurse socket */
+	int raw[2];
+#define RAW_IPSOCKET 0
+#define RAW_IP6SOCKET 1
+	u_short port;
 	int sockcount;			/* set sockets */
 	int nth;
 	pid_t pid;
@@ -484,7 +487,7 @@ struct reply_logic {
 	int buildtype;
 #define BUILD_CNAME	1
 #define BUILD_OTHER	2
-	int (*reply)(struct sreply *, ddDB *);
+	int (*reply)(struct sreply *, int *, ddDB *);
 };
 
 

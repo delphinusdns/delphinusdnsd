@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.132 2020/07/17 05:40:19 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.133 2020/07/21 18:19:58 pjp Exp $
  */
 
 
@@ -130,35 +130,35 @@ extern void 	init_notifyddd(void);
 extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
 extern struct rbtree *  Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 extern int 	memcasecmp(u_char *, u_char *, int);
-extern int 	reply_a(struct sreply *, ddDB *);
-extern int 	reply_aaaa(struct sreply *, ddDB *);
-extern int 	reply_any(struct sreply *, ddDB *);
-extern int 	reply_badvers(struct sreply *, ddDB *);
-extern int	reply_nodata(struct sreply *, ddDB *);
-extern int 	reply_cname(struct sreply *, ddDB *);
-extern int 	reply_fmterror(struct sreply *, ddDB *);
-extern int 	reply_notauth(struct sreply *, ddDB *);
-extern int 	reply_notimpl(struct sreply *, ddDB *);
-extern int 	reply_nxdomain(struct sreply *, ddDB *);
-extern int 	reply_noerror(struct sreply *, ddDB *);
-extern int	reply_notify(struct sreply *, ddDB *);
-extern int 	reply_soa(struct sreply *, ddDB *);
-extern int 	reply_mx(struct sreply *, ddDB *);
-extern int 	reply_naptr(struct sreply *, ddDB *);
-extern int 	reply_ns(struct sreply *, ddDB *);
-extern int 	reply_ptr(struct sreply *, ddDB *);
-extern int 	reply_refused(struct sreply *, ddDB *);
-extern int 	reply_srv(struct sreply *, ddDB *);
-extern int 	reply_sshfp(struct sreply *, ddDB *);
-extern int 	reply_tlsa(struct sreply *, ddDB *);
-extern int 	reply_txt(struct sreply *, ddDB *);
-extern int 	reply_version(struct sreply *, ddDB *);
-extern int      reply_rrsig(struct sreply *, ddDB *);
-extern int	reply_dnskey(struct sreply *, ddDB *);
-extern int	reply_ds(struct sreply *, ddDB *);
-extern int	reply_nsec(struct sreply *, ddDB *);
-extern int	reply_nsec3(struct sreply *, ddDB *);
-extern int	reply_nsec3param(struct sreply *, ddDB *);
+extern int 	reply_a(struct sreply *, int *, ddDB *);
+extern int 	reply_aaaa(struct sreply *, int *, ddDB *);
+extern int 	reply_any(struct sreply *, int *, ddDB *);
+extern int 	reply_badvers(struct sreply *, int *, ddDB *);
+extern int	reply_nodata(struct sreply *, int *, ddDB *);
+extern int 	reply_cname(struct sreply *, int *, ddDB *);
+extern int 	reply_fmterror(struct sreply *, int *, ddDB *);
+extern int 	reply_notauth(struct sreply *, int *, ddDB *);
+extern int 	reply_notimpl(struct sreply *, int *, ddDB *);
+extern int 	reply_nxdomain(struct sreply *, int *, ddDB *);
+extern int 	reply_noerror(struct sreply *, int *, ddDB *);
+extern int	reply_notify(struct sreply *, int *, ddDB *);
+extern int 	reply_soa(struct sreply *, int *, ddDB *);
+extern int 	reply_mx(struct sreply *, int *, ddDB *);
+extern int 	reply_naptr(struct sreply *, int *, ddDB *);
+extern int 	reply_ns(struct sreply *, int *, ddDB *);
+extern int 	reply_ptr(struct sreply *, int *, ddDB *);
+extern int 	reply_refused(struct sreply *, int *, ddDB *);
+extern int 	reply_srv(struct sreply *, int *, ddDB *);
+extern int 	reply_sshfp(struct sreply *, int *, ddDB *);
+extern int 	reply_tlsa(struct sreply *, int *, ddDB *);
+extern int 	reply_txt(struct sreply *, int *, ddDB *);
+extern int 	reply_version(struct sreply *, int *, ddDB *);
+extern int      reply_rrsig(struct sreply *, int *, ddDB *);
+extern int	reply_dnskey(struct sreply *, int *, ddDB *);
+extern int	reply_ds(struct sreply *, int *, ddDB *);
+extern int	reply_nsec(struct sreply *, int *, ddDB *);
+extern int	reply_nsec3(struct sreply *, int *, ddDB *);
+extern int	reply_nsec3param(struct sreply *, int *, ddDB *);
 extern char 	*rrlimit_setup(int);
 extern char 	*dns_label(char *, int *);
 extern void 	ddd_shutdown(void);
@@ -304,7 +304,6 @@ int
 main(int argc, char *argv[], char *environ[])
 {
 	static int udp[DEFAULT_SOCKET];
-	static int dup[DEFAULT_SOCKET];
 	static int tcp[DEFAULT_SOCKET];
 	static int afd[DEFAULT_SOCKET];
 	static int uafd[DEFAULT_SOCKET];
@@ -623,16 +622,8 @@ main(int argc, char *argv[], char *environ[])
 
 			res = res0;
 
-#ifdef __linux__
-			
 			udp[i] = bind_this_res(res, 0);
-			dup[i] = bind_this_res(res, 0);
-#else
-			/* first dup, then udp */
-			dup[i] = bind_this_res(res, 1);
-			udp[i] = bind_this_res(res, 0);
-#endif
-
+			memcpy((void *)&cfg->ss[i], (void *)res->ai_addr, res->ai_addrlen);
 
 			if (res->ai_family == AF_INET) {
 				on = 1;
@@ -782,14 +773,8 @@ main(int argc, char *argv[], char *environ[])
 				continue;
 			}
 
-#if __linux__
 			udp[i] = bind_this_pifap(pifap, 0, salen);
-			dup[i] = bind_this_pifap(pifap, 0, salen);
-#else
-			/* first dup, then udp */
-			dup[i] = bind_this_pifap(pifap, 1, salen);
-			udp[i] = bind_this_pifap(pifap, 0, salen);
-#endif
+			memcpy((void *)&cfg->ss[i], (void *)pifap->ifa_addr, salen);
 
 			if (pifap->ifa_addr->sa_family == AF_INET) {
 				on = 1;
@@ -870,6 +855,20 @@ main(int argc, char *argv[], char *environ[])
 		}
 	} /* if bflag? */
 
+	if ((cfg->raw[0] = socket(AF_INET, SOCK_RAW, IPPROTO_UDP)) < 0) {
+		dolog(LOG_INFO, "raw0 socket: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+	shutdown(cfg->raw[0], SHUT_RD);
+	if ((cfg->raw[1] = socket(AF_INET6, SOCK_RAW, IPPROTO_UDP)) < 0) {
+		dolog(LOG_INFO, "raw1 socket: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+	on = 1;
+	shutdown(cfg->raw[1], SHUT_RD);
+	cfg->port = port;
 
 #if __OpenBSD__
 	if (unveil(DELPHINUS_RZONE_PATH, "rwc")  < 0) {
@@ -936,8 +935,9 @@ main(int argc, char *argv[], char *environ[])
 				if (axfrport && axfrport != port)
 					close(uafd[j]);
 			
-				close(dup[j]);
 			}
+			close(cfg->raw[0]);
+			close(cfg->raw[1]);
 
 			setproctitle("AXFR engine on port %d", axfrport);
 			axfrloop(afd, (axfrport == port) ? 0 : i, ident, db, ibuf);
@@ -993,8 +993,9 @@ main(int argc, char *argv[], char *environ[])
 			for (j = 0; j < i; j++) {
 				close(tcp[j]);
 				close(udp[j]);
-				close(dup[j]);
 			}
+			close(cfg->raw[0]);
+			close(cfg->raw[1]);
 
 			setproctitle("Replicant engine");
 
@@ -1113,8 +1114,9 @@ main(int argc, char *argv[], char *environ[])
 			for (j = 0; j < i; j++) {
 				close(tcp[j]);
 				close(udp[j]);
+				if (axfrport && axfrport != port)
+					close(uafd[j]);
 
-				cfg->dup[j] = dup[j];
 			}
 
 			cfg->sockcount = i;
@@ -1136,6 +1138,8 @@ main(int argc, char *argv[], char *environ[])
 	
 	} /* forward */
 
+	close(cfg->raw[0]);
+	close(cfg->raw[1]);
 
 
 	/* the rest of the daemon goes on in TCP and UDP loops */
@@ -1194,7 +1198,6 @@ main(int argc, char *argv[], char *environ[])
 
 				cfg->ident[i] = strdup(ident[i]);
 	
-				close(dup[i]);
 			}
 
 			setproctitle("child %d pid %d", n, cfg->pid);
@@ -1216,8 +1219,6 @@ main(int argc, char *argv[], char *environ[])
 			cfg->axfr[i] = uafd[i];
 
 		cfg->ident[i] = strdup(ident[i]);
-
-		close(dup[i]);
 	}
 
 	(void)mainloop(cfg, &cortex_ibuf);
@@ -1519,7 +1520,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	int rcheck = 0;
 	int blocklist = 1;
 	int require_tsig = 0;
-	int sp; 
 	pid_t idata;
 
 	u_int32_t received_ttl;
@@ -1569,6 +1569,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 
 	ssize_t n, datalen;
 	int ix;
+	int sretlen;
 	
 	pid = fork();
 	switch (pid) {
@@ -1680,8 +1681,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		exit(1);
 	}
 #endif
-
-	sp = cfg->recurse;
 
 	for (;;) {
 		is_ipv6 = 0;
@@ -1849,7 +1848,7 @@ axfrentry:
 				if (filter && require_tsig == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					slen = reply_refused(&sreply, NULL);
+					slen = reply_refused(&sreply, &sretlen, NULL);
 
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, filter policy\n", so, cfg->ident[i], address, received_ttl, aregion);
 					goto drop;
@@ -1858,7 +1857,7 @@ axfrentry:
 				if (passlist && blocklist == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					slen = reply_refused(&sreply, NULL);
+					slen = reply_refused(&sreply, &sretlen, NULL);
 
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, passlist policy\n", so, cfg->ident[i], address, received_ttl, aregion);
 					goto drop;
@@ -1934,7 +1933,7 @@ axfrentry:
 										dolog(LOG_INFO, "on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
 										/* format error */
 										build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-										slen = reply_fmterror(&sreply, NULL);
+										slen = reply_fmterror(&sreply, &sretlen, NULL);
 										dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
 										imsg_free(&imsg);
 										goto drop;
@@ -1950,7 +1949,7 @@ axfrentry:
 										/* we didn't see a tsig header */
 										if (filter && pq.tsig.have_tsig == 0) {
 											build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-											slen = reply_refused(&sreply, NULL);
+											slen = reply_refused(&sreply, &sretlen, NULL);
 											dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, received_ttl, aregion);
 											imsg_free(&imsg);
 											goto drop;
@@ -1984,7 +1983,7 @@ axfrentry:
 							dolog(LOG_INFO, "on descriptor %u interface \"%s\" authenticated dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[i], address);
 							snprintf(replystring, DNS_MAXNAME, "NOTIFY");
 							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-							slen = reply_notify(&sreply, NULL);
+							slen = reply_notify(&sreply, &sretlen, NULL);
 
 							/* send notify to replicant process */
 							idata = (pid_t)question->hdr->namelen;
@@ -1997,7 +1996,7 @@ axfrentry:
 							dolog(LOG_INFO, "on descriptor %u interface \"%s\" not authenticated dns NOTIFY packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsig.tsigerrorcode, address);
 							snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
 							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-							slen = reply_notauth(&sreply, NULL);
+							slen = reply_notauth(&sreply, &sretlen, NULL);
 							goto udpout;
 					}
 
@@ -2005,7 +2004,7 @@ axfrentry:
 						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[i], address);
 						snprintf(replystring, DNS_MAXNAME, "NOTIFY");
 						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-						slen = reply_notify(&sreply, NULL);
+						slen = reply_notify(&sreply, &sretlen, NULL);
 							/* send notify to replicant process */
 							idata = (pid_t)question->hdr->namelen;
 							imsg_compose(udp_ibuf, IMSG_NOTIFY_MESSAGE, 
@@ -2017,7 +2016,7 @@ axfrentry:
 						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying REFUSED\n", so, cfg->ident[i], address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-						slen = reply_refused(&sreply, NULL);
+						slen = reply_refused(&sreply, &sretlen, NULL);
 
 						goto udpout;
 					}
@@ -2027,13 +2026,13 @@ axfrentry:
 					dolog(LOG_INFO, "on descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsig.tsigerrorcode, address);
 					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
 					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					slen = reply_notauth(&sreply, NULL);
+					slen = reply_notauth(&sreply, &sretlen, NULL);
 					goto udpout;
 				}
 				/* hack around whether we're edns version 0 */
 				if (question->ednsversion != 0) {
 					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					slen = reply_badvers(&sreply, NULL);
+					slen = reply_badvers(&sreply, &sretlen, NULL);
 
 					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" edns version is %u from %s, replying badvers\n", so, cfg->ident[i], question->ednsversion, address);
 
@@ -2046,7 +2045,7 @@ axfrentry:
 					strcasecmp(question->converted_name, "version.bind.") == 0) {
 							snprintf(replystring, DNS_MAXNAME, "VERSION");
 							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-							slen = reply_version(&sreply, NULL);
+							slen = reply_version(&sreply, &sretlen, NULL);
 							goto udpout;
 				}
 
@@ -2066,7 +2065,7 @@ axfrentry:
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 
 						build_reply(&sreply, so, buf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
-						slen = reply_refused(&sreply, NULL);
+						slen = reply_refused(&sreply, &sretlen, NULL);
 						goto udpout;
 						break;
 					case ERR_NXDOMAIN:
@@ -2085,7 +2084,7 @@ axfrentry:
 							fromlen, rbt0, NULL, aregion, istcp, \
 							0, replybuf);
 
-							slen = reply_nxdomain(&sreply, cfg->db);
+							slen = reply_nxdomain(&sreply, &sretlen, cfg->db);
 						}
 						goto udpout;
 						break;
@@ -2099,12 +2098,12 @@ axfrentry:
 						if (rbt1 != NULL) {
 							snprintf(replystring, DNS_MAXNAME, "NODATA");
 							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
-							slen = reply_nodata(&sreply, cfg->db);
+							slen = reply_nodata(&sreply, &sretlen, cfg->db);
 						} else {
 							if (forward)
 								goto forwardudp;
 							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
-							slen = reply_refused(&sreply, cfg->db);
+							slen = reply_refused(&sreply, &sretlen, cfg->db);
 							snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						}
 						goto udpout;
@@ -2119,7 +2118,7 @@ forwardudp:
 								} else {
 									snprintf(replystring, DNS_MAXNAME, "REFUSED");
 									build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
-									slen = reply_refused(&sreply, cfg->db);
+									slen = reply_refused(&sreply, &sretlen, cfg->db);
 									goto udpout;
 								}
 						} else
@@ -2222,7 +2221,7 @@ forwardudp:
 								fromlen, rbt0, NULL, aregion, istcp, 0, 
 								replybuf);
 
-							slen = reply_noerror(&sreply, cfg->db);
+							slen = reply_noerror(&sreply, &sretlen, cfg->db);
 
 							goto udpout;
 						} 
@@ -2237,7 +2236,7 @@ forwardudp:
 							fromlen, rbt0, NULL, aregion, istcp, \
 							0, replybuf);
 
-							slen = reply_ns(&sreply, cfg->db);
+							slen = reply_ns(&sreply, &sretlen, cfg->db);
 						} else {
 							slen = 0;
 							snprintf(replystring, DNS_MAXNAME, "DROP");
@@ -2290,7 +2289,7 @@ forwardudp:
 							fromlen, NULL, NULL, aregion, istcp, 0, \
 							replybuf);
 
-					slen = reply_notimpl(&sreply, NULL);
+					slen = reply_notimpl(&sreply, &sretlen, NULL);
 					snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					goto udpout;
 				}
@@ -2314,7 +2313,7 @@ forwardudp:
 							continue;
 						}
 							
-						slen = (*rl->reply)(&sreply, cfg->db);
+						slen = (*rl->reply)(&sreply, &sretlen, cfg->db);
 						break;
 					} /* if rl->rrtype == */
 				}
@@ -2333,7 +2332,7 @@ forwardudp:
 							fromlen, rbt0, NULL, aregion, istcp, 0, \
 							replybuf);
 
-						slen = reply_ns(&sreply, cfg->db);
+						slen = reply_ns(&sreply, &sretlen, cfg->db);
 					} else {
 
 
@@ -2341,7 +2340,7 @@ forwardudp:
 							fromlen, NULL, NULL, aregion, istcp, 0, \
 							replybuf);
 
-						slen = reply_notimpl(&sreply, NULL);
+						slen = reply_notimpl(&sreply, &sretlen, NULL);
 						snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					}
 				}
@@ -2614,7 +2613,6 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	int blocklist = 1;
 	int require_tsig = 0;
 	int axfr_acl = 0;
-	int sp; 
 	pid_t idata;
 	uint conncnt = 0;
 	int tcpflags;
@@ -2659,6 +2657,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 
 	struct sforward *sforward;
 	int ix;
+	int sretlen;
 
 
 	sforward = (struct sforward *)calloc(1, sizeof(struct sforward));
@@ -2721,8 +2720,6 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		exit(1);
 	}
 
-
-	sp = cfg->recurse;
 
 	/* 
 	 * listen on descriptors
@@ -2832,7 +2829,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, filter policy, drop\n", so, cfg->ident[i], address);
 #if 0
 					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					slen = reply_refused(&sreply, NULL);
+					slen = reply_refused(&sreply, &sretlen, NULL);
 #endif
 					close(so);
 					continue;
@@ -3004,7 +3001,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 								/* format error */
 								build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-								slen = reply_fmterror(&sreply, NULL);
+								slen = reply_fmterror(&sreply, &sretlen, NULL);
 								dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 								imsg_free(&imsg);
 								goto drop;
@@ -3019,7 +3016,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 							case PARSE_RETURN_NOTAUTH:
 								if (filter && pq.tsig.have_tsig == 0) {
 									build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-									slen = reply_refused(&sreply, NULL);
+									slen = reply_refused(&sreply, &sretlen, NULL);
 									dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion);
 									imsg_free(&imsg);
 									goto drop;
@@ -3050,7 +3047,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 							dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" authenticated dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 							snprintf(replystring, DNS_MAXNAME, "NOTIFY");
 							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-							slen = reply_notify(&sreply, NULL);
+							slen = reply_notify(&sreply, &sretlen, NULL);
 							/* send notify to replicant process */
 							idata = (pid_t)question->hdr->namelen;
 							imsg_compose(ibuf, IMSG_NOTIFY_MESSAGE, 
@@ -3062,7 +3059,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 							dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns NOTIFY packet (code = %d) from %s, replying notauth\n", so, cfg->ident[tcpnp->intidx], question->tsig.tsigerrorcode, tcpnp->address);
 							snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
 							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-							slen = reply_notauth(&sreply, NULL);
+							slen = reply_notauth(&sreply, &sretlen, NULL);
 							goto tcpout;
 					}
 
@@ -3070,7 +3067,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" dns NOTIFY packet from %s, replying NOTIFY\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 						snprintf(replystring, DNS_MAXNAME, "NOTIFY");
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-						slen = reply_notify(&sreply, NULL);
+						slen = reply_notify(&sreply, &sretlen, NULL);
 						/* send notify to replicant process */
 						idata = (pid_t)question->hdr->namelen;
 						imsg_compose(ibuf, IMSG_NOTIFY_MESSAGE, 
@@ -3082,7 +3079,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying REFUSED\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-						slen = reply_refused(&sreply, NULL);
+						slen = reply_refused(&sreply, &sretlen, NULL);
 
 						goto tcpout;
 					}
@@ -3092,7 +3089,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[tcpnp->intidx], question->tsig.tsigerrorcode, tcpnp->address);
 					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
 					build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					slen = reply_notauth(&sreply, NULL);
+					slen = reply_notauth(&sreply, &sretlen, NULL);
 					goto tcpout;
 				}
 				/* hack around whether we're edns version 0 */
@@ -3122,7 +3119,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					strcasecmp(question->converted_name, "version.bind.") == 0) {
 						snprintf(replystring, DNS_MAXNAME, "VERSION");
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-						slen = reply_version(&sreply, NULL);
+						slen = reply_version(&sreply, &sretlen, NULL);
 						goto tcpout;
 				}
 
@@ -3141,7 +3138,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					case ERR_REFUSED:
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
-						slen = reply_refused(&sreply, NULL);
+						slen = reply_refused(&sreply, &sretlen, NULL);
 						goto tcpout;
 						break;
 					case ERR_NODATA:
@@ -3153,14 +3150,14 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 						if (rbt0 != NULL) {
 							snprintf(replystring, DNS_MAXNAME, "NODATA");
 							build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
-							slen = reply_nodata(&sreply, cfg->db);
+							slen = reply_nodata(&sreply, &sretlen, cfg->db);
 						} else {
 							if (forward)
 								goto forwardtcp;
 
 							snprintf(replystring, DNS_MAXNAME, "REFUSED");
 							build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
-							slen = reply_refused(&sreply, cfg->db);
+							slen = reply_refused(&sreply, &sretlen, cfg->db);
 						}
 
 						goto tcpout;
@@ -3178,7 +3175,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 											from, fromlen, rbt0, NULL, 
 											aregion, istcp, 0, replybuf);
 
-							slen = reply_nxdomain(&sreply, cfg->db);
+							slen = reply_nxdomain(&sreply, &sretlen, cfg->db);
 					 	}
 						goto tcpout;
 
@@ -3191,7 +3188,7 @@ forwardtcp:
 								} else {
 									snprintf(replystring, DNS_MAXNAME, "REFUSED");
 									build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
-									slen = reply_refused(&sreply, cfg->db);
+									slen = reply_refused(&sreply, &sretlen, cfg->db);
 									goto tcpout;
 								}
 						} else
@@ -3314,7 +3311,7 @@ forwardtcp:
 												rbt0, NULL, aregion, istcp, 
 												0, replybuf);
 
-								slen = reply_noerror(&sreply, cfg->db);
+								slen = reply_noerror(&sreply, &sretlen, cfg->db);
 			
 								goto tcpout;
 						}
@@ -3330,7 +3327,7 @@ forwardtcp:
 											from, fromlen, rbt0, NULL, 
 											aregion, istcp, 0, replybuf);
 
-							slen = reply_ns(&sreply, cfg->db);
+							slen = reply_ns(&sreply, &sretlen, cfg->db);
 						} else {
 							slen = 0;
 							snprintf(replystring, DNS_MAXNAME, "DROP");
@@ -3383,7 +3380,7 @@ forwardtcp:
 									from, fromlen, NULL, NULL, aregion, 
 									istcp, 0, replybuf);
 
-					slen = reply_notimpl(&sreply, NULL);
+					slen = reply_notimpl(&sreply, &sretlen, NULL);
 					snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					goto tcpout;
 				}
@@ -3425,7 +3422,7 @@ forwardtcp:
 							continue;
 						}
 							
-						slen = (*rl->reply)(&sreply, cfg->db);
+						slen = (*rl->reply)(&sreply, &sretlen, cfg->db);
 						break;
 					} /* if rl->rrtype == */
 				}
@@ -3444,7 +3441,7 @@ forwardtcp:
 							fromlen, rbt0, NULL, aregion, istcp, 
 							0, replybuf);
 
-						slen = reply_ns(&sreply, cfg->db);
+						slen = reply_ns(&sreply, &sretlen, cfg->db);
 
 					} else {
 
@@ -3452,7 +3449,7 @@ forwardtcp:
 						fromlen, NULL, NULL, aregion, istcp, 
 						0, replybuf);
 		
-						slen = reply_notimpl(&sreply, NULL);
+						slen = reply_notimpl(&sreply, &sretlen, NULL);
 						snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					}
 				}
@@ -3762,6 +3759,7 @@ convert_question(struct parsequestion *pq, int authoritative)
 	q->tsig.tsigorigid = pq->tsig.tsigorigid;
 
 	q->notify = pq->notify;
+	q->rawsocket = 0;
 
 	return (q);
 }
@@ -4044,11 +4042,6 @@ setup_cortex(struct imsgbuf *ibuf)
 		ddd_shutdown();
 		exit(1);
 	}
-
-#if 0
-	/* reopenlog */
-	openlog(__progname, LOG_PID | LOG_NDELAY, LOG_DAEMON);
-#endif
 
 #if __OpenBSD__
 	if (unveil("/", "") == -1) {

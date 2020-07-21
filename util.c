@@ -27,13 +27,16 @@
  */
 
 /* 
- * $Id: util.c,v 1.75 2020/07/19 13:50:06 pjp Exp $
+ * $Id: util.c,v 1.76 2020/07/21 18:19:58 pjp Exp $
  */
 
 #include <sys/types.h>
 #include <sys/socket.h>
 
 #include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/ip6.h>
+#include <netinet/udp.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 
@@ -117,6 +120,8 @@ u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
 int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *);
 int dn_contains(char *name, int len, char *anchorname, int alen);
+uint16_t udp_cksum(u_int16_t *, uint16_t, struct ip *, struct udphdr *);
+uint16_t udp_cksum6(u_int16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
 
 
 int bytes_received;
@@ -2352,4 +2357,145 @@ err:
 
 	memcpy(buf, save, len);
 	return (-1);
+}
+
+
+/*
+ * Copyright (c) 1988, 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)in_cksum.c	8.1 (Berkeley) 6/10/93
+ */
+
+/*
+ * UDP_CKSUM - compute the ones complement sum of the ones complement of 16 bit 
+ * 			  numbers
+ */
+
+
+
+/* 
+ * UDP_CKSUM - compute the checksum with a pseudo header of the UDP packet
+ * 				
+ */
+
+uint16_t
+udp_cksum(u_int16_t *addr, uint16_t len, struct ip *ip, struct udphdr *uh) 
+{
+	union {
+		struct ph {
+			in_addr_t src;
+			in_addr_t dst;
+			u_int8_t pad;
+			u_int8_t proto;
+			u_int16_t len;
+		} s __attribute__((packed));
+
+		u_int16_t i[6];
+	} ph;
+
+	int nleft = len - sizeof(struct udphdr); /* we pass the udp header */
+	int sum = 0;
+	u_int16_t *w = &ph.i[0];
+	u_int16_t *u = (u_int16_t *)uh;
+	uint16_t answer;
+
+	memset(&ph, 0, sizeof(ph));
+	memcpy(&ph.s.src, &ip->ip_src.s_addr, sizeof(in_addr_t));
+	memcpy(&ph.s.dst, &ip->ip_dst.s_addr, sizeof(in_addr_t));
+	ph.s.pad = 0;
+	ph.s.proto = ip->ip_p;
+	ph.s.len = uh->uh_ulen;
+	sum = w[0] + w[1] + w[2] + w[3] + w[4] + w[5] + u[0] + u[1] + u[2];
+	w = addr;
+
+	while (nleft > 1) {
+		sum += *w++;
+		nleft -= 2;
+	}
+	if (nleft == 1) {
+		sum += htons(*(u_char *)w << 8);
+	}
+
+	sum = (sum >> 16) + (sum & 0xffff);
+	sum += (sum >> 16);
+	answer = ~sum;
+	return (answer);
+}
+
+/* 
+ * UDP_CKSUM6 - compute the checksum with a pseudo header of the UDP6 packet
+ * 			RFC 8200 section 8.1	
+ */
+
+uint16_t
+udp_cksum6(u_int16_t *addr, uint16_t len, struct ip6_hdr *ip6, struct udphdr *uh) 
+{
+	union {
+		struct ph {
+			struct in6_addr src;
+			struct in6_addr dst;
+			u_int32_t len;
+			u_int8_t pad[3];
+			u_int8_t nxt;
+		} s __attribute__((packed));
+
+		u_int16_t i[20];
+	} ph;
+
+	int nleft = len - sizeof(struct udphdr); /* we pass the udp header */
+	int sum;
+	u_int16_t *w = &ph.i[0];
+	u_int16_t *u = (u_int16_t *)uh;
+	uint16_t answer;
+
+	memset(&ph, 0, sizeof(ph));
+	memcpy(&ph.s.src, &ip6->ip6_src, sizeof(struct in6_addr));
+	memcpy(&ph.s.dst, &ip6->ip6_dst, sizeof(struct in6_addr));
+	ph.s.len = htonl(len);
+	ph.s.nxt = ip6->ip6_nxt;
+
+	sum = w[0] + w[1] + w[2] + w[3] + w[4] + w[5] + \
+		w[6] + w[7] + w[8] + w[9] + w[10] + \
+		w[11] + w[12] + w[13] + w[14] + w[15] + \
+		w[16] + w[17] + w[18] + w[19] + u[0] + u[1] + u[2];
+
+	w = addr;
+
+	while (nleft > 1) {
+		sum += *w++;
+		nleft -= 2;
+	}
+	if (nleft == 1) {
+		sum += htons(*(u_char *)w << 8);
+	}
+
+	sum = (sum >> 16) + (sum & 0xffff);
+	sum += (sum >> 16);
+	answer = ~sum;
+	return (answer);
 }

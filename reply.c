@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.109 2020/07/20 08:26:53 pjp Exp $
+ * $Id: reply.c,v 1.110 2020/07/21 18:19:58 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -112,36 +112,36 @@ extern int 			dn_contains(char *, int, char *, int);
 
 
 u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int);
-int		reply_generic(struct sreply *, ddDB *);
-int 		reply_a(struct sreply *, ddDB *);
-int		reply_nsec3(struct sreply *, ddDB *);
-int		reply_nsec3param(struct sreply *, ddDB *);
-int		reply_nsec(struct sreply *, ddDB *);
-int		reply_dnskey(struct sreply *, ddDB *);
-int		reply_ds(struct sreply *, ddDB *);
-int		reply_rrsig(struct sreply *, ddDB *);
-int 		reply_aaaa(struct sreply *, ddDB *);
-int 		reply_mx(struct sreply *, ddDB *);
-int 		reply_ns(struct sreply *, ddDB *);
-int 		reply_notimpl(struct sreply *, ddDB *);
-int 		reply_nxdomain(struct sreply *, ddDB *);
-int 		reply_noerror(struct sreply *, ddDB *);
-int		reply_badvers(struct sreply *, ddDB *);
-int		reply_nodata(struct sreply *, ddDB *);
-int 		reply_soa(struct sreply *, ddDB *);
-int 		reply_ptr(struct sreply *, ddDB *);
-int 		reply_txt(struct sreply *, ddDB *);
-int 		reply_version(struct sreply *, ddDB *);
-int 		reply_srv(struct sreply *, ddDB *);
-int 		reply_naptr(struct sreply *, ddDB *);
-int 		reply_sshfp(struct sreply *, ddDB *);
-int		reply_tlsa(struct sreply *, ddDB *);
-int 		reply_cname(struct sreply *, ddDB *);
-int 		reply_any(struct sreply *, ddDB *);
-int 		reply_refused(struct sreply *, ddDB *);
-int 		reply_fmterror(struct sreply *, ddDB *);
-int 		reply_notauth(struct sreply *, ddDB *);
-int		reply_notify(struct sreply *, ddDB *);
+int		reply_generic(struct sreply *, int *, ddDB *);
+int 		reply_a(struct sreply *, int *, ddDB *);
+int		reply_nsec3(struct sreply *, int *, ddDB *);
+int		reply_nsec3param(struct sreply *, int *, ddDB *);
+int		reply_nsec(struct sreply *, int *,  ddDB *);
+int		reply_dnskey(struct sreply *, int *, ddDB *);
+int		reply_ds(struct sreply *, int *, ddDB *);
+int		reply_rrsig(struct sreply *, int *, ddDB *);
+int 		reply_aaaa(struct sreply *, int *, ddDB *);
+int 		reply_mx(struct sreply *, int *, ddDB *);
+int 		reply_ns(struct sreply *, int *, ddDB *);
+int 		reply_notimpl(struct sreply *, int *, ddDB *);
+int 		reply_nxdomain(struct sreply *, int *, ddDB *);
+int 		reply_noerror(struct sreply *, int *, ddDB *);
+int		reply_badvers(struct sreply *, int *, ddDB *);
+int		reply_nodata(struct sreply *, int *, ddDB *);
+int 		reply_soa(struct sreply *, int *, ddDB *);
+int 		reply_ptr(struct sreply *, int *, ddDB *);
+int 		reply_txt(struct sreply *, int *, ddDB *);
+int 		reply_version(struct sreply *, int *, ddDB *);
+int 		reply_srv(struct sreply *, int *, ddDB *);
+int 		reply_naptr(struct sreply *, int *, ddDB *);
+int 		reply_sshfp(struct sreply *, int *, ddDB *);
+int		reply_tlsa(struct sreply *, int *, ddDB *);
+int 		reply_cname(struct sreply *, int *, ddDB *);
+int 		reply_any(struct sreply *, int *, ddDB *);
+int 		reply_refused(struct sreply *, int *, ddDB *);
+int 		reply_fmterror(struct sreply *, int *, ddDB *);
+int 		reply_notauth(struct sreply *, int *, ddDB *);
+int		reply_notify(struct sreply *, int *, ddDB *);
 struct rbtree * find_nsec(char *name, int namelen, struct rbtree *, ddDB *db);
 int 		nsec_comp(const void *a, const void *b);
 int 		count_dots(char *name);
@@ -160,7 +160,7 @@ extern uint8_t vslen;
  */
 
 int
-reply_a(struct sreply *sreply, ddDB *db)
+reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -337,8 +337,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -357,7 +361,7 @@ out:
  */
 
 int
-reply_nsec3param(struct sreply *sreply, ddDB *db)
+reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -551,8 +555,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else { 
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -566,7 +574,7 @@ out:
  */
 
 int
-reply_nsec3(struct sreply *sreply, ddDB *db)
+reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -622,7 +630,7 @@ reply_nsec3(struct sreply *sreply, ddDB *db)
 	/* RFC 5155 section 7.2.8 */
 	/* perhaps we are accompanied by an rrsig */
 	if (find_rr(rbt, DNS_TYPE_NSEC3) && find_rr(rbt, DNS_TYPE_RRSIG)) {
-		return (reply_nxdomain(sreply, db));
+		return (reply_nxdomain(sreply, sretlen, db));
 	}
 	odh = (struct dns_header *)&reply[0];
 
@@ -778,8 +786,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -792,7 +804,7 @@ out:
  */
 
 int
-reply_nsec(struct sreply *sreply, ddDB *db)
+reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -976,8 +988,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -991,7 +1007,7 @@ out:
  */
 
 int
-reply_ds(struct sreply *sreply, ddDB *db)
+reply_ds(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -1176,8 +1192,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -1192,7 +1212,7 @@ out:
  */
 
 int
-reply_dnskey(struct sreply *sreply, ddDB *db)
+reply_dnskey(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -1374,8 +1394,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -1389,7 +1413,7 @@ out:
 
 
 int		
-reply_rrsig(struct sreply *sreply, ddDB *db)
+reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -1498,8 +1522,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -1514,7 +1542,7 @@ out:
  */
 
 int
-reply_aaaa(struct sreply *sreply, ddDB *db)
+reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -1674,8 +1702,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -1690,7 +1722,7 @@ out:
  */
 
 int
-reply_mx(struct sreply *sreply, ddDB *db)
+reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -2016,8 +2048,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -2030,7 +2066,7 @@ out:
  */
 
 int
-reply_ns(struct sreply *sreply, ddDB *db)
+reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -2426,8 +2462,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -2444,7 +2484,7 @@ out:
 
 
 int
-reply_cname(struct sreply *sreply, ddDB *db)
+reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -2770,9 +2810,13 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-		}	
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}	
+		}
 	}
 
 	return (retlen);
@@ -2784,7 +2828,7 @@ out:
  */
 
 int
-reply_ptr(struct sreply *sreply, ddDB *db)
+reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -2961,8 +3005,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -2976,7 +3024,7 @@ out:
 
 
 int
-reply_soa(struct sreply *sreply, ddDB *db)
+reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -3216,8 +3264,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -3231,7 +3283,7 @@ out:
 
 
 int
-reply_txt(struct sreply *sreply, ddDB *db)
+reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -3418,8 +3470,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -3434,7 +3490,7 @@ out:
 
 
 int
-reply_version(struct sreply *sreply, ddDB *db)
+reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -3537,8 +3593,12 @@ reply_version(struct sreply *sreply, ddDB *db)
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -3552,7 +3612,7 @@ reply_version(struct sreply *sreply, ddDB *db)
 
 
 int
-reply_tlsa(struct sreply *sreply, ddDB *db)
+reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -3728,8 +3788,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -3744,7 +3808,7 @@ out:
 
 
 int
-reply_sshfp(struct sreply *sreply, ddDB *db)
+reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -3919,8 +3983,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -3935,7 +4003,7 @@ out:
 
 
 int
-reply_naptr(struct sreply *sreply, ddDB *db)
+reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4144,8 +4212,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -4160,7 +4232,7 @@ out:
 
 
 int
-reply_srv(struct sreply *sreply, ddDB *db)
+reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4340,8 +4412,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -4356,7 +4432,7 @@ out:
 
 
 int
-reply_notimpl(struct sreply  *sreply, ddDB *db)
+reply_notimpl(struct sreply  *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4423,7 +4499,7 @@ reply_notimpl(struct sreply  *sreply, ddDB *db)
  */
 
 int
-reply_nxdomain(struct sreply *sreply, ddDB *db)
+reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4516,8 +4592,12 @@ reply_nxdomain(struct sreply *sreply, ddDB *db)
 			}
 			free(tmpbuf);
 		} else {
-			if ((retlen = sendto(so, reply, len, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			if (q->rawsocket) {
+				*sretlen = retlen = outlen;
+			} else {
+				if ((retlen = sendto(so, reply, len, 0, sa, salen)) < 0) {
+					dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+				}
 			}
 		}
 
@@ -4817,8 +4897,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	} 
 
@@ -4831,7 +4915,7 @@ out:
  */
 
 int
-reply_refused(struct sreply *sreply, ddDB *db)
+reply_refused(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4890,8 +4974,12 @@ reply_refused(struct sreply *sreply, ddDB *db)
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -4904,7 +4992,7 @@ reply_refused(struct sreply *sreply, ddDB *db)
  */
 
 int
-reply_notauth(struct sreply *sreply, ddDB *db)
+reply_notauth(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -4970,8 +5058,12 @@ reply_notauth(struct sreply *sreply, ddDB *db)
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -4984,7 +5076,7 @@ reply_notauth(struct sreply *sreply, ddDB *db)
  */
 
 int
-reply_notify(struct sreply *sreply, ddDB *db)
+reply_notify(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -5054,8 +5146,12 @@ reply_notify(struct sreply *sreply, ddDB *db)
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -5067,7 +5163,7 @@ reply_notify(struct sreply *sreply, ddDB *db)
  */
 
 int
-reply_fmterror(struct sreply *sreply, ddDB *db)
+reply_fmterror(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -5134,7 +5230,7 @@ reply_fmterror(struct sreply *sreply, ddDB *db)
  */
 
 int
-reply_noerror(struct sreply *sreply, ddDB *db)
+reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -5217,8 +5313,12 @@ reply_noerror(struct sreply *sreply, ddDB *db)
 			}
 			free(tmpbuf);
 		} else {
-			if ((retlen = sendto(so, reply, len, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			if (q->rawsocket) {
+				*sretlen = retlen = outlen;
+			} else {
+				if ((retlen = sendto(so, reply, len, 0, sa, salen)) < 0) {
+					dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+				}
 			}
 		}
 
@@ -5449,8 +5549,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -5458,7 +5562,7 @@ out:
 }
 
 int
-reply_any(struct sreply *sreply, ddDB *db)
+reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -5565,8 +5669,12 @@ skip:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -6704,7 +6812,7 @@ truncate:
  */
 
 int
-reply_badvers(struct sreply *sreply, ddDB *db)
+reply_badvers(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -6774,8 +6882,12 @@ reply_badvers(struct sreply *sreply, ddDB *db)
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 
@@ -6790,9 +6902,9 @@ reply_badvers(struct sreply *sreply, ddDB *db)
  */
 
 int
-reply_nodata(struct sreply *sreply, ddDB *db)
+reply_nodata(struct sreply *sreply, int *sretlen, ddDB *db)
 {
-	return (reply_noerror(sreply, db));
+	return (reply_noerror(sreply, sretlen, db));
 }
 
 /* 
@@ -6801,7 +6913,7 @@ reply_nodata(struct sreply *sreply, ddDB *db)
  */
 
 int
-reply_generic(struct sreply *sreply, ddDB *db)
+reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -6975,8 +7087,12 @@ out:
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+		if (q->rawsocket) {
+			*sretlen = retlen = outlen;
+		} else {
+			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
 		}
 	}
 

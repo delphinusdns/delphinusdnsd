@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.37 2020/07/20 08:26:53 pjp Exp $
+ * $Id: forward.c,v 1.38 2020/07/21 18:19:58 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -38,6 +38,9 @@
 #include <sys/resource.h>
 
 #include <netinet/in.h>
+#include <netinet/udp.h>
+#include <netinet/ip.h>
+#include <netinet/ip6.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 
@@ -139,7 +142,11 @@ struct tsig * check_tsig(char *, int, char *);
 void	fwdparseloop(struct imsgbuf *, struct imsgbuf *, struct cfg *);
 void	changeforwarder(struct forwardqueue *);
 void 	stirforwarders(void);
+int rawsend(int, char *, uint16_t, struct sockaddr_in *, int, struct cfg *);
+int rawsend6(int, char *, uint16_t, struct sockaddr_in6 *, int, struct cfg *);
 
+extern uint16_t	udp_cksum(u_int16_t *, uint16_t, struct ip *, struct udphdr *);
+extern uint16_t	udp_cksum6(u_int16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
 extern void 	dolog(int, char *, ...);
 extern void      pack(char *, char *, int);
 extern void     pack16(char *, u_int16_t);
@@ -163,27 +170,27 @@ extern struct rbtree * Lookup_zone(ddDB *, char *, int, int, int);
 extern struct rbtree *  lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
 extern int	cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, struct cfg *);
 
-extern int 	reply_a(struct sreply *, ddDB *);
-extern int 	reply_aaaa(struct sreply *, ddDB *);
-extern int 	reply_any(struct sreply *, ddDB *);
-extern int 	reply_cname(struct sreply *, ddDB *);
-extern int	reply_notify(struct sreply *, ddDB *);
-extern int 	reply_soa(struct sreply *, ddDB *);
-extern int 	reply_mx(struct sreply *, ddDB *);
-extern int 	reply_naptr(struct sreply *, ddDB *);
-extern int 	reply_ns(struct sreply *, ddDB *);
-extern int 	reply_ptr(struct sreply *, ddDB *);
-extern int 	reply_srv(struct sreply *, ddDB *);
-extern int 	reply_sshfp(struct sreply *, ddDB *);
-extern int 	reply_tlsa(struct sreply *, ddDB *);
-extern int 	reply_txt(struct sreply *, ddDB *);
-extern int      reply_rrsig(struct sreply *, ddDB *);
-extern int	reply_dnskey(struct sreply *, ddDB *);
-extern int	reply_ds(struct sreply *, ddDB *);
-extern int	reply_nsec(struct sreply *, ddDB *);
-extern int	reply_nsec3(struct sreply *, ddDB *);
-extern int	reply_nsec3param(struct sreply *, ddDB *);
-extern int	reply_generic(struct sreply *, ddDB *);
+extern int 	reply_a(struct sreply *, int *, ddDB *);
+extern int 	reply_aaaa(struct sreply *, int *, ddDB *);
+extern int 	reply_any(struct sreply *, int *, ddDB *);
+extern int 	reply_cname(struct sreply *, int *, ddDB *);
+extern int	reply_notify(struct sreply *, int *, ddDB *);
+extern int 	reply_soa(struct sreply *, int *, ddDB *);
+extern int 	reply_mx(struct sreply *, int *, ddDB *);
+extern int 	reply_naptr(struct sreply *, int *, ddDB *);
+extern int 	reply_ns(struct sreply *, int *, ddDB *);
+extern int 	reply_ptr(struct sreply *, int *, ddDB *);
+extern int 	reply_srv(struct sreply *, int *, ddDB *);
+extern int 	reply_sshfp(struct sreply *, int *, ddDB *);
+extern int 	reply_tlsa(struct sreply *,  int *,ddDB *);
+extern int 	reply_txt(struct sreply *, int *, ddDB *);
+extern int      reply_rrsig(struct sreply *, int *, ddDB *);
+extern int	reply_dnskey(struct sreply *, int *, ddDB *);
+extern int	reply_ds(struct sreply *, int *, ddDB *);
+extern int	reply_nsec(struct sreply *, int *, ddDB *);
+extern int	reply_nsec3(struct sreply *, int *, ddDB *);
+extern int	reply_nsec3param(struct sreply *, int *, ddDB *);
+extern int	reply_generic(struct sreply *, int *, ddDB *);
 extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
 extern void flag_rr(struct rbtree *rbt);
 extern struct rbtree * find_rrset(ddDB *, char *, int);
@@ -354,9 +361,6 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
                 }
 #endif
 		cfg->shptrsize = 0;
-
-		for (i = 0; i < cfg->sockcount; i++)
-			close(cfg->dup[i]);
 
 		close(ibuf->fd);
 		close(cortex->fd);
@@ -687,6 +691,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 
 	int fromlen, returnval, lzerrno;
 	int istcp = (so == -1 ? 0 : 1);
+	int sretlen;
 
 	int found = 0;
 	time_t now;
@@ -850,16 +855,25 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 				goto newqueue;
 			}
 
+			q->rawsocket = 1;
 			build_reply(&sreply, 
-				(istcp ? so : cfg->dup[sforward->oldsel]),
-				buf, len, q, (struct sockaddr *)from, fromlen, 
+				(istcp ? so : -1), buf, len, q, 
+				(struct sockaddr *)from, fromlen, 
 				rbt, NULL, 0xff, istcp, 0, replybuf); 
 
 
 			/* from delphinusdnsd.c */
 			for (rl = &rlogic[0]; rl->rrtype != 0; rl++) {
 			    if (rl->rrtype == ntohs(q->hdr->qtype)) {
-				slen = (*rl->reply)(&sreply, cfg->db);
+				slen = (*rl->reply)(&sreply, &sretlen, cfg->db);
+				switch (from->ss_family) {
+				case AF_INET:
+					rawsend(cfg->raw[0], sreply.replybuf, sretlen, &sforward->from4, sforward->oldsel, cfg);
+					break;
+				case AF_INET6:
+					rawsend6(cfg->raw[1], sreply.replybuf, sretlen, &sforward->from6, sforward->oldsel, cfg);
+					break;
+				}
 				if (slen < 0) {
 					/*
 					 * we may have a non-dnssec answer cached without RRSIG
@@ -891,7 +905,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 					dolog(LOG_INFO, "replying generic RR %d\n", 
 						ntohs(q->hdr->qtype));
 #endif
-					if (reply_generic(&sreply, cfg->db) < 0) {
+					if (reply_generic(&sreply, &sretlen, cfg->db) < 0) {
 						expire_rr(db, q->hdr->name, q->hdr->namelen, 
 							ntohs(q->hdr->qtype), highexpire);
 						free_question(q);
@@ -1183,7 +1197,6 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	int len = 0;
 	int outlen;
 
-	socklen_t tolen;
 	fd_set rset;
 	ssize_t n, datalen;
 
@@ -1201,7 +1214,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		len = 2;
 	} else {
 		p = buf;
-		so = cfg->dup[fwq->oldsel];
+		so = -1;
 	}
 		
 	if (rlen <= sizeof(struct dns_header)) {
@@ -1488,14 +1501,10 @@ endimsg:
 		
 		switch (fwq->oldfamily) {
 		case AF_INET:
-			tolen = sizeof(struct sockaddr_in);
-			if (sendto(so, buf, len, 0, (struct sockaddr *)&fwq->oldhost4, tolen) < 0)
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			rawsend(cfg->raw[0], buf, len, &fwq->oldhost4, fwq->oldsel, cfg);
 			break;
 		case AF_INET6:
-			tolen = sizeof(struct sockaddr_in6);
-			if (sendto(so, buf, len, 0, (struct sockaddr *)&fwq->oldhost6, tolen) < 0)
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			rawsend6(cfg->raw[1], buf, len, &fwq->oldhost6, fwq->oldsel, cfg);
 			break;
 		}
 	}
@@ -2197,4 +2206,76 @@ stirforwarders(void)
 		
 		count++;
 	}
+}
+
+int
+rawsend(int so, char *buf, uint16_t len, struct sockaddr_in *sin, int oldsel, struct cfg *cfg)
+{
+	struct udphdr uh;	
+	struct ip ip;
+	struct msghdr msg;
+	struct iovec iov[2];
+
+	memcpy(&ip.ip_src.s_addr, (void*)&(((struct sockaddr_in *)&cfg->ss[oldsel])->sin_addr.s_addr), sizeof(in_addr_t));
+	memcpy(&ip.ip_dst.s_addr, (void*)&sin->sin_addr, sizeof(in_addr_t));
+	ip.ip_p = IPPROTO_UDP;
+
+	memset(&uh, 0, sizeof(uh));
+	uh.uh_sport = htons(cfg->port);
+	uh.uh_dport = sin->sin_port;
+	uh.uh_ulen = htons(len + sizeof(struct udphdr));
+	uh.uh_sum = 0;
+	uh.uh_sum = udp_cksum((uint16_t *)buf,  \
+			len + sizeof(struct udphdr), &ip, &uh);
+
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_name = sin;
+	msg.msg_namelen = sizeof(struct sockaddr_in);
+	iov[0].iov_base = &uh;
+	iov[0].iov_len = sizeof(struct udphdr);
+	iov[1].iov_base = buf;
+	iov[1].iov_len = len;
+	msg.msg_iov = iov;
+	msg.msg_iovlen = 2;
+	
+	return (sendmsg(so, &msg, 0));
+}
+int
+rawsend6(int so, char *buf, uint16_t len, struct sockaddr_in6 *sin6, int oldsel,  struct cfg *cfg)
+{
+	struct udphdr uh;	
+	struct ip6_hdr ip6;
+	struct msghdr msg;
+	struct iovec iov[2];
+
+	memcpy(&ip6.ip6_src, (void*)&(((struct sockaddr_in6 *)&cfg->ss[oldsel])->sin6_addr), sizeof(struct in6_addr));
+	memcpy(&ip6.ip6_dst, (void*)&sin6->sin6_addr, sizeof(struct in6_addr));
+	ip6.ip6_nxt = IPPROTO_UDP;
+
+
+	memset(&uh, 0, sizeof(uh));
+	uh.uh_sport = htons(cfg->port);
+	uh.uh_dport = sin6->sin6_port;
+	uh.uh_ulen = htons(len + sizeof(struct udphdr));
+	uh.uh_sum = 0;
+	uh.uh_sum = udp_cksum6((uint16_t *)buf,  \
+			len + sizeof(struct udphdr), &ip6, &uh);
+
+#ifdef __linux__
+	sin6->sin6_port = htons(IPPROTO_UDP);
+#endif
+
+	memset(&msg, 0, sizeof(msg));
+
+	msg.msg_name = sin6;
+	msg.msg_namelen = sizeof(struct sockaddr_in6);
+
+	iov[0].iov_base = &uh;
+	iov[0].iov_len = sizeof(struct udphdr);
+	iov[1].iov_base = buf;
+	iov[1].iov_len = len;
+	msg.msg_iov = iov;
+	msg.msg_iovlen = 2;
+	
+	return (sendmsg(so, &msg, 0));
 }
