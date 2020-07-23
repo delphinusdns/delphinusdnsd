@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.76 2020/07/21 18:19:58 pjp Exp $
+ * $Id: util.c,v 1.77 2020/07/23 10:48:45 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -158,6 +158,9 @@ extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int
 extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
@@ -190,16 +193,21 @@ struct typetable {
 	{ "NSEC3", DNS_TYPE_NSEC3 },
 	{ "NSEC3PARAM", DNS_TYPE_NSEC3PARAM },
 	{ "TLSA", DNS_TYPE_TLSA },
+	{ "RP", DNS_TYPE_RP },
+	{ "HINFO", DNS_TYPE_HINFO },
+	{ "CAA", DNS_TYPE_CAA },
 	{ NULL, 0}
 };
 
 static struct rrtab myrrtab[] =  { 
  { "a",         DNS_TYPE_A, 		DNS_TYPE_A } ,
  { "aaaa",      DNS_TYPE_AAAA,		DNS_TYPE_AAAA },
+ { "caa",	DNS_TYPE_CAA,		DNS_TYPE_CAA },
  { "cname",     DNS_TYPE_CNAME, 	DNS_TYPE_CNAME },
  { "delegate",  DNS_TYPE_NS, 		DNS_TYPE_NS },
  { "dnskey", 	DNS_TYPE_DNSKEY, 	DNS_TYPE_DNSKEY },
  { "ds", 	DNS_TYPE_DS, 		DNS_TYPE_DS },
+ { "hinfo",	DNS_TYPE_HINFO,		DNS_TYPE_HINFO },
  { "hint",      DNS_TYPE_HINT,		DNS_TYPE_NS }, 
  { "mx",        DNS_TYPE_MX, 		DNS_TYPE_MX },
  { "naptr", 	DNS_TYPE_NAPTR,		DNS_TYPE_NAPTR },
@@ -208,6 +216,7 @@ static struct rrtab myrrtab[] =  {
  { "nsec3", 	DNS_TYPE_NSEC3,		DNS_TYPE_NSEC3 },
  { "nsec3param", DNS_TYPE_NSEC3PARAM,	DNS_TYPE_NSEC3PARAM },
  { "ptr",       DNS_TYPE_PTR,		DNS_TYPE_PTR },
+ { "rp",	DNS_TYPE_RP,		DNS_TYPE_RP },
  { "rrsig", 	DNS_TYPE_RRSIG, 	DNS_TYPE_RRSIG },
  { "soa",       DNS_TYPE_SOA, 		DNS_TYPE_SOA },
  { "srv",       DNS_TYPE_SRV, 		DNS_TYPE_SRV },
@@ -235,6 +244,9 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_TLSA, 0, raxfr_tlsa },
 	{ DNS_TYPE_SRV, 0, raxfr_srv },
 	{ DNS_TYPE_NAPTR, 0, raxfr_naptr },
+	{ DNS_TYPE_RP, 0, raxfr_rp },
+	{ DNS_TYPE_HINFO, 0, raxfr_hinfo },
+	{ DNS_TYPE_CAA, 0, raxfr_caa },
 	{ 0, 0, NULL }
 };
 
@@ -673,6 +685,33 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 	case DNS_TYPE_TLSA:
 		if (find_rr(rbt, DNS_TYPE_TLSA) != NULL) {
 			returnval = DNS_TYPE_TLSA;
+			break;
+		}
+
+		*error = -1;
+		return 0;
+
+	case DNS_TYPE_CAA:
+		if (find_rr(rbt, DNS_TYPE_CAA) != NULL) {
+			returnval = DNS_TYPE_CAA;
+			break;
+		}
+
+		*error = -1;
+		return 0;
+
+	case DNS_TYPE_RP:
+		if (find_rr(rbt, DNS_TYPE_RP) != NULL) {
+			returnval = DNS_TYPE_RP;
+			break;
+		}
+
+		*error = -1;
+		return 0;
+
+	case DNS_TYPE_HINFO:
+		if (find_rr(rbt, DNS_TYPE_HINFO) != NULL) {
+			returnval = DNS_TYPE_HINFO;
 			break;
 		}
 
@@ -1727,49 +1766,49 @@ bitmap2human(char *bitmap, int len)
 		for (j = 0; j < 32; j++) {
 			if (expanded_bitmap[j] & 0x80) {
 				x = 0;
-				bit = (block * 255) + ((j * 8) + x);
+				bit = (block * 256) + ((j * 8) + x);
 				strlcat(human, get_dns_type(bit, 0), sizeof(human));
 				strlcat(human, " ", sizeof(human));
 			}
 			if (expanded_bitmap[j] & 0x40) {
 				x = 1;
-				bit = (block * 255) + ((j * 8) + x);
+				bit = (block * 256) + ((j * 8) + x);
 				strlcat(human, get_dns_type(bit, 0), sizeof(human));
 				strlcat(human, " ", sizeof(human));
 			}
 			if (expanded_bitmap[j] & 0x20) {
 				x = 2;
-				bit = (block * 255) + ((j * 8) + x);
+				bit = (block * 256) + ((j * 8) + x);
 				strlcat(human, get_dns_type(bit, 0), sizeof(human));
 				strlcat(human, " ", sizeof(human));
 			}
 			if (expanded_bitmap[j] & 0x10) {
 				x = 3;
-				bit = (block * 255) + ((j * 8) + x);
+				bit = (block * 256) + ((j * 8) + x);
 				strlcat(human, get_dns_type(bit, 0), sizeof(human));
 				strlcat(human, " ", sizeof(human));
 			}
 			if (expanded_bitmap[j] & 0x8) {
 				x = 4;
-				bit = (block * 255) + ((j * 8) + x);
+				bit = (block * 256) + ((j * 8) + x);
 				strlcat(human, get_dns_type(bit, 0), sizeof(human));
 				strlcat(human, " ", sizeof(human));
 			}
 			if (expanded_bitmap[j] & 0x4) {
 				x = 5;
-				bit = (block * 255) + ((j * 8) + x);
+				bit = (block * 256) + ((j * 8) + x);
 				strlcat(human, get_dns_type(bit, 0), sizeof(human));
 				strlcat(human, " ", sizeof(human));
 			}
 			if (expanded_bitmap[j] & 0x2) {
 				x = 6;
-				bit = (block * 255) + ((j * 8) + x);
+				bit = (block * 256) + ((j * 8) + x);
 				strlcat(human, get_dns_type(bit, 0), sizeof(human));
 				strlcat(human, " ", sizeof(human));
 			}
 			if (expanded_bitmap[j] & 0x1) {
 				x = 7;
-				bit = (block * 255) + ((j * 8) + x);
+				bit = (block * 256) + ((j * 8) + x);
 				strlcat(human, get_dns_type(bit, 0), sizeof(human));
 				strlcat(human, " ", sizeof(human));
 			}

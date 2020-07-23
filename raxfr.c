@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.55 2020/07/08 12:29:02 pjp Exp $
+ * $Id: raxfr.c,v 1.56 2020/07/23 10:48:45 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -100,6 +100,9 @@ int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_
 int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
@@ -202,6 +205,9 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_TLSA, 0, raxfr_tlsa },
 	{ DNS_TYPE_SRV, 0, raxfr_srv },
 	{ DNS_TYPE_NAPTR, 0, raxfr_naptr },
+	{ DNS_TYPE_RP, 0, raxfr_rp },
+	{ DNS_TYPE_HINFO, 0, raxfr_hinfo },
+	{ DNS_TYPE_CAA, 0, raxfr_caa },
 	{ 0, 0, NULL }
 };
 
@@ -527,6 +533,84 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 }
 
 int 
+raxfr_caa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
+{
+	struct caa caa;
+	u_char *q = p;
+	int i;
+
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	caa.flags = *p;
+	p++;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	caa.taglen = *p;
+	p++;
+	BOUNDS_CHECK((p + caa.taglen), q, rdlen, end);
+	memcpy(&caa.tag, p, caa.taglen);
+	p += caa.taglen;
+	BOUNDS_CHECK((p + (rdlen - 2 - caa.taglen)), q, rdlen, end);
+	caa.valuelen = rdlen - 2 - caa.taglen;
+	memcpy(&caa.value, p, caa.valuelen);
+	p += caa.valuelen;
+
+	if (f != NULL) {
+		fprintf(f, "%u,", caa.flags);
+		for (i = 0; i < caa.taglen; i++) {
+			fprintf(f, "%c", caa.tag[i]);
+		}
+		fprintf(f, ",\"");
+		for (i = 0; i < caa.valuelen; i++) {
+			fprintf(f, "%c", caa.value[i]);
+		}
+		fprintf(f, "\"\n");
+	}
+
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
+	return (p - estart);
+}
+
+
+int 
+raxfr_hinfo(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
+{
+	struct hinfo hinfo;
+	u_char *q = p;
+	int i;
+
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	hinfo.cpulen = *p;
+	p++;
+	BOUNDS_CHECK((p + hinfo.cpulen), q, rdlen, end);
+	memcpy(&hinfo.cpu, p, hinfo.cpulen);
+	p += hinfo.cpulen;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	hinfo.oslen = *p;
+	p++;
+	BOUNDS_CHECK((p + hinfo.oslen), q, rdlen, end);
+	memcpy(&hinfo.os, p, hinfo.oslen);
+	p += hinfo.oslen;
+
+	if (f != NULL) {
+		fprintf(f, "\"");
+		for (i = 0; i < hinfo.cpulen; i++) {
+			fprintf(f, "%c", hinfo.cpu[i]);
+		}
+		fprintf(f, "\",\"");
+		for (i = 0; i < hinfo.oslen; i++) {
+			fprintf(f, "%c", hinfo.os[i]);
+		}
+		fprintf(f, "\"\n");
+	}
+
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
+	return (p - estart);
+}
+
+int 
 raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct ds d;
@@ -825,6 +909,67 @@ raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 		HMAC_Update(ctx, q, p - q);
 	
 	return (p - estart);
+}
+
+int
+raxfr_rp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
+{
+	char *save, *humanname;
+	u_char *q = p;
+	u_char expand[256];
+	int max = sizeof(expand);
+	int elen = 0;
+
+	memset(&expand, 0, sizeof(expand));
+	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
+	if (save == NULL) {
+		fprintf(stderr, "expanding compression failure 2\n");
+		return -1;
+	} else  {
+		q = save;
+	}
+
+	humanname = convert_name(expand, elen);
+	if (humanname == NULL) {
+		return -1;
+	}
+
+	if (f != NULL) {
+		fprintf(f, "%s,", humanname);
+	}
+
+	free(humanname);
+
+	memset(&expand, 0, sizeof(expand));
+	elen = 0;
+	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
+	if (save == NULL) {
+		fprintf(stderr, "expanding compression failure 2\n");
+		return -1;
+	} else  {
+		q = save;
+	}
+
+	humanname = convert_name(expand, elen);
+	if (humanname == NULL) {
+		return -1;
+	}
+
+	if (f != NULL) {
+		fprintf(f, "%s\n", humanname);
+	}
+
+	free(humanname);
+
+
+
+
+
+	if (ctx != NULL) {
+		HMAC_Update(ctx, p, q - p);
+	}
+
+	return (q - estart);
 }
 
 int

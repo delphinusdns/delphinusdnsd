@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.108 2020/07/17 05:40:19 pjp Exp $
+ * $Id: parse.y,v 1.109 2020/07/23 10:48:45 pjp Exp $
  */
 
 %{
@@ -223,6 +223,9 @@ int 		fill_nsec(ddDB *, char *, char *, u_int32_t, char *, char *);
 int		fill_nsec3param(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
 int		fill_nsec3(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
 int		fill_ds(ddDB *, char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
+int		fill_rp(ddDB *, char *, char *, int, char *, char *);
+int		fill_hinfo(ddDB *, char *, char *, int, char *, char *);
+int		fill_caa(ddDB *, char *, char *, int, uint8_t, char *, char *);
 
 void		create_nsec_bitmap(char *, char *, int *);
 int             findeol(void);
@@ -1179,6 +1182,81 @@ zonestatement:
 			free ($13);
 			free ($15);
 			free ($17);
+		}
+		|
+		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA STRING COMMA QUOTEDSTRING CRLF
+		{
+			if (strcasecmp($3, "caa") == 0) { 
+				if (fill_caa(mydb, $1, $3, $5, $7, $9, $11) < 0) {
+					return -1;
+				}
+
+#if DEBUG
+				if (debug)
+					printf("%s CAA -> %lld %s \"%s\"\n", $1, $7, $9, $11);
+#endif
+
+			} else {
+				if (debug)
+					printf("another record I don't know about?");
+				return (-1);
+			}
+
+			free ($1);
+			free ($3);
+			free ($9);
+			free ($11);
+
+		}
+		|
+		STRING COMMA STRING COMMA NUMBER COMMA QUOTEDSTRING COMMA QUOTEDSTRING CRLF
+		{
+			/* HINFO */
+			if (strcasecmp($3, "hinfo") == 0) { 
+				if (fill_hinfo(mydb, $1, $3, $5, $7, $9) < 0) {
+					return -1;
+				}
+
+#if DEBUG
+				if (debug)
+					printf("%s HINFO -> \"%s\" \"%s\"\n", $1, $7, $9);
+#endif
+
+			} else {
+				if (debug)
+					printf("another record I don't know about?");
+				return (-1);
+			}
+
+			free ($1);
+			free ($3);
+			free ($7);
+			free ($9);
+		}
+		|
+		STRING COMMA STRING COMMA NUMBER COMMA STRING COMMA STRING CRLF
+		{
+			/* RP */
+			if (strcasecmp($3, "rp") == 0) { 
+				if (fill_rp(mydb, $1, $3, $5, $7, $9) < 0) {
+					return -1;
+				}
+
+#if DEBUG
+				if (debug)
+					printf("%s RP -> %s %s\n", $1, $7, $9);
+#endif
+
+			} else {
+				if (debug)
+					printf("another record I don't know about?");
+				return (-1);
+			}
+
+			free ($1);
+			free ($3);
+			free ($7);
+			free ($9);
 		}
 		| comment CRLF
 		;
@@ -3196,6 +3274,161 @@ fill_ns(ddDB *db, char *name, char *type, int myttl, char *nameserver)
 	
 	return (0);
 
+}
+
+int
+fill_caa(ddDB *db, char *name, char *type, int myttl, uint8_t flags, char *tag, char *value)
+{
+	struct caa *caa;
+	struct rbtree *rbt;
+	char *converted_name;
+	int converted_namelen;
+	int i;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	if (strlen(tag) > DNS_MAXNAME || strlen(value) > 1024) {
+		dolog(LOG_INFO, "input too long\n");
+		return -1;
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_CAA, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	if ((caa = (struct caa *)calloc(1, sizeof(struct caa))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+	caa->flags = flags;
+	caa->taglen = strlen(tag);
+	caa->valuelen = strlen(value);
+
+	memcpy(caa->value, value, caa->valuelen);
+	memcpy(caa->tag, tag, caa->taglen);
+
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_CAA, caa, myttl, 0);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+	
+	free (converted_name);
+
+
+	return (0);
+}
+
+int
+fill_hinfo(ddDB *db, char *name, char *type, int myttl, char *cpu, char *os)
+{
+	struct hinfo *hi;
+	struct rbtree *rbt;
+	char *converted_name;
+	int converted_namelen;
+	int i, oslen, cpulen;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	if ((hi = (struct hinfo *)calloc(1, sizeof(struct hinfo))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_HINFO, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+
+	oslen = strlen(os);
+	cpulen = strlen(cpu);
+	
+	if (oslen > 255 || cpulen > 255)
+		return -1;
+
+	hi->cpulen = cpulen;
+	hi->oslen = oslen;
+	
+	memcpy(&hi->cpu[0], cpu, cpulen);
+	memcpy(&hi->os[0], os, oslen);
+
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_HINFO, hi, myttl, 0);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+	
+	if (converted_name)
+		free (converted_name);
+
+	
+	return (0);
+
+}
+
+int
+fill_rp(ddDB *db, char *name, char *type, int myttl, char *mbox, char *txt)
+{
+	struct rp *rp;
+	struct rbtree *rbt;
+	char *converted_name;
+	int converted_namelen;
+	int converted_mboxlen, converted_txtlen;
+	char *converted_mbox, *converted_txt;
+	int i;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	if ((rp = (struct rp *)calloc(1, sizeof(struct rp))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_RP, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	converted_mbox = dns_label(mbox, &converted_mboxlen);
+	converted_txt = dns_label(txt, &converted_txtlen);
+	
+	if (converted_mbox == NULL || converted_txt == NULL) {
+		dolog(LOG_INFO, "wrong input on dnsname (dns_label)\n");
+		return -1;
+	}
+	
+	if (converted_mboxlen > DNS_MAXNAME || converted_txtlen > DNS_MAXNAME) {
+		dolog(LOG_INFO, "input names too long\n");	
+		return -1;
+	}
+
+	memcpy(rp->mbox, converted_mbox, converted_mboxlen);
+	memcpy(rp->txt, converted_txt, converted_txtlen);
+	rp->txtlen = converted_txtlen;
+	rp->mboxlen = converted_mboxlen;
+	
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_RP, rp, myttl, 0);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+	
+	if (converted_name)
+		free (converted_name);
+
+	free (converted_mbox);
+	free (converted_txt);
+
+	return (0);
 }
 
 int

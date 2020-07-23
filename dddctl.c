@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.113 2020/07/17 05:40:18 pjp Exp $
+ * $Id: dddctl.c,v 1.114 2020/07/23 10:48:45 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -840,6 +840,47 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			fprintf(of, "\"\t%s\n", (((struct naptr *)rrp2->rdata)->replacement[0] == '\0') ? "." : convert_name(((struct naptr *)rrp2->rdata)->replacement, ((struct naptr *)rrp2->rdata)->replacementlen));
 		}
 	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_CAA)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no caa in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			fprintf(of, "%s %d IN CAA %d ", 
+					convert_name(rbt->zone, rbt->zonelen),
+					rrset->ttl, 
+					((struct caa *)rrp2->rdata)->flags);
+					
+			for (i = 0; i < ((struct caa *)rrp2->rdata)->taglen; i++) {
+				fprintf(of, "%c", ((struct caa *)rrp2->rdata)->tag[i]);
+			}
+			fprintf(of, " \"");
+			for (i = 0; i < ((struct caa *)rrp2->rdata)->valuelen; i++) {
+				fprintf(of, "%c", ((struct caa *)rrp2->rdata)->value[i]);
+			}
+			fprintf(of, "\"\n");
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_HINFO)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no hinfo in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			fprintf(of, "%s %d IN HINFO ", 
+					convert_name(rbt->zone, rbt->zonelen),
+					rrset->ttl);
+					
+			for (i = 0; i < ((struct hinfo *)rrp2->rdata)->cpulen; i++) {
+				fprintf(of, "%c", ((struct hinfo *)rrp2->rdata)->cpu[i]);
+			}
+			fprintf(of, " ");
+			for (i = 0; i < ((struct hinfo *)rrp2->rdata)->oslen; i++) {
+				fprintf(of, "%c", ((struct hinfo *)rrp2->rdata)->os[i]);
+			}
+			fprintf(of, "\n");
+		}
+	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
 			dolog(LOG_INFO, "no txt in zone!\n");
@@ -954,6 +995,20 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 				((struct dnskey *)rrp2->rdata)->protocol,
 				((struct dnskey *)rrp2->rdata)->algorithm,
 				buf);
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_RP)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no RP RR in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		
+			fprintf(of, "%s %d IN RP %s %s\n",
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl,
+				convert_name(((struct rp *)rrp2->rdata)->mbox, ((struct rp *)rrp2->rdata)->mboxlen),
+				convert_name(((struct rp *)rrp2->rdata)->txt, ((struct rp *)rrp2->rdata)->txtlen));
 		}
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.133 2020/07/21 18:19:58 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.134 2020/07/23 10:48:45 pjp Exp $
  */
 
 
@@ -155,6 +155,9 @@ extern int 	reply_txt(struct sreply *, int *, ddDB *);
 extern int 	reply_version(struct sreply *, int *, ddDB *);
 extern int      reply_rrsig(struct sreply *, int *, ddDB *);
 extern int	reply_dnskey(struct sreply *, int *, ddDB *);
+extern int	reply_caa(struct sreply *, int *, ddDB *);
+extern int	reply_rp(struct sreply *, int *, ddDB *);
+extern int	reply_hinfo(struct sreply *, int *, ddDB *);
 extern int	reply_ds(struct sreply *, int *, ddDB *);
 extern int	reply_nsec(struct sreply *, int *, ddDB *);
 extern int	reply_nsec3(struct sreply *, int *, ddDB *);
@@ -231,6 +234,9 @@ static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_NSEC3, DNS_TYPE_NSEC3, BUILD_OTHER, reply_nsec3 },
 	{ DNS_TYPE_NSEC, DNS_TYPE_NSEC, BUILD_OTHER, reply_nsec },
 	{ DNS_TYPE_RRSIG, DNS_TYPE_RRSIG, BUILD_OTHER, reply_rrsig },
+	{ DNS_TYPE_CAA, DNS_TYPE_CAA, BUILD_OTHER, reply_caa },
+	{ DNS_TYPE_RP, DNS_TYPE_RP, BUILD_OTHER, reply_rp },
+	{ DNS_TYPE_HINFO, DNS_TYPE_HINFO, BUILD_OTHER, reply_hinfo },
 	{ 0, 0, 0, NULL }
 };
 	
