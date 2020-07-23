@@ -16,6 +16,7 @@ Changes in RELEASE_1_5 from RELEASE_1_4
 - changed how a question gets parsed (build_question()), hopeing to get
   more security out of this
 - in dddctl query allow a class to be specified (-c)
+- added RP, HINFO and CAA RR support in all areas except dddctl query
 
 [2019] Changes in RELEASE_1_4 from RELEASE_1_3
 
