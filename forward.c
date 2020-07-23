@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.38 2020/07/21 18:19:58 pjp Exp $
+ * $Id: forward.c,v 1.39 2020/07/23 11:20:34 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -911,6 +911,15 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 						free_question(q);
 						goto newqueue;
 					} 
+					switch (from->ss_family) {
+					case AF_INET:
+						rawsend(cfg->raw[0], sreply.replybuf, sretlen, &sforward->from4, sforward->oldsel, cfg);
+						break;
+					case AF_INET6:
+						rawsend6(cfg->raw[1], sreply.replybuf, sretlen, &sforward->from6, sforward->oldsel, cfg);
+						break;
+					}
+					
 						
 					break;
 				default:
