@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: sign.c,v 1.9 2020/07/23 10:48:45 pjp Exp $
+ * $Id: sign.c,v 1.10 2020/07/23 16:04:01 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -4281,51 +4281,48 @@ sign_rp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 			if (c1->data == NULL) {
 				dolog(LOG_INFO, "c1->data out of memory\n");
 				return -1;
-                }
+                	}
 
-                memcpy(c1->data, tmpkey, c1->len);
+			memcpy(c1->data, tmpkey, c1->len);
 
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			else {
+				TAILQ_FOREACH(c2, &head, entries) {
+					if (c1->len < c2->len)
+						break;
+					else if (c2->len == c1->len &&
+						memcmp(c1->data, c2->data, c1->len) < 0)
+						break;
+				}
 
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
-	}
+				if (c2 != NULL)
+					TAILQ_INSERT_BEFORE(c2, c1, entries);
+				else
+					TAILQ_INSERT_TAIL(&head, c1, entries);
+			}
+		}
 
-        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
+		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+			pack(p, c2->data, c2->len);
+			p += c2->len;
 
-                TAILQ_REMOVE(&head, c2, entries);
-        }
-	keylen = (p - key);	
+			TAILQ_REMOVE(&head, c2, entries);
+		}
+		keylen = (p - key);	
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
-	if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
 
-	if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "RP", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "RP", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
 	
 	} while ((*++zsk_key) != NULL);
 
@@ -4753,52 +4750,56 @@ sign_caa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			if (c1->data == NULL) {
 				dolog(LOG_INFO, "c1->data out of memory\n");
 				return -1;
-                }
+			}
 
-                memcpy(c1->data, tmpkey, c1->len);
+			memcpy(c1->data, tmpkey, c1->len);
 
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
+			if (TAILQ_EMPTY(&head))
+				TAILQ_INSERT_TAIL(&head, c1, entries);
+			else {
+				TAILQ_FOREACH(c2, &head, entries) {
+					if (c1->len < c2->len) {
+						if (memcmp(c1->data, c2->data, c1->len) > 0) {
+							break;
+						}
+					} else if (c2->len == c1->len &&
+						memcmp(c1->data, c2->data, c1->len) < 0) {
+						break;
+					} else if (c1->len > c2->len) {
+						if (memcmp(c1->data, c2->data, c2->len) > 0) {
+							break;
+						}
+					}
+				}
 
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
-	}
+				if (c2 != NULL)
+					TAILQ_INSERT_BEFORE(c2, c1, entries);
+				else
+					TAILQ_INSERT_TAIL(&head, c1, entries);
+			}
 
-        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
+		} /* tailq foreach */
 
-                TAILQ_REMOVE(&head, c2, entries);
-        }
-	keylen = (p - key);	
+		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
+			pack(p, c2->data, c2->len);
+			p += c2->len;
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
-	if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+			TAILQ_REMOVE(&head, c2, entries);
+		}
+		keylen = (p - key);	
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
 
-	if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "CAA", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
-	
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "CAA", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
 	} while ((*++zsk_key) != NULL);
 
 	return 0;
