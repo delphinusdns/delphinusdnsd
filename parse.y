@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.109 2020/07/23 10:48:45 pjp Exp $
+ * $Id: parse.y,v 1.110 2020/07/24 08:44:00 pjp Exp $
  */
 
 %{
@@ -4020,6 +4020,7 @@ notifysource(struct question *q, struct sockaddr_storage *from)
 							return 1;
 						}
 				} else {
+					dolog(LOG_INFO, "notify for \"%s\" couldn't match", q->converted_name);
 					free(zone);
 				}
 		} /* if havetsig */
