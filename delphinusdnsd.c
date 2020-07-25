@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.134 2020/07/23 10:48:45 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.135 2020/07/25 14:54:42 pjp Exp $
  */
 
 
@@ -1563,6 +1563,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	struct sreply sreply;
 	struct reply_logic *rl = NULL;
 	struct timeval tv = { 10, 0};
+	struct timeval rectv0, rectv1, *prectv;
 
 	struct msghdr msgh;
 	struct cmsghdr *cmsg = NULL;
@@ -1576,6 +1577,9 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	ssize_t n, datalen;
 	int ix;
 	int sretlen;
+
+	memset(&rectv0, 0, sizeof(struct timeval));
+	memset(&rectv1, 0, sizeof(struct timeval));
 	
 	pid = fork();
 	switch (pid) {
@@ -1783,13 +1787,26 @@ axfrentry:
 
 										if (cmsg->cmsg_len != 
 												CMSG_LEN(sizeof(int))) {
-											dolog(LOG_INFO, "cmsg->cmsg_len == %d\n", cmsg->cmsg_len);
+											dolog(LOG_INFO, "IPV6_HOPLIMIT cmsg->cmsg_len == %d\n", cmsg->cmsg_len);
 											continue;
 										}
 
 										ttlptr = (u_char *) CMSG_DATA(cmsg);
 										received_ttl = (u_int)*ttlptr;
                      				}
+
+									if (cmsg->cmsg_level == SOL_SOCKET &&
+										cmsg->cmsg_type == SCM_TIMESTAMP) {
+
+										if (cmsg->cmsg_len !=
+											CMSG_LEN(sizeof(struct timeval))) {
+											dolog(LOG_INFO, "SCM_TIMESTAMP cmsg->cmsg_len == %d\n", cmsg->cmsg_len);
+											continue;
+										}
+
+										prectv = (struct timeval *) CMSG_DATA(cmsg);
+										memcpy((char *)&rectv0, (char *)prectv, sizeof(struct timeval));
+									}
 				}
 	
 				if (from->sa_family == AF_INET6) {
@@ -2353,7 +2370,18 @@ forwardudp:
 			
 		udpout:
 				if (lflag) {
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d) for \"%s\" type=%s class=%u, %s%s%sanswering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, received_ttl, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, " : ""), (question->dnssecok ? "dnssecok, " : ""), (question->tsig.tsigverified ? "tsig, " : "") , replystring, len, slen);
+					double diffms;
+
+					gettimeofday(&rectv1, NULL);
+					if (rectv1.tv_sec - rectv0.tv_sec > 0) {
+						rectv1.tv_usec += 1000000;
+						rectv1.tv_sec--;
+					}
+					diffms = (((double)rectv1.tv_sec - (double)rectv0.tv_sec) \
+							* 1000) + \
+						(double)(rectv1.tv_usec - rectv0.tv_usec) / 1000;
+
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d, tta=%2.3fms) for \"%s\" type=%s class=%u, %s%s%sanswering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, received_ttl, aregion, diffms, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, " : ""), (question->dnssecok ? "dnssecok, " : ""), (question->tsig.tsigverified ? "tsig, " : "") , replystring, len, slen);
 
 				}
 
@@ -3271,7 +3299,7 @@ forwardtcp:
 						slen = 0;
 
 						if (lflag)
-							dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (%d/%d)\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), replystring, len, slen);
+							dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d, tta=NA) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (%d/%d)\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), replystring, len, slen);
 
 						if (fakequestion != NULL) {
 							free_question(fakequestion);
@@ -4324,41 +4352,16 @@ bind_this_res(struct addrinfo *res, int shut)
 		dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 	}
 
-#ifndef __FreeBSD__
-	if (shut) {
-		if (shutdown(so, SHUT_RD) < 0) {
-			dolog(LOG_INFO, "shutdown: %s\n", strerror(errno));
-			ddd_shutdown();
-			exit(1);
-		}
+	if (setsockopt(so, SOL_SOCKET, SO_TIMESTAMP,
+		&on, sizeof(on)) < 0) {
+		dolog(LOG_INFO, "setsockopt timestamp: %s\n", strerror(errno));
 	}
-#endif
 
 	if (bind(so, res->ai_addr, res->ai_addrlen) < 0) {
 		dolog(LOG_INFO, "bind: %s\n", strerror(errno));
 		ddd_shutdown();
 		exit(1);
 	}
-
-#ifdef __linux__
-	{
-		struct sock_filter code[] = {
-			BPF_STMT(BPF_RET+BPF_K, 0)
-		};
-
-		struct sock_fprog sfp = {
-			.len = 1,
-			.filter = code,
-		};
-		
-		if (setsockopt(so, SOL_SOCKET, SO_ATTACH_REUSEPORT_CBPF,
-			&sfp, sizeof(sfp)) < 0) {
-			dolog(LOG_INFO, "bpf: %s\n", strerror(errno));
-			ddd_shutdown();
-			exit(1);
-		}
-	}
-#endif
 
 	return (so);
 }
@@ -4381,41 +4384,16 @@ bind_this_pifap(struct ifaddrs *pifap, int shut, int salen)
 		dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 	}
 
-
-#ifndef __FreeBSD__
-	if (shut) {
-		if (shutdown(so, SHUT_RD) < 0) {
-			dolog(LOG_INFO, "shutdown: %s\n", strerror(errno));
-			ddd_shutdown();
-			exit(1);
-		}
+	if (setsockopt(so, SOL_SOCKET, SO_TIMESTAMP,
+		&on, sizeof(on)) < 0) {
+		dolog(LOG_INFO, "setsockopt timestamp: %s\n", strerror(errno));
 	}
-#endif
-	
+
+
 	if (bind(so, (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
 		dolog(LOG_INFO, "bind: %s\n", strerror(errno));
 		ddd_shutdown();
 		exit(1);
 	}
-#ifdef __linux__
-	{
-		struct sock_filter code[] = {
-			BPF_STMT(BPF_RET+BPF_K, 0),
-		};
-
-		struct sock_fprog sfp = {
-			.len = 1,
-			.filter = code,
-		};
-		
-		if (setsockopt(so, SOL_SOCKET, SO_ATTACH_REUSEPORT_CBPF,
-			&sfp, sizeof(sfp)) < 0) {
-			dolog(LOG_INFO, "bpf: %s\n", strerror(errno));
-			ddd_shutdown();
-			exit(1);
-		}
-	}
-#endif
-
 	return (so);
 }
