@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.114 2020/07/23 10:48:45 pjp Exp $
+ * $Id: dddctl.c,v 1.115 2020/07/26 14:03:50 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -867,18 +867,18 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			return -1;
 		}
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-			fprintf(of, "%s %d IN HINFO ", 
+			fprintf(of, "%s %d IN HINFO \"", 
 					convert_name(rbt->zone, rbt->zonelen),
 					rrset->ttl);
 					
 			for (i = 0; i < ((struct hinfo *)rrp2->rdata)->cpulen; i++) {
 				fprintf(of, "%c", ((struct hinfo *)rrp2->rdata)->cpu[i]);
 			}
-			fprintf(of, " ");
+			fprintf(of, "\" \"");
 			for (i = 0; i < ((struct hinfo *)rrp2->rdata)->oslen; i++) {
 				fprintf(of, "%c", ((struct hinfo *)rrp2->rdata)->os[i]);
 			}
-			fprintf(of, "\n");
+			fprintf(of, "\"\n");
 		}
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
