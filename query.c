@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: query.c,v 1.9 2020/07/19 13:50:06 pjp Exp $
+ * $Id: query.c,v 1.10 2020/07/26 16:17:10 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -338,9 +338,16 @@ dig(int argc, char *argv[])
 	answers = 0;
 
 	if (type == DNS_TYPE_AXFR) {
+		if ((format & ZONE_FORMAT) && f != NULL) 
+			fprintf(f, "zone \"%s\" {\n", domainname);
+
 		if (lookup_axfr(f, so, domainname, &mysoa, format, tsigkey, tsigpass, &segment, &answers, &additionalcount) < 0) {
 			exit(1);
 		}
+
+		if ((format & ZONE_FORMAT) && f != NULL)
+			fprintf(f, "}\n");
+
 				
 	} else {
 		if (lookup_name(f, so, domainname, type, &mysoa, format, nameserver, port, &answers, &additionalcount, class) < 0) {

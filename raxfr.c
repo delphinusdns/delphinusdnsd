@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.56 2020/07/23 10:48:45 pjp Exp $
+ * $Id: raxfr.c,v 1.57 2020/07/26 16:17:10 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -2311,11 +2311,21 @@ do_raxfr(FILE *f, struct rzone *rzone)
 	answers = 0;
 	additionalcount = 0;
 
+	if ((format & ZONE_FORMAT) && f != NULL) 
+		fprintf(f, "zone \"%s\" {\n", rzone->zonename);
+
 	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), humanpass, &segment, &answers, &additionalcount) < 0) {
+		/* close the zone */
+		if ((format & ZONE_FORMAT) && f != NULL)
+			fprintf(f, "}\n");
+
 		dolog(LOG_ERR, "lookup_axfr() failed\n");
 		close(so);
 		return -1;
 	}
+
+	if ((format & ZONE_FORMAT) && f != NULL)
+		fprintf(f, "}\n");
 				
 	close(so);
 	return (0);

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.77 2020/07/23 10:48:45 pjp Exp $
+ * $Id: util.c,v 1.78 2020/07/26 16:17:10 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -2136,8 +2136,10 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			rwh->dh.additional = saveadd;
 		}
 
+#if 0
 		if (*segment == 0 && (format & ZONE_FORMAT) && f != NULL) 
 			fprintf(f, "zone \"%s\" {\n", zonename);
+#endif
 	
 		(*segment)++;
 
@@ -2230,10 +2232,12 @@ out:
 		HMAC_CTX_free(ctx);	
 	}
 
+#if 0
 	if (f != NULL) {
 		if ((format & ZONE_FORMAT))
 			fprintf(f, "}\n");
 	}
+#endif
 
 	free_question(q);
 
