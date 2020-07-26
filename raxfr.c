@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.57 2020/07/26 16:17:10 pjp Exp $
+ * $Id: raxfr.c,v 1.58 2020/07/26 17:08:14 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -118,7 +118,7 @@ int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, H
 int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
 
 u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
-int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *);
+int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int);
 int raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *, int);
 
 
@@ -177,6 +177,8 @@ extern uint32_t unpack32(char *);
 extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
 
+extern int		dn_contains(char *, int, char *, int);
+
 
 /* The following alias helps with bounds checking all input, needed! */
 
@@ -213,7 +215,7 @@ static struct raxfr_logic supported[] = {
 
 
 int
-raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soacount, u_int16_t *rdlen, u_int32_t format, HMAC_CTX *ctx)
+raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soacount, u_int16_t *rdlen, u_int32_t format, HMAC_CTX *ctx, char *zonename, int zonelen)
 {
 	int rrlen;
 	char *save;
@@ -238,6 +240,7 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 	
 	if ((q + 2) > end)
 		return -1;
+
 
 	rtype = unpack16(q);
 	q += 2;
@@ -275,6 +278,17 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 
 	humanname = convert_name(expand, elen);
 	if (humanname == NULL) {
+		return -1;
+	}
+
+	/* check for poison */
+	if (!dn_contains(expand, elen, zonename, zonelen)) {
+		char *humanzone;
+
+		humanzone = convert_name(zonename, zonelen);
+		dolog(LOG_INFO, "possible poison in AXFR, %s not part of %s", humanname, humanzone);
+		free(humanname);
+		free(humanzone);
 		return -1;
 	}
 
@@ -2154,7 +2168,7 @@ get_remote_soa(struct rzone *rzone)
 
 
 	for (i = answers; i > 0; i--) {
-		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, (dotsig == 1) ? ctx : NULL)) < 0) {
+		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, (dotsig == 1) ? ctx : NULL, name, zonelen)) < 0) {
 			dolog(LOG_INFO, "not a SOA reply, or ERROR\n");
 			close(so);
 			free(reply);  free(dupreply);
