@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.58 2020/07/26 17:08:14 pjp Exp $
+ * $Id: raxfr.c,v 1.59 2020/07/27 05:11:19 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -115,7 +115,7 @@ int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, H
 int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
+int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *, struct soa_constraints *);
 
 u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int);
@@ -165,7 +165,7 @@ extern void	dolog(int, char *, ...);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int namelen);               
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);    
 extern struct question         *build_question(char *, int, int, char *);
-extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *);
+extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *);
 extern int     find_tsig_key(char *, int, char *, int);
 extern int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 
@@ -343,7 +343,7 @@ raxfr_skip(FILE *f, u_char *p, u_char *estart)
 }
 
 int
-raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, int soacount, u_int32_t format, u_int16_t rdlen, HMAC_CTX *ctx)
+raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, int soacount, u_int32_t format, u_int16_t rdlen, HMAC_CTX *ctx, struct soa_constraints *constraints)
 {
 	u_int32_t rvalue;
 	char *save, *humanname;
@@ -435,6 +435,19 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	rvalue = unpack32(q);
 	mysoa->minttl = rvalue;
 	q += sizeof(u_int32_t);
+
+	if (constraints->refresh > ntohl(mysoa->refresh) ||
+		constraints->retry > ntohl(mysoa->retry) ||
+		constraints->expire > ntohl(mysoa->expire)) {
+		dolog(LOG_INFO, "raxfr_soa:  refresh/retry/expire values were below SOA constraints %u/%u, %u/%u, %u/%u, bailing out!\n", constraints->refresh, ntohl(mysoa->refresh), constraints->retry, ntohl(mysoa->retry), constraints->expire, ntohl(mysoa->expire));
+		
+		if (f != NULL) {
+			fprintf(f, "constraints failure\n");
+			fflush(f);
+		}
+
+		return -1;
+	}
 	
 	if (soacount < soalimit) {
 		if (f != NULL) {
@@ -2179,7 +2192,7 @@ get_remote_soa(struct rzone *rzone)
 			p = (estart + rrlen);
 
 		if (rrtype == DNS_TYPE_SOA) {
-			if ((len = raxfr_soa(f, p, estart, end, &mysoa, soacount, format, rdlen, (dotsig == 1) ? ctx : NULL)) < 0) {
+			if ((len = raxfr_soa(f, p, estart, end, &mysoa, soacount, format, rdlen, (dotsig == 1) ? ctx : NULL, &rz->constraints)) < 0) {
 				dolog(LOG_INFO, "raxfr_soa failed\n");
 				close(so);
 				free(reply);  free(dupreply);
@@ -2328,7 +2341,7 @@ do_raxfr(FILE *f, struct rzone *rzone)
 	if ((format & ZONE_FORMAT) && f != NULL) 
 		fprintf(f, "zone \"%s\" {\n", rzone->zonename);
 
-	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), humanpass, &segment, &answers, &additionalcount) < 0) {
+	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), humanpass, &segment, &answers, &additionalcount, &rzone->constraints) < 0) {
 		/* close the zone */
 		if ((format & ZONE_FORMAT) && f != NULL)
 			fprintf(f, "}\n");

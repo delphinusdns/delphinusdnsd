@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.79 2020/07/26 17:08:14 pjp Exp $
+ * $Id: util.c,v 1.80 2020/07/27 05:11:19 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -118,7 +118,7 @@ int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 char * 	bin2hex(char *, int);
 u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
-int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *);
+int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *);
 int dn_contains(char *name, int len, char *anchorname, int alen);
 uint16_t udp_cksum(u_int16_t *, uint16_t, struct ip *, struct udphdr *);
 uint16_t udp_cksum6(u_int16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
@@ -163,7 +163,7 @@ extern int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16
 extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
-extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
+extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *, struct soa_constraints *);
 extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int);
 extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int);
 extern char *convert_name(char *, int);
@@ -1824,7 +1824,7 @@ bitmap2human(char *bitmap, int len)
 
 
 int
-lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass, int *segment, int *answers, int *additionalcount)
+lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass, int *segment, int *answers, int *additionalcount, struct soa_constraints *constraints)
 {
 	char query[512];
 	char pseudo_packet[512];
@@ -2136,11 +2136,6 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			rwh->dh.additional = saveadd;
 		}
 
-#if 0
-		if (*segment == 0 && (format & ZONE_FORMAT) && f != NULL) 
-			fprintf(f, "zone \"%s\" {\n", zonename);
-#endif
-	
 		(*segment)++;
 
 		for (count = 0; count < segmentcount; count++) {
@@ -2186,7 +2181,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 				p = (estart + rrlen);
 
 			if (rrtype == DNS_TYPE_SOA) {
-				if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen, ctx)) < 0) {
+				if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen, ctx, constraints)) < 0) {
 					fprintf(stderr, "raxfr_soa failed\n");
 					return -1;
 				}

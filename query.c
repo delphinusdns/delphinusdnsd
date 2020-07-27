@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: query.c,v 1.11 2020/07/26 17:08:14 pjp Exp $
+ * $Id: query.c,v 1.12 2020/07/27 05:11:19 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -159,12 +159,12 @@ extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int
 extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
-extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *);
+extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *, struct soa_constraints *);
 extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int);
 
 extern int                      memcasecmp(u_char *, u_char *, int);
 extern int 			tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
-extern int  lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *);
+extern int  lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *);
 extern int 			insert_tsig(char *, char *);
 extern int  			find_tsig_key(char *, int, char *, int);
 extern int  			insert_tsig_key(char *, int, char *);
@@ -218,6 +218,7 @@ dig(int argc, char *argv[])
 	int segment = 0;
 	int answers = 0;
 	int additionalcount = 0;
+	struct soa_constraints constraints = { 0, 0, 0 };
 
 	while ((ch = getopt(argc, argv, "c:@:DIP:TZp:Q:y:")) != -1) {
 		switch (ch) {
@@ -341,7 +342,7 @@ dig(int argc, char *argv[])
 		if ((format & ZONE_FORMAT) && f != NULL) 
 			fprintf(f, "zone \"%s\" {\n", domainname);
 
-		if (lookup_axfr(f, so, domainname, &mysoa, format, tsigkey, tsigpass, &segment, &answers, &additionalcount) < 0) {
+		if (lookup_axfr(f, so, domainname, &mysoa, format, tsigkey, tsigpass, &segment, &answers, &additionalcount, &constraints) < 0) {
 			exit(1);
 		}
 
@@ -447,6 +448,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	struct whole_header {
 		struct dns_header dh;
 	} *wh, *rwh;
+	struct soa_constraints constraints = { 60, 60, 60 };
 	
 	u_char *p, *name;
 
@@ -670,7 +672,7 @@ skip:
 		p = (estart + rrlen);
 
 		if (rrtype == DNS_TYPE_SOA) {
-			if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen, NULL)) < 0) {
+			if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen, NULL, &constraints)) < 0) {
 				fprintf(stderr, "raxxfr_soa failed\n");
 				return -1;
 			}

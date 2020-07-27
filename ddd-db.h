@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.50 2020/07/21 18:19:58 pjp Exp $
+ * $Id: ddd-db.h,v 1.51 2020/07/27 05:11:19 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -438,6 +438,12 @@ struct mzone {
 #define DELPHINUS_RZONE_PATH	DEFAULT_RZONE_DIR
 #endif
 
+struct soa_constraints {
+	uint32_t refresh;
+	uint32_t retry;
+	uint32_t expire;
+};
+
 struct rzone {
 	SLIST_ENTRY(rzone)	rzone_entry;
 	int 			active;
@@ -449,7 +455,8 @@ struct rzone {
 	struct sockaddr_storage storage;
 	char			*tsigkey;
 	char 			*filename;
-	struct	soa		soa;
+	struct soa		soa;
+	struct soa_constraints	constraints;
 } *rz, *rz0;
 
 struct raxfr_logic {

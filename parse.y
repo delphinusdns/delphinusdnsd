@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.111 2020/07/24 08:51:34 pjp Exp $
+ * $Id: parse.y,v 1.112 2020/07/27 05:11:19 pjp Exp $
  */
 
 %{
@@ -797,6 +797,24 @@ rzonestatement:
 
 		free($1);
 		free($2);
+	}
+	|
+	STRING NUMBER COMMA NUMBER COMMA NUMBER SEMICOLON CRLF
+	{
+		if (strcmp($1, "constraints") == 0) {
+			rz = SLIST_FIRST(&rzones);
+			if (rz == NULL) {
+					return -1;
+			}
+		
+			rz->active = 1;
+			
+			rz->constraints.refresh = $2;
+			rz->constraints.retry = $4;
+			rz->constraints.expire = $6;
+		}
+
+		free ($1);
 	}
 	| comment CRLF
 	;
@@ -3862,6 +3880,9 @@ add_rzone(void)
 	lrz->tsigkey = NULL;
 	lrz->filename = NULL;
 	memset(&lrz->storage, 0, sizeof(struct sockaddr_storage));
+	lrz->constraints.refresh = 60;
+	lrz->constraints.retry = 60;
+	lrz->constraints.expire = 60;
 
 	SLIST_INSERT_HEAD(&rzones, lrz, rzone_entry);
 #ifdef __OpenBSD__
