@@ -166,6 +166,7 @@ options "arrowhead" {
 include "/etc/delphinusdns/delphinusdns.tsig";
 
 rzone "ip6.centroid.eu." {
+	constraints 600, 600, 600;
 	; do make sure you have a tsig "" {} for this
         tsigkey "pass";
         masterport 10053;
@@ -183,7 +184,7 @@ in BNF:
 .Bd -literal
 line = ( version | axfrport | include | zinclude | zone | region | 
 	axfr | mzone | passlist | filter | recurse | comment | 
-		options | forward )
+		options | forward | rzone )
 
 version = "version" ("number") ;
 
@@ -227,13 +228,15 @@ tsig-auth = "tsig-auth" (string) ("base64-string") ;
 tsig = "tsig" ("string") [ "{" cidrlist "}" ]
 
 rzone = "rzone" ("string") [ "{" rzonelist "}" ]
-rzonelist = ( opttsig | optmaster | optmasterport | optrzonename | optfilename )
+rzonelist = ( opttsig | optmaster | optmasterport | optrzonename | 
+		optfilename | optconstraints )
 
 opttsig = "tsigkey" ("string") ;
 optmaster = "master" ("cidr-address") ;
 optmasterport = "masterport"  (number) ;
 optrzonename = "zonename" ("string") ;
 optfilename = "filename" ("string") ;
+optconstraints = "constraints" (number), (number), (number) ;
 
 
 forward = "forward" ("string") [ "{" forwardlist "}" ]
