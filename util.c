@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.80 2020/07/27 05:11:19 pjp Exp $
+ * $Id: util.c,v 1.81 2020/07/27 08:23:04 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -164,7 +164,7 @@ extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int
 extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *, struct soa_constraints *);
-extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int);
+extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int, int);
 extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int);
 extern char *convert_name(char *, int);
 
@@ -2142,7 +2142,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			char mac[32];
 			elen = 0;
 
-			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format, ctx, name, zonelen)) < 0) {
+			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format, ctx, name, zonelen, 1)) < 0) {
 				fprintf(stderr, "not a SOA reply, or ERROR\n");
 				return -1;
 			}

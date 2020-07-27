@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: query.c,v 1.12 2020/07/27 05:11:19 pjp Exp $
+ * $Id: query.c,v 1.13 2020/07/27 08:23:04 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -160,7 +160,7 @@ extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_
 extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *, struct soa_constraints *);
-extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int);
+extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int, int);
 
 extern int                      memcasecmp(u_char *, u_char *, int);
 extern int 			tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
@@ -664,7 +664,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 skip:
 
 
-		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, NULL, name, zonelen)) < 0) {
+		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, NULL, name, zonelen, 0)) < 0) {
 			fprintf(stderr, "not a SOA reply, or ERROR\n");
 			return -1;
 		}

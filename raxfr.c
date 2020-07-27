@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.59 2020/07/27 05:11:19 pjp Exp $
+ * $Id: raxfr.c,v 1.60 2020/07/27 08:23:04 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -118,7 +118,7 @@ int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, H
 int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *, struct soa_constraints *);
 
 u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
-int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int);
+int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int, int);
 int raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx, char *, int);
 
 
@@ -215,7 +215,7 @@ static struct raxfr_logic supported[] = {
 
 
 int
-raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soacount, u_int16_t *rdlen, u_int32_t format, HMAC_CTX *ctx, char *zonename, int zonelen)
+raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soacount, u_int16_t *rdlen, u_int32_t format, HMAC_CTX *ctx, char *zonename, int zonelen, int axfr)
 {
 	int rrlen;
 	char *save;
@@ -282,7 +282,7 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 	}
 
 	/* check for poison */
-	if (!dn_contains(expand, elen, zonename, zonelen)) {
+	if (axfr && !dn_contains(expand, elen, zonename, zonelen)) {
 		char *humanzone;
 
 		humanzone = convert_name(zonename, zonelen);
@@ -2181,7 +2181,7 @@ get_remote_soa(struct rzone *rzone)
 
 
 	for (i = answers; i > 0; i--) {
-		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, (dotsig == 1) ? ctx : NULL, name, zonelen)) < 0) {
+		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, (dotsig == 1) ? ctx : NULL, name, zonelen, 0)) < 0) {
 			dolog(LOG_INFO, "not a SOA reply, or ERROR\n");
 			close(so);
 			free(reply);  free(dupreply);
