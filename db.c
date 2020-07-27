@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: db.c,v 1.23 2020/07/15 20:27:15 pjp Exp $
+ * $Id: db.c,v 1.24 2020/07/27 08:21:08 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -173,6 +173,7 @@ dddbget(ddDB *db, ddDBT *key, ddDBT *data)
 int
 dddbclose(ddDB *db)
 {
+	free (db);
 	return 0;
 }
 
@@ -426,6 +427,9 @@ expire_db(ddDB *db, int all)
 			
 			totalcount += count;
 		}
+
+		RB_REMOVE(domaintree, &db->head, walk);
+		free(walk);
 	}
 
 	return (totalcount);
