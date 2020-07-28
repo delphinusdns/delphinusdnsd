@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.60 2020/07/27 08:23:04 pjp Exp $
+ * $Id: raxfr.c,v 1.61 2020/07/28 05:17:05 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -2362,7 +2362,9 @@ do_raxfr(FILE *f, struct rzone *rzone)
 int
 pull_rzone(struct rzone *rzone, time_t now)
 {
+	int fd;
 	char *p, *q;
+	char save;
 	FILE *f;
 	char buf[PATH_MAX];
 
@@ -2379,18 +2381,28 @@ pull_rzone(struct rzone *rzone, time_t now)
 		return -1;
 	}
 
+	save = *p;
+	*p = '\0';
+
+	if (access(".", W_OK | R_OK) == -1) {
+		dolog(LOG_INFO, "%s: %s (must be writable and readable by %s)\n", rzone->filename, strerror(errno), DEFAULT_PRIVILEGE);
+		*p = save;
+		return -1;
+	}
+
+	*p = save;
 	snprintf(buf, sizeof(buf), "%s.XXXXXXXXXXXXXX", p);	
-	if ((mkstemp(buf)) == -1) {
-		dolog(LOG_INFO, "can't determine temporary filename from %s (3)\n", rzone->filename);
+	if ((fd = mkstemp(buf)) == -1) {
+		dolog(LOG_INFO, "mkstemp: %s\n", rzone->filename, strerror(errno));
 		return -1;
 	}
 
 	p = &buf[0];
 	umask(022);
 		
-	f = fopen(p, "w");
+	f = fdopen(fd, "w");
 	if (f == NULL) {
-		dolog(LOG_INFO, "can't create temporary filename for zone %s\n", rzone->zonename);
+		dolog(LOG_INFO, "fdopen %s: %s\n", rzone->zonename, strerror(errno));
 		return -1;
 	}
 
