@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.136 2020/07/26 06:53:40 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.137 2020/07/28 06:49:24 pjp Exp $
  */
 
 
@@ -3885,6 +3885,7 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 					
 		
 		if (FD_ISSET(so, &rset)) {
+			slen = sizeof(struct sockaddr_un);
 			if ((nso = accept(so, (struct sockaddr*)&psun, &slen)) < 0)
 				continue;
 
