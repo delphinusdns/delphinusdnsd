@@ -17,6 +17,11 @@ Changes in RELEASE_1_5 from RELEASE_1_4
   more security out of this
 - in dddctl query allow a class to be specified (-c)
 - added RP, HINFO and CAA RR support in all areas except dddctl query
+- added extra security measure to prevent DNS poisoning by AXFR
+- add a SOA constraint on rzone's to constrain SOA refresh/retry/expire values
+  by default these are 60/60/60
+- terminology changes blacklist->blocklist, whitelist->passlist, 
+  anything_slave() to anything_ddd(), to keep with the times
 
 [2019] Changes in RELEASE_1_4 from RELEASE_1_3
 
