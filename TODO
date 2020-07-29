@@ -1,6 +1,15 @@
 The TODO's here are for delphinusdnsd which is the successor of wildcarddnsd.
 Please see https://delphinusdns.org for updates/news.
 
+For 1.6.0 release
+
+- filter input to dddctl query for escape codes.
+- Shape up the NSEC code as it seems NSEC is having a renaissance, at least
+to have replicant compatibility for NSEC
+- display statistics via the UNIX socket, now possible with the cortex process.
+- DNS Update (RFC 2136 and 3007) must be Secure with TSIG, and do DNSSEC signing
+- an IODINE-like DNS tunnel functionality (perhaps for 1.7.0?)
+
 For 1.5.0 release
 - make sure an RRset has the same TTL, we don't need TTL in a single RR because
   the set requires per RFC 2181 section 5.2 to be the same in the RRset. [DONE]
