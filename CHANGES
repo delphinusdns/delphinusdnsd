@@ -26,6 +26,8 @@ Changes in RELEASE_1_5 from RELEASE_1_4
   by default these are 60/60/60
 - terminology changes blacklist->blocklist, whitelist->passlist, 
   anything_slave() to anything_ddd(), to keep with the times
+- made the 3G database truly RW (before there was some memcpy'ing going on 
+that corrupted pointers making the databse RO).
 
 [2019] Changes in RELEASE_1_4 from RELEASE_1_3
 
