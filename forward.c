@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.39 2020/07/23 11:20:34 pjp Exp $
+ * $Id: forward.c,v 1.40 2020/07/30 05:14:29 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -2057,7 +2057,9 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 							free(packet);
 							break;
 						}
+#if DEBUG
 						dolog(LOG_INFO, "received %d bytes from descriptor %d\n", unpack32((char *)&pi->pkt_s.buflen), imsg.fd);
+#endif
 					} else
 						packet = &pi->pkt_s.buf[0];
 
