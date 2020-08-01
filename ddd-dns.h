@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.28 2020/08/01 07:46:30 pjp Exp $
+ * $Id: ddd-dns.h,v 1.29 2020/08/01 08:45:44 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -135,6 +135,9 @@ struct dns_question_hdr {
 
 /* When DNS_NOTAUTH, add a TSIG header with the following error codes */
 
+#define DNS_BADALG	0x15	/* RCODE (21) BADALG RFC 2930 sect. 2.6 */
+#define DNS_BADNAME	0x14	/* RCODE (20) BADNAME RFC 2930 sect. 2.6 */
+#define DNS_BADMODE	0x13	/* RCODE (19) BADMODE RFC 2930 sect. 2.6 */
 #define DNS_BADTIME	0x12	/* RCODE (18) BADTIME RFC 2845 p. 3 */
 #define DNS_BADKEY	0x11	/* RCODE (17) BADKEY RFC 2845 p. 3 */
 #define DNS_BADSIG	0x10	/* RCODE (16) BADSIG RFC 2845 p. 3 */
