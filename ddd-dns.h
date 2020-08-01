@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.27 2020/07/21 18:19:58 pjp Exp $
+ * $Id: ddd-dns.h,v 1.28 2020/08/01 07:46:30 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -213,6 +213,7 @@ struct dns_question_hdr {
 #define DNS_TYPE_NSEC3PARAM	51	/* RFC 5155, section 4 */
 #define DNS_TYPE_TLSA	52		/* RFC 6698, section 7.1 */
 
+#define DNS_TYPE_TKEY	249		/* RFC 2930 */
 #define DNS_TYPE_TSIG	250		/* RFC 2845, page 3 */
 #define DNS_TYPE_IXFR	251		/* RFC 1995, page 2  */
 #define DNS_TYPE_AXFR	252		/* RFC 5936, page 10 */
