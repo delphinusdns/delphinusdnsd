@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-dns.h,v 1.29 2020/08/01 08:45:44 pjp Exp $
+ * $Id: ddd-dns.h,v 1.30 2020/08/01 09:01:52 pjp Exp $
  */
 
 #ifndef _DNS_H
@@ -120,7 +120,7 @@ struct dns_question_hdr {
 #define DNS_RECAVAIL	0x80	/* if set Recursion Available (RA) */
 #define DNS_AD		0x20	/* if set, Authentic Data (AD), RFC 2535 */
 #define DNS_CD		0x10	/* if set, Checking Disabled (CD), RFC 2535 */
-#define DNS_BADVERS	0x10	/* RCODE (16) BADVERS RFC 2671 p. 6 */
+/* lower 4 bits of RCODE's 0x00 through 0x0F, below */
 #define DNS_NOTZONE	0xA	/* RCODE - Not within zone section RFC 2136 */
 #define DNS_NOTAUTH	0x9	/* RCODE - Not Authenticated RFC 2845 */
 #define DNS_NXRRSET	0x8	/* RCODE - RRSET should exist, but doesn't */
@@ -133,14 +133,20 @@ struct dns_question_hdr {
 #define DNS_FORMATERR	0x1	/* RCODE - Format Error */
 #define DNS_NOERR	0x0	/* RCODE - No error */
 
-/* When DNS_NOTAUTH, add a TSIG header with the following error codes */
+/* Extended RCODE's (part of EDNS0 RFC 2671) */
 
 #define DNS_BADALG	0x15	/* RCODE (21) BADALG RFC 2930 sect. 2.6 */
 #define DNS_BADNAME	0x14	/* RCODE (20) BADNAME RFC 2930 sect. 2.6 */
 #define DNS_BADMODE	0x13	/* RCODE (19) BADMODE RFC 2930 sect. 2.6 */
+
+/* When DNS_NOTAUTH, add a TSIG header with the following error codes */
+
 #define DNS_BADTIME	0x12	/* RCODE (18) BADTIME RFC 2845 p. 3 */
 #define DNS_BADKEY	0x11	/* RCODE (17) BADKEY RFC 2845 p. 3 */
 #define DNS_BADSIG	0x10	/* RCODE (16) BADSIG RFC 2845 p. 3 */
+#define DNS_BADVERS	0x10	/* RCODE (16) BADVERS RFC 2671 p. 6 */
+
+/* END of Extended RCODE's */
 
 /*
  * macros to set flags (must be converted to network byte order after)
