@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: cache.c,v 1.10 2020/07/20 08:41:31 pjp Exp $
+ * $Id: cache.c,v 1.11 2020/08/02 14:58:18 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -523,6 +523,7 @@ cache_mx(struct scache *scache)
 	q += 2;
 
 	memset(&expand, 0, sizeof(expand));
+	elen = 0;
 	save = expand_compression(q, scache->estart, scache->end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
 		fprintf(stderr, "expanding compression failure 2\n");
@@ -532,8 +533,12 @@ cache_mx(struct scache *scache)
 	}
 
 	memcpy(&mx.exchange, expand, sizeof(mx.exchange));
+	if (lower_dnsname(mx.exchange, elen) == -1) {
+		dolog(LOG_INFO, "lower_dnsname failed\n");
+		return -1;
+	}
 	mx.exchangelen = elen;
-	mx.preference = mxpriority;
+	mx.preference = ntohs(mxpriority);
 
 	transmit_rr(scache, &mx, sizeof(mx));
 
