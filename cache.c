@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: cache.c,v 1.11 2020/08/02 14:58:18 pjp Exp $
+ * $Id: cache.c,v 1.12 2020/08/03 08:54:07 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -134,7 +134,7 @@ int cache_generic(struct scache *);
 
 static struct cache_logic supported_cache[] = {
 	{ DNS_TYPE_A, 0, cache_a },
-	{ DNS_TYPE_NS, 0, cache_ns },
+	/* { DNS_TYPE_NS, 0, cache_ns }, */
 	{ DNS_TYPE_MX, 0, cache_mx },
 	{ DNS_TYPE_PTR, 0, cache_ptr },
 	{ DNS_TYPE_AAAA, 0, cache_aaaa },
@@ -272,7 +272,8 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 	rrtype = ntohs(unpack16(pb));	
 
 	/* caching ANY or RRSIG is a nono */
-	if (rrtype == DNS_TYPE_ANY || rrtype == DNS_TYPE_RRSIG) {
+	if (rrtype == DNS_TYPE_ANY || rrtype == DNS_TYPE_RRSIG
+		|| rrtype == DNS_TYPE_NS) {
 		return -1;
 	}
 	
