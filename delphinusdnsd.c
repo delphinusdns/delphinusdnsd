@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.137 2020/07/28 06:49:24 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.138 2020/08/08 05:51:48 pjp Exp $
  */
 
 
@@ -1515,7 +1515,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 
 	int sel, oldsel;
 	int len, slen = 0;
-	int is_ipv6;
 	int i, nomore = 0;
 	int istcp = 1;
 	int maxso;
@@ -1693,7 +1692,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 #endif
 
 	for (;;) {
-		is_ipv6 = 0;
 		maxso = 0;
 
 		FD_ZERO(&rset);
@@ -1810,7 +1808,6 @@ axfrentry:
 				}
 	
 				if (from->sa_family == AF_INET6) {
-					is_ipv6 = 1;
 
 					fromlen = sizeof(struct sockaddr_in6);
 					sin6 = (struct sockaddr_in6 *)from;
@@ -1834,7 +1831,6 @@ axfrentry:
 					}
 
 				} else if (from->sa_family == AF_INET) {
-					is_ipv6 = 0;
 					
 					fromlen = sizeof(struct sockaddr_in);
 					sin = (struct sockaddr_in *)from;
@@ -2636,7 +2632,6 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	fd_set rset;
 	int sel;
 	int len, slen = 0;
-	int is_ipv6;
 	int i;
 	int istcp = 1;
 	int maxso;
@@ -2764,7 +2759,6 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	}
 
 	for (;;) {
-		is_ipv6 = 0;
 		maxso = 0;
 
 		FD_ZERO(&rset);
@@ -2819,7 +2813,6 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				}
 
 				if (from->sa_family == AF_INET6) {
-					is_ipv6 = 1;
 
 					fromlen = sizeof(struct sockaddr_in6);
 					sin6 = (struct sockaddr_in6 *)from;
@@ -2836,7 +2829,6 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 						require_tsig = find_tsig((struct sockaddr_storage *)sin6, AF_INET6);
 					}
 				} else if (from->sa_family == AF_INET) {
-					is_ipv6 = 0;
 					
 					fromlen = sizeof(struct sockaddr_in);
 					sin = (struct sockaddr_in *)from;
@@ -3572,7 +3564,6 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	char *packet;
 	fd_set rset;
 	int sel;
-	int require_tsig = 0;
 	int fd = mybuf->fd;
 	ssize_t n, datalen;
 
@@ -3618,7 +3609,6 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				}
 
 				datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
-				require_tsig = 0;
 
 				memset(&pq, 0, sizeof(struct parsequestion));
 
@@ -3932,14 +3922,12 @@ determine_glue(ddDB *db)
 {
 	struct rbtree *rbt, *rbt0;
 	struct rrset *rrset;
-	int rs;
 	struct node *n, *nx;
 	int len;
 	int have_soa = 0, have_ns = 0;
 	char *p;
 
         RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
-                rs = n->datalen;
 		rbt = (struct rbtree *)n->data;
 
 		rrset = find_rr(rbt, DNS_TYPE_SOA);
@@ -3960,7 +3948,6 @@ determine_glue(ddDB *db)
 
 	/* mark SOA's */
         RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
-                rs = n->datalen;
 		rbt = (struct rbtree *)n->data;
 
 		rrset = find_rr(rbt, DNS_TYPE_SOA);
@@ -3973,7 +3960,6 @@ determine_glue(ddDB *db)
 
 	/* mark glue */
         RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
-                rs = n->datalen;
 		rbt = (struct rbtree *)n->data;
 
 		if (rbt->flags & RBT_APEX) {
@@ -3989,7 +3975,6 @@ determine_glue(ddDB *db)
 	}
 
         RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
-                rs = n->datalen;
 		rbt = (struct rbtree *)n->data;
 
 
@@ -4040,7 +4025,7 @@ determine_glue(ddDB *db)
 void
 setup_cortex(struct imsgbuf *ibuf)
 {
-	int sel, max = 0;
+	int max = 0;
 	int datalen, nomore = 0;
 
 	ssize_t n;
@@ -4109,7 +4094,7 @@ setup_cortex(struct imsgbuf *ibuf)
 			FD_SET(neup->ibuf.fd, &rset);
 		}
 	
-		sel = select(max + 1, &rset, NULL, NULL, NULL);
+		select(max + 1, &rset, NULL, NULL, NULL);
 
 		SLIST_FOREACH(neup, &neuronhead, entries) {
 			if (FD_ISSET(neup->ibuf.fd, &rset)) {

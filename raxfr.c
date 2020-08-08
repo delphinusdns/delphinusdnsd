@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.61 2020/07/28 05:17:05 pjp Exp $
+ * $Id: raxfr.c,v 1.62 2020/08/08 05:51:48 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -222,7 +222,7 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 	char *humanname;
 	u_char expand[256];
 	u_char *q = p;
-	u_int16_t rtype, rclass, rdtmp;
+	u_int16_t rtype, rdtmp;
 	u_int32_t rttl;
 	int elen = 0;
 	int max = sizeof(expand);
@@ -248,7 +248,9 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 	if ((q + 2) > end)
 		return -1;
 
+#if 0
 	rclass = unpack16(q);
+#endif
 	q += 2;
 
 	if ((q + 4) > end)
@@ -875,7 +877,6 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 {
 	struct nsec3param np;
 	u_int16_t iter;
-	char *hex;
 	u_char *q = p;
 
 	BOUNDS_CHECK((p + 1), q, rdlen, end);
@@ -892,7 +893,7 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 	memcpy(&np.salt, p, np.saltlen);
 	p += np.saltlen;
 	
-	hex = bin2hex(np.salt, np.saltlen);
+	bin2hex(np.salt, np.saltlen);
 
 	if (f != NULL) {
 		fprintf(f, "%u,%u,%u,\"%s\"\n", np.algorithm, np.flags, 
@@ -910,12 +911,10 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 int
 raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
-	u_int8_t len;
 	int i;
 	u_char *q = p;
 
 	BOUNDS_CHECK(p, q, rdlen, end);
-	len = rdlen;
 
 	if (f != NULL) 
 		fprintf(f, "\"");
@@ -1284,7 +1283,7 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	char *otherdata;
 	u_char expand[256];
 	u_char *q = p;
-	u_int16_t rtype, rclass, origid, tsigerror, otherlen;
+	u_int16_t rtype, rclass, tsigerror, otherlen;
 	u_int32_t rttl;
 	int rlen, rrlen = -1;
 	int elen = 0;
@@ -1381,7 +1380,9 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	if ((q + 2) > end)
 		goto out;
 
+#if 0
 	origid = unpack16(q);
+#endif
 	q += 2;
 
 	if ((q + 2) > end)

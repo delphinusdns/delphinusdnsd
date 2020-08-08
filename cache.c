@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: cache.c,v 1.12 2020/08/03 08:54:07 pjp Exp $
+ * $Id: cache.c,v 1.13 2020/08/08 05:51:48 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -634,7 +634,6 @@ cache_nsec3param(struct scache *scache)
 int
 cache_txt(struct scache *scache)
 {
-	u_int8_t len;
 	int i;
 	uint16_t rdlen = scache->rdlen;
 	u_char *p = scache->payload;
@@ -644,7 +643,6 @@ cache_txt(struct scache *scache)
 	return -1;
 
 	BOUNDS_CHECK(scache->payload, q, scache->rdlen, scache->end);
-	len = rdlen;
 
 	for (i = 0; i < rdlen; i++) {
 		if (i % 256 == 0)
@@ -815,8 +813,6 @@ cache_srv(struct scache *scache)
 int 
 cache_naptr(struct scache *scache)
 {
-	u_int16_t tmp16;
-	struct naptr n;
 	char *save;;
 	u_char *p = scache->payload;
 	u_char *q = p;
@@ -828,12 +824,16 @@ cache_naptr(struct scache *scache)
 	/* we won't cache naptr either for now */
 	return -1;
 	BOUNDS_CHECK((q + 2), scache->payload, scache->rdlen, scache->end);
+#if 0
 	tmp16 = unpack16(q);
 	n.order = ntohs(tmp16);
+#endif
 	q += 2;
 	BOUNDS_CHECK((q + 2), scache->payload, scache->rdlen, scache->end);
+#if 0
 	tmp16 = unpack16(q);
 	n.preference = ntohs(tmp16);
+#endif
 	q += 2;
 
 	

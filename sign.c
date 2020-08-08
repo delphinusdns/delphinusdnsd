@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: sign.c,v 1.10 2020/07/23 16:04:01 pjp Exp $
+ * $Id: sign.c,v 1.11 2020/08/08 05:51:48 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1070,7 +1070,6 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 	char *p;
 
 	int binlen;
-	int len;
 
 	mode_t savemask;
 	time_t now;
@@ -1170,7 +1169,7 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 	fprintf(f, "Algorithm: %d (%s)\n", algorithm, alg_to_name(algorithm));
 	/* PrivateKey */
 	binlen = BN_bn2bin(ecprivatekey, (char *)&bin);
-	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "PrivateKey: %s\n", b64);
 
 	now = time(NULL);
@@ -1231,7 +1230,7 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 	p++;
 	binlen--;
 
-	len = mybase64_encode(p, binlen, b64, sizeof(b64));
+	mybase64_encode(p, binlen, b64, sizeof(b64));
 	fprintf(f, "%s%s %d IN DNSKEY %d 3 %d %s\n", zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".", ttl, flags, algorithm, b64);
 
 	fclose(f);
@@ -1307,7 +1306,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	char bin[4096];
 	char b64[4096];
 	char tmp[4096];
-	int i, binlen, len;
+	int i, binlen;
 	char *retval;
 	char *p;
 	time_t now;
@@ -1461,39 +1460,39 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	fprintf(f, "Algorithm: %d (%s)\n", algorithm, alg_to_name(algorithm));
 	/* modulus */
 	binlen = BN_bn2bin(rsan, (char *)&bin);
-	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Modulus: %s\n", b64);
 	/* public exponent */
 	binlen = BN_bn2bin(rsae, (char *)&bin);
-	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "PublicExponent: %s\n", b64);
 	/* private exponent */
 	binlen = BN_bn2bin(rsad, (char *)&bin);
-	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "PrivateExponent: %s\n", b64);
 	/* get the RSA factors */
 	RSA_get0_factors(rsa, (const BIGNUM **)&rsap, (const BIGNUM **)&rsaq);
 	/* prime1 */
 	binlen = BN_bn2bin(rsap, (char *)&bin);
-	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Prime1: %s\n", b64);
 	/* prime2 */
 	binlen = BN_bn2bin(rsaq, (char *)&bin);
-	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Prime2: %s\n", b64);
 	/* get the RSA crt params */
 	RSA_get0_crt_params(rsa, (const BIGNUM **)&rsadmp1, (const BIGNUM **)&rsadmq1, (const BIGNUM **)&rsaiqmp);
 	/* exponent1 */
 	binlen = BN_bn2bin(rsadmp1, (char *)&bin);
-	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Exponent1: %s\n", b64);
 	/* exponent2 */
 	binlen = BN_bn2bin(rsadmq1, (char *)&bin);
-	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Exponent2: %s\n", b64);
 	/* coefficient */
 	binlen = BN_bn2bin(rsaiqmp, (char *)&bin);
-	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Coefficient: %s\n", b64);
 
 	now = time(NULL);
@@ -1560,7 +1559,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	pack(p, tmp, binlen);
 	p += binlen; 
 	binlen = (p - &bin[0]);
-	len = mybase64_encode(bin, binlen, b64, sizeof(b64));
+	mybase64_encode(bin, binlen, b64, sizeof(b64));
 	fprintf(f, "%s%s %d IN DNSKEY %d 3 %d %s\n", zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".", ttl, flags, algorithm, b64);
 
 	fclose(f);
@@ -6684,7 +6683,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 	int labellen;
 	u_int32_t ttl = 0;
 
-	int j, rs, len, rootlen;
+	int rs, len, rootlen;
 
 	TAILQ_HEAD(listhead, mynsec3) head;
 
@@ -6741,8 +6740,6 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 	n3p.saltlen = ((struct nsec3param *)rrp2->rdata)->saltlen;
 	memcpy((char *)&n3p.salt, ((struct nsec3param *)rrp2->rdata)->salt, 
 			((struct nsec3param *)rrp2->rdata)->saltlen);
-
-	j = 0;
 
 	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 		rs = n->datalen;

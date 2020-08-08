@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.46 2020/07/08 12:29:02 pjp Exp $
+ * $Id: axfr.c,v 1.47 2020/08/08 05:51:48 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -850,7 +850,6 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 	int outlen;
 	int rrcount;
 	int envelopcount;
-	int rs;
 	int tsigkeylen;
 
 	struct node *n, *nx;
@@ -1067,7 +1066,6 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		envelopcount = 1;
 		
 		RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
-			rs = n->datalen;
 			if ((rbt = calloc(1, sizeof(struct rbtree))) == NULL) {
 				dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 				goto drop;
@@ -1280,7 +1278,6 @@ build_header(ddDB *db, char *reply, char *buf, struct question *q, int answercou
 int
 build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question *q)
 {
-	char *p;
 	char *label;
 	char *plabel;
 		
@@ -1317,7 +1314,9 @@ build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question
 
 	offset += 12;			/* up to rdata length */
 
+#if 0
 	p = (char *)&answer->rdata;
+#endif
 
 
 	label = ((struct soa *)rrp->rdata)->nsserver;
@@ -1601,8 +1600,8 @@ notifypacket(int so, void *vnotnp, void *vmd, int packetcount)
 	struct notifyentry *notnp = (struct notifyentry *)vnotnp;
 	struct mzone *mz = (struct mzone *)notnp->mzone;
 	struct mzone_dest *md = (struct mzone_dest *)vmd;
-	struct sockaddr_in bsin, *sin;
-	struct sockaddr_in6 bsin6, *sin6;
+	struct sockaddr_in bsin;
+	struct sockaddr_in6 bsin6;
 	struct sockaddr_storage savesin, newsin;
 	char packet[512];
 	char *questionname;
@@ -1699,7 +1698,6 @@ notifypacket(int so, void *vnotnp, void *vmd, int packetcount)
 		struct sockaddr_in *tmpsin = (struct sockaddr_in *)&md->notifydest;
 
 		slen = sizeof(struct sockaddr_in);
-		sin = (struct sockaddr_in *)&md->notifydest;
 		memset(&bsin, 0, sizeof(bsin));
 		bsin.sin_family = AF_INET;
 		bsin.sin_port = htons(md->port);
@@ -1710,7 +1708,6 @@ notifypacket(int so, void *vnotnp, void *vmd, int packetcount)
 		struct sockaddr_in6 *tmpsin = (struct sockaddr_in6 *)&md->notifydest;
 
 		slen = sizeof(struct sockaddr_in6);
-		sin6 = (struct sockaddr_in6 *)&md->notifydest;
 		memset(&bsin6, 0, sizeof(bsin6));
 		bsin6.sin6_family = AF_INET6;
 		bsin6.sin6_port = htons(md->port);

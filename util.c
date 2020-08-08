@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.81 2020/07/27 08:23:04 pjp Exp $
+ * $Id: util.c,v 1.82 2020/08/08 05:51:48 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1087,7 +1087,6 @@ build_question(char *buf, int len, int additional, char *mac)
 	/* in IXFR an additional SOA entry is tacked on, we want to skip this */
 	do {
 		u_int16_t val16;
-		u_int32_t val32;
 
 		rollback = i;
 
@@ -1123,7 +1122,9 @@ build_question(char *buf, int len, int additional, char *mac)
 		i += 2;
 		o += 2;
 		/* ttl */
+#if 0
 		val32 = unpack32(o);
+#endif
 		i += 4;
 		o += 4;
 		val16 = unpack16(o);
@@ -1843,7 +1844,6 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	u_char *end, *estart;
 	int len, totallen, zonelen, rrlen, rrtype;
 	int soacount = 0;
-	int elen = 0;
 	int segmentcount = 0;
 	int count = 0;
 	u_int16_t rdlen, *plen;
@@ -2140,7 +2140,6 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 		for (count = 0; count < segmentcount; count++) {
 			char mac[32];
-			elen = 0;
 
 			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format, ctx, name, zonelen, 1)) < 0) {
 				fprintf(stderr, "not a SOA reply, or ERROR\n");

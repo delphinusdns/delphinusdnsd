@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.38 2020/07/13 22:02:26 pjp Exp $
+ * $Id: additional.c,v 1.39 2020/08/08 05:51:48 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -807,7 +807,7 @@ additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *
 	struct answer *answer;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
-	int tmplen, rroffset;
+	int tmplen;
 	int retcount;
 	time_t now;
 
@@ -820,7 +820,6 @@ additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *
 	if (rrp == NULL)
 		goto out;
 	
-	rroffset = offset;
 
 	/* check if we go over our return length */
 	if ((offset + namelen) > replylen)
@@ -898,7 +897,7 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 	struct rrset *rrset;
 	struct rr *rrp;
 
-	int tmplen, rroffset;
+	int tmplen;
 	u_int8_t *somelen;
 	int retcount;
 	time_t now;
@@ -912,7 +911,6 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 	if (rrp == NULL)
 		goto out;
 	
-	rroffset = offset;
 
 	/* check if we go over our return length */
 	if ((offset + namelen) > replylen)

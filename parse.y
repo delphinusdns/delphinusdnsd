@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.112 2020/07/27 05:11:19 pjp Exp $
+ * $Id: parse.y,v 1.113 2020/08/08 05:51:48 pjp Exp $
  */
 
 %{
@@ -699,10 +699,6 @@ rzonestatement:
 		rz->active = 1;
 		rz->masterport = $2 & 0xffff;
 
-#ifdef __OpenBSD__
-		if (debug)
-			printf("at rzone %x, set masterport to %d\n", (unsigned int)rz, rz->masterport);
-#endif
 	}
 	|
 	MASTER ipcidr SEMICOLON CRLF
@@ -742,11 +738,6 @@ rzonestatement:
 			inet_pton(AF_INET, rz->master, &sin->sin_addr.s_addr);
 		}
 
-#ifdef __OpenBSD__
-		if (debug)
-			printf("at rzone %x, added master server at %s\n", (unsigned int)rz,
-				p);
-#endif
 
 		free($2);
 	}
@@ -776,23 +767,11 @@ rzonestatement:
 				perror("dns_label");
 				return -1;
 			} 
-#ifdef __OpenBSD__
-			if (debug)
-				printf("at rzone %x, added zonename of %s\n", (unsigned int)rz, p);
-#endif
 		} else if (strcmp($1, "filename") == 0) {
 			rz->filename = p;
-#ifdef __OpenBSD__
-			if (debug)
-				printf("at rzone %x, added filename of %s\n", (unsigned int)rz, p);
-#endif
 
 		} else if (strcmp($1, "tsigkey") == 0) {
 			rz->tsigkey = p;
-#ifdef __OpenBSD__
-			if (debug)
-				printf("at rzone %x, added tsigkey of %s\n", (unsigned int)rz, p);
-#endif
 		}
 
 		free($1);
@@ -2961,8 +2940,7 @@ fill_sshfp(ddDB *db, char *name, char *type, int myttl, int alg, int fptype, cha
 	struct rbtree *rbt;
 	int converted_namelen;
 	char *converted_name;
-	int len, i;
-	int ret;
+	int i;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2983,10 +2961,10 @@ fill_sshfp(ddDB *db, char *name, char *type, int myttl, int alg, int fptype, cha
 
 	switch (fptype) {
 	case 1:
-		len = sshfp->fplen = DNS_SSHFP_SIZE_SHA1;
+		sshfp->fplen = DNS_SSHFP_SIZE_SHA1;
 		break;
 	case 2:
-		len = sshfp->fplen = DNS_SSHFP_SIZE_SHA256;
+		sshfp->fplen = DNS_SSHFP_SIZE_SHA256;
 		break;
 	default:
 		dolog(LOG_ERR, "sshfp: unknown fingerprint type!\n");
@@ -2994,7 +2972,7 @@ fill_sshfp(ddDB *db, char *name, char *type, int myttl, int alg, int fptype, cha
 	}
 
 	memset(sshfp->fingerprint, 0, sizeof(sshfp->fingerprint));
-	ret = hex2bin(fingerprint, strlen(fingerprint), sshfp->fingerprint);
+	hex2bin(fingerprint, strlen(fingerprint), sshfp->fingerprint);
 
 
 	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_SSHFP, sshfp, myttl, 0);
@@ -3885,10 +3863,6 @@ add_rzone(void)
 	lrz->constraints.expire = 60;
 
 	SLIST_INSERT_HEAD(&rzones, lrz, rzone_entry);
-#ifdef __OpenBSD__
-	if (debug)
-		printf("added rzone at 0x%x\n", (unsigned int)lrz);
-#endif
 	
 	return (lrz);
 }

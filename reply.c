@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.111 2020/07/23 10:48:45 pjp Exp $
+ * $Id: reply.c,v 1.112 2020/08/08 05:51:48 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -2697,7 +2697,6 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 	int replysize = 512;
 	int retlen = -1;
 	u_int16_t rollback;
-	int ns_type;
 	int delegation, addiscount;
 	int addcount = 0;
 	int retcount;
@@ -2780,7 +2779,9 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		name = ((struct ns *)rrp->rdata)->nsserver;
 		namelen = ((struct ns *)rrp->rdata)->nslen;
+#if 0
 		ns_type = ((struct ns *)rrp->rdata)->ns_type;
+#endif
 
 		answer->rdlength = htons(namelen);
 
@@ -3085,7 +3086,6 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	u_int16_t outlen;
-	char *p;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
@@ -3172,7 +3172,9 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	outlen += 12;			/* up to rdata length */
 
+#if 0
 	p = (char *)&answer->rdata;
+#endif
 
 	label = (char *)&((struct cname *)rrp->rdata)->cname;
 	labellen = ((struct cname *)rrp->rdata)->cnamelen;
@@ -3429,7 +3431,6 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	u_int16_t outlen;
-	char *p;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
@@ -3513,7 +3514,9 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	outlen += 12;			/* up to rdata length */
 
+#if 0
 	p = (char *)&answer->rdata;
+#endif
 
 	label = ((struct ptr *)rrp->rdata)->ptr;
 	labellen = ((struct ptr *)rrp->rdata)->ptrlen;
@@ -3625,7 +3628,6 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	u_int16_t outlen;
-	char *p;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
@@ -3711,7 +3713,9 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	outlen += 12;			/* up to rdata length */
 
+#if 0
 	p = (char *)&answer->rdata;
+#endif
 
 
 	label = ((struct soa *)rrp->rdata)->nsserver;
@@ -4113,7 +4117,6 @@ reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
 
 	if (istcp) {
 		replysize = 65535;
@@ -4135,7 +4138,6 @@ reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
 
 	outlen += (q->hdr->namelen + 4);
-	rollback = outlen;
 
 	/* blank query */
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
@@ -4604,9 +4606,7 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	int naptr_count;
-	char *name;
 	u_int16_t outlen;
-	u_int16_t namelen;
 
 	struct answer {
 		char name[2];
@@ -4633,6 +4633,7 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int tmplen, savelen;
+	int namelen;
 	char *p;
 	int retlen = -1;
 	u_int16_t rollback;
@@ -4715,7 +4716,9 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		memcpy((char *)p, (char *)((struct naptr *)rrp->rdata)->replacement, ((struct naptr *)rrp->rdata)->replacementlen);
 	
+#if 0
 		name = ((struct naptr *)rrp->rdata)->replacement;
+#endif
 		namelen = ((struct naptr *)rrp->rdata)->replacementlen;
 
 		outlen += (12 + 4 + ((struct naptr *)rrp->rdata)->replacementlen);
@@ -4833,9 +4836,7 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	int srv_count;
-	char *name;
 	u_int16_t outlen;
-	u_int16_t namelen;
 
 	struct answer {
 		char name[2];
@@ -4924,8 +4925,10 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		memcpy((char *)&answer->target, (char *)((struct srv *)rrp->rdata)->target, ((struct srv *)rrp->rdata)->targetlen);
 
+#if 0
 		name = ((struct srv *)rrp->rdata)->target;
 		namelen = ((struct srv *)rrp->rdata)->targetlen;
+#endif
 
 		outlen += (12 + 6 + ((struct srv *)rrp->rdata)->targetlen);
 
@@ -5100,7 +5103,6 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	u_int16_t outlen;
-	char *p;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
@@ -5234,7 +5236,6 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	outlen += 10;   /* sizeof(struct answer)  up to rdata length */
 
-	p = (char *)&answer->rdata;
 
 	label = ((struct soa *)rrp->rdata)->nsserver;
 	labellen = ((struct soa *)rrp->rdata)->nsserver_len;
@@ -5831,7 +5832,6 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	u_int16_t outlen;
-	char *p;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
@@ -5953,7 +5953,6 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	outlen += 10;			/* up to rdata length */
 
-	p = (char *)&answer->rdata;
 
 	label = ((struct soa *)rrp->rdata)->nsserver;
 	labellen = ((struct soa *)rrp->rdata)->nsserver_len;

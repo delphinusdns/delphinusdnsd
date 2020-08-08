@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.40 2020/07/30 05:14:29 pjp Exp $
+ * $Id: forward.c,v 1.41 2020/08/08 05:51:48 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1200,7 +1200,6 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	static char *buf = NULL;
 	char *p;
 
-	int so;
 	int i; 	/* = v/r */
 	int sel, rc;
 	int len = 0;
@@ -1223,7 +1222,6 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		len = 2;
 	} else {
 		p = buf;
-		so = -1;
 	}
 		
 	if (rlen <= sizeof(struct dns_header)) {
@@ -1528,7 +1526,6 @@ check_tsig(char *buf, int len, char *mac)
 	char expand[DNS_MAXNAME + 1];
 	u_int rollback, i, j;
 	u_int16_t type, rdlen;
-	u_int32_t ttl;
 	u_int64_t timefudge;
 	int elen = 0;
 	int additional;
@@ -1640,8 +1637,10 @@ check_tsig(char *buf, int len, char *mac)
 			break;
 		}
 
+#if 0
 		/* RFC 3225 */
 		ttl = ntohl(opt->ttl);
+#endif
 
 		i += 11 + ntohs(opt->rdlen);
 		if (i > len) {
