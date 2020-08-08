@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.51 2020/07/27 05:11:19 pjp Exp $
+ * $Id: ddd-db.h,v 1.52 2020/08/08 16:04:52 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -91,7 +91,7 @@ struct dnskey {
 	u_int8_t algorithm;		/* would be 5, RFC 3110 */
 	char public_key[4096];
 	u_int16_t publickey_len;
-} __attribute__((packed)); 
+};
 
 struct rrsig {
 	u_int16_t type_covered;
@@ -108,23 +108,14 @@ struct rrsig {
 	uint32_t ttl;		/* RFC 4034 section 3, the TTL value of ... */
 	int used;		/* if this RRSIG is used at all */
 	time_t created;		/* when this was added to the cache */
-} __attribute__((packed)); 
-
-#if 0
-struct rrsig {
-	struct internal_rrsig internal[3];
-#define	RRSIG_RRSET	0
-#define RRSIG_DNSKEY	1
-#define RRSIG_DS	2
-} __attribute__((packed)); 
-#endif
+};
 
 struct nsec {
 	char next_domain_name[DNS_MAXNAME];
 	u_int8_t ndn_len;	/* next domain name length */
 	char bitmap[8192];
 	u_int16_t bitmap_len;
-} __attribute__((packed));
+};
 
 struct nsec3 {
 	u_int8_t algorithm;
@@ -136,7 +127,7 @@ struct nsec3 {
 	u_int8_t nextlen;	/* next domain name length */
 	char bitmap[8192];
 	u_int16_t bitmap_len;
-} __attribute__((packed));
+};
 
 struct nsec3param {
 	u_int8_t algorithm;
@@ -144,7 +135,7 @@ struct nsec3param {
 	u_int16_t iterations;
 	u_int8_t saltlen;
 	char salt[256];
-} __attribute__((packed));
+};
 
 struct ds {
 	u_int16_t key_tag;
@@ -152,7 +143,7 @@ struct ds {
 	u_int8_t digest_type;
 	char digest[4096];
 	u_int16_t digestlen;
-} __attribute__((packed)); 
+};
 
 
 struct soa {
@@ -165,13 +156,13 @@ struct soa {
 	u_int32_t retry;
 	u_int32_t expire;
 	u_int32_t minttl;
-} __attribute__((packed)); 
+};
 
 struct smx {
 	u_int16_t preference;		/* MX preference */
 	char exchange[DNS_MAXNAME];	/* name of exchange server */
 	int exchangelen;		/* length of exchange server name */
-} __attribute__((packed));
+};
 
 struct ns {
 	char nsserver[DNS_MAXNAME];	/* NS name */
@@ -180,7 +171,7 @@ struct ns {
 #define NS_TYPE_DELEGATE        0x1
 #define NS_TYPE_HINT            0x2
 
-} __attribute__((packed));
+};
 
 struct srv {
 	u_int16_t priority;		/* SRV 16 bit priority */
@@ -188,14 +179,14 @@ struct srv {
 	u_int16_t port;			/* 16 bit port */
 	char target[DNS_MAXNAME];	/* SRV target name */
 	int targetlen;			/* SRV target name length */
-} __attribute__((packed));
+};
 
 struct sshfp {
 	u_int8_t algorithm;		/* SSHFP algorithm */
 	u_int8_t fptype;		/* SSHFP fingerprint type */
 	char fingerprint[DNS_MAXNAME];  /* fingerprint */
 	int fplen;			/* fingerprint length */
-} __attribute__((packed));
+};
 
 struct tlsa {
 	u_int8_t usage;			/* TLSA usage */
@@ -203,7 +194,7 @@ struct tlsa {
 	u_int8_t matchtype;		/* TLSA matching type */
 	char data[DNS_MAXNAME];  	/* TLSA data */
 	int datalen;			/* data length */
-} __attribute__((packed));
+};
 
 struct naptr {
 	u_int16_t order;		/* NAPTR 16 bit order */
@@ -216,36 +207,36 @@ struct naptr {
 	int regexplen;			/* regexp len */
 	char replacement[DNS_MAXNAME];	/* replacement this is a domain */
 	int replacementlen;
-} __attribute__((packed));
+};
 
 struct cname {
         char cname[DNS_MAXNAME];                /* CNAME RR */
         int cnamelen;                           /* len of CNAME */
-} __attribute__((packed));
+};
 
 struct ptr {
         char ptr[DNS_MAXNAME];                  /* PTR RR */
         int ptrlen;                             /* len of PTR */
-} __attribute__((packed));
+};
 
 struct txt {
         char txt[1024];                  	/* TXT string */
         int txtlen;                             /* len of TXT */
-} __attribute__((packed));
+};
 
 struct hinfo {
 	char cpu[255];
 	int cpulen;
 	char os[255];
 	int oslen;
-} __attribute__((packed));
+};
 
 struct rp {
 	char mbox[DNS_MAXNAME];
 	int mboxlen;
 	char txt[DNS_MAXNAME];
 	int txtlen;
-} __attribute__((packed));
+};
 
 struct caa {
 	uint8_t flags;
@@ -253,15 +244,15 @@ struct caa {
 	int taglen;
 	char value[1024];	/* something reasonable, could be 65000! */
 	int valuelen;
-} __attribute__((packed));
+};
 
 struct a {
         in_addr_t a;      /* IP addresses */
-} __attribute__((packed));
+};
 
 struct aaaa {
         struct in6_addr aaaa;     /* IPv6 addresses */
-} __attribute__((packed));
+};
 
 
 
