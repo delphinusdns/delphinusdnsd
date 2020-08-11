@@ -27,10 +27,10 @@
  */
 
 /*
- * $Id: sign.c,v 1.11 2020/08/08 05:51:48 pjp Exp $
+ * $Id: sign.c,v 1.12 2020/08/11 15:37:17 pjp Exp $
  */
 
-#include <sys/types.h>
+#include <sys/param.h>	/* for MIN() */
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
@@ -185,6 +185,9 @@ int 		dump_db(ddDB *, FILE *, char *);
 int		notglue(ddDB *, struct rbtree *, char *);
 char * 		dnskey_wire_rdata(struct rr *, int *);
 
+char *		canonical_sort(char **, int, int *);
+int 		cs_cmp(const void *, const void *);
+
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 
 BN_GENCB * BN_GENCB_new(void);
@@ -305,6 +308,8 @@ extern int tsig;
 #define MASK_DUMP_DB			0x40
 #define MASK_DUMP_BIND			0x80
 
+
+#define MAX_RECORDS_IN_RRSET		100
 
 /*
  * SIGNMAIN - the heart of dddctl sign ...
@@ -1977,7 +1982,8 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 	
 
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey = NULL;
 	char *zone;
 
@@ -1988,25 +1994,16 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
 
-	TAILQ_HEAD(listhead, canonical) head;
-
- 	struct canonical {
-  		char *data;
-  		int len;
-  		TAILQ_ENTRY(canonical) entries;
- 	} *c1, *c2, *cp;
-
-
- 	TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -2110,6 +2107,15 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		pack(p, dnsname, labellen);
 		p += labellen;
 
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
+
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
   			q = tmpkey;
 			pack(q, rbt->zone, rbt->zonelen);
@@ -2126,45 +2132,35 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			pack(q, (char *)((struct txt *)rrp2->rdata)->txt, ((struct txt *)rrp2->rdata)->txtlen);
 			q += ((struct txt *)rrp2->rdata)->txtlen;
 
-			c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+			r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-			}
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-			memcpy(c1->data, tmpkey, c1->len);
-
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			else {
-				TAILQ_FOREACH(c2, &head, entries) {
-					if (c1->len < c2->len)
-						break;
-					else if (c2->len == c1->len &&
-						 memcmp(c1->data, c2->data, c1->len) < 0)
-						break;
-			}
-
-			if (c2 != NULL)
-				TAILQ_INSERT_BEFORE(c2, c1, entries);
-			else
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			}
+			csort++;
 		}
 
-		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-			pack(p, c2->data, c2->len);
-			p += c2->len;
 
-			TAILQ_REMOVE(&head, c2, entries);
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
 		}
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
 
 		keylen = (p - key);	
 
@@ -2202,7 +2198,8 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 	
 
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -2213,24 +2210,16 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-	TAILQ_HEAD(listhead, canonical) head;
 
-        struct canonical {
-                char *data;
-                int len;
-                TAILQ_ENTRY(canonical) entries;
-        } *c1, *c2, *cp;
-
-
-        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -2334,6 +2323,14 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		p += labellen;
 
 		/* no signature here */	
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			q = tmpkey;
@@ -2351,45 +2348,35 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 			pack(q, (char *)&((struct aaaa *)rrp2->rdata)->aaaa, sizeof(struct in6_addr));
 			q += sizeof(struct in6_addr);
 
-			c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+			r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-			}
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-			memcpy(c1->data, tmpkey, c1->len);
-
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			else {
-				TAILQ_FOREACH(c2, &head, entries) {
-					if (c1->len < c2->len)
-						break;
-					else if (c2->len == c1->len &&
-						memcmp(c1->data, c2->data, c1->len) < 0)
-						break;
-				}
-
-				if (c2 != NULL)
-					TAILQ_INSERT_BEFORE(c2, c1, entries);
-				else
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-			}
+			csort++;
 		}
 
-		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-			pack(p, c2->data, c2->len);
-			p += c2->len;
 
-			TAILQ_REMOVE(&head, c2, entries);
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
 		}
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
 
 		keylen = (p - key);	
 
@@ -2589,10 +2576,6 @@ sign_nsec3(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		
 		keylen = (p - key);	
 
-	#if 0
-		debug_bindump(key, keylen);
-	#endif
-
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
 			return -1;
@@ -2747,7 +2730,6 @@ sign_nsec3param(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int ro
 
 		/* no signature here */	
 		/* XXX this should probably be done on a canonical sorted records */
-		
 		pack(p, rbt->zone, rbt->zonelen);
 		p += rbt->zonelen;
 		pack16(p, htons(DNS_TYPE_NSEC3PARAM));
@@ -2774,10 +2756,6 @@ sign_nsec3param(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int ro
 		} 
 
 		keylen = (p - key);	
-
-	#if 0
-		debug_bindump(key, keylen);
-	#endif
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -2949,9 +2927,6 @@ sign_cname(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 
 		keylen = (p - key);	
 
-	#if 0
-		debug_bindump(key, keylen);
-	#endif
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
 			return -1;
@@ -3106,7 +3081,6 @@ sign_ptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 		/* no signature here */	
 		/* XXX this should probably be done on a canonical sorted records */
-		
 		pack(p, rbt->zone, rbt->zonelen);
 		p += rbt->zonelen;
 		pack16(p, htons(DNS_TYPE_PTR));
@@ -3122,9 +3096,6 @@ sign_ptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 		keylen = (p - key);	
 
-	#if 0
-		debug_bindump(key, keylen);
-	#endif
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
 			return -1;
@@ -3160,7 +3131,8 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 	
 
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -3171,24 +3143,16 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-        TAILQ_HEAD(listhead, canonical) head;
 
-        struct canonical {
-                char *data;
-                int len;
-                TAILQ_ENTRY(canonical) entries;
-        } *c1, *c2, *cp;
-
-
-        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -3293,6 +3257,14 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 
 		/* no signature here */	
 		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			q = tmpkey;
@@ -3329,45 +3301,35 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 			pack(q, ((struct naptr *)rrp2->rdata)->replacement, ((struct naptr *)rrp2->rdata)->replacementlen);
 			q += ((struct naptr *)rrp2->rdata)->replacementlen;
 
-			c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+			r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-			}
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-			memcpy(c1->data, tmpkey, c1->len);
-
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			else {
-				TAILQ_FOREACH(c2, &head, entries) {
-					if (c1->len < c2->len)
-						break;
-					else if (c2->len == c1->len &&
-						memcmp(c1->data, c2->data, c1->len) < 0)
-						break;
-				}
-
-				if (c2 != NULL)
-					TAILQ_INSERT_BEFORE(c2, c1, entries);
-				else
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-			}
+			csort++;
 		}
 
-		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-			pack(p, c2->data, c2->len);
-			p += c2->len;
 
-			TAILQ_REMOVE(&head, c2, entries);
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
 		}
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
 
 		keylen = (p - key);	
 
@@ -3410,7 +3372,8 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 	
 
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -3421,24 +3384,16 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-        TAILQ_HEAD(listhead, canonical) head;
 
-        struct canonical {
-                char *data;
-                int len;
-                TAILQ_ENTRY(canonical) entries;
-        } *c1, *c2, *cp;
-
-
-        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -3543,6 +3498,14 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 		/* no signature here */	
 		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			q = tmpkey;
@@ -3565,46 +3528,35 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			pack(q, ((struct srv *)rrp2->rdata)->target, ((struct srv *)rrp2->rdata)->targetlen);
 			q += ((struct srv *)rrp2->rdata)->targetlen;
 			
-			c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+			r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-			}
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-			memcpy(c1->data, tmpkey, c1->len);
-
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			else {
-				TAILQ_FOREACH(c2, &head, entries) {
-					if (c1->len < c2->len)
-						break;
-					else if (c2->len == c1->len &&
-						memcmp(c1->data, c2->data, c1->len) < 0)
-						break;
-				}
-
-				if (c2 != NULL)
-					TAILQ_INSERT_BEFORE(c2, c1, entries);
-				else
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-			}
-
+			csort++;
 		}
 
-		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-			pack(p, c2->data, c2->len);
-			p += c2->len;
 
-			TAILQ_REMOVE(&head, c2, entries);
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
 		}
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
 
 		keylen = (p - key);	
 
@@ -3647,7 +3599,8 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 	
 
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -3658,24 +3611,16 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-        TAILQ_HEAD(listhead, canonical) head;
 
-        struct canonical {
-                char *data;
-                int len;
-                TAILQ_ENTRY(canonical) entries;
-        } *c1, *c2, *cp;
-
-
-        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -3780,6 +3725,14 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 
 		/* no signature here */	
 		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			q = tmpkey;
@@ -3800,46 +3753,35 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 			pack(q, ((struct sshfp *)rrp2->rdata)->fingerprint, ((struct sshfp *)rrp2->rdata)->fplen);
 			q += ((struct sshfp *)rrp2->rdata)->fplen;
 
-			c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+			r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-			}
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-			memcpy(c1->data, tmpkey, c1->len);
-
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			else {
-				TAILQ_FOREACH(c2, &head, entries) {
-					if (c1->len < c2->len &&
-						memcmp(c1->data, c2->data, c1->len) > 0)
-						break;
-					else if (c2->len == c1->len &&
-						memcmp(c1->data, c2->data, c1->len) < 0)
-						break;
-				}
-
-				if (c2 != NULL)
-					TAILQ_INSERT_BEFORE(c2, c1, entries);
-				else
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-			}
+			csort++;
 		}
 
-		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-			pack(p, c2->data, c2->len);
-			p += c2->len;
 
-			TAILQ_REMOVE(&head, c2, entries);
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
 		}
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
 
 		keylen = (p - key);	
 
@@ -3881,7 +3823,8 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 	
 
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -3892,24 +3835,16 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-        TAILQ_HEAD(listhead, canonical) head;
 
-        struct canonical {
-                char *data;
-                int len;
-                TAILQ_ENTRY(canonical) entries;
-        } *c1, *c2, *cp;
-
-
-        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -4015,6 +3950,14 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 
 		/* no signature here */	
 		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
 		
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
@@ -4038,45 +3981,35 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 			pack(q, ((struct tlsa *)rrp2->rdata)->data, ((struct tlsa *)rrp2->rdata)->datalen);
 			q += ((struct tlsa *)rrp2->rdata)->datalen;
 
-			c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+			r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-			}
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-			memcpy(c1->data, tmpkey, c1->len);
-
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			else {
-				TAILQ_FOREACH(c2, &head, entries) {
-					if (c1->len < c2->len)
-						break;
-					else if (c2->len == c1->len &&
-						memcmp(c1->data, c2->data, c1->len) < 0)
-						break;
-				}
-
-				if (c2 != NULL)
-					TAILQ_INSERT_BEFORE(c2, c1, entries);
-				else
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-			}
+			csort++;
 		}
 
-		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-			pack(p, c2->data, c2->len);
-			p += c2->len;
 
-			TAILQ_REMOVE(&head, c2, entries);
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
 		}
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
 
 		keylen = (p - key);	
 
@@ -4115,7 +4048,8 @@ sign_rp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 	
 
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -4126,24 +4060,16 @@ sign_rp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-        TAILQ_HEAD(listhead, canonical) head;
 
-        struct canonical {
-                char *data;
-                int len;
-                TAILQ_ENTRY(canonical) entries;
-        } *c1, *c2, *cp;
-
-
-        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -4248,6 +4174,14 @@ sign_rp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 
 		/* no signature here */	
 		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			q = tmpkey;
@@ -4269,45 +4203,36 @@ sign_rp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 			q += ((struct rp *)rrp2->rdata)->txtlen;
 
 
-		       c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+			r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-                	}
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-			memcpy(c1->data, tmpkey, c1->len);
-
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			else {
-				TAILQ_FOREACH(c2, &head, entries) {
-					if (c1->len < c2->len)
-						break;
-					else if (c2->len == c1->len &&
-						memcmp(c1->data, c2->data, c1->len) < 0)
-						break;
-				}
-
-				if (c2 != NULL)
-					TAILQ_INSERT_BEFORE(c2, c1, entries);
-				else
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-			}
+			csort++;
 		}
 
-		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-			pack(p, c2->data, c2->len);
-			p += c2->len;
 
-			TAILQ_REMOVE(&head, c2, entries);
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
 		}
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
+
 		keylen = (p - key);	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
@@ -4342,7 +4267,8 @@ sign_hinfo(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 	
 
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -4353,24 +4279,16 @@ sign_hinfo(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-        TAILQ_HEAD(listhead, canonical) head;
 
-        struct canonical {
-                char *data;
-                int len;
-                TAILQ_ENTRY(canonical) entries;
-        } *c1, *c2, *cp;
-
-
-        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -4475,6 +4393,14 @@ sign_hinfo(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 
 		/* no signature here */	
 		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			q = tmpkey;
@@ -4499,64 +4425,51 @@ sign_hinfo(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 			pack(q, ((struct hinfo *)rrp2->rdata)->os, ((struct hinfo *)rrp2->rdata)->oslen);
 			q += ((struct hinfo *)rrp2->rdata)->oslen;
 
-
-		       c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+			r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-                }
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-                memcpy(c1->data, tmpkey, c1->len);
+			csort++;
+		}
 
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
 
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
-	}
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
+		}
 
-        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
+		pack(p, r, rlen);
+		p += rlen;
 
-                TAILQ_REMOVE(&head, c2, entries);
-        }
-	keylen = (p - key);	
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
-	if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
+		keylen = (p - key);	
 
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
 
-	if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "HINFO", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
-	
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "HINFO", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+		
 	} while ((*++zsk_key) != NULL);
 
 	return 0;
@@ -4580,7 +4493,8 @@ sign_caa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 	
 
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -4591,24 +4505,16 @@ sign_caa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-        TAILQ_HEAD(listhead, canonical) head;
 
-        struct canonical {
-                char *data;
-                int len;
-                TAILQ_ENTRY(canonical) entries;
-        } *c1, *c2, *cp;
-
-
-        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -4711,8 +4617,13 @@ sign_caa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		pack(p, dnsname, labellen);
 		p += labellen;
 
-		/* no signature here */	
-		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			q = tmpkey;
@@ -4738,54 +4649,36 @@ sign_caa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			q += ((struct caa *)rrp2->rdata)->valuelen;
 
 
-		       c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+		        r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-			}
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-			memcpy(c1->data, tmpkey, c1->len);
-
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			else {
-				TAILQ_FOREACH(c2, &head, entries) {
-					if (c1->len < c2->len) {
-						if (memcmp(c1->data, c2->data, c1->len) > 0) {
-							break;
-						}
-					} else if (c2->len == c1->len &&
-						memcmp(c1->data, c2->data, c1->len) < 0) {
-						break;
-					} else if (c1->len > c2->len) {
-						if (memcmp(c1->data, c2->data, c2->len) > 0) {
-							break;
-						}
-					}
-				}
-
-				if (c2 != NULL)
-					TAILQ_INSERT_BEFORE(c2, c1, entries);
-				else
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-			}
-
+			csort++;
 		} /* tailq foreach */
 
-		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-			pack(p, c2->data, c2->len);
-			p += c2->len;
-
-			TAILQ_REMOVE(&head, c2, entries);
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
 		}
-		keylen = (p - key);	
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
+
+		keylen = (p - key);
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -4822,7 +4715,8 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 	
 
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -4833,24 +4727,16 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-        TAILQ_HEAD(listhead, canonical) head;
 
-        struct canonical {
-                char *data;
-                int len;
-                TAILQ_ENTRY(canonical) entries;
-        } *c1, *c2, *cp;
-
-
-        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -4955,6 +4841,14 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 
 		/* no signature here */	
 		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			q = tmpkey;
@@ -4977,63 +4871,49 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 			pack(q, ((struct ds *)rrp2->rdata)->digest, ((struct ds *)rrp2->rdata)->digestlen);
 			q += ((struct ds *)rrp2->rdata)->digestlen;
 
-		       c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+		        r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
+
+			csort++;
                 }
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
+		}
 
-                memcpy(c1->data, tmpkey, c1->len);
+		pack(p, r, rlen);
+		p += rlen;
 
-                if (TAILQ_EMPTY(&head))
-                        TAILQ_INSERT_TAIL(&head, c1, entries);
-                else {
-                        TAILQ_FOREACH(c2, &head, entries) {
-                                if (c1->len < c2->len)
-                                        break;
-                                else if (c2->len == c1->len &&
-                                        memcmp(c1->data, c2->data, c1->len) < 0)
-                                        break;
-                        }
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
 
-                        if (c2 != NULL)
-                                TAILQ_INSERT_BEFORE(c2, c1, entries);
-                        else
-                                TAILQ_INSERT_TAIL(&head, c1, entries);
-                }
-	}
+		keylen = (p - key);	
 
-        TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-                pack(p, c2->data, c2->len);
-                p += c2->len;
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
 
-                TAILQ_REMOVE(&head, c2, entries);
-        }
-	keylen = (p - key);	
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
 
-#if 0
-	debug_bindump(key, keylen);
-#endif
-	if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
-		dolog(LOG_INFO, "signing failed\n");
-		return -1;
-	}
-
-	len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
-	tmp[len] = '\0';
-
-	if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "DS", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
-		dolog(LOG_INFO, "fill_rrsig\n");
-		return -1;
-	}
-	
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "DS", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+		
 	} while ((*++zsk_key) != NULL);
 
 	return 0;
@@ -5056,7 +4936,8 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 	char shabuf[64];
 	
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -5067,24 +4948,16 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-        TAILQ_HEAD(listhead, canonical) head;
 
-        struct canonical {
-                char *data;
-                int len;
-                TAILQ_ENTRY(canonical) entries;
-        } *c1, *c2, *cp;
-
-
-        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -5190,6 +5063,14 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 
 		/* no signature here */	
 		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			q = tmpkey;
@@ -5206,45 +5087,35 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 			memcpy(q, ((struct ns *)rrp2->rdata)->nsserver, ((struct ns *)rrp2->rdata)->nslen);
 			q += ((struct ns *)rrp2->rdata)->nslen;
 
-		       c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+		        r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-			}
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-			memcpy(c1->data, tmpkey, c1->len);
-
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			else {
-				TAILQ_FOREACH(c2, &head, entries) {
-					if (c1->len < c2->len)
-						break;
-					else if (c2->len == c1->len &&
-						memcmp(c1->data, c2->data, c1->len) < 0)
-						break;
-				}
-
-				if (c2 != NULL)
-					TAILQ_INSERT_BEFORE(c2, c1, entries);
-				else
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-			}
+			csort++;
 		}
 
-		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-			pack(p, c2->data, c2->len);
-			p += c2->len;
-
-			TAILQ_REMOVE(&head, c2, entries);
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
 		}
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
+
 		keylen = (p - key);	
 
 	#if 0
@@ -5285,7 +5156,8 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 	
 
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -5296,24 +5168,16 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-        TAILQ_HEAD(listhead, canonical) head;
 
-        struct canonical {
-                char *data;
-                int len;
-                TAILQ_ENTRY(canonical) entries;
-        } *c1, *c2, *cp;
-
-
-        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -5418,6 +5282,14 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 
 		/* no signature here */	
 		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			q = tmpkey;
@@ -5436,45 +5308,35 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 			memcpy(q, ((struct smx *)rrp2->rdata)->exchange, ((struct smx *)rrp2->rdata)->exchangelen);
 			q += ((struct smx *)rrp2->rdata)->exchangelen;
 
-			c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+		        r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-			}
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-			memcpy(c1->data, tmpkey, c1->len);
-
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			else {
-				TAILQ_FOREACH(c2, &head, entries) {
-					if (c1->len < c2->len)
-						break;
-					else if (c2->len == c1->len &&
-						memcmp(c1->data, c2->data, c1->len) < 0)
-						break;
-				}
-
-				if (c2 != NULL)
-					TAILQ_INSERT_BEFORE(c2, c1, entries);
-				else
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-			}
+			csort++;
 		}
 
-		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-			pack(p, c2->data, c2->len);
-			p += c2->len;
-
-			TAILQ_REMOVE(&head, c2, entries);
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
 		}
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
+
 		keylen = (p - key);	
 
 	#if 0
@@ -5516,7 +5378,8 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 	
 
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -5527,24 +5390,18 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 
 	int labellen;
 	int keyid;
-	int len;
+	int len, rlen, i;
+	uint16_t clen;
 	int keylen, siglen = sizeof(signature);
 	int labels;
 	int nzk = 0;
+	int csort = 0;
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-        TAILQ_HEAD(listhead, canonical) head;
-
-        struct canonical {
-                char *data;
-                int len;
-                TAILQ_ENTRY(canonical) entries;
-        } *c1, *c2, *cp;
 
 
-        TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -5649,6 +5506,13 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 
 		/* no signature here */	
 		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			q = tmpkey;
@@ -5665,50 +5529,38 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 			pack32(q, ((struct a *)rrp2->rdata)->a);
 			q += 4;
 
-			c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
+		        r = canonsort[csort] = calloc(1, 68000);
+			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-			}
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-			memcpy(c1->data, tmpkey, c1->len);
-
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			else {
-				TAILQ_FOREACH(c2, &head, entries) {
-					if (c1->len < c2->len)
-						break;
-					else if (c2->len == c1->len &&
-						memcmp(c1->data, c2->data, c1->len) < 0)
-						break;
-				}
-
-				if (c2 != NULL)
-					TAILQ_INSERT_BEFORE(c2, c1, entries);
-				else
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-			}
+			csort++;
+		}
+		
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
 		}
 
-		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-			pack(p, c2->data, c2->len);
-			p += c2->len;
+		memcpy(p, r, rlen);
+		//pack(p, r, rlen);
+		p += rlen;
 
-			TAILQ_REMOVE(&head, c2, entries);
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
 		}
+		free(canonsort);
+
 		keylen = (p - key);	
 
-	#if 0
-		debug_bindump(key, keylen);	
-	#endif
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
 			return -1;
@@ -7338,8 +7190,12 @@ void
 debug_bindump(const char *key, int keylen)
 {
 	int fd, i;
+	static int ix = 0;
+	char buf[512];
 
-	fd = open("bindump.bin", O_WRONLY | O_CREAT | O_TRUNC, 0600);
+	
+	snprintf(buf, sizeof(buf), "bindump.bin.%d", ix++);
+	fd = open(buf, O_WRONLY | O_CREAT | O_TRUNC, 0600);
 	for (i = 0; i < keylen; i++) {
 		write(fd, (const void *)&key[i], 1);
 	}
@@ -7719,4 +7575,112 @@ update_soa_serial(ddDB *db, char *zonename, time_t serial)
 	}
 
 
+}
+
+char *
+canonical_sort(char **canonsort, int csort, int *rlen)
+{
+	int totallen = 0;
+	int i;
+	uint16_t len;
+	char *p, *q, *rp = NULL;
+	char *array, *r;
+
+	
+	array = calloc(csort, 68000);
+	if (array == NULL)
+		return NULL;
+
+	r = array;
+
+	for (i = 0; i < csort; i++) {
+		p = canonsort[i];
+		len = unpack16(p);	
+		totallen += len;
+
+		memcpy(r, p, len + 2);
+		r += 68000;
+	}
+	
+
+	qsort((void*)array, csort, 68000, cs_cmp);
+
+	rp = malloc(totallen);
+	if (rp == NULL) {
+		return NULL;
+	}
+
+	q = &rp[0];
+	r = array;
+
+	for (i = 0; i < csort; i++) {
+		len = unpack16(r);	
+		r += 2;
+		unpack(q, r, len);
+		q += len;
+		r += (68000 - 2);
+	}
+
+	free(array);
+
+#if 0
+	printf("dumping canonsort\n");
+	for (i = 0; i < totallen; i++) {
+		if (i && i % 16 == 0)
+			printf("\n");
+		printf("%02x, ", rp[i] & 0xff);
+	}
+	printf("\n");
+#endif
+
+	*rlen = totallen;
+	return (rp);
+}
+
+int
+cs_cmp(const void *a, const void *b)
+{
+	uint16_t lena = unpack16((char *)a);
+	uint16_t lenb = unpack16((char *)b);
+	u_char *a2 = ((u_char *)a + 2);
+	u_char *b2 = ((u_char *)b + 2);
+	int i, mlen, ret;
+
+	mlen = MIN(lena, lenb);
+
+	/* skip the dnsname (no compression here) */
+	for (i = 0; i < mlen; i++) {
+		if (a2[i] != 0) {
+			i += a2[i];
+		} else {
+			break;
+		}
+	}
+
+	i++;	/* advance 1 to the ttl */
+	i += 2;  /* type */
+	i += 2;  /* class */
+	i += 4;	 /* ttl */
+
+	ret = memcmp(&a2[0], &b2[0], i);
+	if (ret != 0)
+		return (ret);
+
+	i += 2;  /* rdlen */
+
+	for (; i < mlen; i++) {
+		if (a2[i] < b2[i])
+			return -1;
+		else if (a2[i] > b2[i])
+			return 1;
+	}
+
+	/* if they are still equal the shorter one wins */
+		
+	if (lena < lenb)
+		return -1;
+	else if (lena > lenb)
+		return 1;
+	else
+		return 0;
 }
