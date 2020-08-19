@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.139 2020/08/12 04:22:27 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.140 2020/08/19 12:49:03 pjp Exp $
  */
 
 
@@ -4064,13 +4064,11 @@ setup_cortex(struct imsgbuf *ibuf)
 	}
 
 #if __OpenBSD__
-#if 0
 	if (unveil("/", "") == -1) {
 		dolog(LOG_INFO, "unveil cortex: %s\n", strerror(errno));
-		ddd_shutdown();
-		exit(1);
+		/* XXX notice no exit here */
 	}
-#endif
+
 	if (unveil(NULL, NULL) == -1) {
 		dolog(LOG_INFO, "unveil cortex: %s\n", strerror(errno));
 		ddd_shutdown();
