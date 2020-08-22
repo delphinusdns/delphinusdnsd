@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: sign.c,v 1.12 2020/08/11 15:37:17 pjp Exp $
+ * $Id: sign.c,v 1.13 2020/08/22 06:28:10 pjp Exp $
  */
 
 #include <sys/param.h>	/* for MIN() */
@@ -6660,7 +6660,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			strlcat(bitmap, "TLSA ", sizeof(bitmap));	
 
 #if 0
-		printf("%s %s\n", buf, bitmap);
+		printf("%s\n", bitmap);
 #endif
 
 		n1 = calloc(1, sizeof(struct mynsec3));
@@ -6767,7 +6767,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		 * same hash, just skip those.  Funny thing is that it did
 		 * not get found when struct domain's were still used.. odd.
 		 */
-		if (strcmp(n2->hashname, np->hashname) == 0)
+		if (np != n2 && strcmp(n2->hashname, np->hashname) == 0)
 			continue;
 #if 0
 		printf("%s next: %s %s\n", n2->hashname, np->hashname, n2->bitmap);
@@ -6776,10 +6776,6 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		fill_nsec3(db, buf, "nsec3", ttl, n3p.algorithm, n3p.flags, n3p.iterations, salt, np->hashname, n2->bitmap);
 	}
 
-#if 0
-	printf("%d records\n", j);
-#endif
-	
 	return 0;
 }
 
