@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: sign.c,v 1.13 2020/08/22 06:28:10 pjp Exp $
+ * $Id: sign.c,v 1.14 2020/08/24 06:05:30 pjp Exp $
  */
 
 #include <sys/param.h>	/* for MIN() */
@@ -183,7 +183,6 @@ void		update_soa_serial(ddDB *, char *, time_t);
 void		debug_bindump(const char *, int);
 int 		dump_db(ddDB *, FILE *, char *);
 int		notglue(ddDB *, struct rbtree *, char *);
-char * 		dnskey_wire_rdata(struct rr *, int *);
 
 char *		canonical_sort(char **, int, int *);
 int 		cs_cmp(const void *, const void *);
@@ -5780,7 +5779,8 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 	char shabuf[64];
 	
 	char *dnsname;
-	char *p, *q;
+	char *p, *q, *r;
+	char **canonsort;
 	char *key, *tmpkey;
 	char *zone;
 
@@ -5790,28 +5790,18 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 	uint8_t algorithm;
 
 	int nzk = 0;
+	int csort = 0;
 	int labellen;
 	int keyid;
-	int len;
+	int len, i, rlen;
 	int keylen, siglen = sizeof(signature);
 	int labels;
+	int clen = 0;
 
 
 	char timebuf[32];
 	struct tm tm;
 	u_int32_t expiredon2, signedon2;
-
-	TAILQ_HEAD(listhead, canonical) head;
-
-	struct canonical {
-		char *data;
-		int len;
-		char *rdata;
-		int rdatalen;
-		int pid;
-		TAILQ_ENTRY(canonical) entries;
-	} *c1, *c2, *cp;
-		
 
 	zsk_key = calloc(3, sizeof(struct keysentry *));
 	if (zsk_key == NULL) {
@@ -5819,7 +5809,6 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 		return -1;
 	}
 		
-	TAILQ_INIT(&head);
 	memset(&shabuf, 0, sizeof(shabuf));
 
 	key = malloc(10 * 4096);
@@ -5907,6 +5896,15 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 			p += labellen;
 
 			/* no signature here */	
+
+			canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+			if (canonsort == NULL) {
+				dolog(LOG_INFO, "canonsort out of memory\n");
+				return -1;
+			}
+
+			csort = 0;
+				
 			
 			TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 				q = tmpkey;
@@ -5929,64 +5927,37 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 				pack(q, ((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len);
 				q += ((struct dnskey *)rrp2->rdata)->publickey_len;
 
-				c1 = malloc(sizeof(struct canonical));
-				if (c1 == NULL) {
-					dolog(LOG_INFO, "c1 out of memory\n");
+				r = canonsort[csort] = calloc(1, 68000);
+				if (r == NULL) {
+					dolog(LOG_INFO, "out of memory\n");
 					return -1;
 				}
 
-				c1->len = (q - tmpkey);
-				c1->data = malloc(c1->len);
-				if (c1->data == NULL) {
-					dolog(LOG_INFO, "c1->data out of memory\n");
-					return -1;
-				}
-			
-				memcpy(c1->data, tmpkey, c1->len);
+				clen = (q - tmpkey);
+				pack16(r, clen);
+				r += 2;
+				pack(r, tmpkey, clen);
 
-				c1->rdata = dnskey_wire_rdata(rrp2, &c1->rdatalen);
-				if (c1->rdata == NULL) {
-					dolog(LOG_INFO, "c1->rdata out of memory\n");
-					return -1;
-				}
-
-				if (TAILQ_EMPTY(&head))
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-				else {
-					TAILQ_FOREACH(c2, &head, entries) {
-						if (c1->rdatalen < c2->rdatalen && 	
-							memcmp(c1->rdata, c2->rdata, c1->rdatalen) <= 0)
-							break;
-						else if (c1->rdatalen > c2->rdatalen &&
-							memcmp(c1->rdata, c2->rdata, c2->rdatalen) <= 0)
-							break;
-						else if (c2->rdatalen == c1->rdatalen &&
-							memcmp(c1->rdata, c2->rdata, c1->rdatalen) <= 0)
-							break;
-					}
-
-					if (c2 != NULL) 
-						TAILQ_INSERT_BEFORE(c2, c1, entries);
-					else
-						TAILQ_INSERT_TAIL(&head, c1, entries);
-				}
-
+				csort++;
 			}
 
-			TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-				pack(p, c2->data, c2->len);
-				p += c2->len;
-
-				free(c2->rdata);
-				free(c2->data);
-
-				TAILQ_REMOVE(&head, c2, entries);
+	
+			r = canonical_sort(canonsort, csort, &rlen);
+			if (r == NULL) {
+				dolog(LOG_INFO, "canonical_sort failed\n");
+				return -1;
 			}
+
+			memcpy(p, r, rlen);
+			p += rlen;
+
+			free(r);
+			for (i = 0; i < csort; i++) {
+				free(canonsort[i]);
+			}
+			free(canonsort);
+
 			keylen = (p - key);	
-
-		#if 0
-			debug_bindump(key, keylen);
-		#endif
 
 			if (sign(algorithm, key, keylen, knp, (char *)&signature, &siglen) < 0) {
 				dolog(LOG_INFO, "signing failed\n");
@@ -6087,6 +6058,14 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 		p += labellen;
 
 		/* no signature here */	
+
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+				dolog(LOG_INFO, "canonsort2 out of memory\n");
+				return -1;
+		}
+
+		csort = 0;
 		
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 #if 0
@@ -6117,66 +6096,37 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 			pack(q, ((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len);
 			q += ((struct dnskey *)rrp2->rdata)->publickey_len;
 
-			c1 = malloc(sizeof(struct canonical));
-			if (c1 == NULL) {
-				dolog(LOG_INFO, "c1 out of memory\n");
+
+			r = canonsort[csort] = calloc(1, 68000);
+			if (r == NULL) {
+				dolog(LOG_INFO, "out of memory\n");
 				return -1;
 			}
 
-			c1->len = (q - tmpkey);
-			c1->data = malloc(c1->len);
-			if (c1->data == NULL) {
-				dolog(LOG_INFO, "c1->data out of memory\n");
-				return -1;
-			}
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
 
-			c1->pid = dnskey_keytag((struct dnskey *)rrp2->rdata);
-
-			memcpy(c1->data, tmpkey, c1->len);
-
-			c1->rdata = dnskey_wire_rdata(rrp2, &c1->rdatalen);
-			if (c1->rdata == NULL) {
-				dolog(LOG_INFO, "c1->rdata out of memory\n");
-				return -1;
-			}
-
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, c1, entries);
-			else {
-				TAILQ_FOREACH(c2, &head, entries) {
-					if (c1->rdatalen < c2->rdatalen && 	
-						memcmp(c1->rdata, c2->rdata, c1->rdatalen) <= 0)
-						break;
-					else if (c1->rdatalen > c2->rdatalen &&
-						memcmp(c1->rdata, c2->rdata, c2->rdatalen) <= 0)
-						break;
-					else if (c2->rdatalen == c1->rdatalen &&
-						memcmp(c1->rdata, c2->rdata, c1->rdatalen) <= 0)
-						break;
-				}
-
-				if (c2 != NULL)
-					TAILQ_INSERT_BEFORE(c2, c1, entries);
-				else
-					TAILQ_INSERT_TAIL(&head, c1, entries);
-			}
+			csort++;
 		}
 
-		TAILQ_FOREACH_SAFE(c2, &head, entries, cp) {
-			pack(p, c2->data, c2->len);
-			p += c2->len;
-
-			free(c2->rdata);
-			free(c2->data);
-
-			TAILQ_REMOVE(&head, c2, entries);
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
 		}
+
+		memcpy(p, r, rlen);
+		p += rlen;
+
+		free(r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
 
 		keylen = (p - key);	
-
-	#if 0
-		debug_bindump(key, keylen);
-	#endif
 
 		siglen = sizeof(signature);
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
@@ -7509,38 +7459,6 @@ notglue(ddDB *db, struct rbtree *rbt, char *zonename)
 	free(zoneapex);
 	/* let's pretend we're not glue here */
 	return 1;
-}
-
-/*
- * DNSKEY_WIRE_RDATA - create wire representation of the RDATA portion of an RR
- */
-
-char *
-dnskey_wire_rdata(struct rr *rr, int *outlen)
-{
-	char *tmp = NULL, *p;
-
-	*outlen = sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t) \
-		+ ((struct dnskey *)rr->rdata)->publickey_len;
-
-	tmp = malloc(*outlen);
-	if (tmp == NULL)
-		return NULL;
-		
-	p = tmp;
-	pack16(p, htons(((struct dnskey *)rr->rdata)->flags));
-	p += 2;
-	
-	pack8(p, ((struct dnskey *)rr->rdata)->protocol);
-	p++;
-
-	pack8(p, ((struct dnskey *)rr->rdata)->algorithm);
-	p++;
-
-	pack(p, ((struct dnskey *)rr->rdata)->public_key,
-		((struct dnskey *)rr->rdata)->publickey_len);
-
-	return (tmp);
 }
 
 void
