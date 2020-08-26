@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.113 2020/08/08 05:51:48 pjp Exp $
+ * $Id: parse.y,v 1.114 2020/08/26 07:17:26 pjp Exp $
  */
 
 %{
@@ -96,6 +96,7 @@ extern int	insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
 extern int 	insert_passlist(char *, char *);
 extern int	insert_tsig(char *, char *);
 extern int	insert_tsig_key(char *, int, char *, int);
+extern int	insert_zone(char *);
 extern void 	ddd_shutdown(void);
 extern int 	mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int 	mybase64_decode(char const *, u_char *, size_t);
@@ -809,6 +810,13 @@ zone:
 
 zonelabel:
 	QUOTEDSTRING
+	{
+		if (insert_zone($1) < 0) {
+			return -1;
+		}
+
+		free($1);
+	}
 	;
 
 zonecontent:

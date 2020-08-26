@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.52 2020/08/08 16:04:52 pjp Exp $
+ * $Id: ddd-db.h,v 1.53 2020/08/26 07:17:26 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -554,5 +554,25 @@ struct pkt_imsg {
 
 #define	SHAREDMEMSIZE	400
 #define SHAREDMEMSIZE3	200
+
+struct walkentry {
+        struct rbtree *rbt;
+        TAILQ_ENTRY(walkentry) walk_entry;
+} *we1, *wep;
+
+struct zoneentry {
+        char name[DNS_MAXNAME];
+        int namelen;
+        char *humanname;
+        TAILQ_HEAD(, walkentry) walkhead;
+        RB_ENTRY(zoneentry) zone_entry;
+};
+
+RB_HEAD(zonetree, zoneentry);
+RB_PROTOTYPE(zonetree, zoneentry, zone_entry, zonecmp);
+
+extern int zonecmp(struct zoneentry *, struct zoneentry *);
+	
+
 
 #endif /* _DB_H */

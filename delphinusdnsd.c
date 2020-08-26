@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.140 2020/08/19 12:49:03 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.141 2020/08/26 07:17:26 pjp Exp $
  */
 
 
@@ -176,6 +176,7 @@ extern int 	notifysource(struct question *, struct sockaddr_storage *);
 extern int 	drop_privs(char *, struct passwd *);
 extern struct rbtree * 	get_soa(ddDB *, struct question *);
 extern struct rbtree *	get_ns(ddDB *, struct rbtree *, int *);
+extern void populate_zone(ddDB *db);
 
 
 struct question		*convert_question(struct parsequestion *, int);
@@ -680,6 +681,7 @@ main(int argc, char *argv[], char *environ[])
 			}
 
 			if (axfrport && axfrport != port) {
+				populate_zone(db);
 				/* axfr port below */
 				hints.ai_socktype = SOCK_STREAM;
 				hints.ai_protocol = IPPROTO_TCP;
@@ -722,6 +724,7 @@ main(int argc, char *argv[], char *environ[])
 					exit(1);
 				}
 			} else if (axfrport && axfrport == port) {
+				populate_zone(db);
 				afd[i] = -1;
 			}
 
@@ -820,6 +823,7 @@ main(int argc, char *argv[], char *environ[])
 
 			/* axfr socket */
 			if (axfrport && axfrport != port) {
+				populate_zone(db);
 				if ((afd[i] = socket(pifap->ifa_addr->sa_family, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 					dolog(LOG_INFO, "tcp socket: %s\n", strerror(errno));
 					ddd_shutdown();
@@ -849,6 +853,7 @@ main(int argc, char *argv[], char *environ[])
 					exit(1);
 				}
 			} else if (axfrport && axfrport == port) {
+				populate_zone(db);
 				afd[i] = -1;
 			}
 

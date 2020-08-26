@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.41 2020/08/08 05:51:48 pjp Exp $
+ * $Id: forward.c,v 1.42 2020/08/26 07:17:26 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -474,7 +474,7 @@ drop:
 				fwq1->so = -1;
 
 				if (fwq1->returnso != -1)
-					close(fwq2->returnso);
+					close(fwq1->returnso);
 				
 				if (fwq1->tsigkey)
 					free(fwq1->tsigkey);

@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: dddctl.c,v 1.115 2020/07/26 14:03:50 pjp Exp $
+ * $Id: dddctl.c,v 1.116 2020/08/26 07:17:26 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -110,7 +110,7 @@ int insert_filter(char *, char *);
 int insert_passlist(char *, char *);
 int insert_notifyddd(char *, char *);
 int insert_forward(struct sockaddr_storage *, uint16_t, char *);
-
+int insert_zone(char *);
 
 int illdestination;
 int *ptr = &illdestination;
@@ -201,6 +201,12 @@ main(int argc, char *argv[])
 
 	usage(argc, argv);
 	exit(1);
+}
+
+int
+insert_zone(char *zonename)
+{
+	return 0;
 }
 
 int

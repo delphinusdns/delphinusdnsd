@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: axfr.c,v 1.47 2020/08/08 05:51:48 pjp Exp $
+ * $Id: axfr.c,v 1.48 2020/08/26 07:17:26 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -125,6 +125,8 @@ extern int domaincmp(struct node *e1, struct node *e2);
 extern char * dns_label(char *, int *);
 extern int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *);
 extern int find_tsig_key(char *keyname, int keynamelen, char *key, int keylen);
+extern int have_zone(char *zonename, int zonelen);
+
 
 int notify = 0;				/* do not notify when set to 0 */
 
@@ -132,6 +134,7 @@ extern int debug, verbose;
 extern time_t time_changed;
 extern int tsig;
 extern long glob_time_offset;
+extern struct zonetree zonehead;
 
 SLIST_HEAD(, axfrentry) axfrhead;
 
@@ -840,8 +843,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 	char *buf;
 	char tsigkey[512];
-	char *p;
-	char *q;
+	char *p, *q;
 	char *reply, *replybuf;
 
 	int len, dnslen = 0;
@@ -852,13 +854,12 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 	int envelopcount;
 	int tsigkeylen;
 
-	struct node *n, *nx;
+	struct zoneentry find, *res;
 	struct dns_header *dh, *odh;
 	struct sreply sreply;
 	struct question *question, *fq;
-	struct rbtree *rbt = NULL, *rbt2 = NULL, *saverbt = NULL, *soa = NULL;
+	struct rbtree *rbt = NULL, *rbt2 = NULL, *soa = NULL;
 	struct rrset *rrset = NULL;
-	struct rr *rrp = NULL;
 
 	ddDBT key, data;
 	HMAC_CTX *tsigctx = NULL;
@@ -942,6 +943,8 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			goto drop;
 		}
 
+		question->aa = 1;
+
 		if (ntohs(question->hdr->qclass) != DNS_CLASS_IN) {
 			dolog(LOG_INFO, "AXFR question wasn't for class DNS_CLASS_IN, drop\n");
 			goto drop;
@@ -975,6 +978,11 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 		q = question->hdr->name;
 		qlen = question->hdr->namelen;
+
+		if (have_zone(q, qlen) != 1) {
+			dolog(LOG_INFO, "not in our list of zones, drop\n");
+			goto drop;
+		}
 
 		rbt = find_rrset(db, q, qlen);
 		if (rbt == NULL) {
@@ -1064,49 +1072,25 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		outlen = build_soa(db, (reply + 2), outlen, soa, question);
 		rrcount = 1;
 		envelopcount = 1;
-		
-		RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
-			if ((rbt = calloc(1, sizeof(struct rbtree))) == NULL) {
-				dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-				goto drop;
-			}
-			if ((saverbt = calloc(1, sizeof(struct rbtree))) == NULL) {
-				dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-				goto drop;
-			}
 
-			memcpy((char*)rbt, (char*)n->data, sizeof(struct rbtree));
-			memcpy((char*)saverbt,(char*)n->data, sizeof(struct rbtree));
+		memcpy(find.name, q, qlen);
+		find.namelen = qlen;
+
+		if ((res = RB_FIND(zonetree, &zonehead, &find)) == NULL) {
+			dolog(LOG_INFO, "internal error getting zonename\n");
+			goto drop;
+		}
+
+		TAILQ_FOREACH(wep, &res->walkhead, walk_entry) {
+			rbt = wep->rbt;
 
 			if (checklabel(db, rbt, soa, question)) {
 				fq = build_fake_question(rbt->zone, rbt->zonelen, 0, NULL, 0);
+				fq->aa = 1;
 				build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, rbt, NULL, 0xff, 1, 0, replybuf);
+				
 				outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0);
 				free_question(fq);
-	
-				if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
-					rrp = TAILQ_FIRST(&rrset->rr_head);
-					if (rrp != NULL && 
-						((struct ns *)rrp->rdata)->ns_type & NS_TYPE_DELEGATE) {
-						TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-							fq = build_fake_question(((struct ns *)rrp->rdata)->nsserver,
-								((struct ns *)rrp->rdata)->nslen, 0, NULL, 0);
-							rbt2 = find_rrset(db, fq->hdr->name, fq->hdr->namelen);
-							if (rbt2 == NULL) {
-								free_question(fq);
-								continue;
-							}
-
-							build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, rbt2, NULL, 0xff, 1, 0, replybuf);
-							outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0);
-							if (rbt2) {
-								rbt2 = NULL;
-							}
-							free_question(fq);
-						
-						} /* TAILQ_FOREACH */
-					} /* if (rrp != NULL */
-				} /* if (find_rr */
 			} /* if checklabel */
 
 			/*
@@ -1210,10 +1194,6 @@ drop:
 		rbt2 = NULL;
 	}
 
-	if (saverbt) {
-		saverbt = NULL;
-	}
-
 	close(so);
 	exit(0);
 }
@@ -1314,11 +1294,6 @@ build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question
 
 	offset += 12;			/* up to rdata length */
 
-#if 0
-	p = (char *)&answer->rdata;
-#endif
-
-
 	label = ((struct soa *)rrp->rdata)->nsserver;
 	labellen = ((struct soa *)rrp->rdata)->nsserver_len;
 
@@ -1394,50 +1369,6 @@ build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question
 int
 checklabel(ddDB *db, struct rbtree *rbt, struct rbtree *soa, struct question *q)
 {
-	struct rbtree *tmprbt;
-	struct rrset *rrset;
-	char *p;
-	int plen;
-
-	if (memcmp(rbt, soa, sizeof(struct rbtree)) == 0)	
-		return 1;
-	
-	p = rbt->zone;
-	plen = rbt->zonelen;
-
-	do {
-		if (*p == '\0')
-			return (0);
-
-		tmprbt = find_rrset(db, p, plen);
-		if (tmprbt == NULL) {
-			plen -= (*p + 1);
-			p = (p + (*p + 1));
-
-			continue;
-		}
-	
-		/*
- 		 * the encountered label has an SOA before we got to the
-		 * root, so we skip this record entirely...
-		 */
-
-		if ((rrset = find_rr(tmprbt, DNS_TYPE_SOA)) != NULL) {
-			return (0);
-		}
-
-			
-		/*
-		 * and check the next label...
-		 */
-
-		plen -= (*p + 1);
-		p = (p + (*p + 1));
-
-		
-	} while (memcmp(p, q->hdr->name, q->hdr->namelen) != 0);
-
-	
 	return (1);
 }
 
