@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.53 2020/08/26 07:17:26 pjp Exp $
+ * $Id: ddd-db.h,v 1.54 2020/09/06 07:38:00 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -40,7 +40,7 @@
 #include "ddd-config.h"
 
 #ifndef DEFAULT_CONFFILE
-#define CONFFILE "/etc/delphinusdns/delphinusdns.conf"
+#define CONFFILE "/var/delphinusdnsd/etc/delphinusdns.conf"
 #else
 #define CONFFILE DEFAULT_CONFFILE
 #endif
@@ -424,7 +424,7 @@ struct mzone {
 } *mz, *mz0;
 
 #ifndef DEFAULT_RZONE_DIR
-#define DELPHINUS_RZONE_PATH	"/etc/delphinusdns/replicant"
+#define DELPHINUS_RZONE_PATH	"/var/delphinusdnsd/replicant"
 #else
 #define DELPHINUS_RZONE_PATH	DEFAULT_RZONE_DIR
 #endif
