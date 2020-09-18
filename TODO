@@ -9,6 +9,7 @@ to have replicant compatibility for NSEC
 - display statistics via the UNIX socket, now possible with the cortex process.
 - DNS Update (RFC 2136 and 3007) must be Secure with TSIG, and do DNSSEC signing
 - an IODINE-like DNS tunnel functionality (perhaps for 1.7.0?)
+- add DNS64 (RFC 6147) capability to forwarding mode
 
 For 1.5.0 release
 - make sure an RRset has the same TTL, we don't need TTL in a single RR because
