@@ -26,7 +26,7 @@
  * 
  */
 /*
- * $Id: raxfr.c,v 1.62 2020/08/08 05:51:48 pjp Exp $
+ * $Id: raxfr.c,v 1.63 2020/09/24 05:15:23 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -165,7 +165,7 @@ extern void	dolog(int, char *, ...);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int namelen);               
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);    
 extern struct question         *build_question(char *, int, int, char *);
-extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *);
+extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t);
 extern int     find_tsig_key(char *, int, char *, int);
 extern int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 
@@ -2342,7 +2342,7 @@ do_raxfr(FILE *f, struct rzone *rzone)
 	if ((format & ZONE_FORMAT) && f != NULL) 
 		fprintf(f, "zone \"%s\" {\n", rzone->zonename);
 
-	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), humanpass, &segment, &answers, &additionalcount, &rzone->constraints) < 0) {
+	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), humanpass, &segment, &answers, &additionalcount, &rzone->constraints, rzone->bytelimit) < 0) {
 		/* close the zone */
 		if ((format & ZONE_FORMAT) && f != NULL)
 			fprintf(f, "}\n");

@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: util.c,v 1.82 2020/08/08 05:51:48 pjp Exp $
+ * $Id: util.c,v 1.83 2020/09/24 05:15:23 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -118,7 +118,7 @@ int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 char * 	bin2hex(char *, int);
 u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
-int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *);
+int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t);
 int dn_contains(char *name, int len, char *anchorname, int alen);
 uint16_t udp_cksum(u_int16_t *, uint16_t, struct ip *, struct udphdr *);
 uint16_t udp_cksum6(u_int16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
@@ -1825,7 +1825,7 @@ bitmap2human(char *bitmap, int len)
 
 
 int
-lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass, int *segment, int *answers, int *additionalcount, struct soa_constraints *constraints)
+lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass, int *segment, int *answers, int *additionalcount, struct soa_constraints *constraints, uint32_t bytelimit)
 {
 	char query[512];
 	char pseudo_packet[512];
@@ -2013,7 +2013,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		return -1;
 	}
 
-	/* catch reply */
+	/* catch reply, totallen is reused here */
+	totallen = 0;
 
 	reply = calloc(1, 0xffff + 2);
 	if (reply == NULL) {
@@ -2073,6 +2074,14 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			perror("recv");
 			return -1;
 		}
+
+		totallen += len;
+
+		if (totallen >= bytelimit) {
+			fprintf(stderr, "download exceeded byte limit\n");
+			return -1;
+		}
+
 		rwh = (struct whole_header *)&reply[0];
 		bytes_received += ntohs(rwh->len);
 

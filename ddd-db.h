@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: ddd-db.h,v 1.54 2020/09/06 07:38:00 pjp Exp $
+ * $Id: ddd-db.h,v 1.55 2020/09/24 05:15:23 pjp Exp $
  */
 
 #ifndef _DB_H
@@ -448,6 +448,7 @@ struct rzone {
 	char 			*filename;
 	struct soa		soa;
 	struct soa_constraints	constraints;
+	uint32_t		bytelimit;
 } *rz, *rz0;
 
 struct raxfr_logic {

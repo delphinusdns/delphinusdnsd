@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.114 2020/08/26 07:17:26 pjp Exp $
+ * $Id: parse.y,v 1.115 2020/09/24 05:15:23 pjp Exp $
  */
 
 %{
@@ -259,6 +259,7 @@ int 		drop_privs(char *, struct passwd *);
 %token PASSLIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
 %token INCOMINGTSIG DESTINATION CACHE STRICTX20
+%token BYTELIMIT
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -795,6 +796,17 @@ rzonestatement:
 		}
 
 		free ($1);
+	}
+	|
+	BYTELIMIT NUMBER SEMICOLON CRLF
+	{
+		rz = SLIST_FIRST(&rzones);
+		if (rz == NULL) {
+				return -1;
+		}
+
+		rz->active = 1;
+		rz->bytelimit = $2;
 	}
 	| comment CRLF
 	;
@@ -1752,6 +1764,7 @@ struct tab {
 struct tab cmdtab[] = {
 	{ "axfrport", AXFRPORT, 0},
 	{ "axfr-for", AXFRFOR, STATE_IP },
+	{ "bytelimit", BYTELIMIT, 0 },
 	{ "cache", CACHE, 0 },
 	{ "destination", DESTINATION, 0 },
 	{ "filter", FILTER, STATE_IP },
@@ -3869,6 +3882,7 @@ add_rzone(void)
 	lrz->constraints.refresh = 60;
 	lrz->constraints.retry = 60;
 	lrz->constraints.expire = 60;
+	lrz->bytelimit = (1024 * 1024 * 64);	/* 64 MB */
 
 	SLIST_INSERT_HEAD(&rzones, lrz, rzone_entry);
 	

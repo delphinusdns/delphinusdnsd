@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: query.c,v 1.13 2020/07/27 08:23:04 pjp Exp $
+ * $Id: query.c,v 1.14 2020/09/24 05:15:23 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -164,7 +164,7 @@ extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_
 
 extern int                      memcasecmp(u_char *, u_char *, int);
 extern int 			tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
-extern int  lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *);
+extern int  lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t);
 extern int 			insert_tsig(char *, char *);
 extern int  			find_tsig_key(char *, int, char *, int);
 extern int  			insert_tsig_key(char *, int, char *);
@@ -342,7 +342,7 @@ dig(int argc, char *argv[])
 		if ((format & ZONE_FORMAT) && f != NULL) 
 			fprintf(f, "zone \"%s\" {\n", domainname);
 
-		if (lookup_axfr(f, so, domainname, &mysoa, format, tsigkey, tsigpass, &segment, &answers, &additionalcount, &constraints) < 0) {
+		if (lookup_axfr(f, so, domainname, &mysoa, format, tsigkey, tsigpass, &segment, &answers, &additionalcount, &constraints, 0xffffffff) < 0) {
 			exit(1);
 		}
 

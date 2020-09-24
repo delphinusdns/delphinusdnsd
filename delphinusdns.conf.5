@@ -167,6 +167,7 @@ include "/etc/delphinusdns/delphinusdns.tsig";
 
 rzone "ip6.centroid.eu." {
 	constraints 600, 600, 600;
+	bytelimit 65536;
 	; do make sure you have a tsig "" {} for this
         tsigkey "pass";
         masterport 10053;
@@ -229,7 +230,7 @@ tsig = "tsig" ("string") [ "{" cidrlist "}" ]
 
 rzone = "rzone" ("string") [ "{" rzonelist "}" ]
 rzonelist = ( opttsig | optmaster | optmasterport | optrzonename | 
-		optfilename | optconstraints )
+		optfilename | optconstraints | optbytelimit )
 
 opttsig = "tsigkey" ("string") ;
 optmaster = "master" ("cidr-address") ;
@@ -237,6 +238,7 @@ optmasterport = "masterport"  (number) ;
 optrzonename = "zonename" ("string") ;
 optfilename = "filename" ("string") ;
 optconstraints = "constraints" (number), (number), (number) ;
+optbytelimit = "bytelimit" (number) ;
 
 
 forward = "forward" ("string") [ "{" forwardlist "}" ]
