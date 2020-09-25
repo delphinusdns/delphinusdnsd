@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.115 2020/09/24 05:15:23 pjp Exp $
+ * $Id: parse.y,v 1.116 2020/09/25 06:28:05 pjp Exp $
  */
 
 %{
@@ -3882,7 +3882,7 @@ add_rzone(void)
 	lrz->constraints.refresh = 60;
 	lrz->constraints.retry = 60;
 	lrz->constraints.expire = 60;
-	lrz->bytelimit = (1024 * 1024 * 64);	/* 64 MB */
+	lrz->bytelimit = 0xffffffff;	/* 4 GB */
 
 	SLIST_INSERT_HEAD(&rzones, lrz, rzone_entry);
 	
