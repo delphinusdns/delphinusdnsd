@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.113 2020/09/30 07:23:58 pjp Exp $
+ * $Id: reply.c,v 1.114 2020/09/30 10:07:31 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -154,6 +154,7 @@ void 		set_reply_flags(struct rbtree *, struct dns_header *, struct question *);
 extern int debug, verbose, dnssec, tcpanyonly;
 extern char *versionstring;
 extern uint8_t vslen;
+extern u_int max_udp_payload;
 
 
 
@@ -208,7 +209,7 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -414,7 +415,7 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -627,7 +628,7 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 
 	/* RFC 5155 section 7.2.8 */
@@ -851,7 +852,7 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -1047,7 +1048,7 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -1244,7 +1245,7 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -1444,7 +1445,7 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -1649,7 +1650,7 @@ reply_ds(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -1855,7 +1856,7 @@ reply_dnskey(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -2047,7 +2048,7 @@ reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -2181,7 +2182,7 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 	
 
 	odh = (struct dns_header *)&reply[0];
@@ -2380,7 +2381,7 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -2725,7 +2726,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 	
 	odh = (struct dns_header *)&reply[0];
 
@@ -3128,7 +3129,7 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 	outlen = sizeof(struct dns_header);
@@ -3470,7 +3471,7 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 	
 	odh = (struct dns_header *)&reply[0];
 	outlen = sizeof(struct dns_header);
@@ -3668,7 +3669,7 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 	
 	/* st */
 
@@ -3927,7 +3928,7 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 	
 	/* st */
 
@@ -4123,7 +4124,7 @@ reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 	
 	/* st */
 
@@ -4257,7 +4258,7 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 	
 
 	odh = (struct dns_header *)&reply[0];
@@ -4453,7 +4454,7 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 	
 
 	odh = (struct dns_header *)&reply[0];
@@ -4649,7 +4650,7 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -4878,7 +4879,7 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -5145,7 +5146,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 	
 	odh = (struct dns_header *)&reply[0];
 	outlen = sizeof(struct dns_header);
@@ -5873,7 +5874,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 	
 	odh = (struct dns_header *)&reply[0];
 	outlen = sizeof(struct dns_header);
@@ -6179,7 +6180,7 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (! istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 	
 	/* st */
 
@@ -7584,7 +7585,7 @@ reply_badvers(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 	
 	odh = (struct dns_header *)&reply[0];
 	outlen = sizeof(struct dns_header);
@@ -7706,7 +7707,7 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 	if (!istcp && q->edns0len > 512)
-		replysize = q->edns0len;
+		replysize = MIN(q->edns0len, max_udp_payload);
 
 	odh = (struct dns_header *)&reply[0];
 

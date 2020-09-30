@@ -21,7 +21,7 @@
  */
 
 /*
- * $Id: parse.y,v 1.116 2020/09/25 06:28:05 pjp Exp $
+ * $Id: parse.y,v 1.117 2020/09/30 10:07:31 pjp Exp $
  */
 
 %{
@@ -204,6 +204,7 @@ time_t time_changed;
 int dnssec = 0;
 int raxfrflag = 0;
 int tcpanyonly = 0;
+u_int max_udp_payload = 0xffff; /* 65535 */
 
 char 		*check_rr(char *, char *, int, int *);
 int 		fill_a(ddDB *, char *, char *, int, char *);
@@ -1365,6 +1366,10 @@ optionsstatement:
 				ratelimit = 1;
 				ratelimit_packets_per_second = $2;
 				dolog(LOG_DEBUG, "ratelimiting to %d packets per second\n", ratelimit_packets_per_second);
+			} else if (strcasecmp($1, "max-udp-payload") == 0) {
+				max_udp_payload = $2;
+
+				dolog(LOG_DEBUG, "max-udp-payload is now %u\n", max_udp_payload);
 			}
 			
 		}

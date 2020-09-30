@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: additional.c,v 1.39 2020/08/08 05:51:48 pjp Exp $
+ * $Id: additional.c,v 1.40 2020/09/30 10:07:31 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -671,7 +671,7 @@ additional_opt(struct question *question, char *reply, int replylen, int offset)
 
 	memset(answer->name, 0, sizeof(answer->name));
 	answer->type = htons(DNS_TYPE_OPT);
-	answer->class = htons(question->edns0len);
+	answer->class = htons(MIN(question->edns0len, replylen));
 	if (dnssec && question->dnssecok)
 		rcode =  DNSSEC_OK;
 

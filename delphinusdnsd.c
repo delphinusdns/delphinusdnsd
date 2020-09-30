@@ -27,7 +27,7 @@
  */
 
 /*
- * $Id: delphinusdnsd.c,v 1.141 2020/08/26 07:17:26 pjp Exp $
+ * $Id: delphinusdnsd.c,v 1.142 2020/09/30 10:07:31 pjp Exp $
  */
 
 
@@ -268,6 +268,7 @@ extern int passlist;
 extern int tsig;
 extern int dnssec;
 extern int raxfrflag;
+extern u_int max_udp_payload;
 
 static int reload = 0;
 static int mshutdown = 0;
@@ -2179,7 +2180,7 @@ forwardudp:
 						memcpy((char *)&sforward->header, buf, sizeof(struct dns_header));
 						sforward->type = question->hdr->qtype;
 						sforward->class = question->hdr->qclass;
-						sforward->edns0len = question->edns0len;
+						sforward->edns0len = MIN(question->edns0len, max_udp_payload);
 						sforward->dnssecok = question->dnssecok;
 
 						if (question->tsig.have_tsig && question->tsig.tsigverified) {
