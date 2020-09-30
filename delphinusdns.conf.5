@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd September 25, 2020
+.Dd September 30, 2020
 .Dt DELPHINUSDNS.CONF 5
 .Os 
 .Sh NAME
@@ -254,7 +254,8 @@ comment = ( ; | pound ) line
 
 options = "options" ("string") [ "{" optionlist "}" ]
 optionlist = ( optrecurse | optinterface | optfork | optport | 
-		optratelimit | optbind | optdnssec | opttcponanyonly)
+		optratelimit | optbind | optdnssec | opttcponanyonly |
+		optmaxudppayload)
 optrecurse = "recurse" ;
 optinterface = "interface" ("string") ;
 optfork = "fork" number ; 
@@ -262,6 +263,7 @@ optratelimit = "ratelimit-pps" number ;
 optbind = "bind" cidr-address ;
 optdnssec = "dnssec" ; 
 opttcponanyonly = "tcp-on-any-only" ;
+optmaxudppayload = "max-udp-payload" number ;
 
 .Ed
 .Sh FILES
