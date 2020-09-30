@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: reply.c,v 1.112 2020/08/08 05:51:48 pjp Exp $
+ * $Id: reply.c,v 1.113 2020/09/30 07:23:58 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -7601,9 +7601,6 @@ reply_badvers(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	SET_DNS_REPLY(odh);
 
-	if (q->aa)
-		SET_DNS_AUTHORITATIVE(odh);
-	
 	HTONS(odh->query);
 
 	odh->question = htons(1);
