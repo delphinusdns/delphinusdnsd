@@ -33,6 +33,7 @@ that corrupted pointers making the databse RO).
   an operator more time to notice what's going on.  It surely will prevent
   memory exhaustion if used carefully.
 - improve on the speed of AXFR's for very large databases (tested on 1.4 million AAAA records, 2 seconds vs. 120 seconds).
+- do not reply AA on BADVERS
 
 [2019] Changes in RELEASE_1_4 from RELEASE_1_3
 
