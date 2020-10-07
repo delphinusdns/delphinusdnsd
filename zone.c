@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: zone.c,v 1.1 2020/08/26 07:17:26 pjp Exp $
+ * $Id: zone.c,v 1.2 2020/10/07 06:42:44 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -132,6 +132,7 @@ populate_zone(ddDB *db)
 			continue;
 		}
 
+		res = NULL;
 		for (plen = rbt->zonelen, p = rbt->zone; plen > 0; 
 								p++, plen--) {
 			memcpy(find.name, p, plen);
@@ -143,6 +144,9 @@ populate_zone(ddDB *db)
 			plen -= *p;
 			p += *p;
 		}
+
+		if (res == NULL)
+			continue;
 
 		TAILQ_FOREACH(wep, &res->walkhead, walk_entry) {
 			if (wep->rbt == rbt)
