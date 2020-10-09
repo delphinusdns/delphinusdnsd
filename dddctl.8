@@ -1,4 +1,4 @@
-.\" $Id: dddctl.8,v 1.13 2020/09/25 08:07:04 pjp Exp $
+.\" $Id: dddctl.8,v 1.14 2020/10/09 08:33:51 pjp Exp $
 .\" In parts copyright (template) by:
 .\"
 .\"	$OpenBSD: vmctl.8,v 1.39 2018/02/24 13:14:09 jmc Exp $
@@ -18,7 +18,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: September 25 2020 $
+.Dd $Mdocdate: October 9 2020 $
 .Dt DDDCTL 8
 .Os
 .Sh NAME
@@ -158,6 +158,10 @@ stops delphinusdnsd with optional control socket path.
 .It Cm restart Ar [-s path]
 restarts delphinusdnsd with optional control socket path.
 .Sh EXAMPLES
+To create a ZSK and a KSK key the first time one may do:
+.Pp
+dddctl sign -Z -K -n delphinusdns.org
+.Pp
 To sign a delphinusdns zone the first time one may do:
 .Pp
 dddctl sign -Z -K -a 13 -B 2048 -n delphinusdns.org -i delphinusdns.org.zone -o delphinusdns.org.zone.signed
