@@ -27,7 +27,7 @@
  */
 
 /* 
- * $Id: forward.c,v 1.43 2020/10/15 07:11:48 pjp Exp $
+ * $Id: forward.c,v 1.44 2020/10/21 14:04:03 pjp Exp $
  */
 
 #include <sys/types.h>
@@ -1440,7 +1440,7 @@ endimsg:
 		|| unpack32((char *)&pi->pkt_s.tsig.tsigverified) == 0)) {
 		char ipdest[INET6_ADDRSTRLEN];
 
-		inet_ntop(fwq->family, &fwq->host, (void*)&ipdest, sizeof(ipdest));
+		inet_ntop(fwq->family, ((struct sockaddr *)&fwq->host)->sa_data, (void*)&ipdest, sizeof(ipdest));
 		dolog(LOG_INFO, "FORWARD returnit, TSIG didn't check out error code = %d from %s port %u (ID: %ux)\n", unpack32((char *)&pi->pkt_s.tsig.tsigerrorcode), ipdest, fwq->port, fwq->id);
 		return;
 	}
