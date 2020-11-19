@@ -1,4 +1,4 @@
-$Id: README,v 1.47 2020/07/29 05:34:50 pjp Exp $
+$Id: README,v 1.48 2020/11/19 09:25:28 pjp Exp $
 
 1. README
  1.1 AUTHOR(S)
@@ -105,11 +105,7 @@ $ ./configure
 $ vipw
 ## or
 $ pw user add _ddd -m
-# install libressl from ports or pkg
-$ cd /usr/ports/security/libressl
-$ make install
 ## make the program
-$ cd delphinusdnsd
 $ make
 ## install the binary (as root)
 $ make install
@@ -165,11 +161,11 @@ it they can send patches for the Makefile.
 ------------------+--------------------+---------------------+
 Operating System  | makes and compiles | responds to queries |
 ------------------+--------------------+---------------------+
-FreeBSD 11.4      |        yes         |       yes           |
+FreeBSD 12.2      |        yes         |       yes           |
 ------------------+--------------------+---------------------+
-NetBSD 9.0        |        yes         |       yes           |
+NetBSD 9.1        |        yes         |       yes           |
 ------------------+--------------------+---------------------+
-OpenBSD 6.7       |        yes         |       yes           |
+OpenBSD 6.8       |        yes         |       yes           |
 ------------------+--------------------+---------------------+
 Linux*		  |        yes         |       yes           |
 ------------------+--------------------+---------------------+
