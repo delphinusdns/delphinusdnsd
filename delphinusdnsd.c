@@ -294,7 +294,7 @@ u_int32_t cachesize = 0;
 char *bind_list[255];
 char *interface_list[255];
 #ifndef DD_VERSION
-char *versionstring = "delphinusdnsd-1.4";
+char *versionstring = "delphinusdnsd-1.5";
 uint8_t vslen = 17;
 #else
 char *versionstring = DD_VERSION;
