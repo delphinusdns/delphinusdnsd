@@ -26,10 +26,6 @@
  * 
  */
 
-/* 
- * $Id: filter.c,v 1.6 2019/06/06 14:56:08 pjp Exp $
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 

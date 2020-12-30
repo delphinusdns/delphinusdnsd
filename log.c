@@ -26,11 +26,6 @@
  * 
  */
 
-/* 
- * $Id: log.c,v 1.9 2019/11/25 15:14:42 pjp Exp $
- */
-
-
 #include <sys/types.h>
 #include <sys/socket.h>
 

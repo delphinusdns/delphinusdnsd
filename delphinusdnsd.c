@@ -26,11 +26,6 @@
  * 
  */
 
-/*
- * $Id: delphinusdnsd.c,v 1.142 2020/09/30 10:07:31 pjp Exp $
- */
-
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>

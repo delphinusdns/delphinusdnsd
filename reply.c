@@ -26,10 +26,6 @@
  * 
  */
 
-/* 
- * $Id: reply.c,v 1.114 2020/09/30 10:07:31 pjp Exp $
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 

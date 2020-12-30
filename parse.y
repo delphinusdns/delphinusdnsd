@@ -20,10 +20,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/*
- * $Id: parse.y,v 1.117 2020/09/30 10:07:31 pjp Exp $
- */
-
 %{
 #include <sys/types.h>
 #include <sys/socket.h>

@@ -42,10 +42,6 @@
  * IF IBM IS APPRISED OF THE POSSIBILITY OF SUCH DAMAGES.
  */
 
-/*
- * $Id: base64.c,v 1.3 2020/04/11 06:00:07 pjp Exp $
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>

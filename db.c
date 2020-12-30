@@ -26,10 +26,6 @@
  * 
  */
 
-/*
- * $Id: db.c,v 1.24 2020/07/27 08:21:08 pjp Exp $
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 

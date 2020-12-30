@@ -26,10 +26,6 @@
  * 
  */
 
-/* 
- * $Id: ent.c,v 1.11 2020/07/16 17:54:03 pjp Exp $
- */
-
 /*
  * this file is based on passlist.c
  */

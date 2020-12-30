@@ -26,10 +26,6 @@
  * 
  */
 
-/*
- * $Id: ddd-db.h,v 1.55 2020/09/24 05:15:23 pjp Exp $
- */
-
 #ifndef _DB_H
 #define _DB_H
 

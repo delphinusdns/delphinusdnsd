@@ -26,10 +26,6 @@
  * 
  */
 
-/*
- * $Id: dddctl.c,v 1.116 2020/08/26 07:17:26 pjp Exp $
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>

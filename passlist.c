@@ -26,11 +26,6 @@
  * 
  */
 
-/* 
- * $Id: passlist.c,v 1.1 2020/07/16 17:54:03 pjp Exp $
- */
-
-
 /*
  * this file is based on filter.c 
  */

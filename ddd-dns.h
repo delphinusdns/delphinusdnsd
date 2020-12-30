@@ -26,10 +26,6 @@
  * 
  */
 
-/*
- * $Id: ddd-dns.h,v 1.30 2020/08/01 09:01:52 pjp Exp $
- */
-
 #ifndef _DNS_H
 #define _DNS_H
 

@@ -25,9 +25,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
-/*
- * $Id: raxfr.c,v 1.63 2020/09/24 05:15:23 pjp Exp $
- */
 
 #include <sys/types.h>
 #include <sys/select.h>

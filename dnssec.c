@@ -26,10 +26,6 @@
  * 
  */
 
-/*
- * $Id: dnssec.c,v 1.31 2020/07/19 07:09:02 pjp Exp $
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>

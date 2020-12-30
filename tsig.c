@@ -26,11 +26,6 @@
  * 
  */
 
-/* 
- * $Id: tsig.c,v 1.4 2019/06/28 06:44:07 pjp Exp $
- */
-
-
 /*
  * this file is based on filter.c 
  */

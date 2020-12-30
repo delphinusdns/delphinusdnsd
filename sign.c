@@ -26,10 +26,6 @@
  * 
  */
 
-/*
- * $Id: sign.c,v 1.15 2020/09/17 12:14:16 pjp Exp $
- */
-
 #include <sys/param.h>	/* for MIN() */
 #include <sys/time.h>
 #include <sys/stat.h>

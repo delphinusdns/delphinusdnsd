@@ -26,10 +26,6 @@
  * 
  */
 
-/* 
- * $Id: zone.c,v 1.2 2020/10/07 06:42:44 pjp Exp $
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 

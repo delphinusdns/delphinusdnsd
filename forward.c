@@ -26,10 +26,6 @@
  * 
  */
 
-/* 
- * $Id: forward.c,v 1.45 2020/10/22 05:18:38 pjp Exp $
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/uio.h>

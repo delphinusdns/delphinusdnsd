@@ -26,10 +26,6 @@
  * 
  */
 
-/* 
- * $Id: cache.c,v 1.13 2020/08/08 05:51:48 pjp Exp $
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/uio.h>

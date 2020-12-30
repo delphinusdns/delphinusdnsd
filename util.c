@@ -26,10 +26,6 @@
  * 
  */
 
-/* 
- * $Id: util.c,v 1.83 2020/09/24 05:15:23 pjp Exp $
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 

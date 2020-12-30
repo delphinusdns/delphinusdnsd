@@ -26,10 +26,6 @@
  * 
  */
 
-/*
- * $Id: query.c,v 1.14 2020/09/24 05:15:23 pjp Exp $
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
