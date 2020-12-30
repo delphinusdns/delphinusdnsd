@@ -8,7 +8,8 @@ For 1.6.0 release
 to have replicant compatibility for NSEC
 - display statistics via the UNIX socket, now possible with the cortex process.
 - DNS Update (RFC 2136 and 3007) must be Secure with TSIG, and do DNSSEC signing
-- add DNS64 (RFC 6147) and DNS over TLS (RFC 7858) capability to forwarding mode
+- add DNS64 (RFC 6147) capability to forwarding mode
+- add DNS over TLS (RFC 7858) capability to forwarding mode
 - an OpenBSD port/package starting with 1.5.0 release
 
 For 1.5.0 release
