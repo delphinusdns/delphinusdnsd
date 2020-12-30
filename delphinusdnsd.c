@@ -757,6 +757,12 @@ main(int argc, char *argv[], char *environ[])
 				continue;
 			}
 
+			/* ifa_addrs can be NULL */
+			if (pifap->ifa_addr == NULL) {
+				i--;
+				continue;
+			}
+
 			if (pifap->ifa_addr->sa_family == AF_INET) {
 				sin = (struct sockaddr_in *)pifap->ifa_addr;
 				sin->sin_port = htons(port);
