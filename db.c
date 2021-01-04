@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2017 Peter J. Philipp
+ * Copyright (c) 2017-2021 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,6 +68,7 @@ int rotate_rr(struct rrset *rrset);
 void flag_rr(struct rbtree *rbt);
 int expire_rr(ddDB *, char *, int, u_int16_t, time_t);
 int expire_db(ddDB *, int);
+void remove_rbt(struct rbtree *);
 
 extern void      dolog(int, char *, ...);
 
@@ -135,8 +136,9 @@ dddbput(ddDB *db, ddDBT *key, ddDBT *data)
 		if (res->datalen != data->size)
 			return -1;
 
-		if (res->data != data->data)
-			free(res->data);
+		if (res->data != data->data) {
+			remove_rbt((struct rbtree *)res->data);
+		}
 
 		res->data = data->data;
 		RB_REMOVE(domaintree, &db->head, res);
@@ -181,7 +183,6 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, ui
 	struct rrset *rrset = NULL;
 	struct rr *myrr = NULL;
 	char *humanname = NULL;
-
 
 	rbt = find_rrset(db, name, len);
 	if (rbt == NULL) {
@@ -229,7 +230,6 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, ui
 		rrset->created = time(NULL);
 
 		TAILQ_INIT(&rrset->rr_head);
-
 		TAILQ_INSERT_TAIL(&rbt->rrset_head, rrset, entries);
 	} else
 		rrset->created = time(NULL);
@@ -347,12 +347,6 @@ expire_rr(ddDB *db, char *name, int len, u_int16_t rrtype, time_t now)
 		return 0;
 	}
 
-#if 0
-	rt = TAILQ_FIRST(&rp->rr_head);
-	if (rt == NULL)
-		return 0;
-#endif
-
 	/* expire these */
 	if (rrtype != DNS_TYPE_RRSIG) {
 		if (difftime(now, rp->created) >= (double)rp->ttl) {
@@ -398,7 +392,8 @@ expire_db(ddDB *db, int all)
 {
 	struct node *walk, *walk0;
 	struct rbtree *rbt = NULL;
-	struct rrset *rp, *rp0;
+	struct rrset *rp, *rp0, *rp2;
+	struct rr *rt1 = NULL, *rt2 = NULL;
 	int totalcount = 0, count = 0;
 	time_t now;
 
@@ -418,14 +413,50 @@ expire_db(ddDB *db, int all)
 			continue;
 
 		TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
-			count = expire_rr(db, rbt->zone, rbt->zonelen, \
-					rp->rrtype, now);
+			rp2 = find_rr(rbt, rp->rrtype);
+			if (rp2 == NULL) {
+				return 0;
+			}
+			if (rp->rrtype != DNS_TYPE_RRSIG) {
+				if (difftime(now, rp2->created) >= (double)rp2->ttl) {
+					count = 0;
+
+					TAILQ_FOREACH_SAFE(rt1, &rp2->rr_head, entries, rt2) {
+						TAILQ_REMOVE(&rp2->rr_head, rt1, entries);
+						free(rt1->rdata);
+						free(rt1);
+						count++;		
+					}
+
+					TAILQ_REMOVE(&rbt->rrset_head, rp2, entries);
+					free(rp2);
+
+					return (count);
+				}
+			} else {
+				count = 0;
+				TAILQ_FOREACH_SAFE(rt1, &rp2->rr_head, entries, rt2) {
+					struct rrsig *rrsig = (struct rrsig *)rt1->rdata;
+					if (difftime(now, rrsig->created) >= (double)rrsig->ttl) {
+						TAILQ_REMOVE(&rp2->rr_head, rt1, entries);
+						free(rt1->rdata);
+						free(rt1);
+						count++;
+					}
+				}
+				
+				if (TAILQ_EMPTY(&rp2->rr_head)) {
+					TAILQ_REMOVE(&rbt->rrset_head, rp, entries);
+					free(rp2);
+				}
+			}
 			
 			totalcount += count;
 		}
 
 		RB_REMOVE(domaintree, &db->head, walk);
 		free(walk);
+		free(rbt);
 	}
 
 	return (totalcount);
@@ -482,4 +513,45 @@ rotate_rr(struct rrset *rrset)
 	TAILQ_INSERT_HEAD(&rrset->rr_head, rrp, entries);
 
 	return 0;
+}
+
+void
+remove_rbt(struct rbtree *rbt)
+{
+	struct rrset *rp = NULL, *rp0 = NULL, *rp2 = NULL;
+	struct rr *rt1 = NULL, *rt2 = NULL;
+
+	if (rbt == NULL)
+		return;
+
+	TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
+		rp2 = find_rr(rbt, rp->rrtype);
+		if (rp2 == NULL) {
+			return;
+		}
+		if (rp->rrtype != DNS_TYPE_RRSIG) {
+			TAILQ_FOREACH_SAFE(rt1, &rp2->rr_head, entries, rt2) {
+				TAILQ_REMOVE(&rp2->rr_head, rt1, entries);
+				free(rt1->rdata);
+				free(rt1);
+			}
+
+			TAILQ_REMOVE(&rbt->rrset_head, rp2, entries);
+			free(rp2);
+		} else {
+			TAILQ_FOREACH_SAFE(rt1, &rp2->rr_head, entries, rt2) {
+				TAILQ_REMOVE(&rp2->rr_head, rt1, entries);
+				free(rt1->rdata);
+				free(rt1);
+			}
+			if (TAILQ_EMPTY(&rp2->rr_head)) {
+				TAILQ_REMOVE(&rbt->rrset_head, rp, entries);
+				free(rp2);
+			}
+		}
+	}
+
+	free(rbt);
+
+	return;
 }
