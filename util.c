@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2002-2020 Peter J. Philipp
+ * Copyright (c) 2002-2021 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -105,6 +105,7 @@ struct question		*build_fake_question(char *, int, u_int16_t, char *, int);
 
 char 			*get_dns_type(int, int);
 int 			memcasecmp(u_char *, u_char *, int);
+int 			compress_label(u_char *, u_int16_t, int);
 struct question		*build_question(char *, int, int, char *);
 int			free_question(struct question *);
 struct rrtab 	*rrlookup(char *);
@@ -2401,6 +2402,322 @@ err:
 	return (-1);
 }
 
+
+/*
+ * COMPRESS_LABEL - 	compress a DNS name, must be passed an entire reply
+ *			with the to be compressed name before the offset of 
+ *			that reply.
+ */
+
+int
+compress_label(u_char *buf, u_int16_t offset, int labellen)
+{
+	u_char *label[10000];
+	u_char *end = &buf[offset];
+	struct question {
+		u_int16_t type;
+		u_int16_t class;
+	} __attribute__((packed));
+	struct answer {
+		u_int16_t type;
+		u_int16_t class;
+		u_int32_t ttl;
+		u_int16_t rdlength;	 
+	} __attribute__((packed));
+	struct soa {
+         	u_int32_t serial;
+                u_int32_t refresh;
+                u_int32_t retry;
+                u_int32_t expire;
+                u_int32_t minttl;
+        } __attribute__((packed));
+
+	struct answer *a;
+
+	u_int i, j;
+	u_int checklen;
+
+	u_char *p, *e;
+	u_char *compressmark;
+
+	int elen;
+	char expand[DNS_MAXNAME + 1];
+	char *end_name = NULL;
+
+
+	p = &buf[sizeof(struct dns_header)];
+	label[0] = p;
+	
+	elen = 0;
+	memset(&expand, 0, sizeof(expand));
+	end_name = expand_compression((u_char *)&buf[sizeof(struct dns_header)],(u_char *)buf, (u_char *)&buf[offset], (u_char *)&expand, &elen, sizeof(expand));
+	if (end_name == NULL) {
+		dolog(LOG_ERR, "expand_compression() failed, bad formatted question name\n");
+		return(0);
+	}
+
+	if (((char *)end_name - (char *)buf) < elen) {
+		dolog(LOG_ERR, "compression in question compress_label #1\n");
+		return(0);
+	}
+
+	p = end_name;
+
+	p += sizeof(struct question);	
+	p++;	/* one more */
+	/* start of answer/additional/authoritative */	
+	/* XXX 10000 in case of AXFR should satisfy a envelope size 64K */
+	for (i = 1; i < 10000; i++) {
+		label[i] = p;
+
+		while (p <= end && *p) {
+			if ((*p & 0xc0) == 0xc0) {
+				p++;
+				break;
+			}
+			p += *p;
+			p++;
+
+			if (p >= end)
+				goto end;
+		}	
+			
+		p++;	/* one more */
+
+
+		a = (struct answer *)p;
+		p += sizeof(struct answer);	
+
+		/* Thanks FreeLogic! */
+		if (p >= end)
+			goto end;
+
+		switch (ntohs(a->type)) {
+		case DNS_TYPE_A:
+			p += sizeof(in_addr_t);
+			break;
+		case DNS_TYPE_AAAA:
+			p += 16;		/* sizeof 4 * 32 bit */
+			break;
+		case DNS_TYPE_TXT:
+			p += *p;
+			p++;
+			break;
+		case DNS_TYPE_TLSA:
+			p += 2;
+			switch (*p) {
+			case 1:
+				p += DNS_TLSA_SIZE_SHA256 + 1;
+				break;
+			case 2:
+				p += DNS_TLSA_SIZE_SHA512 + 1;
+				break;
+			default:
+				/* XXX */
+				goto end;
+			}
+
+			break;
+		case DNS_TYPE_SSHFP:
+			p++;
+			switch (*p) {
+			case 1:
+				p += DNS_SSHFP_SIZE_SHA1 + 1;
+				break;
+			case 2:
+				p += DNS_SSHFP_SIZE_SHA256 + 1;
+				break;
+			default:
+				/* XXX */
+				goto end;
+			}
+
+			break;	
+		case DNS_TYPE_SRV:
+			p += (2 * sizeof(u_int16_t)); /* priority, weight */
+			/* the port will be assumed in the fall through for
+			   mx_priority..
+			*/
+			/* FALLTHROUGH */
+		case DNS_TYPE_MX:
+			p += sizeof(u_int16_t);	 /* mx_priority */
+			/* FALLTHROUGH */
+		case DNS_TYPE_NS:	
+		case DNS_TYPE_PTR:
+		case DNS_TYPE_CNAME:
+			label[++i] = p;
+			while (p <= end && *p) {
+				if ((*p & 0xc0) == 0xc0) {
+					p++;
+					break;
+				}
+				p += *p;
+				p++;
+
+				if (p >= end)
+					goto end;
+			}	
+
+			p++;	/* one more */
+			break;
+		case DNS_TYPE_RP:
+			label[++i] = p;
+			while (p <= end && *p) {
+				if ((*p & 0xc0) == 0xc0) {
+					p++;
+					break;
+				}
+				p += *p;
+				p++;
+
+				if (p >= end)
+					goto end;
+			}	
+
+			p++;	/* one more */
+
+			if (p >= end)
+				goto end;
+
+			label[++i] = p;
+			while (p <= end && *p) {
+				if ((*p & 0xc0) == 0xc0) {
+					p++;
+					break;
+				}
+				p += *p;
+				p++;
+
+				if (p >= end)
+					goto end;
+			}	
+
+			p++;	/* one more */
+
+			if (p >= end)
+				goto end;
+
+			break;
+		case DNS_TYPE_SOA:
+			/* nsserver */
+			label[++i] = p;
+			while (p <= end && *p) {
+				if ((*p & 0xc0) == 0xc0) {
+					p++;
+					break;
+				}
+				p += *p;
+				p++;
+				if (p >= end)
+					goto end;
+			}	
+
+			p++;	/* one more */
+
+			if (p >= end)
+				break;
+
+			/* responsible person */
+			label[++i] = p;
+			while (p <= end && *p) {
+				if ((*p & 0xc0) == 0xc0) {
+					p++;
+					break;
+				}
+				p += *p;
+				p++;
+			}	
+
+			p++;	/* one more */
+
+			if (p >= end)
+				break;
+
+			p += sizeof(struct soa);	/* advance struct soa */
+
+			break;
+		case DNS_TYPE_NAPTR:
+			p += (2 * sizeof(u_int16_t)); /* order and preference */
+			p += *p; /* flags */
+			p++;
+			p += *p; /* services */
+			p++;
+			p += *p; /* regexp */
+			p++;
+			
+			label[++i] = p;
+			while (p <= end && *p) {
+				if ((*p & 0xc0) == 0xc0) {
+					p++;
+					break;
+				}
+				p += *p;
+				p++;
+
+				if (p >= end)
+					goto end;
+			}	
+
+			p++;	/* one more */
+			break;
+	
+		case DNS_TYPE_DNSKEY:
+		case DNS_TYPE_NSEC3:
+		case DNS_TYPE_NSEC3PARAM:
+		case DNS_TYPE_RRSIG:
+		case DNS_TYPE_CAA:
+		case DNS_TYPE_HINFO:
+			/* above six FALLTHROUGH */
+		default:
+			p += a->rdlength;
+			break;
+		} /* switch */
+
+		if (p >= end)
+			break;
+	} /* for (i *) */
+
+end:
+	
+	p = &buf[offset - labellen];
+	checklen = labellen;
+
+	for (;*p != 0;) {
+		for (j = 0; j < i; j++) {
+			for (e = label[j]; *e; e += *e, e++) {
+				if ((*e & 0xc0) == 0xc0) 
+					break;
+
+				if (memcasecmp(e, p, checklen) == 0) {
+					/* e is now our compress offset */
+					compressmark = e;
+					goto out;		/* found one */
+				}  
+			}	/* for (e .. */
+	
+		} /* for (j .. */ 
+
+		if (*p > DNS_MAXLABEL)
+			return 0;		/* totally bogus label */
+
+		checklen -= *p;
+		p += *p;
+		checklen--;
+		p++;
+	}
+
+	return (0);	 	/* no compression possible */
+
+out:
+	/* take off our compress length */
+	offset -= checklen;
+	/* write compressed label */
+	pack16(&buf[offset], htons((compressmark - &buf[0]) | 0xc000));
+
+	offset += sizeof(u_int16_t);	
+
+	return (offset);
+}
 
 /*
  * Copyright (c) 1988, 1992, 1993
