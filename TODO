@@ -1,6 +1,12 @@
 The TODO's here are for delphinusdnsd which is the successor of wildcarddnsd.
 Please see https://delphinusdns.org for updates/news.
 
+For 1.7.0 release
+
+- filter input to dddctl query for escape codes.
+- DNS Update (RFC 2136 and 3007) must be Secure with TSIG, and do DNSSEC signing
+- Add CDS and CDNSKEY RR (RFC 8078)
+
 For 1.6.0 release
 
 - filter input to dddctl query for escape codes.
@@ -11,6 +17,7 @@ to have replicant compatibility for NSEC
 - add DNS64 (RFC 6147) capability to forwarding mode
 - add DNS over TLS (RFC 7858) capability to forwarding mode
 - an OpenBSD port/package starting with 1.5.0 release
+- a port to windows 10 and windows server 2019
 
 For 1.5.0 release
 - make sure an RRset has the same TTL, we don't need TTL in a single RR because
