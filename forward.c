@@ -1955,7 +1955,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 	struct imsg imsg;
 	struct dns_header *dh;
 
-	char *packet;
+	char *packet = NULL;
 	u_char *end, *estart;
 	fd_set rset;
 	ssize_t n, datalen;
@@ -1989,6 +1989,11 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 
 	for (;;) {
+		if (istcp && packet != NULL) {
+			free(packet);
+			packet = NULL;
+		}
+
 		FD_ZERO(&rset);
 		FD_SET(fd, &rset);
 
@@ -2004,6 +2009,10 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 			}
 
 			for (;;) {
+				if (istcp && packet != NULL) {
+					free(packet);
+					packet = NULL;
+				}
 			
 				if ((n = imsg_get(ibuf, &imsg)) == -1) {
 					break;
@@ -2061,6 +2070,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 							imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, imsg.fd, &rc, sizeof(int));
 							msgbuf_write(&ibuf->w);
 							free(packet);
+							packet = NULL;
 							break;
 						}
 #if DEBUG
@@ -2080,8 +2090,10 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 						rc = PARSE_RETURN_NAK;
 						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &rc, sizeof(int));
 						msgbuf_write(&ibuf->w);
-						if (istcp)
+						if (istcp) {
 							free(packet);
+							packet = NULL;
+						}
 						break;
 					}
 					dh = (struct dns_header *)packet;
@@ -2090,8 +2102,10 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 						rc = PARSE_RETURN_NOTAREPLY;
 						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &rc, sizeof(int));
 						msgbuf_write(&ibuf->w);
-						if (istcp)
+						if (istcp) {
 							free(packet);
+							packet = NULL;
+						}
 						break;
 					}
 
@@ -2107,8 +2121,10 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 						rc = PARSE_RETURN_NOQUESTION;
 						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &rc, sizeof(int));
 						msgbuf_write(&ibuf->w);
-						if (istcp)
+						if (istcp) {
 							free(packet);
+							packet = NULL;
+						}
 						break;
 					}
 					/* insert parsing logic here */
@@ -2136,8 +2152,10 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 								imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &rc, sizeof(int));
 								msgbuf_write(&ibuf->w);
 			
-								if (istcp)
+								if (istcp) {
 									free(packet);
+									packet = NULL;
+								}
 								break;
 							}
 
@@ -2167,8 +2185,10 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 					free(stsig);
 
-					if (istcp)
+					if (istcp) {
 						free(packet);
+						packet = NULL;
+					}
 					break;
 				} /* switch */
 

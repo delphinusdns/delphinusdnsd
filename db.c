@@ -270,7 +270,7 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, ui
 struct rbtree *
 find_rrset(ddDB *db, char *name, int len)
 {
-	ddDBT key, data;
+	static ddDBT key, data;
 
 	if (name == NULL || len == 0)
 		return NULL;
