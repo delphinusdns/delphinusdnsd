@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2005-2020 Peter J. Philipp
+ * Copyright (c) 2005-2021 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -5545,11 +5545,20 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db)
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 	SET_DNS_RCODE_REFUSED(odh);
 	HTONS(odh->query);
+
+	odh->answer = 0;			/* reset any answers */
+	odh->nsrr = 0;				/* reset any authoritave */
+	odh->additional = 0;			/* reset any additionals */
+
 	set_reply_flags(NULL, odh, q);
 
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
+
+		if (q->edns0len > 512)
+			replysize = MIN(q->edns0len, max_udp_payload);
+
 		outlen = additional_opt(q, reply, replysize, outlen);
 	}
 
