@@ -49,9 +49,9 @@ for those that cannot do without those platforms, but at the risk of more
 attack surface*.  Delphinusdnsd chroots and privseps on all platforms, meaning 
 that a direct root exploit is not possible.
 
-Usually CVS HEAD is for OpenBSD and the other ports are not guaranteed to 
-compile until shortly before release time, when testing occurs for these 
-platforms.
+Usually the master branch is for OpenBSD and the other ports are not 
+guaranteed to compile until shortly before release time, when testing occurs 
+for these platforms.
 
 Use the tool "dig" that comes with bind9 to debug Delphinusdns.  If you like to 
 program, then you can fork Delphinusdns and make your own creation, or you
