@@ -105,7 +105,7 @@ extern void		reply_fmterror(struct sreply *, ddDB *);
 extern void		reply_nxdomain(struct sreply *, ddDB *);
 extern struct rbtree *	get_soa(ddDB *, struct question *);
 extern int		compress_label(u_char *, int, int);
-extern u_int16_t	create_anyreply(struct sreply *, char *, int, int, int);
+extern u_int16_t	create_anyreply(struct sreply *, char *, int, int, int, uint32_t);
 extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
 extern struct question	*build_question(char *, int, int, char *);
 extern int		free_question(struct question *);
@@ -1085,7 +1085,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				fq->aa = 1;
 				build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, rbt, NULL, 0xff, 1, 0, replybuf);
 				
-				outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0);
+				outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0, res->zonenumber);
 				free_question(fq);
 			} /* if checklabel */
 

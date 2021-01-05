@@ -65,15 +65,16 @@ int	insert_zone(char *);
 int have_zone(char *zonename, int zonelen);
 void populate_zone(ddDB *db);
 int zonecmp(struct zoneentry *, struct zoneentry *);
+struct zoneentry * zone_findzone(struct rbtree *);
 
 extern void 		dolog(int, char *, ...);
-extern in_addr_t 	getmask(int);
-extern int 		getmask6(int, struct sockaddr_in6 *);
 extern char * dns_label(char *, int *);
 extern void ddd_shutdown(void);
 extern int dn_contains(char *name, int len, char *anchorname, int alen);
+extern uint32_t match_zonenumber(struct rbtree *, uint32_t);
 
 extern int debug, verbose;
+extern uint32_t zonenumber;
 
 struct zonetree zonehead = RB_INITIALIZER(&zonehead);
 RB_GENERATE(zonetree, zoneentry, zone_entry, zonecmp);
@@ -106,6 +107,7 @@ insert_zone(char *zonename)
 		dolog(LOG_INFO, "strdup failed\n");
 		return -1;
 	}
+	zep->zonenumber = zonenumber;
 
 	TAILQ_INIT(&zep->walkhead);
 
@@ -121,46 +123,54 @@ populate_zone(ddDB *db)
 	struct rbtree *rbt = NULL;
 	char *p;
 	int plen;
+	uint32_t i;
 
-	RB_FOREACH(walk, domaintree, &db->head) {
-		rbt = (struct rbtree *)walk->data;	
-		if (rbt == NULL) {
-			continue;
-		}
 
-		res = NULL;
-		for (plen = rbt->zonelen, p = rbt->zone; plen > 0; 
-								p++, plen--) {
-			memcpy(find.name, p, plen);
-			find.namelen = plen;
-			if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
-				break;
+	for (i = 0; i < zonenumber; i++) {
+		RB_FOREACH(walk, domaintree, &db->head) {
+			rbt = (struct rbtree *)walk->data;	
+			if (rbt == NULL) {
+				continue;
 			}
 
-			plen -= *p;
-			p += *p;
+			if (match_zonenumber(rbt, i) == 0)
+				continue;
+
+			res = NULL;
+			for (plen = rbt->zonelen, p = rbt->zone; plen > 0; 
+									p++, plen--) {
+				memcpy(find.name, p, plen);
+				find.namelen = plen;
+				if (((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) &&
+					(i == res->zonenumber)) {
+					break;
+				}
+
+				plen -= *p;
+				p += *p;
+			}
+
+			if (res == NULL)
+				continue;
+
+			TAILQ_FOREACH(wep, &res->walkhead, walk_entry) {
+				if (wep->rbt == rbt)
+					break;
+			}
+
+			if (wep)
+				continue;
+
+			if ((wep = malloc(sizeof(struct walkentry))) == NULL) {
+				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+				ddd_shutdown();
+				sleep(10);
+				exit(1);
+			}
+				
+			wep->rbt = rbt;
+			TAILQ_INSERT_TAIL(&res->walkhead, wep, walk_entry);
 		}
-
-		if (res == NULL)
-			continue;
-
-		TAILQ_FOREACH(wep, &res->walkhead, walk_entry) {
-			if (wep->rbt == rbt)
-				break;
-		}
-
-		if (wep)
-			continue;
-
-		if ((wep = malloc(sizeof(struct walkentry))) == NULL) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			ddd_shutdown();
-			sleep(10);
-			exit(1);
-		}
-			
-		wep->rbt = rbt;
-		TAILQ_INSERT_TAIL(&res->walkhead, wep, walk_entry);
 	}
 }
 
@@ -187,4 +197,31 @@ zonecmp(struct zoneentry *e1, struct zoneentry *e2)
 		return -1;	
 	else
 		return 1;
+}
+
+/*
+ * ZONE_FINDZONE - find the closest zonenumber and return its zoneentry or NULL
+ *
+ */
+
+struct zoneentry *
+zone_findzone(struct rbtree *rbt)
+{
+	struct zoneentry find, *res;
+	char *p;
+	int plen;
+
+	/* find the corresponding zone for the zone number */
+	for (plen = rbt->zonelen, p = rbt->zone; plen > 0; p++, plen--) {
+		memcpy(find.name, p, plen);
+		find.namelen = plen;
+
+		if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
+			return (res);
+		}
+		plen -= *p;
+		p += *p;
+	}
+
+	return (NULL);
 }

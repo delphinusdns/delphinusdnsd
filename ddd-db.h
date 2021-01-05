@@ -313,6 +313,7 @@ struct rr {
 	void *rdata;
 	uint16_t rdlen;
 	time_t changed;
+	uint32_t zonenumber;
 	TAILQ_ENTRY(rr) entries;
 };
 
@@ -334,7 +335,6 @@ struct rbtree {
 #define RBT_DNSSEC		0x1 /* this rbtree entry is of type DNSSEC */
 #define RBT_APEX		0x2 /* this rbtree entry is the apex of zone */
 #define RBT_GLUE		0x4 /* this rbtree entry is GLUE data */
-
 
 	TAILQ_HEAD(rrseth, rrset) rrset_head;
 };
@@ -561,6 +561,7 @@ struct zoneentry {
         char name[DNS_MAXNAME];
         int namelen;
         char *humanname;
+	uint32_t zonenumber;
         TAILQ_HEAD(, walkentry) walkhead;
         RB_ENTRY(zoneentry) zone_entry;
 };

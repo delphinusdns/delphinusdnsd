@@ -69,9 +69,11 @@ void flag_rr(struct rbtree *rbt);
 int expire_rr(ddDB *, char *, int, u_int16_t, time_t);
 int expire_db(ddDB *, int);
 void remove_rbt(struct rbtree *);
+uint32_t match_zonenumber(struct rbtree *rbt, uint32_t);
 
 extern void      dolog(int, char *, ...);
 
+extern uint32_t zonenumber;
 extern char * convert_name(char *, int);
 int domaincmp(struct node *e1, struct node *e2);
 
@@ -252,6 +254,7 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, ui
 	}
 	myrr->changed = time(NULL);
 	myrr->rdlen = rdlen;
+	myrr->zonenumber = zonenumber - 1;          /* needed for glued ns */
 
 	rrset->ttl = ttl;
 
@@ -554,4 +557,22 @@ remove_rbt(struct rbtree *rbt)
 	free(rbt);
 
 	return;
+}
+
+uint32_t
+match_zonenumber(struct rbtree *rbt, uint32_t zonenumberx)
+{
+	struct rrset *rrset = NULL;
+	struct rr *rt1 = NULL;
+
+	TAILQ_FOREACH(rrset, &rbt->rrset_head, entries) {
+		if (rrset) {
+			TAILQ_FOREACH(rt1, &rrset->rr_head, entries) {
+				if (rt1->zonenumber == zonenumberx)
+					return 1;
+			}
+		}
+	}
+
+	return 0;
 }
