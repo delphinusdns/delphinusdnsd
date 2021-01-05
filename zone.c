@@ -71,7 +71,7 @@ extern void 		dolog(int, char *, ...);
 extern char * dns_label(char *, int *);
 extern void ddd_shutdown(void);
 extern int dn_contains(char *name, int len, char *anchorname, int alen);
-extern uint32_t match_zonenumber(struct rbtree *, uint32_t);
+extern uint32_t match_zoneglue(struct rbtree *);
 
 extern int debug, verbose;
 extern uint32_t zonenumber;
@@ -123,26 +123,59 @@ populate_zone(ddDB *db)
 	struct rbtree *rbt = NULL;
 	char *p;
 	int plen;
-	uint32_t i;
 
+	RB_FOREACH(walk, domaintree, &db->head) {
+		rbt = (struct rbtree *)walk->data;	
+		if (rbt == NULL) {
+			continue;
+		}
 
-	for (i = 0; i < zonenumber; i++) {
-		RB_FOREACH(walk, domaintree, &db->head) {
-			rbt = (struct rbtree *)walk->data;	
-			if (rbt == NULL) {
-				continue;
+		res = NULL;
+		for (plen = rbt->zonelen, p = rbt->zone; plen > 0; 
+								p++, plen--) {
+			memcpy(find.name, p, plen);
+			find.namelen = plen;
+			if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
+				break;
 			}
 
-			if (match_zonenumber(rbt, i) == 0)
-				continue;
+			plen -= *p;
+			p += *p;
+		}
 
+		if (res == NULL)
+			continue;
+
+		TAILQ_FOREACH(wep, &res->walkhead, walk_entry) {
+			if (wep->rbt == rbt)
+				break;
+		}
+
+		if (wep)
+			continue;
+
+		if ((wep = malloc(sizeof(struct walkentry))) == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+			ddd_shutdown();
+			sleep(10);
+			exit(1);
+		}
+			
+		wep->rbt = rbt;
+		/* wep->zonenumber = res->zonenumber; */
+		TAILQ_INSERT_TAIL(&res->walkhead, wep, walk_entry);
+
+		/* there is a parent zone that has another entry */
+		if (match_zoneglue(rbt)) {
 			res = NULL;
-			for (plen = rbt->zonelen, p = rbt->zone; plen > 0; 
-									p++, plen--) {
+
+			plen -= *p;	/* advance to higher parent */
+			p += *p;
+
+			for (p++, plen--; plen > 0; p++, plen--) {
 				memcpy(find.name, p, plen);
 				find.namelen = plen;
-				if (((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) &&
-					(i == res->zonenumber)) {
+				if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
 					break;
 				}
 

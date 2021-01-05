@@ -69,7 +69,7 @@ void flag_rr(struct rbtree *rbt);
 int expire_rr(ddDB *, char *, int, u_int16_t, time_t);
 int expire_db(ddDB *, int);
 void remove_rbt(struct rbtree *);
-uint32_t match_zonenumber(struct rbtree *rbt, uint32_t);
+uint32_t match_zoneglue(struct rbtree *rbt);
 
 extern void      dolog(int, char *, ...);
 
@@ -559,17 +559,26 @@ remove_rbt(struct rbtree *rbt)
 	return;
 }
 
+/*
+ * MATCH_ZONEGLUE - match if there is over 1 links to different zones inside
+ *			this rbt, this means that there is glue information
+ *			out there...
+ */
+
 uint32_t
-match_zonenumber(struct rbtree *rbt, uint32_t zonenumberx)
+match_zoneglue(struct rbtree *rbt)
 {
 	struct rrset *rrset = NULL;
 	struct rr *rt1 = NULL;
+	uint32_t lastzonenum = (uint32_t)-1;
 
 	TAILQ_FOREACH(rrset, &rbt->rrset_head, entries) {
 		if (rrset) {
 			TAILQ_FOREACH(rt1, &rrset->rr_head, entries) {
-				if (rt1->zonenumber == zonenumberx)
+				if (lastzonenum != (uint32_t)-1 && 	
+					lastzonenum != rt1->zonenumber)
 					return 1;
+				lastzonenum = rt1->zonenumber;
 			}
 		}
 	}
