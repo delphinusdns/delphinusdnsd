@@ -109,9 +109,10 @@ extern struct rbtree *		get_soa(ddDB *, struct question *);
 extern struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
 extern struct rbtree *		Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
 extern int 			dn_contains(char *, int, char *, int);
+extern struct zoneentry *	zone_findzone(struct rbtree *);
 
 
-u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int);
+u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int, uint32_t);
 int		reply_caa(struct sreply *, int *, ddDB *);
 int		reply_hinfo(struct sreply *, int *, ddDB *);
 int		reply_rp(struct sreply *, int *, ddDB *);
@@ -198,6 +199,14 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -210,6 +219,7 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 	
 	if (!istcp && q->edns0len > 512)
 		replysize = MIN(q->edns0len, max_udp_payload);
+
 
 	odh = (struct dns_header *)&reply[0];
 
@@ -239,6 +249,8 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 	a_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		/*
 		 * answer->name is a pointer to the request (0xc00c) 
 		 */
@@ -404,6 +416,14 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 	int saltlen;
 	
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -617,6 +637,14 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 	int bitmaplen, saltlen, nextlen;
 
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -840,6 +868,14 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 	u_int16_t rollback;
 	int valuelen, taglen;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	
 	now = time(NULL);
@@ -882,6 +918,8 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 	caa_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		if ((outlen + sizeof(struct answer) + 2 + \
 			((struct caa *)rrp->rdata)->taglen + \
 			((struct caa *)rrp->rdata)->valuelen) > replysize) {	
@@ -1036,6 +1074,14 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	
 	now = time(NULL);
@@ -1078,6 +1124,8 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 	hinfo_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		if ((outlen + sizeof(struct answer) + 2 + \
 			((struct hinfo *)rrp->rdata)->cpulen + \
 			((struct hinfo *)rrp->rdata)->oslen) > replysize) {	
@@ -1233,6 +1281,14 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	
 	now = time(NULL);
@@ -1275,6 +1331,8 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 	rp_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		if ((outlen + sizeof(struct answer) + \
 			((struct rp *)rrp->rdata)->mboxlen + \
 			((struct rp *)rrp->rdata)->txtlen) > replysize) {	
@@ -1434,6 +1492,14 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 	u_int16_t rollback;
 	int ndnlen, bitmaplen;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -1639,6 +1705,14 @@ reply_ds(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -1679,6 +1753,8 @@ reply_ds(struct sreply *sreply, int *sretlen, ddDB *db)
 	a_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		if ((outlen + sizeof(struct answer) + 
 			((struct ds *)rrp->rdata)->digestlen) > replysize) {
 			NTOHS(odh->query);
@@ -1845,6 +1921,14 @@ reply_dnskey(struct sreply *sreply, int *sretlen, ddDB *db)
 	int rrsig_count = 0;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -1886,6 +1970,8 @@ reply_dnskey(struct sreply *sreply, int *sretlen, ddDB *db)
 	dnskey_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		if ((outlen + sizeof(struct answer) + 
 			((struct dnskey *)rrp->rdata)->publickey_len) > replysize) {
 			NTOHS(odh->query);
@@ -2039,6 +2125,14 @@ reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	int tmplen = 0;
 	u_int16_t rollback;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	if ((find_rr(rbt, DNS_TYPE_RRSIG)) == 0)
 		return -1;
@@ -2171,6 +2265,14 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -2214,6 +2316,8 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 	aaaa_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		answer->name[0] = 0xc0;
 		answer->name[1] = 0x0c;
 		answer->type = q->hdr->qtype;
@@ -2366,6 +2470,14 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 		int contained;
 		SLIST_ENTRY(addis) addis_entries;
 	} *ad0, *ad1;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	SLIST_INIT(&addishead);
 	/* check for apex, delegations */
@@ -2411,6 +2523,8 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 	mx_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		answer->name[0] = 0xc0;
 		answer->name[1] = 0x0c;
 		answer->type = q->hdr->qtype;
@@ -2709,6 +2823,14 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 		int namelen;
 		SLIST_ENTRY(addis) addis_entries;
 	} *ad0, *ad1;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	SLIST_INIT(&addishead);
 	/* check for apex, delegations */
@@ -2768,6 +2890,8 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 	ns_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		memcpy(&reply[outlen], rbt1->zone, rbt1->zonelen);
 		answer = (struct answer *)(&reply[outlen] + rbt1->zonelen);
 		answer->type = htons(DNS_TYPE_NS);
@@ -3118,6 +3242,14 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -3461,6 +3593,14 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) == 0)
@@ -3658,6 +3798,14 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -3917,6 +4065,14 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 	u_int16_t rollback;
 	int txt_count = 0;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -3960,6 +4116,8 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 	txt_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		/*
 		 * answer->name is a pointer to the request (0xc00c) 
 		 */
@@ -4247,6 +4405,14 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -4288,6 +4454,8 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	tlsa_count = 0;
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		answer->name[0] = 0xc0;
 		answer->name[1] = 0x0c;
 		answer->type = q->hdr->qtype;
@@ -4442,6 +4610,14 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 
 	now = time(NULL);
@@ -4484,6 +4660,8 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	sshfp_count = 0;
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		answer->name[0] = 0xc0;
 		answer->name[1] = 0x0c;
 		answer->type = q->hdr->qtype;
@@ -4639,6 +4817,14 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -4680,6 +4866,8 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	naptr_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		savelen = outlen;
 		answer->name[0] = 0xc0;
 		answer->name[1] = 0x0c;
@@ -4868,6 +5056,14 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 	int tmplen;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -4908,6 +5104,8 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	srv_count = 0;
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		answer->name[0] = 0xc0;
 		answer->name[1] = 0x0c;
 		answer->type = q->hdr->qtype;
@@ -6176,6 +6374,7 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
+	struct rbtree *rbt = sreply->rbt1;
 	struct question *q = sreply->q;
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
@@ -6183,6 +6382,7 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 	int replysize = 512;
 	int retlen = -1;
 	u_int16_t rollback;
+	struct zoneentry *res = NULL;
 
 	if (istcp) {
 		replysize = 65535;
@@ -6230,7 +6430,13 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 		goto skip;	
 	}
 
-	outlen = create_anyreply(sreply, (char *)reply, replysize, outlen, 1);
+	res = zone_findzone(rbt);
+	if (res == NULL) {
+		dolog(LOG_ERR, "no zoneentry found for %s, this is an error\n", rbt->humanname);
+		return -1;
+	}
+
+	outlen = create_anyreply(sreply, (char *)reply, replysize, outlen, 1, res->zonenumber);
 	if (outlen == 0) {
 		return (retlen);
 	} else if (istcp == 0 && outlen == 65535) {
@@ -6292,7 +6498,7 @@ skip:
  */
 
 u_int16_t
-create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int soa)
+create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int soa, uint32_t zonenumberx)
 {
 	int a_count, aaaa_count, ns_count, mx_count, srv_count, sshfp_count;
 	int txt_count;
@@ -6465,6 +6671,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != 0) {
 		dnskey_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if (offset + q->hdr->namelen > rlen)
 				goto truncate;
 
@@ -6525,6 +6733,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		hinfo_count = 0;
 
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if (offset + q->hdr->namelen > rlen)
 				goto truncate;
 
@@ -6578,6 +6788,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		rp_count = 0;
 
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if (offset + q->hdr->namelen > rlen)
 				goto truncate;
 
@@ -6628,6 +6840,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		caa_count = 0;
 
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if (offset + q->hdr->namelen > rlen)
 				goto truncate;
 
@@ -6680,6 +6894,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		ds_count = 0;
 
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if (offset + q->hdr->namelen > rlen)
 				goto truncate;
 
@@ -6937,6 +7153,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		ns_count = 0;
 
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if (offset + q->hdr->namelen > rlen)
 				goto truncate;
 
@@ -7049,6 +7267,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		mx_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if ((offset + q->hdr->namelen) > rlen) {
 				goto truncate;
 			}
@@ -7104,6 +7324,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != 0) {
 		txt_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 
 			if ((offset + q->hdr->namelen) > rlen) {
 				goto truncate;
@@ -7154,6 +7376,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		tlsa_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if ((offset + q->hdr->namelen) > rlen) {
 				goto truncate;
 			}
@@ -7219,6 +7443,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		sshfp_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if ((offset + q->hdr->namelen) > rlen) {
 				goto truncate;
 			}
@@ -7276,6 +7502,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != 0) {
 		naptr_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if ((offset + q->hdr->namelen) > rlen) {
 				goto truncate;
 			}
@@ -7364,6 +7592,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != 0) {
 		srv_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if ((offset + q->hdr->namelen) > rlen) {
 				goto truncate;
 			}
@@ -7484,6 +7714,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		a_count = 0;
 
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if (offset + q->hdr->namelen > rlen)
 				goto truncate;
 
@@ -7524,6 +7756,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		aaaa_count = 0;
 
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
 			if (offset + q->hdr->namelen > rlen)
 				goto truncate;
 
@@ -7705,6 +7939,14 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	u_int16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	res = zone_findzone(rbt);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
 
 	now = time(NULL);
 
@@ -7746,6 +7988,8 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 	gen_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
 		/* can we afford to write another header? if no truncate */
 		if ((outlen + 12 + rrp->rdlen) > replysize) {
 			NTOHS(odh->query);

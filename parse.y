@@ -198,6 +198,7 @@ YYSTYPE yylval;
 
 char *converted_name;
 int converted_namelen;
+uint32_t zonenumber = 0;
 ddDBT key, data;
 int axfrport = 0;
 time_t time_changed;
@@ -827,6 +828,8 @@ zonelabel:
 		if (insert_zone($1) < 0) {
 			return -1;
 		}
+
+		zonenumber++;
 
 		free($1);
 	}
