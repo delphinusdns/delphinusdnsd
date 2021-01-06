@@ -24,7 +24,7 @@ fudge values) and is invaluable for use with computers without real time clock
 - rdomains throughout the daemon (forwarding and especially main daemon)
 - setproctitle setting of an identifier for identifying a delphinusdnsd when
 many are in the system, also dddctl should be modified to set up killing such
-an ident (ie. /var/run/delphinusdnsd-${ID}.sock)
+an ident (ie. /var/run/delphinusdnsd-${ID}.sock) [DONE]
 
 
 For 1.5.0 release
