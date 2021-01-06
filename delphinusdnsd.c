@@ -287,6 +287,7 @@ u_int16_t port = 53;
 u_int32_t cachesize = 0;
 char *bind_list[255];
 char *interface_list[255];
+char *identstring = NULL;
 #ifndef DD_VERSION
 char *versionstring = "delphinusdnsd-1.5";
 uint8_t vslen = 17;
@@ -316,12 +317,13 @@ main(int argc, char *argv[], char *environ[])
 	int salen;
 	int found = 0;
 	int on = 1;
+	int usesp = 0;
 
 	pid_t pid;
 
 	static char *ident[DEFAULT_SOCKET];
 	char *conffile = CONFFILE;
-	char buf[512];
+	char buf[PATH_MAX];
 	char **av = NULL;
 	char *socketpath = SOCKPATH;
 	
@@ -362,7 +364,7 @@ main(int argc, char *argv[], char *environ[])
 #endif
 
 
-	while ((ch = getopt(argc, argv, "b:df:i:ln:p:s:v")) != -1) {
+	while ((ch = getopt(argc, argv, "b:df:I:i:ln:p:s:v")) != -1) {
 		switch (ch) {
 		case 'b':
 			bflag = 1;
@@ -377,6 +379,9 @@ main(int argc, char *argv[], char *environ[])
 			break;
 		case 'f':
 			conffile = optarg;
+			break;
+		case 'I':
+			identstring = optarg;
 			break;
 		case 'i':
 			iflag = 1;
@@ -397,6 +402,7 @@ main(int argc, char *argv[], char *environ[])
 			break;
 		case 's':
 			socketpath = optarg;
+			usesp = 1;
 			break;
 		case 'v':
 			verbose++;
@@ -410,6 +416,21 @@ main(int argc, char *argv[], char *environ[])
 	if (bflag && iflag) {
 		fprintf(stderr, "you may specify -i or -b but not both\n");
 		exit(1);
+	}
+
+	if (identstring != NULL && usesp) {
+		fprintf(stderr, "may not specify -I and -s together\n");
+		exit(1);
+	}
+
+	if (identstring) {
+		snprintf(buf, sizeof(buf), "/var/run/delphinusdnsd-%s.sock",
+			identstring);
+
+		if ((socketpath = strdup(buf)) == NULL) {
+			perror("strdup");
+			exit(1);
+		}
 	}
 
 	/*
@@ -951,7 +972,7 @@ main(int argc, char *argv[], char *environ[])
 			close(cfg->raw[0]);
 			close(cfg->raw[1]);
 
-			setproctitle("AXFR engine on port %d", axfrport);
+			setproctitle("AXFR engine on port %d [%s]", axfrport, (identstring != NULL ? identstring : ""));
 			axfrloop(afd, (axfrport == port) ? 0 : i, ident, db, ibuf);
 			/* NOTREACHED */
 			exit(1);
@@ -1009,7 +1030,7 @@ main(int argc, char *argv[], char *environ[])
 			close(cfg->raw[0]);
 			close(cfg->raw[1]);
 
-			setproctitle("Replicant engine");
+			setproctitle("Replicant engine [%s]", (identstring != NULL ? identstring : ""));
 
 			replicantloop(db, ibuf);
 
@@ -1140,7 +1161,7 @@ main(int argc, char *argv[], char *environ[])
 				MAP_INHERIT_NONE);
 #endif
 
-			setproctitle("FORWARD engine");
+			setproctitle("FORWARD engine [%s]", (identstring != NULL ? identstring : ""));
 			forwardloop(db, cfg, ibuf, &cortex_ibuf);
 			/* NOTREACHED */
 			exit(1);
@@ -1212,7 +1233,8 @@ main(int argc, char *argv[], char *environ[])
 	
 			}
 
-			setproctitle("child %d pid %d", n, cfg->pid);
+			setproctitle("child %d pid %d [%s]", n, cfg->pid, 
+				(identstring != NULL ? identstring : ""));
 			(void)mainloop(cfg, &cortex_ibuf);
 
 			/* NOTREACHED */
@@ -1342,7 +1364,8 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 #endif
 		}
 
-		setproctitle("TCP engine %d", cfg->pid);
+		setproctitle("TCP engine %d [%s]", cfg->pid, 
+				(identstring != NULL ? identstring : ""));
 		tcploop(cfg, tcp_ibuf, ibuf);
 		/* NOTREACHED */
 		exit(1);
@@ -1409,7 +1432,8 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		close(udp_ibuf->fd);
 		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
 		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
-		setproctitle("udp parse engine %d", cfg->pid);
+		setproctitle("udp parse engine %d [%s]", cfg->pid, 
+			(identstring != NULL ? identstring : ""));
 		parseloop(cfg, &parse_ibuf);
 		/* NOTREACHED */
 		exit(1);
@@ -2212,7 +2236,7 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 #endif
 	
 #ifndef NO_SETPROCTITLE
-	setproctitle("master");
+	setproctitle("master [%s]", (identstring != NULL ? identstring : ""));
 #endif
 
 	pid = getpid();
@@ -2461,7 +2485,8 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		close(cortex->fd);
 		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
 		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
-		setproctitle("tcp parse engine %d", cfg->pid);
+		setproctitle("tcp parse engine %d [%s]", cfg->pid,
+			(identstring != NULL ? identstring : ""));
 		parseloop(cfg, &parse_ibuf);
 		/* NOTREACHED */
 		exit(1);
@@ -3541,7 +3566,8 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	uid_t uid;
 	gid_t gid;
 
-	setproctitle("unix controlling socket");
+	setproctitle("unix controlling socket [%s]", 
+		(identstring != NULL ? identstring : ""));
 
 	memset(&sun, 0, sizeof(sun));
 	sun.sun_family = AF_UNIX;
@@ -3782,7 +3808,7 @@ setup_cortex(struct imsgbuf *ibuf)
 
 	SLIST_INIT(&neuronhead);
 
-	setproctitle("cortex");
+	setproctitle("cortex [%s]", (identstring != NULL ? identstring : ""));
 
 	pw = getpwnam(DEFAULT_PRIVILEGE);
 	if (pw == NULL) {

@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2016-2020 Peter J. Philipp
+ * Copyright (c) 2016-2021 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -309,9 +309,9 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask]\n\t\t[-n zonename] [-o output] [-R keyword] [-S pid] [-s salt]\n\t\t[-t ttl] [-x serial] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
-		fprintf(stderr, "\tstart [-f configfile] [-s socket]\n");
-		fprintf(stderr, "\tstop [-s socket]\n");
-		fprintf(stderr, "\trestart [-s socket]\n");
+		fprintf(stderr, "\tstart [-f configfile] [-I ident] [-s socket]\n");
+		fprintf(stderr, "\tstop [-I ident] [-s socket]\n");
+		fprintf(stderr, "\trestart [-I ident] [-s socket]\n");
 		retval = 0;
 	}
 
@@ -323,23 +323,41 @@ start(int argc, char *argv[])
 {
 	struct stat sb;
 	char buf[PATH_MAX];
+	char sockpathbuf[PATH_MAX];
 	char *path = NULL;
 	char *socketpath = SOCKPATH;
 	char *configfile = CONFFILE;
-	int ch;
+	char *ident = NULL;
+	int ch, usesp = 0;
 
-	while ((ch = getopt(argc, argv, "f:s:")) != -1) {
+	while ((ch = getopt(argc, argv, "f:I:s:")) != -1) {
 		switch (ch) {
 		case 'f':
 			configfile = optarg;
 			break;
+		case 'I':
+			ident = optarg;
+			break;
 		case 's':
 			socketpath = optarg;
+			usesp = 1;
 			break;
 		default:
 			usage(argc, argv);
 			exit(1);
 		}
+	}
+
+	if (ident != NULL && usesp) {
+		fprintf(stderr, "cannot specify -I and -s together\n");
+		exit(1);
+	}
+
+	if (ident != NULL) {
+		snprintf(sockpathbuf, sizeof(sockpathbuf),
+			"/var/run/delphinusdnsd-%s.sock", ident);
+
+		socketpath = sockpathbuf;
 	}
 
 	if (lstat(socketpath, &sb) != -1) {
@@ -378,13 +396,21 @@ start(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (execl("/usr/local/sbin/delphinusdnsd", "delphinusdnsd", "-f", path, 
-		"-s", socketpath, NULL) < 0) {
-		perror("execl");
-		exit(1);	
+	if (ident) {
+		if (execl("/usr/local/sbin/delphinusdnsd", "delphinusdnsd", "-f", path, 
+			"-I", ident, NULL) < 0) {
+			perror("execl");
+			exit(1);	
+		}
+	} else {
+		if (execl("/usr/local/sbin/delphinusdnsd", "delphinusdnsd", "-f", path, 
+			"-s", socketpath, NULL) < 0) {
+			perror("execl");
+			exit(1);	
+		}
 	}
 
-	return 1;
+	return 0;
 }
 
 int
@@ -419,21 +445,38 @@ command_socket(char *sockpath)
 int	
 restart(int argc, char *argv[])
 {
-	char buf[512];
+	char buf[512], sockpathbuf[512];
 	char *socketpath = SOCKPATH;
+	char *ident = NULL;
 	struct dddcomm *dc;
-	int so;
+	int so, usesp = 0;
 	int ch, len;
 
-	while ((ch = getopt(argc, argv, "s:")) != -1) {
+	while ((ch = getopt(argc, argv, "I:s:")) != -1) {
 		switch (ch) {
+		case 'I':
+			ident = optarg;
+			break;
 		case 's':
 			socketpath = optarg;
+			usesp = 1;
 			break;
 		default:
 			usage(argc, argv);
 			exit(1);
 		}
+	}
+
+	if (ident != NULL && usesp) {
+		fprintf(stderr, "cannot specify -I and -s together\n");
+		exit(1);
+	} 
+
+	if (ident != NULL) {
+		snprintf(sockpathbuf, sizeof(sockpathbuf), 
+			"/var/run/delphinusdnsd-%s.sock", ident);
+		
+		socketpath = sockpathbuf;
 	}
 
 	if (geteuid() != 0) {
@@ -469,21 +512,39 @@ restart(int argc, char *argv[])
 int	
 stop(int argc, char *argv[])
 {
-	char buf[512];
+	char buf[PATH_MAX];
+	char sockpathbuf[PATH_MAX];
 	char *socketpath = SOCKPATH;
+	char *ident = NULL;
 	struct dddcomm *dc;
-	int so;
+	int so, usesp = 0;
 	int ch, len;
 
-	while ((ch = getopt(argc, argv, "s:")) != -1) {
+	while ((ch = getopt(argc, argv, "I:s:")) != -1) {
 		switch (ch) {
+		case 'I':
+			ident = optarg;
+			break;
 		case 's':
 			socketpath = optarg;
+			usesp = 1;
 			break;
 		default:
 			usage(argc, argv);
 			exit(1);
 		}
+	}
+
+	if (ident != NULL && usesp) {
+		fprintf(stderr, "cannot specify -i and -s together\n");
+		exit(1);
+	} 
+
+	if (ident != NULL) {
+		snprintf(sockpathbuf, sizeof(sockpathbuf), 
+			"/var/run/delphinusdnsd-%s.sock", ident);
+		
+		socketpath = sockpathbuf;
 	}
 
 	if (geteuid() != 0) {

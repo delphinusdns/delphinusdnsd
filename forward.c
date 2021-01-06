@@ -237,6 +237,7 @@ extern int dnssec;
 extern int cache;
 extern int forward;
 extern int strictx20i;
+extern char *identstring;
 
 
 /*
@@ -365,7 +366,9 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		imsg_init(&parse_ibuf, pi[0]);
 		imsg_init(&biparse_ibuf, bipi[0]);
 		
-		setproctitle("forward parse engine");
+		setproctitle("forward parse engine [%s]",
+			(identstring != NULL ? identstring : ""));
+
 		fwdparseloop(&parse_ibuf, &biparse_ibuf, cfg);
 		/* NOTREACHED */
 
