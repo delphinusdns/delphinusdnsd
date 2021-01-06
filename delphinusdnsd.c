@@ -419,7 +419,7 @@ main(int argc, char *argv[], char *environ[])
 	}
 
 	if (identstring != NULL && usesp) {
-		fprintf(stderr, "may not specify -I and -s together\n");
+		fprintf(stderr, "cannot specify -I and -s together\n");
 		exit(1);
 	}
 

@@ -536,7 +536,7 @@ stop(int argc, char *argv[])
 	}
 
 	if (ident != NULL && usesp) {
-		fprintf(stderr, "cannot specify -i and -s together\n");
+		fprintf(stderr, "cannot specify -I and -s together\n");
 		exit(1);
 	} 
 
