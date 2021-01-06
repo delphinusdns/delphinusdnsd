@@ -1,4 +1,4 @@
-.\" Copyright (c) 2005-2020 Peter J. Philipp
+.\" Copyright (c) 2005-2021 Peter J. Philipp
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd September 25, 2020
+.Dd January 6, 2021
 .Dt DELPHINUSDNSD 8
 .Os 
 .Sh NAME
@@ -34,6 +34,7 @@
 .Op Fl dlv
 .Op Fl b Ar address
 .Op Fl f Ar file
+.Op Fl I Ar identstring
 .Op Fl i Ar interface
 .Op Fl n Ar instances
 .Op Fl p Ar port
@@ -65,6 +66,15 @@ foreground.
 .Ar file
 The configuration file to be used is found at 
 .Ar file .
+.It Fl I
+.Ar identstring
+Allows the operator to specify an identification string to reflect in the
+process listing and subsequent 
+.Xr dddctl 8 
+start/stop/restart commands.  This helps identifying the processes when many
+.Nm
+run in a system.  May not be used in conjunction with
+.Fl s .
 .It Fl i
 .Ar interface
 The particular
@@ -92,6 +102,8 @@ should listen on.
 .Ar path
 Specifies the socket path to use with 
 .Xr dddctl 8 .
+May not be used in conjunction with 
+.Fl I .
 .It Fl v
 Be more verbose in debug mode.  This shows configfile parsing logic.
 .El

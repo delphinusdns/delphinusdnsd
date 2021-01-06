@@ -2,7 +2,7 @@
 .\"
 .\"	$OpenBSD: vmctl.8,v 1.39 2018/02/24 13:14:09 jmc Exp $
 .\"
-.\" Copyright (c) 2018-2020 Peter J. Philipp
+.\" Copyright (c) 2018-2021 Peter J. Philipp
 .\" Copyright (c) 2015 Mike Larkin <mlarkin@openbsd.org>
 .\"
 .\" Permission to use, copy, modify, and distribute this software for any
@@ -17,7 +17,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: October 9 2020 $
+.Dd $Mdocdate: January 6 2021 $
 .Dt DDDCTL 8
 .Os
 .Sh NAME
@@ -148,13 +148,13 @@ use provided ZSK zone-signing keyname.
 produces an SSHFP output on stdout in 
 .Xr delphinusdnsd 8
 format.
-.It Cm start Ar [-f configfile] [-s path]
+.It Cm start Ar [-f configfile] [-I identstring] [-s path]
 starts
 .Xr delphinusdnsd 8
 with an optional configfile and control socket path.
-.It Cm stop Ar [-s path]
+.It Cm stop Ar [-I identstring] [-s path]
 stops delphinusdnsd with optional control socket path.
-.It Cm restart Ar [-s path]
+.It Cm restart Ar [-I identstring] [-s path]
 restarts delphinusdnsd with optional control socket path.
 .Sh EXAMPLES
 To create a ZSK and a KSK key the first time one may do:
