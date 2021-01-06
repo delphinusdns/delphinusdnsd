@@ -238,7 +238,7 @@ extern int cache;
 extern int forward;
 extern int strictx20i;
 extern char *identstring;
-
+extern uint32_t zonenumber;
 
 /*
  * INIT_FORWARD - initialize the forward linked lists
@@ -390,6 +390,8 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		ddd_shutdown();
 		exit(1);
 	}
+
+	zonenumber = 0;		/* reset this to 0 */
 
 	for (;;) {
 		/*
