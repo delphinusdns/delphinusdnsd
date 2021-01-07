@@ -192,7 +192,7 @@ extern int	reply_nsec3(struct sreply *, int *, ddDB *);
 extern int	reply_nsec3param(struct sreply *, int *, ddDB *);
 extern int	reply_generic(struct sreply *, int *, ddDB *);
 extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
-extern void flag_rr(struct rbtree *rbt);
+extern void flag_rr(struct rbtree *rbt, uint32_t);
 extern struct rbtree * find_rrset(ddDB *, char *, int);
 extern int	randomize_dnsname(char *buf, int len);
 extern int	lower_dnsname(char *buf, int len);
@@ -241,6 +241,7 @@ extern int dnssec;
 extern int cache;
 extern int forward;
 extern int strictx20i;
+extern uint32_t zonenumber;
 
 
 /*
@@ -391,6 +392,8 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		ddd_shutdown();
 		exit(1);
 	}
+
+	zonenumber = 0;		/* reset this to 0 */
 
 	for (;;) {
 		/*
@@ -648,9 +651,11 @@ drop:
 									pack32((char *)&ri->u.s.read, 1);
 									continue;
 								}
+
+								flag_rr(rbt, RBT_CACHE);
 	
 								if (unpack32((char *)&ri->rri_rr.authentic) == 1) 
-									flag_rr(rbt);
+									flag_rr(rbt, RBT_DNSSEC);
 
 								pack32((char *)&ri->u.s.read, 1);
 							} /* if */

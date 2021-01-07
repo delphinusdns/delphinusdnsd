@@ -69,7 +69,7 @@ struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 int display_rr(struct rrset *rrset);
 int rotate_rr(struct rrset *rrset);
-void flag_rr(struct rbtree *rbt);
+void flag_rr(struct rbtree *rbt, uint32_t flag);
 int expire_rr(ddDB *, char *, int, u_int16_t, time_t);
 int expire_db(ddDB *, int);
 void remove_rbt(struct rbtree *);
@@ -486,9 +486,9 @@ find_rr(struct rbtree *rbt, u_int16_t rrtype)
 }
 
 void 
-flag_rr(struct rbtree *rbt)
+flag_rr(struct rbtree *rbt, uint32_t flag)
 {
-	rbt->flags |= RBT_DNSSEC;
+	rbt->flags |= flag;
 }
 
 int
