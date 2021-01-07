@@ -18,7 +18,7 @@ to have replicant compatibility for NSEC
 - add DNS over TLS (RFC 7858) capability to forwarding mode
 - an OpenBSD port/package starting with 1.5.0 release
 - a port to windows 10 and windows server 2019
-- fudgesize in forwarding mode for setting higher FUDGE value (currently 300)
+- fudgesize in forwarding mode for setting higher FUDGE value [DONE]
 - ntphack in main daemon for allowing *.ntp.org through (this disables TSIG
 fudge values) and is invaluable for use with computers without real time clock
 - rdomains throughout the daemon (forwarding and especially main daemon)

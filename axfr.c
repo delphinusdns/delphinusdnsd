@@ -119,7 +119,7 @@ extern int rotate_rr(struct rrset *rrset);
 
 extern int domaincmp(struct node *e1, struct node *e2);
 extern char * dns_label(char *, int *);
-extern int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *);
+extern int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
 extern int find_tsig_key(char *keyname, int keynamelen, char *key, int keylen);
 extern int have_zone(char *zonename, int zonelen);
 
@@ -1021,7 +1021,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				struct dns_header *odh;
 
 				odh = (struct dns_header *)&reply[2];
-				outlen = additional_tsig(question, (reply + 2), 0xffff, outlen, 0, 0, NULL);
+				outlen = additional_tsig(question, (reply + 2), 0xffff, outlen, 0, 0, NULL, DEFAULT_TSIG_FUDGE);
 				NTOHS(odh->additional); 
 				odh->additional++;
 				HTONS(odh->additional);
@@ -1106,7 +1106,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				if (question->tsig.have_tsig && question->tsig.tsigverified) {
 					int tmplen = outlen;
 
-					outlen = additional_tsig(question, (reply + 2), 65000, outlen, 0, envelopcount, tsigctx);
+					outlen = additional_tsig(question, (reply + 2), 65000, outlen, 0, envelopcount, tsigctx, DEFAULT_TSIG_FUDGE);
 					if (tmplen != outlen) {
 						odh->additional = htons(1);
 
@@ -1158,7 +1158,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			else
 				envelopcount = -2;
 
-			outlen = additional_tsig(question, (reply + 2), 65000, outlen, 0, envelopcount, tsigctx);
+			outlen = additional_tsig(question, (reply + 2), 65000, outlen, 0, envelopcount, tsigctx, DEFAULT_TSIG_FUDGE);
 			odh->additional = htons(1);
 
 			pack16(reply, htons(outlen));
@@ -1608,7 +1608,7 @@ notifypacket(int so, void *vnotnp, void *vmd, int packetcount)
 			return;
 		}
 	
-		outlen = additional_tsig(fq, packet, sizeof(packet), outlen, 1, 0, NULL);
+		outlen = additional_tsig(fq, packet, sizeof(packet), outlen, 1, 0, NULL, DEFAULT_TSIG_FUDGE);
 
 		dnh->additional = htons(1);
 

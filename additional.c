@@ -73,7 +73,7 @@ int additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 int additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 int additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *, int);
-int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *);
+int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
 
 extern void 	pack(char *, char *, int);
 extern void 	pack32(char *, u_int32_t);
@@ -404,7 +404,7 @@ out:
  */
 
 int 
-additional_tsig(struct question *question, char *reply, int replylen, int offset, int request, int envelope, HMAC_CTX *tsigctx) 
+additional_tsig(struct question *question, char *reply, int replylen, int offset, int request, int envelope, HMAC_CTX *tsigctx, uint16_t fudge) 
 {
 	struct dns_tsigrr *answer, *ppanswer, *timers;
 	u_int macsize = 32;
@@ -531,18 +531,18 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	answer = (struct dns_tsigrr *)&reply[offset];
 	if (envelope > 1 || envelope < -1) {
 #ifdef __linux__
-		answer->timefudge = htobe64(((u_int64_t)tmp64 << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+		answer->timefudge = htobe64(((u_int64_t)tmp64 << 16) | (fudge & 0xffff));
 #else
-		answer->timefudge = htobe64(((u_int64_t)now << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+		answer->timefudge = htobe64(((u_int64_t)now << 16) | (fudge & 0xffff));
 #endif
 	} else {
 		if (request == 0 || envelope == 1) {
 			answer->timefudge = question->tsig.tsig_timefudge;
 		} else {
 #ifdef __linux__
-			answer->timefudge = htobe64((tmp64 << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+			answer->timefudge = htobe64((tmp64 << 16) | (fudge & 0xffff));
 #else
-			answer->timefudge = htobe64((now << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+			answer->timefudge = htobe64((now << 16) | (fudge & 0xffff));
 #endif
 		}
 	}
@@ -579,9 +579,9 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 		ppanswer->timefudge = question->tsig.tsig_timefudge;
 	else
 #ifdef __linux__
-		ppanswer->timefudge = htobe64(((u_int64_t)tmp64 << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+		ppanswer->timefudge = htobe64(((u_int64_t)tmp64 << 16) | (fudge & 0xffff));
 #else
-		ppanswer->timefudge = htobe64(((u_int64_t)now << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+		ppanswer->timefudge = htobe64(((u_int64_t)now << 16) | (fudge & 0xffff));
 #endif
 	ppoffset += 8;
 
@@ -610,7 +610,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 		if (envelope % 89 == 0 || envelope == -2)  {
 			ttlen = 0;
 			timers = (struct dns_tsigrr *)&tsig_timers[ttlen];
-			timers->timefudge = htobe64(((u_int64_t)now << 16) | (DEFAULT_TSIG_FUDGE & 0xffff));
+			timers->timefudge = htobe64(((u_int64_t)now << 16) | (fudge & 0xffff));
 			ttlen += 8;
 			HMAC_Update(tsigctx, (const unsigned char *)tsig_timers, ttlen);
 		}

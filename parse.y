@@ -202,6 +202,7 @@ int dnssec = 0;
 int raxfrflag = 0;
 int tcpanyonly = 0;
 u_int max_udp_payload = 0xffff; /* 65535 */
+uint16_t fudge_forward = DEFAULT_TSIG_FUDGE;
 
 char 		*check_rr(char *, char *, int, int *);
 int 		fill_a(ddDB *, char *, char *, int, char *);
@@ -257,7 +258,7 @@ int 		drop_privs(char *, struct passwd *);
 %token PASSLIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
 %token INCOMINGTSIG DESTINATION CACHE STRICTX20
-%token BYTELIMIT
+%token BYTELIMIT FUDGE
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -1585,6 +1586,15 @@ forwardstatement	:	INCOMINGTSIG STRING SEMICOLON CRLF
 	
 				free ($2);
 			}
+			| FUDGE NUMBER SEMICOLON CRLF
+			{
+				if ($2 > 65535 || $2 < 1) {
+                        		dolog(LOG_INFO, "Fudge value out of Range (1-65535)\n");
+                        		return (-1);
+				}	
+	
+				fudge_forward = $2;
+			}
 			| comment CRLF
 			;	
 
@@ -1773,6 +1783,7 @@ struct tab cmdtab[] = {
 	{ "destination", DESTINATION, 0 },
 	{ "filter", FILTER, STATE_IP },
 	{ "forward", FORWARD, 0 },
+	{ "fudge", FUDGE, 0 },
 	{ "include", INCLUDE, 0 },
 	{ "incoming-tsig", INCOMINGTSIG, 0 },
 	{ "master", MASTER, 0 },

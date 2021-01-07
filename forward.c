@@ -128,6 +128,7 @@ struct forwardqueue {
 	SLIST_ENTRY(forwardqueue) entries;	/* next entry */
 } *fwq1, *fwq2, *fwqp;
 
+
 void	init_forward(void);
 int	insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
 void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
@@ -151,7 +152,7 @@ extern uint16_t unpack16(char *);
 extern uint32_t unpack32(char *);
 extern void     ddd_shutdown(void);
 extern int      additional_opt(struct question *, char *, int, int);
-extern int      additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *);
+extern int      additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
 extern struct question	*build_question(char *, int, int, char *);
 extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
 extern int	free_question(struct question *);
@@ -239,6 +240,7 @@ extern int forward;
 extern int strictx20i;
 extern char *identstring;
 extern uint32_t zonenumber;
+extern uint16_t fudge_forward;
 
 /*
  * INIT_FORWARD - initialize the forward linked lists
@@ -1161,7 +1163,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	len = outlen;
 
 	if (tsigname) {
-		outlen = additional_tsig(q, packet, 0xffff, len, 1, 0, NULL);
+		outlen = additional_tsig(q, packet, 0xffff, len, 1, 0, NULL, fudge_forward);
 		dh->additional = htons(2);	
 	}
 
@@ -1495,7 +1497,7 @@ endimsg:
 		q->tsig.have_tsig = 1;
 		q->tsig.tsig_timefudge = fwq->tsigtimefudge;
 
-		outlen = additional_tsig(q, p, 0xffff, rlen, 0, 0, NULL);
+		outlen = additional_tsig(q, p, 0xffff, rlen, 0, 0, NULL, fudge_forward);
 		if (outlen == rlen) {
 			dolog(LOG_INFO, "additional tsig failed\n");
 		} else {
