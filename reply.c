@@ -198,11 +198,15 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -415,11 +419,15 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -636,11 +644,15 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -867,11 +879,15 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	
 	now = time(NULL);
@@ -1073,11 +1089,15 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	
 	now = time(NULL);
@@ -1280,11 +1300,15 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	
 	now = time(NULL);
@@ -1491,11 +1515,15 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -1704,11 +1732,15 @@ reply_ds(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -1920,11 +1952,15 @@ reply_dnskey(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -2124,11 +2160,15 @@ reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	if ((find_rr(rbt, DNS_TYPE_RRSIG)) == 0)
 		return -1;
@@ -2264,11 +2304,15 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -2469,11 +2513,15 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	SLIST_INIT(&addishead);
 	/* check for apex, delegations */
@@ -2822,11 +2870,15 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	SLIST_INIT(&addishead);
 	/* check for apex, delegations */
@@ -3241,11 +3293,15 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -3592,11 +3648,15 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) == 0)
@@ -3797,11 +3857,15 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -4064,11 +4128,15 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -4404,11 +4472,15 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -4609,11 +4681,15 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 
 	now = time(NULL);
@@ -4816,11 +4892,15 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -5055,11 +5135,15 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
@@ -7938,11 +8022,15 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 	uint32_t zonenumberx;
 	struct zoneentry *res = NULL;
 
-	res = zone_findzone(rbt);
-	if (res != NULL)
-		zonenumberx = res->zonenumber;
-	else
+	if (rbt->flags & RBT_CACHE) {
 		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
 
 	now = time(NULL);
 
