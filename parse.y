@@ -90,6 +90,7 @@ extern int 	insert_notifyddd(char *, char *);
 extern int 	insert_filter(char *, char *);
 extern int	insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
 extern int 	insert_passlist(char *, char *);
+extern int      insert_tsigpassname(char *);
 extern int	insert_tsig(char *, char *);
 extern int	insert_tsig_key(char *, int, char *, int);
 extern int	insert_zone(char *);
@@ -103,6 +104,7 @@ extern int display_rr(struct rrset *rrset);
 extern void flag_rr(struct rbtree *);
 extern int pull_rzone(struct rzone *, time_t);
 
+extern int tsigpassname;
 extern int passlist;
 extern int tsig;
 extern int notify;
@@ -258,7 +260,7 @@ int 		drop_privs(char *, struct passwd *);
 %token PASSLIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
 %token INCOMINGTSIG DESTINATION CACHE STRICTX20
-%token BYTELIMIT FUDGE
+%token BYTELIMIT FUDGE TSIGPASSNAME
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -292,6 +294,7 @@ cmd	:
 	| axfr CRLF
 	| passlist CRLF
 	| tsig CRLF
+	| tsigpassname CRLF
 	| filter CRLF
 	| forward CRLF
 	| comment CRLF
@@ -1447,6 +1450,45 @@ tsigstatement	:	ipcidr SEMICOLON CRLF
 			| comment CRLF
 			;	
 
+/* tsigpassname "these names" { .. } */
+
+tsigpassname:
+	TSIGPASSNAME tsigpassnamelabel tsigpassnamecontent
+	{
+		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
+                        dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
+                        return (-1);
+                }
+	}
+	;
+
+tsigpassnamelabel:
+	QUOTEDSTRING
+	;
+
+tsigpassnamecontent:
+			OBRACE tsigpassnamestatements EBRACE 
+			| OBRACE CRLF tsigpassnamestatements EBRACE 
+			;
+
+tsigpassnamestatements 	:  		
+				tsigpassnamestatements tsigpassnamestatement 
+				| tsigpassnamestatement 
+				;
+
+tsigpassnamestatement	:	QUOTEDSTRING SEMICOLON CRLF
+			{
+					if (insert_tsigpassname($1) != 0) {
+						dolog(LOG_INFO, "insert_tsigpassname failed\n");
+						return -1;
+					}
+
+					tsigpassname = 1;
+					free ($1);
+			}
+			| comment CRLF
+			;	
+
 /* passlist "these hosts" { .. } */
 
 passlist:
@@ -1799,6 +1841,7 @@ struct tab cmdtab[] = {
 	{ "strictx20", STRICTX20, 0},
 	{ "tsig", TSIG, 0 },
 	{ "tsig-auth", TSIGAUTH, 0 }, 
+	{ "tsigpassname", TSIGPASSNAME, 0 },
 	{ "wildcard-only-for", WOF, STATE_IP },
 	{ "version", VERSION, 0 },
 	{ "zinclude", ZINCLUDE, 0 },

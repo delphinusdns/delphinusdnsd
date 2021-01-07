@@ -172,6 +172,7 @@ extern int 	drop_privs(char *, struct passwd *);
 extern struct rbtree * 	get_soa(ddDB *, struct question *);
 extern struct rbtree *	get_ns(ddDB *, struct rbtree *, int *);
 extern void populate_zone(ddDB *db);
+extern int tsigpassname_contains(char *, int, int *);
 
 
 struct question		*convert_question(struct parsequestion *, int);
@@ -282,6 +283,7 @@ int forward = 0;
 int forwardtsig = 0;
 int strictx20i = 1;
 int zonecount = 0;
+int tsigpassname = 0;
 int cache = 0;
 u_int16_t port = 53;
 u_int32_t cachesize = 0;
@@ -1336,6 +1338,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	ssize_t n, datalen;
 	int ix;
 	int sretlen;
+	int passnamewc;
 
 	memset(&rectv0, 0, sizeof(struct timeval));
 	memset(&rectv1, 0, sizeof(struct timeval));
@@ -1727,7 +1730,6 @@ axfrentry:
 										imsg_free(&imsg);
 										goto drop;
 									case PARSE_RETURN_NOTAUTH:
-										/* we didn't see a tsig header */
 										if (filter && pq.tsig.have_tsig == 0) {
 											build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 											slen = reply_refused(&sreply, &sretlen, NULL);
@@ -1804,11 +1806,19 @@ axfrentry:
 				} /* if question->notify */
 
 				if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0)  {
-					dolog(LOG_INFO, "on descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsig.tsigerrorcode, address);
-					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
-					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					slen = reply_notauth(&sreply, &sretlen, NULL);
-					goto udpout;
+					/* if the name on the passlist is not present */ 
+					if (question->tsig.have_tsig &&
+						question->tsig.tsigerrorcode == DNS_BADTIME &&
+						tsigpassname &&
+							tsigpassname_contains(question->hdr->name, question->hdr->namelen, &passnamewc)) {
+							dolog(LOG_INFO, "passing %s despite being a TSIG unauthenticated query\n", question->converted_name);
+					} else {
+							dolog(LOG_INFO, "on descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[i], question->tsig.tsigerrorcode, address);
+							snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
+							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
+							slen = reply_notauth(&sreply, &sretlen, NULL);
+							goto udpout;
+					}
 				}
 				/* hack around whether we're edns version 0 */
 				if (question->ednsversion != 0) {
@@ -1897,10 +1907,20 @@ forwardudp:
 									question->tsig.tsigverified) {
 									snprintf(replystring, DNS_MAXNAME, "FORWARD");
 								} else {
-									snprintf(replystring, DNS_MAXNAME, "REFUSED");
-									build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
-									slen = reply_refused(&sreply, &sretlen, cfg->db);
-									goto udpout;
+									if (question->tsig.have_tsig &&
+										question->tsig.tsigerrorcode == DNS_BADTIME &&
+										tsigpassname &&
+											tsigpassname_contains(question->hdr->name, question->hdr->namelen, &passnamewc)) {
+											snprintf(replystring, DNS_MAXNAME,
+													"FORWARD");
+
+											dolog(LOG_INFO, "passing %s despite being a TSIG unauthenticated query\n", question->converted_name);
+									} else {
+											snprintf(replystring, DNS_MAXNAME, "REFUSED");
+											build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
+											slen = reply_refused(&sreply, &sretlen, cfg->db);
+											goto udpout;
+									}
 								}
 						} else
 								snprintf(replystring, DNS_MAXNAME, "FORWARD");
@@ -2404,6 +2424,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	int blocklist = 1;
 	int require_tsig = 0;
 	int axfr_acl = 0;
+	int passnamewc;
 	pid_t idata;
 	uint conncnt = 0;
 	int tcpflags;
@@ -2843,13 +2864,12 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 									0, 0, -1, question->hdr->name, idata);
 							msgbuf_write(&ibuf->w);
 							goto tcpout;
-					
 					} else if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0) {
-							dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns NOTIFY packet (code = %d) from %s, replying notauth\n", so, cfg->ident[tcpnp->intidx], question->tsig.tsigerrorcode, tcpnp->address);
-							snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
-							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-							slen = reply_notauth(&sreply, &sretlen, NULL);
-							goto tcpout;
+						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns NOTIFY packet (code = %d) from %s, replying notauth\n", so, cfg->ident[tcpnp->intidx], question->tsig.tsigerrorcode, tcpnp->address);
+						snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
+						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
+						slen = reply_notauth(&sreply, &sretlen, NULL);
+						goto tcpout;
 					}
 
 					if (notifysource(question, (struct sockaddr_storage *)from)) {
@@ -2875,11 +2895,18 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				} /* if question->notify */
 
 				if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0)  {
-					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[tcpnp->intidx], question->tsig.tsigerrorcode, tcpnp->address);
-					snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
-					build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					slen = reply_notauth(&sreply, &sretlen, NULL);
-					goto tcpout;
+					if (question->tsig.have_tsig &&
+						question->tsig.tsigerrorcode == DNS_BADTIME &&
+						tsigpassname &&
+						tsigpassname_contains(question->hdr->name, question->hdr->namelen, &passnamewc)) {
+							dolog(LOG_INFO, "passing on TCP name %s despite it not authenticating the TSIG\n", question->converted_name);
+					} else {
+							dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" not authenticated dns packet (code = %d) from %s, replying notauth\n", so, cfg->ident[tcpnp->intidx], question->tsig.tsigerrorcode, tcpnp->address);
+							snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
+							build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
+							slen = reply_notauth(&sreply, &sretlen, NULL);
+							goto tcpout;
+					}
 				}
 				/* hack around whether we're edns version 0 */
 
@@ -2975,10 +3002,20 @@ forwardtcp:
 									question->tsig.tsigverified) {
 									snprintf(replystring, DNS_MAXNAME, "FORWARD");
 								} else {
-									snprintf(replystring, DNS_MAXNAME, "REFUSED");
-									build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
-									slen = reply_refused(&sreply, &sretlen, cfg->db);
-									goto tcpout;
+									if (question->tsig.have_tsig &&
+										question->tsig.tsigerrorcode == DNS_BADTIME &&
+										tsigpassname &&
+										tsigpassname_contains(question->hdr->name, question->hdr->namelen, &passnamewc)) {
+										snprintf(replystring, DNS_MAXNAME,
+											"FORWARD");
+
+										dolog(LOG_INFO, "TCP passing %s despite being a TSIG unauthenticated query\n", question->converted_name);
+									} else {
+										snprintf(replystring, DNS_MAXNAME, "REFUSED");
+										build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
+										slen = reply_refused(&sreply, &sretlen, cfg->db);
+										goto tcpout;
+									}
 								}
 						} else
 								snprintf(replystring, DNS_MAXNAME, "FORWARD");

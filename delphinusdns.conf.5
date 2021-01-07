@@ -183,9 +183,10 @@ Syntax for
 .Nm
 in BNF:
 .Bd -literal
-line = ( version | axfrport | include | zinclude | zone | region | 
-	axfr | mzone | passlist | filter | recurse | comment | 
-		options | forward | rzone )
+line = ( 	version | axfrport | include | zinclude | zone | region | 
+		axfr | mzone | passlist | filter | recurse | comment | 
+		options | forward | rzone | tsig | tsig-auth |
+		tsigpassname )
 
 version = "version" ("number") ;
 
@@ -195,9 +196,9 @@ include = "include" ("filename") ;
 
 zinclude = "zinclude" ("filename") ;
 
-zone = "zone" ("string") [ "{" zonedata "}" ]
-zonedata = { [hostname] [ "," dnstype] [ "," ttl ] ["," variablednsdata] }
 hostname = string
+zone = "zone" ("hostname") [ "{" zonedata "}" ]
+zonedata = { [hostname] [ "," dnstype] [ "," ttl ] ["," variablednsdata] }
 dnstype = ( 	"a" | "aaaa" | "caa" | "cname" | "dnskey" | "ds" | "hinfo" | 
 		"hint" | "mx" | "naptr" | "ns" | "nsec3" | "nsec3param" | 
 		"ptr" | "rp" | "rrsig" | "soa" | "srv" | "sshfp" | "tlsa" | 
@@ -228,6 +229,7 @@ recurse = "recurse-for" ("string") [ "{" cidrlist "}" ]
 base64-string = (string)
 tsig-auth = "tsig-auth" (string) ("base64-string") ;
 tsig = "tsig" ("string") [ "{" cidrlist "}" ]
+tsigpassname = "tsigpassname" ("string") [ "{" ("hostname") "}" ]
 
 rzone = "rzone" ("string") [ "{" rzonelist "}" ]
 rzonelist = ( opttsig | optmaster | optmasterport | optrzonename | 

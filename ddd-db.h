@@ -572,6 +572,17 @@ RB_PROTOTYPE(zonetree, zoneentry, zone_entry, zonecmp);
 
 extern int zonecmp(struct zoneentry *, struct zoneentry *);
 	
+struct pnentry {
+	char name[DNS_MAXNAME];
+	int namelen;
+	char *humanname;
+	int wildcard;
+        RB_ENTRY(pnentry) pn_entry;
+};
 
+RB_HEAD(pntree, pnentry);
+RB_PROTOTYPE(pntree, pnentry, pn_entry, pncmp);
+
+extern int pncmp(struct pnentry *, struct pnentry *);
 
 #endif /* _DB_H */
