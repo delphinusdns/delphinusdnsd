@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd September 30, 2020
+.Dd January 7, 2021
 .Dt DELPHINUSDNS.CONF 5
 .Os 
 .Sh NAME
@@ -198,9 +198,10 @@ zinclude = "zinclude" ("filename") ;
 zone = "zone" ("string") [ "{" zonedata "}" ]
 zonedata = { [hostname] [ "," dnstype] [ "," ttl ] ["," variablednsdata] }
 hostname = string
-dnstype = ( 	"a" | "aaaa" | "cname" | "dnskey" | "ds" | "mx" | "naptr" |
-		"ns" | "nsec3" | "nsec3param" | "ptr" | "rrsig" |
-		"soa" | "srv" | "sshfp" | "tlsa" | "txt" | "hint" )
+dnstype = ( 	"a" | "aaaa" | "caa" | "cname" | "dnskey" | "ds" | "hinfo" | 
+		"hint" | "mx" | "naptr" | "ns" | "nsec3" | "nsec3param" | 
+		"ptr" | "rp" | "rrsig" | "soa" | "srv" | "sshfp" | "tlsa" | 
+		"txt" )
 
 ttl = number
 
@@ -242,13 +243,15 @@ optbytelimit = "bytelimit" (number) ;
 
 
 forward = "forward" ("string") [ "{" forwardlist "}" ]
-forwardlist = ( optdestination | optstrictx20 | optcache | optincomingtsig )
+forwardlist = ( optdestination | optstrictx20 | optcache | optincomingtsig |
+			optfudge )
 
 optdestination = "destination" ("cidr-address") "port" ("integer") "key" 
 			(string | "NOKEY") ;
 optstrictx20 = "strictx20" ("yes" | "no") ;
 optcache =  "cache" ("yes" | "no") ;
 optincomingtsig = "incoming-tsig" ("yes" | "no") ;
+optfudge = "fudge" (number) ;
 
 comment = ( ; | pound ) line
 
