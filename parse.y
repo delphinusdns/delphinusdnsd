@@ -191,6 +191,7 @@ static ddDB *mydb;
 static char *current_zone = NULL;
 static int pullzone = 1;
 
+
 YYSTYPE yylval;
 
 
@@ -205,6 +206,8 @@ int raxfrflag = 0;
 int tcpanyonly = 0;
 u_int max_udp_payload = 0xffff; /* 65535 */
 uint16_t fudge_forward = DEFAULT_TSIG_FUDGE;
+uint8_t rdomain = 0;
+uint8_t forward_rdomain = 0;
 
 char 		*check_rr(char *, char *, int, int *);
 int 		fill_a(ddDB *, char *, char *, int, char *);
@@ -260,7 +263,7 @@ int 		drop_privs(char *, struct passwd *);
 %token PASSLIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
 %token INCOMINGTSIG DESTINATION CACHE STRICTX20
-%token BYTELIMIT FUDGE TSIGPASSNAME
+%token BYTELIMIT FUDGE TSIGPASSNAME RDOMAIN
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -1373,7 +1376,8 @@ optionsstatement:
 				max_udp_payload = $2;
 
 				dolog(LOG_DEBUG, "max-udp-payload is now %u\n", max_udp_payload);
-			}
+			} 
+
 			
 		}
 	}
@@ -1391,6 +1395,19 @@ optionsstatement:
 				bind_list[bcount++] = $2;
 			}
 		}
+	}
+	|
+	RDOMAIN NUMBER SEMICOLON CRLF
+	{
+		if ($2 > 255 || $2 < 0) {
+			dolog(LOG_INFO, "bad rdomain number (0-255)\n");
+			return -1;
+		}
+
+		rdomain = $2;
+		forward_rdomain = rdomain;
+		
+		dolog(LOG_DEBUG, "default rdomain is now %u\n", rdomain);
 	}
 	| comment CRLF
 	;
@@ -1637,6 +1654,15 @@ forwardstatement	:	INCOMINGTSIG STRING SEMICOLON CRLF
 	
 				fudge_forward = $2;
 			}
+			| RDOMAIN NUMBER SEMICOLON CRLF
+			{
+				if ($2 > 255 || $2 < 0) {
+                        		dolog(LOG_INFO, "rdomain value out of Range (0-255)\n");
+                        		return (-1);
+				}	
+
+				forward_rdomain = $2;
+			}
 			| comment CRLF
 			;	
 
@@ -1836,6 +1862,7 @@ struct tab cmdtab[] = {
 	{ "options", OPTIONS, 0 },
 	{ "passlist", PASSLIST, STATE_IP },
 	{ "port", PORT, 0},
+	{ "rdomain", RDOMAIN, 0 },
 	{ "region", REGION, STATE_IP },
 	{ "rzone", RZONE, 0 },
 	{ "strictx20", STRICTX20, 0},

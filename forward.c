@@ -329,6 +329,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 
 	char *ptr;
 
+	
 	ptr = cfg->shptr;
 
 	forward = 0; 		/* in this process we don't need forward on */

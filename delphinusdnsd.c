@@ -264,6 +264,8 @@ extern int tsig;
 extern int dnssec;
 extern int raxfrflag;
 extern u_int max_udp_payload;
+extern uint8_t rdomain;
+extern uint8_t forward_rdomain;
 
 static int reload = 0;
 static int mshutdown = 0;
@@ -599,6 +601,14 @@ main(int argc, char *argv[], char *environ[])
 		exit(1);
 	}
 
+#ifdef __OpenBSD__
+	if (setrtable(rdomain) < 0) {
+		dolog(LOG_INFO, "setrtable: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
+
 	/* ratelimiting setup */
 	if (ratelimit) {
 		ratelimit_backlog = ratelimit_packets_per_second * 2;
@@ -901,7 +911,6 @@ main(int argc, char *argv[], char *environ[])
 		ddd_shutdown();
 		exit(1);
 	}
-	on = 1;
 	shutdown(cfg->raw[1], SHUT_RD);
 	cfg->port = port;
 
@@ -1116,6 +1125,15 @@ main(int argc, char *argv[], char *environ[])
 
 			cfg->shptr3 = shptr;
 			cfg->shptr3size = shsize;
+
+#ifdef __OpenBSD__
+			/* set up rdomain if specified as a forwarding option */
+			if (setrtable(forward_rdomain) < 0) {
+				dolog(LOG_INFO, "forward setrtable: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#endif
 
 			/* chroot to the drop priv user home directory */
 #ifdef DEFAULT_LOCATION
