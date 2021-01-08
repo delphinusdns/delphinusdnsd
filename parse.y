@@ -101,7 +101,7 @@ extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uin
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int display_rr(struct rrset *rrset);
-extern void flag_rr(struct rbtree *);
+extern void flag_rr(struct rbtree *, uint32_t);
 extern int pull_rzone(struct rzone *, time_t);
 
 extern int tsigpassname;
@@ -2592,7 +2592,7 @@ fill_rrsig(ddDB *db, char *name, char *type, u_int32_t myttl, char *typecovered,
 
 	/* flag this rrset as being a DNSSEC rrset */
 
-	flag_rr(rbt);
+	flag_rr(rbt, RBT_DNSSEC);
 
         memset(&key, 0, sizeof(key));
         memset(&data, 0, sizeof(data));
