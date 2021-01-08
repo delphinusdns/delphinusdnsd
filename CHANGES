@@ -1,6 +1,11 @@
 Changes in RELEASE_1_6 from RELEASE_1_5
 
-None yet.
+- rdomain support in OpenBSD
+- fudgesize in forwarding mode for setting higher FUDGE value
+- ntphack in main daemon for allowing *.ntp.org through
+- setproctitle setting of an identifier for identifying a delphinusdnsd in
+  systems that have multiple delphinusdnsd running
+
 
 Changes in RELEASE_1_5 from RELEASE_1_4
 
