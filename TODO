@@ -20,7 +20,7 @@ to have replicant compatibility for NSEC
 - a port to windows 10 and windows server 2019
 - fudgesize in forwarding mode for setting higher FUDGE value [DONE]
 - ntphack in main daemon for allowing *.ntp.org through [DONE]
-- rdomains throughout the daemon (forwarding and especially main daemon)
+- rdomains throughout the daemon (forwarding and especially main daemon) [DONE]
 - setproctitle setting of an identifier for identifying a delphinusdnsd when
 many are in the system, also dddctl should be modified to set up killing such
 an ident (ie. /var/run/delphinusdnsd-${ID}.sock) [DONE]
