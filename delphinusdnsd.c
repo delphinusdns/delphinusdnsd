@@ -4303,12 +4303,12 @@ sm_lock(char *shm, size_t end)
 	char *lock = (char *)&shm[end - 16];	
 	uint32_t value;
 
+	while ((value = arc4random()) == SM_NOLOCK);
+
 	for (;;) {
 		while (unpack32(lock) != SM_NOLOCK) {
 			usleep(arc4random() % 300);
 		}
-
-		while ((value = arc4random()) == SM_NOLOCK);
 		pack32(lock, value);		/* race here */
 		usleep(10);
 		if (unpack32(lock) == value) 	/* check for race here */
