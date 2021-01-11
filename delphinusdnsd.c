@@ -4310,7 +4310,6 @@ sm_lock(char *shm, size_t end)
 			usleep(arc4random() % 300);
 		}
 		pack32(lock, value);		/* race here */
-		usleep(10);
 		if (unpack32(lock) == value) 	/* check for race here */
 			return;
 	}
