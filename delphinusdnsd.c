@@ -191,6 +191,8 @@ struct imsgbuf * 	register_cortex(struct imsgbuf *, int);
 void			nomore_neurons(struct imsgbuf *);
 int			bind_this_res(struct addrinfo *, int);
 int			bind_this_pifap(struct ifaddrs *, int, int);
+char *			sm_init(size_t, size_t);
+size_t			sm_size(size_t, size_t);
 
 /* aliases */
 
@@ -339,9 +341,6 @@ main(int argc, char *argv[], char *environ[])
 	struct cfg *cfg;
 	struct imsgbuf cortex_ibuf;
 	struct imsgbuf *ibuf;
-	struct rr_imsg *ri = NULL;
-	struct sf_imsg *sf = NULL;
-	struct pkt_imsg *pi = NULL;
 
 	static ddDB *db;
 	
@@ -349,8 +348,6 @@ main(int argc, char *argv[], char *environ[])
 	struct tm *ltm;
 
 	char *shptr;
-	int shsize;
-
 	
 	if (geteuid() != 0) {
 		fprintf(stderr, "must be started as root\n");
@@ -1057,25 +1054,10 @@ main(int argc, char *argv[], char *environ[])
 	
 	if (forward) {	
 		/* initialize the only global shared memory segment */
-
-		shsize = 16 + (SHAREDMEMSIZE * sizeof(struct sf_imsg));
-
-		shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
-			MAP_ANON, -1, 0);
-
-		if (shptr == MAP_FAILED) {
-			dolog(LOG_ERR, "failed to setup  mmap segment, exit\n");
-			exit(1);
-		}
-
-		/* initialize */
-		for (sf = (struct sf_imsg *)&shptr[0], j = 0; j < SHAREDMEMSIZE; j++, sf++) {
-			pack32((char *)&sf->u.s.read, 1);
-		}
+		shptr = sm_init(SHAREDMEMSIZE, sizeof(struct sf_imsg));
 
 		cfg->shptr = shptr;
-		cfg->shptrsize = shsize;
-
+		cfg->shptrsize = sm_size(SHAREDMEMSIZE, sizeof(struct sf_imsg));
 
 		switch (pid = fork()) {
 		case -1:
@@ -1090,41 +1072,13 @@ main(int argc, char *argv[], char *environ[])
 			}
 
 			/* initialize shared memory for forward here */
-			shsize = 16 + (SHAREDMEMSIZE * sizeof(struct rr_imsg));
-
-			shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
-				MAP_ANON, -1, 0);
-
-			if (shptr == MAP_FAILED) {
-				dolog(LOG_ERR, "failed to setup mmap segment, exit\n");
-				exit(1);
-			}
-
-			/* initialize */
-			for (ri = (struct rr_imsg *)&shptr[0], j = 0; j < SHAREDMEMSIZE; j++, ri++) {
-				pack32((char *)&ri->u.s.read, 1);
-			}
-
+			shptr = sm_init(SHAREDMEMSIZE, sizeof(struct rr_imsg));
 			cfg->shptr2 = shptr;
-			cfg->shptr2size = shsize;
+			cfg->shptr2size = sm_size(SHAREDMEMSIZE, sizeof(struct rr_imsg));
 
-			shsize = 16 + (SHAREDMEMSIZE3 * sizeof(struct pkt_imsg));
-
-			shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
-				MAP_ANON, -1, 0);
-
-			if (shptr == MAP_FAILED) {
-				dolog(LOG_ERR, "failed to setup mmap segment, exit\n");
-				exit(1);
-			}
-
-			/* initialize */
-			for (pi = (struct pkt_imsg *)&shptr[0], j = 0; j < SHAREDMEMSIZE3; j++, pi++) {
-				pack32((char *)&pi->pkt_s.read, 1);
-			}
-
+			shptr = sm_init(SHAREDMEMSIZE3, sizeof(struct pkt_imsg));
 			cfg->shptr3 = shptr;
-			cfg->shptr3size = shsize;
+			cfg->shptr3size = sm_size(SHAREDMEMSIZE3, sizeof(struct pkt_imsg));
 
 #ifdef __OpenBSD__
 			/* set up rdomain if specified as a forwarding option */
@@ -4201,4 +4155,37 @@ bind_this_pifap(struct ifaddrs *pifap, int shut, int salen)
 		exit(1);
 	}
 	return (so);
+}
+
+char *
+sm_init(size_t members, size_t size_member)
+{
+	char *shptr;
+	size_t shsize;
+	void *sf;
+	size_t j;
+
+	/* initialize the global shared memory segment */
+
+	shsize = sm_size(members, size_member);
+	shptr = mmap(NULL, shsize, PROT_READ | PROT_WRITE, MAP_SHARED |\
+		MAP_ANON, -1, 0);
+
+	if (shptr == MAP_FAILED) {
+		dolog(LOG_ERR, "failed to setup  mmap segment, exit\n");
+		exit(1);
+	}
+
+	/* initialize (set first 4 bytes in each member to 1) */
+	for (sf = (void *)&shptr[0], j = 0; j < members; j++, sf += size_member) {
+		pack32((char *)sf, 1);
+	}
+
+	return (shptr);
+}
+
+size_t
+sm_size(size_t members, size_t size_member)
+{
+	return (16 + (members * size_member));
 }
