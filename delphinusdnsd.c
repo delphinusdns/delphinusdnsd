@@ -193,6 +193,8 @@ int			bind_this_res(struct addrinfo *, int);
 int			bind_this_pifap(struct ifaddrs *, int, int);
 char *			sm_init(size_t, size_t);
 size_t			sm_size(size_t, size_t);
+void			sm_lock(char *, size_t);
+void			sm_unlock(char *, size_t);
 
 /* aliases */
 
@@ -1055,7 +1057,6 @@ main(int argc, char *argv[], char *environ[])
 	if (forward) {	
 		/* initialize the only global shared memory segment */
 		shptr = sm_init(SHAREDMEMSIZE, sizeof(struct sf_imsg));
-
 		cfg->shptr = shptr;
 		cfg->shptrsize = sm_size(SHAREDMEMSIZE, sizeof(struct sf_imsg));
 
@@ -1148,8 +1149,12 @@ main(int argc, char *argv[], char *environ[])
 	close(cfg->raw[0]);
 	close(cfg->raw[1]);
 
-
 	/* the rest of the daemon goes on in TCP and UDP loops */
+
+	shptr = sm_init(SHAREDMEMSIZE, sizeof(struct pq_imsg));
+	cfg->shptr_pq = shptr;
+	cfg->shptr_pqsize = sm_size(SHAREDMEMSIZE, sizeof(struct pq_imsg));
+
 #ifdef DEFAULT_LOCATION
 	if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
 #else
@@ -1209,6 +1214,7 @@ main(int argc, char *argv[], char *environ[])
 
 			setproctitle("child %d pid %d [%s]", n, cfg->pid, 
 				(identstring != NULL ? identstring : ""));
+
 			(void)mainloop(cfg, &cortex_ibuf);
 
 			/* NOTREACHED */
@@ -1304,6 +1310,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	struct imsgbuf *tcp_ibuf, *udp_ibuf, parse_ibuf;
 	struct imsgbuf *pibuf;
 	struct imsg imsg;
+	struct pq_imsg *pq0;
 
 	struct sforward *sforward;
 
@@ -1311,6 +1318,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	int ix;
 	int sretlen;
 	int passnamewc;
+	int pq_offset;
 
 	memset(&rectv0, 0, sizeof(struct timeval));
 	memset(&rectv1, 0, sizeof(struct timeval));
@@ -1672,12 +1680,19 @@ axfrentry:
 
 							switch (imsg.hdr.type) {
 							case IMSG_PARSEREPLY_MESSAGE:
-								if (datalen != sizeof(struct parsequestion)) {
-									dolog(LOG_ERR, "datalen != sizeof(struct parsequestion), can't work with this, drop\n");
+								if (datalen != sizeof(int)) {
+									dolog(LOG_ERR, "datalen != sizeof(int), can't work with this, drop\n");
 									goto drop;
 								}
 					
-								memcpy((char *)&pq, imsg.data, datalen);
+								memcpy((char *)&pq_offset, imsg.data, datalen);
+								pq0 = (struct pq_imsg *)&cfg->shptr_pq[0];
+								pq0 += pq_offset;
+								memcpy((char *)&pq, (char *)&pq0->pqi_pq, sizeof(struct parsequestion));
+
+								sm_lock(cfg->shptr_pq, cfg->shptr_pqsize);
+								pack32((char *)&pq0->u.s.read, 1);
+								sm_unlock(cfg->shptr_pq, cfg->shptr_pqsize);
 
 								if (pq.rc != PARSE_RETURN_ACK) {
 									switch (pq.rc) {
@@ -1944,11 +1959,7 @@ forwardudp:
 						memcpy(&sf.sfi_sf, sforward, sizeof(struct sforward));
 						
 						/* wait for lock */
-						while (cfg->shptr[cfg->shptrsize - 16] == '*') {
-							usleep(arc4random() % 300);
-						}
-
-						cfg->shptr[cfg->shptrsize - 16] = '*'; /* nice semaphore eh? */
+						sm_lock(cfg->shptr, cfg->shptrsize);
 
 						for (sfi = (struct sf_imsg *)&cfg->shptr[0], ix = 0;
 								 ix < SHAREDMEMSIZE; ix++, sfi++) {
@@ -1964,7 +1975,7 @@ forwardudp:
 							goto udpout;
 						}
 
-						cfg->shptr[cfg->shptrsize - 16] = ' ';
+						sm_unlock(cfg->shptr, cfg->shptrsize);
 
 						imsg_compose(udp_ibuf, IMSG_FORWARD_UDP,
 							0, 0, -1, &ix, sizeof(int));
@@ -2435,6 +2446,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	struct imsgbuf *pibuf;
 	struct imsg imsg;
 	struct parsequestion pq;
+	struct pq_imsg *pq0;
 
 	ssize_t n, datalen;
 	u_int32_t imsg_type;
@@ -2442,6 +2454,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	struct sforward *sforward;
 	int ix;
 	int sretlen;
+	int pq_offset;
 
 
 	sforward = (struct sforward *)calloc(1, sizeof(struct sforward));
@@ -2765,13 +2778,20 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 
 					switch (imsg.hdr.type) {
 					case IMSG_PARSEREPLY_MESSAGE:
-						if (datalen != sizeof(struct parsequestion)) {
-							dolog(LOG_ERR, "tcploop datalen != sizeof(struct parsequestion), can't work with this, drop\n");
+						if (datalen != sizeof(int)) {
+							dolog(LOG_ERR, "tcploop datalen != sizeof(int), can't work with this, drop\n");
 							imsg_free(&imsg);
 							goto drop;
 						}
 			
-						memcpy((char *)&pq, imsg.data, datalen);
+						memcpy((char *)&pq_offset, imsg.data, datalen);
+						pq0 = (struct pq_imsg *)&cfg->shptr_pq[0];
+						pq0 += pq_offset;
+						memcpy((char *)&pq, (char *)&pq0->pqi_pq, sizeof(struct parsequestion));
+
+						sm_lock(cfg->shptr_pq, cfg->shptr_pqsize);
+						pack32((char *)&pq0->u.s.read, 1);
+						sm_unlock(cfg->shptr_pq, cfg->shptr_pqsize);
 
 						if (pq.rc != PARSE_RETURN_ACK) {
 							switch (pq.rc) {
@@ -3034,11 +3054,7 @@ forwardtcp:
 						memcpy(&sf.sfi_sf, sforward, sizeof(struct sforward));
 						
 						/* wait for lock */
-						while (cfg->shptr[cfg->shptrsize - 16] == '*') {
-							usleep(arc4random() % 300);
-						}
-
-						cfg->shptr[cfg->shptrsize - 16] = '*'; /* nice semaphore eh? */
+						sm_lock(cfg->shptr, cfg->shptrsize);
 
 						for (sfi = (struct sf_imsg *)&cfg->shptr[0], ix = 0;
 								 ix < SHAREDMEMSIZE; ix++, sfi++) {
@@ -3054,8 +3070,7 @@ forwardtcp:
 							goto tcpout;
 						}
 
-						cfg->shptr[cfg->shptrsize - 16] = ' ';
-
+						sm_unlock(cfg->shptr, cfg->shptrsize);
 
 						imsg_compose(ibuf, IMSG_FORWARD_TCP,
 							0, 0, so, &ix,  sizeof(int));
@@ -3335,9 +3350,10 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	struct parsequestion pq;
 	char *packet;
 	fd_set rset;
-	int sel;
+	int sel, i;
 	int fd = mybuf->fd;
 	ssize_t n, datalen;
+	struct pq_imsg *pq0;
 
 #if __OpenBSD__
 	if (pledge("stdio", NULL) < 0) {
@@ -3389,17 +3405,46 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 
 					if (datalen > MAX_IMSGSIZE) {
 						pq.rc = PARSE_RETURN_NAK;
-						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
-						msgbuf_write(&mybuf->w);
+						sm_lock(cfg->shptr_pq, cfg->shptr_pqsize);
+
+						pq0 = (struct pq_imsg *)&cfg->shptr_pq[0];
+						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
+							if (unpack32((char *)&pq0->u.s.read) == 1) {
+								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion));
+								pack32((char *)&pq0->u.s.read, 0);
+								break;
+							}
+						}
+						if (i == SHAREDMEMSIZE) {
+							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
+						} else {
+							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&i, sizeof(int));
+							msgbuf_write(&mybuf->w);
+						}
+						sm_unlock(cfg->shptr_pq, cfg->shptr_pqsize);
 						break;
 					}
 					memcpy(packet, imsg.data, datalen);
 
 					if (datalen < sizeof(struct dns_header)) {
-						/* SEND NAK */
 						pq.rc = PARSE_RETURN_NAK;
-						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
-						msgbuf_write(&mybuf->w);
+						sm_lock(cfg->shptr_pq, cfg->shptr_pqsize);
+
+						pq0 = (struct pq_imsg *)&cfg->shptr_pq[0];
+						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
+							if (unpack32((char *)&pq0->u.s.read) == 1) {
+								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion));
+								pack32((char *)&pq0->u.s.read, 0);
+								break;
+							}
+						}
+						if (i == SHAREDMEMSIZE) {
+							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
+						} else {
+							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&i, sizeof(int));
+							msgbuf_write(&mybuf->w);
+						}
+						sm_unlock(cfg->shptr_pq, cfg->shptr_pqsize);
 						break;
 					}
 					dh = (struct dns_header *)packet;
@@ -3407,8 +3452,23 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 					if ((ntohs(dh->query) & DNS_REPLY)) {
 						/* we want to reply with a NAK here */
 						pq.rc = PARSE_RETURN_NOTAQUESTION;
-						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
-						msgbuf_write(&mybuf->w);
+						sm_lock(cfg->shptr_pq, cfg->shptr_pqsize);
+
+						pq0 = (struct pq_imsg *)&cfg->shptr_pq[0];
+						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
+							if (unpack32((char *)&pq0->u.s.read) == 1) {
+								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion));
+								pack32((char *)&pq0->u.s.read, 0);
+								break;
+							}
+						}
+						if (i == SHAREDMEMSIZE) {
+							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
+						} else {
+							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&i, sizeof(int));
+							msgbuf_write(&mybuf->w);
+						}
+						sm_unlock(cfg->shptr_pq, cfg->shptr_pqsize);
 						break;
 					}
 
@@ -3419,16 +3479,46 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 					if (ntohs(dh->question) != 1) {
 						/* XXX reply nak here */
 						pq.rc = PARSE_RETURN_NOQUESTION;
-						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
-						msgbuf_write(&mybuf->w);
+						sm_lock(cfg->shptr_pq, cfg->shptr_pqsize);
+
+						pq0 = (struct pq_imsg *)&cfg->shptr_pq[0];
+						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
+							if (unpack32((char *)&pq0->u.s.read) == 1) {
+								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion));
+								pack32((char *)&pq0->u.s.read, 0);
+								break;
+							}
+						}
+						if (i == SHAREDMEMSIZE) {
+							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
+						} else {
+							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&i, sizeof(int));
+							msgbuf_write(&mybuf->w);
+						}
+						sm_unlock(cfg->shptr_pq, cfg->shptr_pqsize);
 						break;
 					}
 
 					if ((question = build_question(packet, datalen, ntohs(dh->additional), NULL)) == NULL) {
 						/* XXX reply nak here */
 						pq.rc = PARSE_RETURN_MALFORMED;
-						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, &pq, sizeof(struct parsequestion));
-						msgbuf_write(&mybuf->w);
+						sm_lock(cfg->shptr_pq, cfg->shptr_pqsize);
+
+						pq0 = (struct pq_imsg *)&cfg->shptr_pq[0];
+						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
+							if (unpack32((char *)&pq0->u.s.read) == 1) {
+								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion));
+								pack32((char *)&pq0->u.s.read, 0);
+								break;
+							}
+						}
+						if (i == SHAREDMEMSIZE) {
+							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
+						} else {
+							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&i, sizeof(int));
+							msgbuf_write(&mybuf->w);
+						}
+						sm_unlock(cfg->shptr_pq, cfg->shptr_pqsize);
 						break;
 					}
 					
@@ -3459,8 +3549,24 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 					pq.tsig.tsigorigid = question->tsig.tsigorigid;
 					pq.notify = question->notify;
 
-					imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&pq, sizeof(struct parsequestion));
-					msgbuf_write(&mybuf->w);
+					/* put it in shared memory */
+					sm_lock(cfg->shptr_pq, cfg->shptr_pqsize);
+
+					pq0 = (struct pq_imsg *)&cfg->shptr_pq[0];
+					for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
+						if (unpack32((char *)&pq0->u.s.read) == 1) {
+							memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion));
+							pack32((char *)&pq0->u.s.read, 0);
+							break;
+						}
+					}
+					if (i == SHAREDMEMSIZE) {
+						dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
+					} else {
+						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&i, sizeof(int));
+						msgbuf_write(&mybuf->w);
+					}
+					sm_unlock(cfg->shptr_pq, cfg->shptr_pqsize);
 					/* send it */
 					free_question(question);
 					break;
@@ -4181,6 +4287,7 @@ sm_init(size_t members, size_t size_member)
 		pack32((char *)sf, 1);
 	}
 
+	sm_unlock(shptr, shsize);
 	return (shptr);
 }
 
@@ -4188,4 +4295,33 @@ size_t
 sm_size(size_t members, size_t size_member)
 {
 	return (16 + (members * size_member));
+}
+
+void
+sm_lock(char *shm, size_t end)
+{
+	char *lock = (char *)&shm[end - 16];	
+	uint32_t value;
+
+	for (;;) {
+		while (unpack32(lock) != SM_NOLOCK) {
+			usleep(arc4random() % 300);
+		}
+
+		while ((value = arc4random()) == SM_NOLOCK);
+		pack32(lock, value);		/* race here */
+		usleep(10);
+		if (unpack32(lock) == value) 	/* check for race here */
+			return;
+	}
+
+	/* NOTREACHED */
+}
+
+void
+sm_unlock(char *shm, size_t end)
+{
+	char *lock = (char *)&shm[end - 16];	
+
+	pack32(lock, SM_NOLOCK);
 }

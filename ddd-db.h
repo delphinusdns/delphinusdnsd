@@ -379,6 +379,8 @@ struct cfg {
 	size_t shptr2size;
 	char *shptr3;			/* shared memory 3 */
 	size_t shptr3size;
+	char *shptr_pq;			/* shared memory 4 */
+	size_t shptr_pqsize;
 	ddDB *db;			/* database */
 };
 
@@ -491,6 +493,20 @@ struct reply_logic {
 #define	MIN(a,b)	(((a) < (b))?(a):(b))
 #endif
 
+struct pq_imsg {
+	union {
+		struct {
+			int read;		/* 4 */
+			int len;		/* 8 */
+			char pad[10];		/* 18 */
+			struct parsequestion pq;
+		} s;
+
+		char pad[1024];
+	} u;
+#define pqi_pq u.s.pq
+};
+
 struct sf_imsg {
 	union {
 		struct {
@@ -552,6 +568,7 @@ struct pkt_imsg {
 
 #define	SHAREDMEMSIZE	400
 #define SHAREDMEMSIZE3	200
+#define SM_NOLOCK	0x4e4c4e4b			/* NLCK */
 
 struct walkentry {
         struct rbtree *rbt;

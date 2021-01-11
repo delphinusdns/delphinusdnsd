@@ -193,6 +193,8 @@ extern void flag_rr(struct rbtree *rbt, uint32_t);
 extern struct rbtree * find_rrset(ddDB *, char *, int);
 extern int	randomize_dnsname(char *buf, int len);
 extern int	lower_dnsname(char *buf, int len);
+extern void	sm_lock(char *, size_t);
+extern void	sm_unlock(char *, size_t);
 
 /*
  * XXX everything but txt and naptr, works...
@@ -542,14 +544,9 @@ drop:
 
 						forwardthis(db, cfg, -1, (struct sforward *)rdata);	
 						free(rdata);
-						/* aquire lock */
-						while (ptr[cfg->shptrsize - 16] == '*')
-							usleep(arc4random() % 300);
-						ptr[cfg->shptrsize - 16] = '*';
-
+						sm_lock(ptr, cfg->shptrsize);
 						sf->u.s.read = 1;
-
-						ptr[cfg->shptrsize - 16] = ' ';	/* release */
+						sm_unlock(ptr, cfg->shptrsize);
 
 						break;
 
@@ -576,13 +573,10 @@ drop:
 						forwardthis(db, cfg, imsg.fd, (struct sforward *)rdata);
 						free(rdata);
 						/* aquire lock */
-						while (ptr[cfg->shptrsize - 16] == '*')
-							usleep(arc4random() % 300);
-						ptr[cfg->shptrsize - 16] = '*';
-
+						sm_lock(ptr, cfg->shptrsize);
 						sf->u.s.read = 1;
+						sm_unlock(ptr, cfg->shptrsize);
 
-						ptr[cfg->shptrsize - 16] = ' ';	/* release */
 						break;
 					}
 
@@ -621,10 +615,7 @@ drop:
 
 						memcpy(&i, imsg.data, sizeof(i));
 
-						while (cfg->shptr2[cfg->shptr2size - 16] == '*')
-							usleep(arc4random() % 300);
-
-						cfg->shptr2[cfg->shptr2size - 16] = '*';
+						sm_lock(cfg->shptr2, cfg->shptr2size);
 						ri = (struct rr_imsg *)&cfg->shptr2[0];
 						for (i = 0; i < SHAREDMEMSIZE; i++, ri++) {
 							if (unpack32((char *)&ri->u.s.read) == 0) {
@@ -661,7 +652,7 @@ drop:
 								pack32((char *)&ri->u.s.read, 1);
 							} /* if */
 						} /* for */
-						cfg->shptr2[cfg->shptr2size - 16] = ' ';
+						sm_unlock(cfg->shptr2, cfg->shptr2size);
 
 						break;
 		
@@ -1310,11 +1301,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		pack32((char *)&pi->pkt_s.istcp, 0);
 	
 	/* lock */
-	while (cfg->shptr3[cfg->shptr3size - 16] == '*')
-		usleep(arc4random() % 300);
-
-	cfg->shptr3[cfg->shptr3size - 16] = '*';
-
+	sm_lock(cfg->shptr3, cfg->shptr3size);
 	pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
 	for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 		if (unpack32((char *)&pi0->pkt_s.read) == 1) {
@@ -1330,8 +1317,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 			return;
 	}
 	msgbuf_write(&ibuf->w);
-
-	cfg->shptr3[cfg->shptr3size - 16] = ' ';
+	sm_unlock(cfg->shptr3, cfg->shptr3size);
 	
 	for (;;) {
 		FD_ZERO(&rset);
@@ -1410,18 +1396,14 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 					memcpy(&i, imsg.data, sizeof(int));
 
 					/* lock */
-					while (cfg->shptr3[cfg->shptr3size - 16] == '*')
-						usleep(arc4random() % 300);
-
-					cfg->shptr3[cfg->shptr3size - 16] = '*';
-
+					sm_lock(cfg->shptr3, cfg->shptr3size);
 					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
 					pi0 = &pi0[i];
 
 					memcpy(pi, pi0, sizeof(struct pkt_imsg));
 
 					pack32((char *)&pi0->pkt_s.read, 1);
-					cfg->shptr3[cfg->shptr3size - 16] = ' ';
+					sm_unlock(cfg->shptr3, cfg->shptr3size);
 
 				if (fwq->istcp == 1) 
 					fwq->so = imsg.fd;
@@ -2047,18 +2029,14 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					memcpy(&i, imsg.data, datalen);
 
 					/* lock */
-					while (cfg->shptr3[cfg->shptr3size - 16] == '*')
-						usleep(arc4random() % 300);
-
-					cfg->shptr3[cfg->shptr3size - 16] = '*';
-
+					sm_lock(cfg->shptr3, cfg->shptr3size);
 					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
 					pi0 = &pi0[i];
 
 					memcpy(pi, pi0, sizeof(struct pkt_imsg));
 					pack32((char *)&pi0->pkt_s.read, 1);
 
-					cfg->shptr3[cfg->shptr3size - 16] = ' ';
+					sm_unlock(cfg->shptr3, cfg->shptr3size);
 
 					istcp = unpack32((char *)&pi->pkt_s.istcp);
 
@@ -2174,11 +2152,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 					pack32((char *)&pi->pkt_s.rc, PARSE_RETURN_ACK);
 
-					while (cfg->shptr3[cfg->shptr3size - 16] == '*')
-						usleep(arc4random() % 300);
-
-					cfg->shptr3[cfg->shptr3size - 16] = '*';
-
+					sm_lock(cfg->shptr3, cfg->shptr3size);
 					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
 					for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 						if (unpack32((char *)&pi0->pkt_s.read) == 1) {
@@ -2191,7 +2165,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &i, sizeof(int));
 					msgbuf_write(&ibuf->w);
 
-					cfg->shptr3[cfg->shptr3size - 16] = ' ';
+					sm_unlock(cfg->shptr3, cfg->shptr3size);
 
 					free(stsig);
 

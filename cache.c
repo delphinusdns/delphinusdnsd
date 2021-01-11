@@ -86,6 +86,8 @@ extern void     unpack(char *, char *, int);
 extern uint16_t unpack16(char *);
 extern uint32_t unpack32(char *);
 extern int lower_dnsname(char *, int);
+extern void	sm_lock(char *, size_t);
+extern void	sm_unlock(char *, size_t);
 
 
 extern int debug, verbose;
@@ -201,12 +203,7 @@ transmit_rr(struct scache *scache, void *rr, int rrsize)
 	ri.u.s.read = 0;
 
 	/* wait for lock */
-	while (scache->cfg->shptr2[scache->cfg->shptr2size - 16] == '*') {
-		usleep(arc4random() % 300);
-	}
-
-	scache->cfg->shptr2[scache->cfg->shptr2size - 16] = '*';
-
+	sm_lock(scache->cfg->shptr2, scache->cfg->shptr2size);
 	
 	for (pri = (struct rr_imsg *)&scache->cfg->shptr2[0], i = 0; 
 			i < SHAREDMEMSIZE; i++, pri++) {
@@ -221,7 +218,7 @@ transmit_rr(struct scache *scache, void *rr, int rrsize)
 		dolog(LOG_INFO, "can't find an open slot in sharedmemsize\n");
 	}
 
-	scache->cfg->shptr2[scache->cfg->shptr2size - 16] = ' ';
+	sm_unlock(scache->cfg->shptr2, scache->cfg->shptr2size);
 }
 
 int
