@@ -142,7 +142,7 @@ int 		reply_sshfp(struct sreply *, int *, ddDB *);
 int		reply_tlsa(struct sreply *, int *, ddDB *);
 int 		reply_cname(struct sreply *, int *, ddDB *);
 int 		reply_any(struct sreply *, int *, ddDB *);
-int 		reply_refused(struct sreply *, int *, ddDB *);
+int 		reply_refused(struct sreply *, int *, ddDB *, int);
 int 		reply_fmterror(struct sreply *, int *, ddDB *);
 int 		reply_notauth(struct sreply *, int *, ddDB *);
 int		reply_notify(struct sreply *, int *, ddDB *);
@@ -5795,7 +5795,7 @@ out:
  */
 
 int
-reply_refused(struct sreply *sreply, int *sretlen, ddDB *db)
+reply_refused(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
@@ -5825,8 +5825,13 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 
-	memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	outlen += (sizeof(struct dns_header) + q->hdr->namelen + 4); 
+	if (haveq) {
+		memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+		outlen += (sizeof(struct dns_header) + q->hdr->namelen + 4); 
+	} else {
+		memcpy(&reply[0], buf, len);
+		outlen += len;
+	}
 
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
 	SET_DNS_RCODE_REFUSED(odh);
@@ -5836,9 +5841,12 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db)
 	odh->nsrr = 0;				/* reset any authoritave */
 	odh->additional = 0;			/* reset any additionals */
 
-	set_reply_flags(NULL, odh, q);
+	if (haveq)
+		set_reply_flags(NULL, odh, q);
+	else
+		odh->question = htons(1);
 
-	if (q->edns0len) {
+	if (haveq && q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 
@@ -5863,7 +5871,7 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db)
 		}
 		free(tmpbuf);
 	} else {
-		if (q->rawsocket) {
+		if (haveq && q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
 			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
