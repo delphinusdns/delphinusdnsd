@@ -1,0 +1,21 @@
+version "1";
+options "cool stuff" {
+	versionstring "DELPHINUSDNSD - http://delphinusdns.centroid.eu";
+	interface "lo0";
+	port 9999;
+}
+
+filter "check this" {
+	127.0.0.1;
+}
+
+zone "centroid.eu" {
+	centroid.eu,soa,3600,uranus.centroid.eu.,hostmaster.centroid.eu.,2019062701,3600,1800,7200,3600
+	centroid.eu,ns,3600,kite.centroid.eu.
+	centroid.eu,ns,3600,rhombus.centroid.eu.
+	centroid.eu,ns,3600,trapezoid.centroid.eu.
+	;
+	centroid.eu,a,3600,200.46.208.61
+	centroid.eu,a,3600,62.75.160.180
+	;
+}

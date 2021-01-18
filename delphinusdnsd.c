@@ -142,7 +142,7 @@ extern int 	reply_mx(struct sreply *, int *, ddDB *);
 extern int 	reply_naptr(struct sreply *, int *, ddDB *);
 extern int 	reply_ns(struct sreply *, int *, ddDB *);
 extern int 	reply_ptr(struct sreply *, int *, ddDB *);
-extern int 	reply_refused(struct sreply *, int *, ddDB *);
+extern int 	reply_refused(struct sreply *, int *, ddDB *, int);
 extern int 	reply_srv(struct sreply *, int *, ddDB *);
 extern int 	reply_sshfp(struct sreply *, int *, ddDB *);
 extern int 	reply_tlsa(struct sreply *, int *, ddDB *);
@@ -1612,7 +1612,7 @@ axfrentry:
 				if (filter && require_tsig == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					slen = reply_refused(&sreply, &sretlen, NULL);
+					slen = reply_refused(&sreply, &sretlen, NULL, 0);
 
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, filter policy\n", so, cfg->ident[i], address, received_ttl, aregion);
 					goto drop;
@@ -1621,7 +1621,7 @@ axfrentry:
 				if (passlist && blocklist == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					slen = reply_refused(&sreply, &sretlen, NULL);
+					slen = reply_refused(&sreply, &sretlen, NULL, 0);
 
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, passlist policy\n", so, cfg->ident[i], address, received_ttl, aregion);
 					goto drop;
@@ -1719,7 +1719,7 @@ axfrentry:
 									case PARSE_RETURN_NOTAUTH:
 										if (filter && pq.tsig.have_tsig == 0) {
 											build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-											slen = reply_refused(&sreply, &sretlen, NULL);
+											slen = reply_refused(&sreply, &sretlen, NULL, 0);
 											dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, received_ttl, aregion);
 											imsg_free(&imsg);
 											goto drop;
@@ -1786,7 +1786,7 @@ axfrentry:
 						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying REFUSED\n", so, cfg->ident[i], address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-						slen = reply_refused(&sreply, &sretlen, NULL);
+						slen = reply_refused(&sreply, &sretlen, NULL, 1);
 
 						goto udpout;
 					}
@@ -1843,7 +1843,7 @@ axfrentry:
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 
 						build_reply(&sreply, so, buf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
-						slen = reply_refused(&sreply, &sretlen, NULL);
+						slen = reply_refused(&sreply, &sretlen, NULL, 1);
 						goto udpout;
 						break;
 					case ERR_NXDOMAIN:
@@ -1881,7 +1881,7 @@ axfrentry:
 							if (forward)
 								goto forwardudp;
 							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
-							slen = reply_refused(&sreply, &sretlen, cfg->db);
+							slen = reply_refused(&sreply, &sretlen, cfg->db, 1);
 							snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						}
 						goto udpout;
@@ -1905,7 +1905,7 @@ forwardudp:
 									} else {
 											snprintf(replystring, DNS_MAXNAME, "REFUSED");
 											build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
-											slen = reply_refused(&sreply, &sretlen, cfg->db);
+											slen = reply_refused(&sreply, &sretlen, cfg->db, 1);
 											goto udpout;
 									}
 								}
@@ -2624,7 +2624,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, filter policy, drop\n", so, cfg->ident[i], address);
 #if 0
 					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					slen = reply_refused(&sreply, &sretlen, NULL);
+					slen = reply_refused(&sreply, &sretlen, NULL, 0);
 #endif
 					close(so);
 					continue;
@@ -2818,7 +2818,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 							case PARSE_RETURN_NOTAUTH:
 								if (filter && pq.tsig.have_tsig == 0) {
 									build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-									slen = reply_refused(&sreply, &sretlen, NULL);
+									slen = reply_refused(&sreply, &sretlen, NULL, 0);
 									dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion);
 									imsg_free(&imsg);
 									goto drop;
@@ -2880,7 +2880,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying REFUSED\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-						slen = reply_refused(&sreply, &sretlen, NULL);
+						slen = reply_refused(&sreply, &sretlen, NULL, 1);
 
 						goto tcpout;
 					}
@@ -2946,7 +2946,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					case ERR_REFUSED:
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
-						slen = reply_refused(&sreply, &sretlen, NULL);
+						slen = reply_refused(&sreply, &sretlen, NULL, 1);
 						goto tcpout;
 						break;
 					case ERR_NODATA:
@@ -2965,7 +2965,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 
 							snprintf(replystring, DNS_MAXNAME, "REFUSED");
 							build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
-							slen = reply_refused(&sreply, &sretlen, cfg->db);
+							slen = reply_refused(&sreply, &sretlen, cfg->db, 1);
 						}
 
 						goto tcpout;
@@ -3005,7 +3005,7 @@ forwardtcp:
 									} else {
 										snprintf(replystring, DNS_MAXNAME, "REFUSED");
 										build_reply(&sreply, so, pbuf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
-										slen = reply_refused(&sreply, &sretlen, cfg->db);
+										slen = reply_refused(&sreply, &sretlen, cfg->db, 1);
 										goto tcpout;
 									}
 								}
