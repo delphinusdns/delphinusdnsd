@@ -530,7 +530,10 @@ remove_rbt(struct rbtree *rbt)
 	TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
 		rp2 = find_rr(rbt, rp->rrtype);
 		if (rp2 == NULL) {
-			return;
+			TAILQ_REMOVE(&rbt->rrset_head, rp, entries);
+			free(rp);
+
+			continue;
 		}
 		if (rp->rrtype != DNS_TYPE_RRSIG) {
 			TAILQ_FOREACH_SAFE(rt1, &rp2->rr_head, entries, rt2) {
@@ -539,17 +542,17 @@ remove_rbt(struct rbtree *rbt)
 				free(rt1);
 			}
 
-			TAILQ_REMOVE(&rbt->rrset_head, rp2, entries);
-			free(rp2);
+			TAILQ_REMOVE(&rbt->rrset_head, rp, entries);
+			free(rp);
 		} else {
 			TAILQ_FOREACH_SAFE(rt1, &rp2->rr_head, entries, rt2) {
 				TAILQ_REMOVE(&rp2->rr_head, rt1, entries);
 				free(rt1->rdata);
 				free(rt1);
 			}
-			if (TAILQ_EMPTY(&rp2->rr_head)) {
+			if (TAILQ_EMPTY(&rp->rr_head)) {
 				TAILQ_REMOVE(&rbt->rrset_head, rp, entries);
-				free(rp2);
+				free(rp);
 			}
 		}
 	}
