@@ -2415,6 +2415,7 @@ pull_rzone(struct rzone *rzone, time_t now)
 	
 	if (do_raxfr(f, rzone) < 0) {
 		dolog(LOG_INFO, "do_raxfr failed\n");
+		fclose(f);
 		return -1;
 	}
 
