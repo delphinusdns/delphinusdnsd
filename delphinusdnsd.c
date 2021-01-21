@@ -1004,6 +1004,9 @@ main(int argc, char *argv[], char *environ[])
 			for (j = 0; j < i; j++) {
 				close(tcp[j]);
 				close(udp[j]);
+
+				if (axfrport && axfrport != port)
+					close(uafd[j]);
 			}
 			close(cfg->raw[0]);
 			close(cfg->raw[1]);
