@@ -118,11 +118,11 @@ struct forwardqueue {
 	int family;				/* our family */
 	char *tsigkey;				/* which key we use for query */
 	uint64_t tsigtimefudge;			/* passed tsigtimefudge */
-	char mac[32];				/* passed mac from query */
+	char mac[DNS_HMAC_SHA256_SIZE];		/* passed mac from query */
 	int haveoldmac;				/* do we have an old mac? */
 	char oldkeyname[256];			/* old key name */
 	int oldkeynamelen;			/* old key name len */
-	char oldmac[32];			/* old mac */
+	char oldmac[DNS_HMAC_SHA256_SIZE];	/* old mac */
 	struct forwardentry *cur_forwardentry;	/* current forwardentry */
 	int dnssecok;				/* DNSSEC in anwers */
 	SLIST_ENTRY(forwardqueue) entries;	/* next entry */
@@ -1159,7 +1159,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 		dh->additional = htons(2);	
 	}
 
-	memcpy(&fwq->mac, &q->tsig.tsigmac, 32);
+	memcpy(&fwq->mac, &q->tsig.tsigmac, DNS_HMAC_SHA256_SIZE);
 
 	len = outlen;
 	p = packet + outlen;
@@ -1311,13 +1311,13 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		}
 	}
 
+	sm_unlock(cfg->shptr3, cfg->shptr3size);
+
 	if (imsg_compose(ibuf, IMSG_PARSE_MESSAGE, 0, 0, (fwq->istcp == 1) ? fwq->so : -1, &i, sizeof(i)) < 0) {
 			dolog(LOG_INFO, "imsg_compose: %s\n", strerror(errno));
-			cfg->shptr3[cfg->shptr3size - 16] = ' ';
 			return;
 	}
 	msgbuf_write(&ibuf->w);
-	sm_unlock(cfg->shptr3, cfg->shptr3size);
 	
 	for (;;) {
 		FD_ZERO(&rset);
@@ -1472,8 +1472,8 @@ endimsg:
 			return;
 		}
 
-		memcpy(&q->tsig.tsigmac, &fwq->oldmac, 32);
-		q->tsig.tsigmaclen = 32;
+		memcpy(&q->tsig.tsigmac, &fwq->oldmac, DNS_HMAC_SHA256_SIZE);
+		q->tsig.tsigmaclen = DNS_HMAC_SHA256_SIZE;
 		q->tsig.tsigalglen = 13;
 		q->tsig.tsigerrorcode = 0;
 		q->tsig.tsigorigid = fwq->oldid;
@@ -1655,7 +1655,7 @@ check_tsig(char *buf, int len, char *mac)
 		u_int32_t val32;
 		int elen, tsignamelen;
 		char tsigkey[512];
-		u_char sha256[32];
+		u_char sha256[DNS_HMAC_SHA256_SIZE];
 		u_int shasize = sizeof(sha256);
 		time_t now, tsigtime;
 		int pseudolen1, pseudolen2, ppoffset = 0;
@@ -1822,7 +1822,7 @@ check_tsig(char *buf, int len, char *mac)
 		
 		i += (8 + 2);		/* timefudge + macsize */
 
-		if (ntohs(tsigrr->macsize) != 32) {
+		if (ntohs(tsigrr->macsize) != DNS_HMAC_SHA256_SIZE) {
 #if DEBUG
 			dolog(LOG_INFO, "bad macsize\n");
 #endif
@@ -1859,15 +1859,13 @@ check_tsig(char *buf, int len, char *mac)
 
 		ppoffset = 0;
 
-		/* check if we have a request mac, this means it's an answer */
-		if (mac) {
-			o = &pseudo_packet[ppoffset];
-			pack16(o, htons(32));
-			ppoffset += 2;
+		/* add mac, we always check answers */
+		o = &pseudo_packet[ppoffset];
+		pack16(o, htons(DNS_HMAC_SHA256_SIZE));
+		ppoffset += 2;
 
-			memcpy(&pseudo_packet[ppoffset], mac, 32);
-			ppoffset += 32;
-		}
+		memcpy(&pseudo_packet[ppoffset], mac, DNS_HMAC_SHA256_SIZE);
+		ppoffset += DNS_HMAC_SHA256_SIZE;
 
 		memcpy(&pseudo_packet[ppoffset], buf, pseudolen1);
 		ppoffset += pseudolen1;
@@ -1923,7 +1921,7 @@ check_tsig(char *buf, int len, char *mac)
 
 		/* copy the mac for error coding */
 		memcpy(rtsig->tsigmac, tsigrr->mac, sizeof(rtsig->tsigmac));
-		rtsig->tsigmaclen = 32;
+		rtsig->tsigmaclen = DNS_HMAC_SHA256_SIZE;
 		
 		/* we're now authenticated */
 		rtsig->tsigerrorcode = 0;
@@ -1947,6 +1945,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 	struct imsg imsg;
 	struct dns_header *dh;
 
+	char mac[DNS_HMAC_SHA256_SIZE];
 	char *packet = NULL;
 	u_char *end, *estart;
 	fd_set rset;
@@ -2067,12 +2066,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					} else
 						packet = &pi->pkt_s.buf[0];
 
-					if (istcp) {
-						tmp = unpack32((char *)&pi->pkt_s.buflen);
-					} else {
-						tmp = unpack32((char *)&pi->pkt_s.buflen);
-					}
-
+					tmp = unpack32((char *)&pi->pkt_s.buflen);
 					if (tmp < sizeof(struct dns_header)) {
 						/* SEND NAK */
 						rc = PARSE_RETURN_NAK;
@@ -2132,7 +2126,8 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 			
 					if (unpack32((char *)&pi->pkt_s.tsigcheck)) {
 							rlen = tmp;
-							stsig = check_tsig((char *)packet, rlen, pi->pkt_s.mac);
+							memcpy((char *)&mac, (char *)&pi->pkt_s.mac, sizeof(mac));
+							stsig = check_tsig((char *)packet, rlen, mac);
 							if (stsig == NULL) {
 								dolog(LOG_INFO, "FORWARD parser, malformed reply packet\n");
 								rc = PARSE_RETURN_MALFORMED;

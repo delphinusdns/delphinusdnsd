@@ -407,7 +407,7 @@ int
 additional_tsig(struct question *question, char *reply, int replylen, int offset, int request, int envelope, HMAC_CTX *tsigctx, uint16_t fudge) 
 {
 	struct dns_tsigrr *answer, *ppanswer, *timers;
-	u_int macsize = 32;
+	u_int macsize = DNS_HMAC_SHA256_SIZE;
 	int tsignamelen;
 	int ppoffset = 0;
 	int ttlen = 0, rollback;
@@ -618,7 +618,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 
 		/* we need it for the else */
 		if (envelope % 89 == 0 || envelope == -2) {
-			macsize = 32;
+			macsize = DNS_HMAC_SHA256_SIZE;
 			HMAC_Final(tsigctx, (unsigned char *)&answer->mac[0], (u_int *)&macsize);
 			memcpy(question->tsig.tsigmac, &answer->mac[0], macsize);
 			priordigest = 1;

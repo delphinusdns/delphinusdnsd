@@ -903,7 +903,7 @@ build_fake_question(char *name, int namelen, u_int16_t type, char *tsigkey, int 
 
 			free(alg);
 
-			q->tsig.tsigmaclen = 32;
+			q->tsig.tsigmaclen = DNS_HMAC_SHA256_SIZE;
 		}
 	}
 
@@ -1186,7 +1186,7 @@ build_question(char *buf, int len, int additional, char *mac)
 		char *pb;
 		char expand[DNS_MAXNAME + 1];
 		char tsigkey[512];
-		u_char sha256[32];
+		u_char sha256[DNS_HMAC_SHA256_SIZE];
 		u_int shasize = sizeof(sha256);
 		time_t now, tsigtime;
 		int pseudolen1, pseudolen2, ppoffset = 0;
@@ -1345,7 +1345,7 @@ build_question(char *buf, int len, int additional, char *mac)
 		
 		i += (8 + 2);		/* timefudge + macsize */
 
-		if (ntohs(tsigrr->macsize) != 32) {
+		if (ntohs(tsigrr->macsize) != DNS_HMAC_SHA256_SIZE) {
 			q->tsig.tsigerrorcode = DNS_BADSIG; 
 			break; 
 		}
@@ -1382,11 +1382,11 @@ build_question(char *buf, int len, int additional, char *mac)
 		/* check if we have a request mac, this means it's an answer */
 		if (mac) {
 			o = &pseudo_packet[ppoffset];
-			pack16(o, htons(32));
+			pack16(o, htons(DNS_HMAC_SHA256_SIZE));
 			ppoffset += 2;
 
-			memcpy(&pseudo_packet[ppoffset], mac, 32);
-			ppoffset += 32;
+			memcpy(&pseudo_packet[ppoffset], mac, DNS_HMAC_SHA256_SIZE);
+			ppoffset += DNS_HMAC_SHA256_SIZE;
 		}
 
 		memcpy(&pseudo_packet[ppoffset], buf, pseudolen1);
@@ -1440,7 +1440,7 @@ build_question(char *buf, int len, int additional, char *mac)
 
 		/* copy the mac for error coding */
 		memcpy(q->tsig.tsigmac, tsigrr->mac, sizeof(q->tsig.tsigmac));
-		q->tsig.tsigmaclen = 32;
+		q->tsig.tsigmaclen = DNS_HMAC_SHA256_SIZE;
 		
 		/* we're now authenticated */
 		q->tsig.tsigerrorcode = 0;
@@ -1598,7 +1598,7 @@ log_diff(char *sha256, char *mac, int len)
 	int i;
 
 	memset(&buf, 0, sizeof(buf));
-	for (i = 0; i < 32; i++) {
+	for (i = 0; i < DNS_HMAC_SHA256_SIZE; i++) {
 		snprintf(tbuf, sizeof(tbuf), "%02x", sha256[i] & 0xff);	
 		strlcat(buf, tbuf, sizeof(buf));
 	}
@@ -1608,7 +1608,7 @@ log_diff(char *sha256, char *mac, int len)
 	dolog(LOG_INFO, "our HMAC = %s\n", buf);
 
 	memset(&buf, 0, sizeof(buf));
-	for (i = 0; i < 32; i++) {
+	for (i = 0; i < DNS_HMAC_SHA256_SIZE; i++) {
 		snprintf(tbuf, sizeof(tbuf), "%02x", mac[i] & 0xff);	
 		strlcat(buf, tbuf, sizeof(buf));
 	}
@@ -1826,7 +1826,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 {
 	char query[512];
 	char pseudo_packet[512];
-	char shabuf[32];
+	char shabuf[DNS_HMAC_SHA256_SIZE];
 	char *reply;
 	struct timeval tv, savetv;
 	struct question *q;
@@ -1913,7 +1913,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 		HMAC_Final(ctx, shabuf, &len);
 
-		if (len != 32) {
+		if (len != DNS_HMAC_SHA256_SIZE) {
 			fprintf(stderr, "not expected len != 32\n");
 			return -1;
 		}
@@ -1947,7 +1947,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		}
 
 		/* rdlen */
-		pack16(p, htons(len + 2 + 4 + 2 + 2 + 32 + 2 + 2 + 2));
+		pack16(p, htons(len + 2 + 4 + 2 + 2 + DNS_HMAC_SHA256_SIZE + 2 + 2 + 2));
 		totallen += 2;
 		p += 2;
 
@@ -2029,7 +2029,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		
 		ctx = HMAC_CTX_new();
 		HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
-		maclen = htons(32);
+		maclen = htons(DNS_HMAC_SHA256_SIZE);
 		HMAC_Update(ctx, (char *)&maclen, sizeof(maclen));
 		HMAC_Update(ctx, shabuf, sizeof(shabuf));
 	} else
@@ -2145,7 +2145,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		(*segment)++;
 
 		for (count = 0; count < segmentcount; count++) {
-			char mac[32];
+			char mac[DNS_HMAC_SHA256_SIZE];
 
 			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format, ctx, name, zonelen, 1)) < 0) {
 				fprintf(stderr, "not a SOA reply, or ERROR\n");
@@ -2176,7 +2176,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 					fprintf(stderr, "HMAC_Init_ex failed!\n");
 					return -1;
 				}
-				maclen = htons(32);
+				maclen = htons(DNS_HMAC_SHA256_SIZE);
 				HMAC_Update(ctx, (char *)&maclen, sizeof(maclen));
 				HMAC_Update(ctx, mac, sizeof(mac));
 
