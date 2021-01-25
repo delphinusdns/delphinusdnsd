@@ -89,10 +89,12 @@ struct dns_optrr {
  * RFC 2845  and RFC 4635 (for SHA-256)
  */
 
+#define DNS_HMAC_SHA256_SIZE	32		/* hmac-sha256 256 bits */
+
 struct dns_tsigrr {
 	u_int64_t timefudge;			/* time (48 bits) and fudge */
 	u_int16_t macsize;			/* MAC size == 32 */
-	char mac[32];				/* SHA-256 MAC */
+	char mac[DNS_HMAC_SHA256_SIZE];		/* SHA-256 MAC */
 	/* empty unless error == badtime */
 } __attribute__((packed));
 
@@ -145,6 +147,7 @@ struct dns_question_hdr {
 #define DNS_BADKEY	0x11	/* RCODE (17) BADKEY RFC 2845 p. 3 */
 #define DNS_BADSIG	0x10	/* RCODE (16) BADSIG RFC 2845 p. 3 */
 #define DNS_BADVERS	0x10	/* RCODE (16) BADVERS RFC 2671 p. 6 */
+
 
 /* END of Extended RCODE's */
 
@@ -270,7 +273,7 @@ struct tsig {
 	int tsigalglen;				/* 271 */
 	char tsigkey[DNS_MAXNAME];		/* 526 */
 	int tsigkeylen;				/* 530 */
-	char tsigmac[32];			/* 562 */
+	char tsigmac[DNS_HMAC_SHA256_SIZE];	/* 562 */
 	int tsigmaclen;				/* 566 */
 	u_int64_t tsig_timefudge;		/* 574 */
 	u_int16_t tsigorigid;			/* 576 */
@@ -340,7 +343,7 @@ struct sforward {
 	int tsignamelen;		/* 866 */
 	uint64_t tsigtimefudge;		/* 874 */
 
-	char mac[32];			/* 906 */
+	char mac[DNS_HMAC_SHA256_SIZE];	/* 906 */
 };
 
 	

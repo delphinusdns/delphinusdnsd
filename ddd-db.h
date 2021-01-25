@@ -543,7 +543,7 @@ struct pkt_imsg {
 			int cache;
 			int tsigcheck;
 			struct tsig tsig;
-			char mac[32];
+			char mac[5 * 32];
 			int buflen;
 			char buf[0];			
 		} s;
