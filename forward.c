@@ -103,6 +103,7 @@ struct forwardqueue {
 	char dnsnamelen;			/* the len of dnsname */
 	uint32_t longid;			/* a long identifier */
 	time_t time;				/* time created */
+	int tries;				/* how many times we rtrnsmt */
 	struct sockaddr_storage host;		/* remote host to query */
 	uint16_t id;				/* new id to query */
 	uint16_t port;				/* remote port to query */
@@ -118,7 +119,7 @@ struct forwardqueue {
 	int family;				/* our family */
 	char *tsigkey;				/* which key we use for query */
 	uint64_t tsigtimefudge;			/* passed tsigtimefudge */
-	char mac[DNS_HMAC_SHA256_SIZE];		/* passed mac from query */
+	char mac[DNS_HMAC_SHA256_SIZE * 5];	/* passed mac from query */
 	int haveoldmac;				/* do we have an old mac? */
 	char oldkeyname[256];			/* old key name */
 	int oldkeynamelen;			/* old key name len */
@@ -613,6 +614,7 @@ drop:
 						if (datalen != sizeof(int))
 							break;
 
+
 						memcpy(&i, imsg.data, sizeof(i));
 
 						sm_lock(cfg->shptr2, cfg->shptr2size);
@@ -1000,6 +1002,7 @@ newqueue:
 		fwq1->longid = arc4random();
 		fwq1->id = fwq1->longid % 0xffff;	
 		fwq1->time = now;
+		fwq1->tries = 1;
 		if (so == -1)
 			fwq1->istcp = 0;
 		else
@@ -1063,8 +1066,10 @@ newqueue:
 	} else {
 		/* resend this one */
 		
-		fwq1->time = now;
-		sendit(fwq1, sforward);
+		/* fwq1->time = now; */
+		if (difftime(now, fwq1->time + (fwq1->tries * fwq1->tries)) > -1) {
+			sendit(fwq1, sforward);
+		}
 	}
 
 	return;	
@@ -1159,7 +1164,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 		dh->additional = htons(2);	
 	}
 
-	memcpy(&fwq->mac, &q->tsig.tsigmac, DNS_HMAC_SHA256_SIZE);
+	memcpy(&fwq->mac[fwq->tries++ * DNS_HMAC_SHA256_SIZE], &q->tsig.tsigmac, DNS_HMAC_SHA256_SIZE);
 
 	len = outlen;
 	p = packet + outlen;
@@ -1660,6 +1665,8 @@ check_tsig(char *buf, int len, char *mac)
 		time_t now, tsigtime;
 		int pseudolen1, pseudolen2, ppoffset = 0;
 		int pseudolen3 , pseudolen4;
+		int mcheck = 0;
+		char *macoffset = NULL;
 
 		rtsig->have_tsig = 0;
 		rtsig->tsigerrorcode = 1;
@@ -1864,7 +1871,10 @@ check_tsig(char *buf, int len, char *mac)
 		pack16(o, htons(DNS_HMAC_SHA256_SIZE));
 		ppoffset += 2;
 
-		memcpy(&pseudo_packet[ppoffset], mac, DNS_HMAC_SHA256_SIZE);
+		macoffset = &pseudo_packet[ppoffset];
+#if 0
+		memcpy(&pseudo_packet[ppoffset], &mac[0], DNS_HMAC_SHA256_SIZE);
+#endif
 		ppoffset += DNS_HMAC_SHA256_SIZE;
 
 		memcpy(&pseudo_packet[ppoffset], buf, pseudolen1);
@@ -1902,22 +1912,28 @@ check_tsig(char *buf, int len, char *mac)
 			break;
 		}
 
-		HMAC(EVP_sha256(), tsigkey, tsignamelen, (unsigned char *)pseudo_packet, 
-			ppoffset, (unsigned char *)&sha256, &shasize);
+		for (mcheck = 0; mcheck < 5; mcheck++) {
+			rtsig->tsigerrorcode = 0;
 
-
+			memcpy(macoffset, &mac[DNS_HMAC_SHA256_SIZE * mcheck], DNS_HMAC_SHA256_SIZE);
+			HMAC(EVP_sha256(), tsigkey, tsignamelen, 
+					(unsigned char *)pseudo_packet, ppoffset, 
+							(unsigned char *)&sha256, &shasize);
 
 #if __OpenBSD__
-		if (timingsafe_memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
+			if (timingsafe_memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
 #else
-		if (memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
+			if (memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
 #endif
 #if DEBUG
-			dolog(LOG_INFO, "HMAC did not verify\n");
+				dolog(LOG_INFO, "HMAC did not verify\n");
 #endif
-			rtsig->tsigerrorcode = DNS_BADSIG;
-			break;
-		}
+				rtsig->tsigerrorcode = DNS_BADSIG;
+				if (mcheck == 4)
+					goto errout;
+			} else 
+				break;
+		} /* for mcheck */
 
 		/* copy the mac for error coding */
 		memcpy(rtsig->tsigmac, tsigrr->mac, sizeof(rtsig->tsigmac));
@@ -1928,6 +1944,8 @@ check_tsig(char *buf, int len, char *mac)
 		rtsig->tsigverified = 1;
 		
 	} while (0);
+
+errout:
 
 	/* parse type and class from the question */
 	return (rtsig);
@@ -1945,7 +1963,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 	struct imsg imsg;
 	struct dns_header *dh;
 
-	char mac[DNS_HMAC_SHA256_SIZE];
+	char mac[DNS_HMAC_SHA256_SIZE * 5];
 	char *packet = NULL;
 	u_char *end, *estart;
 	fd_set rset;
@@ -2109,20 +2127,6 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 						}
 						break;
 					}
-					/* insert parsing logic here */
-
-					/* check for cache */
-					if (unpack32((char *)&pi->pkt_s.cache)) {
-							estart = packet;
-							rlen = tmp;
-							end = &packet[rlen];
-
-							if (cacheit(packet, estart, end, ibuf, bibuf, cfg) < 0) {
-								dolog(LOG_INFO, "cacheit failed\n");
-							}
-					}
-
-					/* check to see if we tsig */
 			
 					if (unpack32((char *)&pi->pkt_s.tsigcheck)) {
 							rlen = tmp;
@@ -2144,6 +2148,18 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 							memcpy(&pi->pkt_s.tsig, stsig, sizeof(struct tsig));
 					}
+
+					/* check for cache */
+					if (unpack32((char *)&pi->pkt_s.cache)) {
+							estart = packet;
+							rlen = tmp;
+							end = &packet[rlen];
+
+							if (cacheit(packet, estart, end, ibuf, bibuf, cfg) < 0) {
+								dolog(LOG_INFO, "cacheit failed\n");
+							}
+					}
+
 
 					pack32((char *)&pi->pkt_s.rc, PARSE_RETURN_ACK);
 
