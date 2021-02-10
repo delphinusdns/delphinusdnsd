@@ -85,6 +85,8 @@
 #include "endian.h"
 #endif
 
+#include <openssl/md5.h>
+
 #include "ddd-dns.h"
 #include "ddd-db.h" 
 #include "ddd-config.h"
@@ -195,6 +197,7 @@ char *			sm_init(size_t, size_t);
 size_t			sm_size(size_t, size_t);
 void			sm_lock(char *, size_t);
 void			sm_unlock(char *, size_t);
+int			same_refused(u_char *, void *, int, void *, int);
 
 /* aliases */
 
@@ -1323,6 +1326,10 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	int passnamewc;
 	int pq_offset;
 
+	MD5_CTX rctx;
+	u_char rdigest[MD5_DIGEST_LENGTH];
+	time_t refusedtime = 0;
+
 	memset(&rectv0, 0, sizeof(struct timeval));
 	memset(&rectv1, 0, sizeof(struct timeval));
 	
@@ -1612,9 +1619,21 @@ axfrentry:
 					goto drop;
 				}
 
+				if ((time(NULL) & ~3) == (refusedtime & ~3) && same_refused(rdigest, (void *)&buf[2], len - 2, (void *)address, strlen(address))) {
+					dolog(LOG_INFO, "short circuiting multiple refused from %s, drop\n", address);	
+					goto drop;
+				}
+				refusedtime = 0;
+
 				if (filter && require_tsig == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
+					MD5_Init(&rctx);
+					MD5_Update(&rctx, (void *)&buf[2], len - 2);
+					MD5_Update(&rctx, address, strlen(address));
+					MD5_Final(rdigest, &rctx);
+					refusedtime = time(NULL);
+
 					slen = reply_refused(&sreply, &sretlen, NULL, 0);
 
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, filter policy\n", so, cfg->ident[i], address, received_ttl, aregion);
@@ -1624,6 +1643,11 @@ axfrentry:
 				if (passlist && blocklist == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
+					MD5_Init(&rctx);
+					MD5_Update(&rctx, (void *)&buf[2], len - 2);
+					MD5_Update(&rctx, (void *)address, strlen(address));
+					MD5_Final(rdigest, &rctx);
+					refusedtime = time(NULL);
 					slen = reply_refused(&sreply, &sretlen, NULL, 0);
 
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, passlist policy\n", so, cfg->ident[i], address, received_ttl, aregion);
@@ -1722,6 +1746,11 @@ axfrentry:
 									case PARSE_RETURN_NOTAUTH:
 										if (filter && pq.tsig.have_tsig == 0) {
 											build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
+											MD5_Init(&rctx);
+											MD5_Update(&rctx, (void *)&buf[2], len - 2);
+											MD5_Update(&rctx, (void *)address, strlen(address));
+											MD5_Final(rdigest, &rctx);
+	refusedtime = time(NULL);
 											slen = reply_refused(&sreply, &sretlen, NULL, 0);
 											dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, received_ttl, aregion);
 											imsg_free(&imsg);
@@ -1789,6 +1818,12 @@ axfrentry:
 						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying REFUSED\n", so, cfg->ident[i], address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
+						MD5_Init(&rctx);
+						MD5_Update(&rctx, (void *)&buf[2], len - 2);
+						MD5_Update(&rctx, (void *)address, strlen(address));
+						MD5_Final(rdigest, &rctx);
+						refusedtime = time(NULL);
+
 						slen = reply_refused(&sreply, &sretlen, NULL, 1);
 
 						goto udpout;
@@ -1846,7 +1881,13 @@ axfrentry:
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 
 						build_reply(&sreply, so, buf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
+						MD5_Init(&rctx);
+						MD5_Update(&rctx, (void *)&buf[2], len - 2);
+						MD5_Update(&rctx, (void *)address, strlen(address));
+						MD5_Final(rdigest, &rctx);
+						refusedtime = time(NULL);
 						slen = reply_refused(&sreply, &sretlen, NULL, 1);
+
 						goto udpout;
 						break;
 					case ERR_NXDOMAIN:
@@ -1884,6 +1925,13 @@ axfrentry:
 							if (forward)
 								goto forwardudp;
 							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
+							MD5_Init(&rctx);
+							MD5_Update(&rctx, (void *)&buf[2], len - 2);
+							MD5_Update(&rctx, (void *)address, strlen(address));
+							MD5_Final(rdigest, &rctx);
+							refusedtime = time(NULL);
+
+
 							slen = reply_refused(&sreply, &sretlen, cfg->db, 1);
 							snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						}
@@ -1908,6 +1956,13 @@ forwardudp:
 									} else {
 											snprintf(replystring, DNS_MAXNAME, "REFUSED");
 											build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
+
+											MD5_Init(&rctx);
+											MD5_Update(&rctx, (void *)&buf[2], len - 2);
+	MD5_Update(&rctx, (void *)address, strlen(address));
+											MD5_Final(rdigest, &rctx);
+	refusedtime = time(NULL);
+
 											slen = reply_refused(&sreply, &sretlen, cfg->db, 1);
 											goto udpout;
 									}
@@ -4326,4 +4381,21 @@ sm_unlock(char *shm, size_t end)
 	char *lock = (char *)&shm[end - 16];	
 
 	pack32(lock, SM_NOLOCK);
+}
+
+int
+same_refused(u_char *old_digest, void *buf, int len, void *address, int addrlen)
+{
+	MD5_CTX ctx;
+	u_char rdigest[MD5_DIGEST_LENGTH];	
+
+	MD5_Init(&ctx);
+	MD5_Update(&ctx, buf, len);
+	MD5_Update(&ctx, address, addrlen);
+	MD5_Final(rdigest, &ctx);
+
+	if (memcmp(rdigest, old_digest, sizeof(rdigest)) == 0)
+		return (1);
+
+	return (0);
 }
