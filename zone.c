@@ -79,6 +79,8 @@ extern uint32_t zonenumber;
 struct zonetree zonehead = RB_INITIALIZER(&zonehead);
 RB_GENERATE(zonetree, zoneentry, zone_entry, zonecmp);
 
+struct walkentry *we1, *wep;
+
 int
 insert_zone(char *zonename)
 {

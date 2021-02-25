@@ -122,7 +122,6 @@ static struct keysentry {
         SLIST_ENTRY(keysentry) keys_entry;
 } *kn, *knp;
 
-u_int64_t expiredon, signedon;
 
 /* prototypes */
 
@@ -200,6 +199,7 @@ extern int lflag;
 extern int icount;
 extern int vslen;
 extern char *versionstring;
+extern u_int64_t expiredon, signedon;
 
 /* externs */
 

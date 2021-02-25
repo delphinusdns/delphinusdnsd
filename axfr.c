@@ -131,6 +131,7 @@ extern time_t time_changed;
 extern int tsig;
 extern long glob_time_offset;
 extern struct zonetree zonehead;
+extern struct walkentry *we1, *wep;
 
 SLIST_HEAD(, axfrentry) axfrhead;
 
@@ -159,7 +160,7 @@ static struct notifyentry {
 extern int domaincmp(struct node *e1, struct node *e2);
 static int 	check_notifyreply(struct dns_header *, struct question *, struct sockaddr_storage *, int, struct notifyentry *, int);
 
-SLIST_HEAD(mzones ,mzone)  mzones;
+extern SLIST_HEAD(mzones ,mzone)  mzones;
 
 /*
  * INIT_AXFR - initialize the axfr singly linked list

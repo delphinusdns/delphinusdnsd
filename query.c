@@ -75,7 +75,6 @@
 static struct timeval tv0;
 static time_t current_time;
 u_int16_t port = 53;
-int bytes_received;
 
 
 /* prototypes */
@@ -93,6 +92,7 @@ extern int verbose;
 
 extern int dnssec;
 extern int tsig;
+extern int bytes_received;
 
 /* externs */
 

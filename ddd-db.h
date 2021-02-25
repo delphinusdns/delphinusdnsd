@@ -1,5 +1,5 @@
 /* 
- * Copyright (c) 2005-2020 Peter J. Philipp
+ * Copyright (c) 2005-2021 Peter J. Philipp
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,8 +26,8 @@
  * 
  */
 
-#ifndef _DB_H
-#define _DB_H
+#ifndef _DDD_DB_H
+#define _DDD_DB_H
 
 #include <sys/types.h>
 #include <limits.h>
@@ -420,7 +420,7 @@ struct mzone {
 	char			*humanname;
 	struct sockaddr_storage	notifybind;
 	SLIST_HEAD(,mzone_dest)	dest;
-} *mz, *mz0;
+};
 
 #ifndef DEFAULT_RZONE_DIR
 #define DELPHINUS_RZONE_PATH	"/var/delphinusdnsd/replicant"
@@ -448,7 +448,7 @@ struct rzone {
 	struct soa		soa;
 	struct soa_constraints	constraints;
 	uint32_t		bytelimit;
-} *rz, *rz0;
+};
 
 struct raxfr_logic {
 	int rrtype;
@@ -573,7 +573,7 @@ struct pkt_imsg {
 struct walkentry {
         struct rbtree *rbt;
         TAILQ_ENTRY(walkentry) walk_entry;
-} *we1, *wep;
+};
 
 struct zoneentry {
         char name[DNS_MAXNAME];
