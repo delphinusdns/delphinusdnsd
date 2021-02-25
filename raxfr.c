@@ -81,7 +81,7 @@
 
 #define MY_SOCK_TIMEOUT		-10
 
-SLIST_HEAD(rzones ,rzone)  rzones;
+extern SLIST_HEAD(rzones ,rzone)  rzones;
 LIST_HEAD(, myschedule)       myschedules = LIST_HEAD_INITIALIZER(myschedules);
 
 struct myschedule {
@@ -95,6 +95,7 @@ struct myschedule {
 } *sp0, *sp1, *spn;
 
 
+extern struct rzone *rz0, *rz;
 
 int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);

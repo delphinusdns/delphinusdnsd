@@ -135,6 +135,7 @@ extern uint8_t vslen;
 
 
 
+
 TAILQ_HEAD(files, file)          files = TAILQ_HEAD_INITIALIZER(files);
 TAILQ_HEAD(rzonefiles, file)	 rzonefiles = TAILQ_HEAD_INITIALIZER(rzonefiles);
 
@@ -206,6 +207,9 @@ int dnssec = 0;
 int raxfrflag = 0;
 int tcpanyonly = 0;
 u_int max_udp_payload = 0xffff; /* 65535 */
+struct mzone *mz0, *mz;
+struct rzone *rz0, *rz;
+
 
 char 		*check_rr(char *, char *, int, int *);
 int 		fill_a(ddDB *, char *, char *, int, char *);
