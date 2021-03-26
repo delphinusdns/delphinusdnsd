@@ -3112,7 +3112,7 @@ forwardtcp:
 						}
 
 						if (ix == SHAREDMEMSIZE) {
-							dolog(LOG_INFO, "delphinusdnsd udp: can't find an open slot in sharedmemsize\n");
+							dolog(LOG_INFO, "delphinusdnsd tcp: can't find an open slot in sharedmemsize\n");
 							goto tcpout;
 						}
 
