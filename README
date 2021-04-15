@@ -51,7 +51,7 @@ for those that cannot do without those platforms, but at the risk of more
 attack surface*.  Delphinusdnsd chroots and privseps on all platforms, meaning 
 that a direct root exploit is not possible.
 
-Usually the master branch is for OpenBSD and the other ports are not 
+Usually the primary branch is for OpenBSD and the other ports are not 
 guaranteed to compile until shortly before release time, when testing occurs 
 for these platforms.
 
@@ -183,8 +183,8 @@ on any platform.
 6. DNSSEC
 ---------
 
-DNSSEC is added hostmaster commitment.  You will have to re-sign your zone at
-periodic intervals.  This can be automated though.
+DNSSEC is added hostcontact responsible person commitment.  You will have to 
+re-sign your zone at periodic intervals.  This can be automated though.
 
 6.1 Signing your zone with dddctl sign
 --------------------------------------

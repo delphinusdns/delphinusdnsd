@@ -5,6 +5,7 @@ Changes in RELEASE_1_6 from RELEASE_1_5
 - ntphack in main daemon for allowing *.ntp.org through
 - setproctitle setting of an identifier for identifying a delphinusdnsd in
   systems that have multiple delphinusdnsd running
+- change every instance of "master" to "primary"
 
 
 Changes in RELEASE_1_5 from RELEASE_1_4

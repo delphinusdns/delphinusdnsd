@@ -78,7 +78,7 @@ mzone "centroid.eu" {
 }
 
 zone "centroid.eu" {
-	centroid.eu,soa,3600,ns1.centroid.eu.,hostmaster.centroid.eu.,2019111901,3600,1800,7200,3600
+	centroid.eu,soa,3600,ns1.centroid.eu.,hostcontact.centroid.eu.,2019111901,3600,1800,7200,3600
 	centroid.eu,ns,3600,somenameserver.delphinusdns.org.
 	centroid.eu,ns,3600,anothernameserver.delphinusdns.org.
 	; all lines in zone start with domainname, RR Type, RR TTL, RDATA
@@ -116,7 +116,7 @@ mzone "centroid.eu" {
 }
  
 
-zinclude "/var/delphinusdnsd/master/centroid.eu.signed";
+zinclude "/var/delphinusdnsd/primary/centroid.eu.signed";
 
 .Ed
 Then the included files are output of
@@ -170,8 +170,8 @@ rzone "ip6.centroid.eu." {
 	bytelimit 65536;
 	; do make sure you have a tsig "" {} for this
         tsigkey "pass";
-        masterport 10053;
-        master 2a01:4f8:162:e700:881c:fe60:3582:f49c;
+        primaryport 10053;
+        primary 2a01:4f8:162:e700:881c:fe60:3582:f49c;
         zonename "ip6.centroid.eu.";
         filename "/var/delphinusdnsd/replicant/ip6.centroid.eu.repl";
 }
@@ -232,12 +232,12 @@ tsig = "tsig" ("string") [ "{" cidrlist "}" ]
 tsigpassname = "tsigpassname" ("string") [ "{" ("hostname") "}" ]
 
 rzone = "rzone" ("string") [ "{" rzonelist "}" ]
-rzonelist = ( opttsig | optmaster | optmasterport | optrzonename | 
+rzonelist = ( opttsig | optprimary | optprimaryport | optrzonename | 
 		optfilename | optconstraints | optbytelimit )
 
 opttsig = "tsigkey" ("string") ;
-optmaster = "master" ("cidr-address") ;
-optmasterport = "masterport"  (number) ;
+optprimary = "primary" ("cidr-address") ;
+optprimaryport = "primaryport"  (number) ;
 optrzonename = "zonename" ("string") ;
 optfilename = "filename" ("string") ;
 optconstraints = "constraints" (number), (number), (number) ;

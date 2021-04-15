@@ -169,9 +169,9 @@ struct question		*convert_question(struct parsequestion *, int);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, char *);
 int			determine_glue(ddDB *db);
 void			mainloop(struct cfg *, struct imsgbuf *);
-void 			master_reload(int);
-void 			master_shutdown(int);
-void 			setup_master(ddDB *, char **, char *, struct imsgbuf *);
+void 			primary_reload(int);
+void 			primary_shutdown(int);
+void 			setup_primary(ddDB *, char **, char *, struct imsgbuf *);
 void			setup_cortex(struct imsgbuf *);
 void 			setup_unixsocket(char *, struct imsgbuf *);
 void 			ddd_signal(int);
@@ -524,9 +524,9 @@ main(int argc, char *argv[], char *environ[])
 		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
 		exit(1);
 	case 0:
-		ibuf = register_cortex(&cortex_ibuf, MY_IMSG_MASTER);
+		ibuf = register_cortex(&cortex_ibuf, MY_IMSG_PRIMARY);
 		if (ibuf != NULL) {
-			setup_master(db, av, socketpath, ibuf);
+			setup_primary(db, av, socketpath, ibuf);
 		}
 		/* NOTREACHED */
 		ddd_shutdown();
@@ -564,7 +564,7 @@ main(int argc, char *argv[], char *environ[])
 	} 
 
 
-	/* end of setup_master code */
+	/* end of setup_primary code */
 		
 	init_region();
 	init_filter();
@@ -1803,7 +1803,7 @@ axfrentry:
 						goto udpout;
 					} else {
 						/* RFC 1996 - 3.10 is probably broken reply REFUSED */
-						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying REFUSED\n", so, cfg->ident[i], address);
+						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of PRIMARY servers replying REFUSED\n", so, cfg->ident[i], address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 						MD5_Init(&rctx);
@@ -2252,13 +2252,13 @@ build_reply(struct sreply *reply, int so, char *buf, int len, struct question *q
 		
 
 /*
- * The master process, waits to be killed, if any other processes are killed
+ * The primary process, waits to be killed, if any other processes are killed
  * and they indicate shutdown through the shared memory segment it will kill
  * the rest of processes in the parent group.
  */
 
 void 
-setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
+setup_primary(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 {
 	pid_t pid;
 	int sel, max = 0;
@@ -2285,15 +2285,15 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 #endif
 	
 #ifndef NO_SETPROCTITLE
-	setproctitle("master [%s]", (identstring != NULL ? identstring : ""));
+	setproctitle("primary [%s]", (identstring != NULL ? identstring : ""));
 #endif
 
 	pid = getpid();
 
-	signal(SIGTERM, master_shutdown);
-	signal(SIGINT, master_shutdown);
-	signal(SIGQUIT, master_shutdown);
-	signal(SIGHUP, master_reload);
+	signal(SIGTERM, primary_shutdown);
+	signal(SIGINT, primary_shutdown);
+	signal(SIGQUIT, primary_shutdown);
+	signal(SIGHUP, primary_reload);
 
 	FD_ZERO(&rset);	
 	for (;;) {
@@ -2309,7 +2309,7 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 		if (sel < 1) {
 			if (*ptr) {
 				dolog(LOG_INFO, "pid %u died, killing delphinusdnsd\n", *ptr);
-				master_shutdown(SIGTERM);
+				primary_shutdown(SIGTERM);
 			}
 
 			if (mshutdown) {
@@ -2360,7 +2360,7 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 			}
 			if (n == 0) {
 				/* child died? */
-				dolog(LOG_INFO, "sigpipe on child?  delphinusdnsd master process exiting.\n");
+				dolog(LOG_INFO, "sigpipe on child?  delphinusdnsd primary process exiting.\n");
 				exit(1);
 			}
 
@@ -2398,11 +2398,11 @@ setup_master(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 }
 
 /* 
- *  master_shutdown - unlink pid file and kill parent group
+ *  primary_shutdown - unlink pid file and kill parent group
  */
 
 void
-master_shutdown(int sig)
+primary_shutdown(int sig)
 {
 	msig = sig;
 	mshutdown = 1;
@@ -2421,11 +2421,11 @@ ddd_signal(int sig)
 }
 
 /*
- * master_reload - reload the delphinusdnsd system
+ * primary_reload - reload the delphinusdnsd system
  */
 
 void
-master_reload(int sig)
+primary_reload(int sig)
 {
 	reload = 1;
 }
@@ -2923,7 +2923,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 						goto tcpout;
 					} else {
 						/* RFC 1996 - 3.10 is probably broken, replying REFUSED */
-						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of MASTER servers replying REFUSED\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+						dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of PRIMARY servers replying REFUSED\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 						slen = reply_refused(&sreply, &sretlen, NULL, 1);
@@ -4079,12 +4079,12 @@ setup_cortex(struct imsgbuf *ibuf)
 							
 							break;
 							
-						/* hellos go to the master */
+						/* hellos go to the primary */
 						case IMSG_HELLO_MESSAGE:
 						case IMSG_SHUTDOWN_MESSAGE:
 						case IMSG_RELOAD_MESSAGE:
 							SLIST_FOREACH(neup2, &neuronhead, entries) {
-								if (neup2->desc == MY_IMSG_MASTER)
+								if (neup2->desc == MY_IMSG_PRIMARY)
 									break;
 							}
 							/* didn't find it?  skip */

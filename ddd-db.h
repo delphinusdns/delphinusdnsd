@@ -35,7 +35,7 @@
 #define PARSEFILE_FLAG_NOSOCKET 0x1
 
 
-#define IMSG_HELLO_MESSAGE  0		/* hello the master process a few */
+#define IMSG_HELLO_MESSAGE  0		/* hello the primary process a few */
 #define IMSG_SPREAD_MESSAGE 1		/* spread a record to all childs */
 #define IMSG_XFR_MESSAGE    2		/* forward message to axfr proc */
 #define IMSG_PARSE_MESSAGE  4		/* pass message to pledge parser */
@@ -350,7 +350,7 @@ struct cfg {
 #define MY_IMSG_TCP		2
 #define MY_IMSG_PARSER		3
 #define MY_IMSG_RAXFR		4
-#define MY_IMSG_MASTER		5
+#define MY_IMSG_PRIMARY		5
 #define MY_IMSG_UNIXCONTROL	6
 #define MY_IMSG_UDP		7
 #define MY_IMSG_FORWARD		8
@@ -429,8 +429,8 @@ struct rzone {
 	char 			*zonename;
 	char			*zone;
 	int			zonelen;
-	u_int16_t		masterport;
-	char			*master;
+	u_int16_t		primaryport;
+	char			*primary;
 	struct sockaddr_storage storage;
 	char			*tsigkey;
 	char 			*filename;

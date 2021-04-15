@@ -1877,7 +1877,7 @@ get_remote_soa(struct rzone *rzone)
 	if (rzone->storage.ss_family == AF_INET6) {
 		memset(&sin6, 0, sizeof(sin6));
 		sin6.sin6_family = AF_INET6;
-		sin6.sin6_port = htons(rzone->masterport);
+		sin6.sin6_port = htons(rzone->primaryport);
 		memcpy(&sin6.sin6_addr, (void *)&((struct sockaddr_in6 *)(&rzone->storage))->sin6_addr, sizeof(struct in6_addr));
 #ifndef __linux__
 		sin6.sin6_len = sizeof(struct sockaddr_in6);
@@ -1887,7 +1887,7 @@ get_remote_soa(struct rzone *rzone)
 	} else {
 		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
-		sin.sin_port = htons(rzone->masterport);
+		sin.sin_port = htons(rzone->primaryport);
 		sin.sin_addr.s_addr = ((struct sockaddr_in *)(&rzone->storage))->sin_addr.s_addr;
 		sa = (struct sockaddr *)&sin;
 	}
@@ -1914,7 +1914,7 @@ get_remote_soa(struct rzone *rzone)
 	}
 
         if (connect(so, sa, slen) < 0) {
-                dolog(LOG_INFO, "connect to master %s port %u: %s\n", rzone->master, rzone->masterport, strerror(errno));
+                dolog(LOG_INFO, "connect to primary %s port %u: %s\n", rzone->primary, rzone->primaryport, strerror(errno));
 				close(so);
 				return(MY_SOCK_TIMEOUT);
         }
@@ -2273,7 +2273,7 @@ do_raxfr(FILE *f, struct rzone *rzone)
 	if (rzone->storage.ss_family == AF_INET6) {
 		memset(&sin6, 0, sizeof(sin6));
 		sin6.sin6_family = AF_INET6;
-		sin6.sin6_port = htons(rzone->masterport);
+		sin6.sin6_port = htons(rzone->primaryport);
 		memcpy(&sin6.sin6_addr, (void *)&((struct sockaddr_in6 *)(&rzone->storage))->sin6_addr, sizeof(struct in6_addr));
 #ifndef __linux__
 		sin6.sin6_len = sizeof(struct sockaddr_in6);
@@ -2283,13 +2283,13 @@ do_raxfr(FILE *f, struct rzone *rzone)
 	} else {
 		memset(&sin, 0, sizeof(sin));
 		sin.sin_family = AF_INET;
-		sin.sin_port = htons(rzone->masterport);
+		sin.sin_port = htons(rzone->primaryport);
 		sin.sin_addr.s_addr = ((struct sockaddr_in *)(&rzone->storage))->sin_addr.s_addr;
 		sa = (struct sockaddr *)&sin;
 	}
 
         if (connect(so, sa, slen) < 0) {
-                dolog(LOG_INFO, "connect to master %s port %u: %s\n", rzone->master, rzone->masterport, strerror(errno));
+                dolog(LOG_INFO, "connect to primary %s port %u: %s\n", rzone->primary, rzone->primaryport, strerror(errno));
 		close(so);
 		return -1;
         }

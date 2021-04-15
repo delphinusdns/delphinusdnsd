@@ -263,7 +263,7 @@ int 		drop_privs(char *, struct passwd *);
 %token VERSION OBRACE EBRACE REGION RZONE AXFRFOR 
 %token DOT COLON TEXT WOF INCLUDE ZONE COMMA CRLF 
 %token ERROR AXFRPORT OPTIONS FILTER MZONE
-%token PASSLIST ZINCLUDE MASTER MASTERPORT TSIGAUTH
+%token PASSLIST ZINCLUDE PRIMARY PRIMARYPORT TSIGAUTH
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
 %token INCOMINGTSIG DESTINATION CACHE STRICTX20
 %token BYTELIMIT FUDGE TSIGPASSNAME RDOMAIN
@@ -699,7 +699,7 @@ rzonestatements 	:
 
 rzonestatement:
 	
-	MASTERPORT NUMBER SEMICOLON CRLF
+	PRIMARYPORT NUMBER SEMICOLON CRLF
 	{
 		rz = SLIST_FIRST(&rzones);
 		if (rz == NULL) {
@@ -707,11 +707,11 @@ rzonestatement:
 		}
 
 		rz->active = 1;
-		rz->masterport = $2 & 0xffff;
+		rz->primaryport = $2 & 0xffff;
 
 	}
 	|
-	MASTER ipcidr SEMICOLON CRLF
+	PRIMARY ipcidr SEMICOLON CRLF
 	{	
 		struct sockaddr_in *sin;
 		struct sockaddr_in6 *sin6;
@@ -729,23 +729,23 @@ rzonestatement:
 			return -1;
 		}
 
-		rz->master = p;
+		rz->primary = p;
 
 		sin = (struct sockaddr_in *)&rz->storage;
 		sin6 = (struct sockaddr_in6 *)&rz->storage;
 
-		if (strchr(rz->master, ':')) {
+		if (strchr(rz->primary, ':')) {
 			rz->storage.ss_family = AF_INET6;
 #ifndef __linux__
 			rz->storage.ss_len = 16;
 #endif
-			inet_pton(AF_INET6, rz->master, &sin6->sin6_addr);
+			inet_pton(AF_INET6, rz->primary, &sin6->sin6_addr);
 		} else {
 			rz->storage.ss_family = AF_INET;
 #ifndef __linux__
 			rz->storage.ss_len = 4;
 #endif
-			inet_pton(AF_INET, rz->master, &sin->sin_addr.s_addr);
+			inet_pton(AF_INET, rz->primary, &sin->sin_addr.s_addr);
 		}
 
 
@@ -855,7 +855,7 @@ zonestatements 	:
 
 zonestatement:
 
-		/* centroid.eu,soa,3600,uranus.centroid.eu.,hostmaster.centroid.eu.,1258740680,3600,1800,7200,3600 */
+		/* centroid.eu,soa,3600,uranus.centroid.eu.,hostcontact.centroid.eu.,1258740680,3600,1800,7200,3600 */
 
 		STRING COMMA STRING COMMA NUMBER COMMA STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER CRLF 
 		{
@@ -1857,14 +1857,14 @@ struct tab cmdtab[] = {
 	{ "fudge", FUDGE, 0 },
 	{ "include", INCLUDE, 0 },
 	{ "incoming-tsig", INCOMINGTSIG, 0 },
-	{ "master", MASTER, 0 },
-	{ "masterport", MASTERPORT, 0 },
 	{ "mzone", MZONE, 0},
 	{ "notifybind", NOTIFYBIND, 0},
 	{ "notifydest", NOTIFYDEST, 0},
 	{ "options", OPTIONS, 0 },
 	{ "passlist", PASSLIST, STATE_IP },
 	{ "port", PORT, 0},
+	{ "primary", PRIMARY, 0 },
+	{ "primaryport", PRIMARYPORT, 0 },
 	{ "rdomain", RDOMAIN, 0 },
 	{ "region", REGION, STATE_IP },
 	{ "rzone", RZONE, 0 },
@@ -3962,8 +3962,8 @@ add_rzone(void)
 	}
 
 	lrz->zonename = NULL;
-	lrz->masterport = 53;
-	lrz->master = NULL;
+	lrz->primaryport = 53;
+	lrz->primary = NULL;
 	lrz->tsigkey = NULL;
 	lrz->filename = NULL;
 	memset(&lrz->storage, 0, sizeof(struct sockaddr_storage));
@@ -4022,7 +4022,7 @@ pull_remote_zone(struct rzone *lrz)
 }
 
 /*
- * ADD_MZONE - add a stub (template) master zone 
+ * ADD_MZONE - add a stub (template) primary zone 
  */
 
 static struct mzone *
@@ -4072,7 +4072,7 @@ notifysource(struct question *q, struct sockaddr_storage *from)
 					free(zone);
 					continue;
 				}	
-				/* if we are the right zone, right tsigkey, and right master IP/IP6 */
+				/* if we are the right zone, right tsigkey, and right primary IP/IP6 */
 				if ((zoneretlen == q->hdr->namelen) &&
 					(memcasecmp(zone, q->hdr->name, zoneretlen) == 0) && 
 					(tsigretlen == q->tsig.tsigkeylen) &&
