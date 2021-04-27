@@ -121,6 +121,7 @@ extern int 	reply_any(struct sreply *, int *, ddDB *);
 extern int 	reply_badvers(struct sreply *, int *, ddDB *);
 extern int	reply_nodata(struct sreply *, int *, ddDB *);
 extern int 	reply_cname(struct sreply *, int *, ddDB *);
+extern int 	reply_zonemd(struct sreply *, int *, ddDB *);
 extern int 	reply_fmterror(struct sreply *, int *, ddDB *);
 extern int 	reply_notauth(struct sreply *, int *, ddDB *);
 extern int 	reply_notimpl(struct sreply *, int *, ddDB *);
@@ -228,6 +229,7 @@ static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_CAA, DNS_TYPE_CAA, BUILD_OTHER, reply_caa },
 	{ DNS_TYPE_RP, DNS_TYPE_RP, BUILD_OTHER, reply_rp },
 	{ DNS_TYPE_HINFO, DNS_TYPE_HINFO, BUILD_OTHER, reply_hinfo },
+	{ DNS_TYPE_ZONEMD, DNS_TYPE_ZONEMD, BUILD_OTHER, reply_zonemd },
 	{ 0, 0, 0, NULL }
 };
 	

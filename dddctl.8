@@ -17,7 +17,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: January 6 2021 $
+.Dd $Mdocdate: April 27 2021 $
 .Dt DDDCTL 8
 .Os
 .Sh NAME
@@ -156,6 +156,14 @@ with an optional configfile and control socket path.
 stops delphinusdnsd with optional control socket path.
 .It Cm restart Ar [-I identstring] [-s path]
 restarts delphinusdnsd with optional control socket path.
+.It Cm zonemd Ar [-c] [-n zonename] [-o outfile] file
+.Bl -tag -width "zonemd"
+message digests (SIMPLE scheme, algorithm SHA386) a non-DNSSEC zonefile.
+.It Fl c
+checks a zonefile wether an embedded ZONEMD matches.
+.It Fl o Ar outfile
+specifies an optional output file, otherwise stdout.
+.El
 .Sh EXAMPLES
 To create a ZSK and a KSK key the first time one may do:
 .Pp

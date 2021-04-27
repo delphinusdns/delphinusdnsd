@@ -122,6 +122,7 @@ u_int64_t expiredon, signedon;
 
 extern int	dig(int argc, char *argv[]);
 extern int	signmain(int argc, char *argv[]);
+extern int	zonemd(int argc, char *argv[]);
 extern uint32_t unpack32(char *);
 extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
@@ -162,8 +163,9 @@ struct _mycmdtab {
 	{ "sign", signmain },
 	{ "sshfp", sshfp },
 	{ "start", start },
-	{ "stop", stop},
+	{ "stop", stop },
 	{ "restart", restart },
+	{ "zonemd", zonemd },
 	{ NULL, NULL }
 };
 
@@ -308,6 +310,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\tstart [-f configfile] [-I ident] [-s socket]\n");
 		fprintf(stderr, "\tstop [-I ident] [-s socket]\n");
 		fprintf(stderr, "\trestart [-I ident] [-s socket]\n");
+		fprintf(stderr, "\tzonemd [-c] [-n zonename] [-o outfile] file\n");
 		retval = 0;
 	}
 
@@ -997,6 +1000,21 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 				((struct tlsa *)rrp2->rdata)->selector, 
 				((struct tlsa *)rrp2->rdata)->matchtype, 
 				bin2hex(((struct tlsa *)rrp2->rdata)->data, ((struct tlsa *)rrp2->rdata)->datalen));
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_ZONEMD)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no zonemd in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			fprintf(of, "%s %d IN ZONEMD %d %d %d ( %s )\n", 
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl, 
+				((struct zonemd *)rrp2->rdata)->serial, 
+				((struct zonemd *)rrp2->rdata)->scheme, 
+				((struct zonemd *)rrp2->rdata)->algorithm, 
+				bin2hex(((struct zonemd *)rrp2->rdata)->hash, ((struct zonemd *)rrp2->rdata)->hashlen));
 		}
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {

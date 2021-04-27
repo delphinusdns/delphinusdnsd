@@ -59,6 +59,7 @@
 #include <openssl/evp.h>
 #include <openssl/bn.h>
 #include <openssl/hmac.h>
+#include <openssl/sha.h>
 
 #include "ddd-dns.h"
 #include "ddd-db.h"
@@ -87,6 +88,7 @@ int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HM
 int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_zonemd(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
@@ -196,6 +198,7 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_RP, 0, raxfr_rp },
 	{ DNS_TYPE_HINFO, 0, raxfr_hinfo },
 	{ DNS_TYPE_CAA, 0, raxfr_caa },
+	{ DNS_TYPE_ZONEMD, 0, raxfr_zonemd },
 	{ 0, 0, NULL }
 };
 
@@ -546,6 +549,52 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 
 	return (q - estart);
 }
+
+int 
+raxfr_zonemd(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
+{
+	struct zonemd zonemd;
+	u_char *q = p;
+	int i;
+
+	BOUNDS_CHECK((p + 4), q, rdlen, end);
+	memcpy(&zonemd.serial, p, 4);
+	p += 4; 
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	zonemd.scheme = *p;
+	p++;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	zonemd.algorithm = *p;
+	p++;
+	switch (zonemd.algorithm) {
+	case ZONEMD_SHA384:
+		zonemd.hashlen = SHA384_DIGEST_LENGTH;
+		break;
+	default:
+		return -1;
+		break;
+	}
+	BOUNDS_CHECK((p + zonemd.hashlen), q, rdlen, end);
+	memcpy(&zonemd.hash, p, zonemd.hashlen);
+	p += zonemd.hashlen;
+
+	if (f != NULL) {
+		fprintf(f, "%u,", zonemd.serial);
+		fprintf(f, "%u,", zonemd.scheme);
+		fprintf(f, "%u,", zonemd.algorithm);
+		for (i = 0; i < zonemd.hashlen; i++) {
+			fprintf(f, "%02x", zonemd.hash[i] & 0xff);
+		}
+		fprintf(f, "\n");
+	}
+
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
+	return (p - estart);
+}
+
+
 
 int 
 raxfr_caa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)

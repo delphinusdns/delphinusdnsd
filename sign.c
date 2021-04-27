@@ -114,6 +114,7 @@ static struct keysentry {
 /* prototypes */
 
 int	add_dnskey(ddDB *);
+int	add_zonemd(ddDB *, char *, int);
 char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
 char *  key2zone(char *, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
 char *  get_key(struct keysentry *,uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int, int *);
@@ -149,6 +150,7 @@ static int	sign_sshfp(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_tlsa(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_ds(ddDB *, char *, int, struct rbtree *, int);
 
+
 int 		sign(int, char *, int, struct keysentry *, char *, int *);
 int 		create_ds(ddDB *, char *, struct keysentry *);
 u_int 		keytag(u_char *key, u_int keysize);
@@ -167,8 +169,6 @@ void		debug_bindump(const char *, int);
 int 		dump_db(ddDB *, FILE *, char *);
 int		notglue(ddDB *, struct rbtree *, char *);
 
-char *		canonical_sort(char **, int, int *);
-int 		cs_cmp(const void *, const void *);
 
 extern int debug;
 extern int verbose;
@@ -204,6 +204,7 @@ extern int fill_dnskey(ddDB *,char *, char *, u_int32_t, u_int16_t, u_int8_t, u_
 extern int fill_rrsig(ddDB *,char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
 extern int fill_nsec3param(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
 extern int fill_nsec3(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
+extern int fill_zonemd(ddDB *, char *, char *, int, uint32_t, uint8_t, uint8_t, char *, int);
 extern char * convert_name(char *name, int namelen);
 
 extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
@@ -232,6 +233,25 @@ extern int insert_axfr(char *, char *);
 extern int insert_filter(char *, char *);
 extern int insert_passlist(char *, char *);
 extern int insert_notifyddd(char *, char *);
+
+extern void zonemd_hash_a(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_aaaa(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_soa(SHA512_CTX *, struct rrset *, struct rbtree *, uint32_t *);
+extern void zonemd_hash_ns(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_cname(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_ptr(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_txt(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_rp(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_hinfo(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_srv(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_naptr(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_caa(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_mx(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_tlsa(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_sshfp(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
+
+extern char *		canonical_sort(char **, int, int *);
 
 extern int dnssec;
 extern int tsig;
@@ -278,7 +298,106 @@ extern int tsig;
 #define MASK_DUMP_BIND			0x80
 
 
-#define MAX_RECORDS_IN_RRSET		100
+
+/*
+ * ZONEMD - the heart of dddctl zonemd ...
+ */
+
+int
+zonemd(int argc, char *argv[])
+{
+	FILE *of = stdout;
+	int ch, checkhash = 0;
+
+	char *zonefile = NULL;
+	char *zonename = NULL;
+
+	uint32_t parseflags = PARSEFILE_FLAG_NOSOCKET;
+	struct stat sb;
+	
+	ddDB *db;
+
+#if __OpenBSD__
+	if (pledge("stdio rpath wpath cpath", NULL) < 0) {
+		perror("pledge");
+		exit(1);
+	}
+#endif
+
+
+	while ((ch = getopt(argc, argv, "cn:o:")) != -1) {
+		switch (ch) {
+		case 'c':
+			checkhash = 1;
+			break;			
+		case 'n':
+			zonename = optarg;
+			break;
+		case 'o':
+			/* output file */
+			if (optarg[0] == '-')
+				break;
+ 
+			errno = 0;
+			if (lstat(optarg, &sb) < 0 && errno != ENOENT) {
+				perror("lstat");
+				exit(1);
+			}
+			if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
+				fprintf(stderr, "%s is not a file!\n", optarg);
+				exit(1);
+			}
+			if ((of = fopen(optarg, "w")) == NULL) {
+				perror("fopen");
+				exit(1);
+			}
+			break;
+		}
+	}
+
+	argc -= optind;
+	argv += optind;
+
+	zonefile = argv[0];
+
+	if (zonefile == NULL || zonename == NULL) {
+		fprintf(stderr, "must provide a zonefile and a zonename!\n");
+		exit(1);
+	}
+
+	db = dddbopen();
+	if (db == NULL) {
+		dolog(LOG_INFO, "dddbopen() failed\n");
+		exit(1);
+	}
+
+	/* now we start reading our configfile */
+		
+	if (parse_file(db, zonefile, parseflags) < 0) {
+		dolog(LOG_INFO, "parsing config file failed\n");
+		exit(1);
+	}
+
+	/* add zonemd to zone */
+
+	if (! checkhash) {
+		add_zonemd(db, zonename, 0);
+	
+		/* write new zone file */
+		if (dump_db(db, of, zonename) < 0)
+			exit (1);
+	} else {
+		if (add_zonemd(db, zonename, 1) == 0) {
+			printf("(ZONEMD) %s: OK\n", zonename);
+		} else {
+			fprintf(stderr, "(ZONEMD) %s: FAILED\n", zonename);
+			exit(1);
+		}
+	}
+
+	return 0;
+}
+
 
 /*
  * SIGNMAIN - the heart of dddctl sign ...
@@ -805,6 +924,8 @@ signmain(int argc, char *argv[])
 
 	exit(0);
 }
+
+
 
 
 int	
@@ -6433,6 +6554,104 @@ store_private_key(struct keysentry *kn, char *zonename, int keyid, int algorithm
 	
 }
 
+int
+add_zonemd(ddDB *db, char *zonename, int check)
+{
+	struct rbtree *rbt = NULL;
+	struct node *n, *nx;
+	struct zonemd *zonemd = NULL;
+	int rs;
+	uint32_t serial;
+	struct rrset *rrset = NULL;
+	SHA512_CTX ctx;
+	uint8_t sharesult[SHA384_DIGEST_LENGTH];
+
+	SHA384_Init(&ctx);
+
+	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
+		rs = n->datalen;
+		if ((rbt = calloc(1, rs)) == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			exit(1);
+		}
+
+		memcpy((char *)rbt, (char *)n->data, n->datalen);
+
+		if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
+			zonemd_hash_a(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+			zonemd_hash_ns(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
+			zonemd_hash_cname(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
+			zonemd_hash_soa(&ctx, rrset, rbt, &serial);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
+			zonemd_hash_ptr(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_HINFO)) != NULL) {
+			zonemd_hash_hinfo(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
+			zonemd_hash_mx(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
+			zonemd_hash_txt(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_RP)) != NULL) {
+			zonemd_hash_rp(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
+			zonemd_hash_aaaa(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
+			zonemd_hash_srv(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
+			zonemd_hash_naptr(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
+			zonemd_hash_sshfp(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
+			zonemd_hash_tlsa(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_CAA)) != NULL) {
+			zonemd_hash_caa(&ctx, rrset, rbt);
+		}
+		if (check && (rrset = find_rr(rbt, DNS_TYPE_ZONEMD)) != NULL) {
+			if ((zonemd = zonemd_hash_zonemd(rrset, rbt)) == NULL)
+				return -1;
+		}
+
+		free(rbt);
+	}
+
+	SHA384_Final(sharesult, &ctx);
+
+	if (check == 0) {
+		if (fill_zonemd(db, zonename, "zonemd", 3600, serial, ZONEMD_SIMPLE, ZONEMD_SHA384, sharesult, SHA384_DIGEST_LENGTH) < 0) {
+			printf("fill_zonemd failed\n");
+			return -1;
+		}
+	} else {
+		if (zonemd == NULL) {
+			return -1;
+		}
+
+		if (memcmp(sharesult, zonemd->hash, zonemd->hashlen) != 0) {
+			free(zonemd);
+			return -1;
+		}
+
+		free(zonemd);
+	}
+	
+	return 0;
+}
 
 int
 construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
@@ -6563,6 +6782,9 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			strlcat(bitmap, "HINFO ", sizeof(bitmap));	
 		if (find_rr(rbt, DNS_TYPE_CAA) != NULL)
 			strlcat(bitmap, "CAA ", sizeof(bitmap));	
+
+		if (find_rr(rbt, DNS_TYPE_ZONEMD) != NULL)
+			strlcat(bitmap, "ZONEMD ", sizeof(bitmap));
 
 		/* they all have RRSIG */
 		strlcat(bitmap, "RRSIG ", sizeof(bitmap));	
@@ -6737,6 +6959,21 @@ print_rbt(FILE *of, struct rbtree *rbt)
 				convert_name(rbt->zone, rbt->zonelen),
 				rrset->ttl, 
 				convert_name(((struct ns *)rrp2->rdata)->nsserver, ((struct ns *)rrp2->rdata)->nslen));
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_ZONEMD)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no zonemd in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			fprintf(of, "  %s,zonemd,%d,%d,%d,%d,%s\n", 
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl, 
+				((struct zonemd *)rrp2->rdata)->serial,
+				((struct zonemd *)rrp2->rdata)->scheme,
+				((struct zonemd *)rrp2->rdata)->algorithm,
+				bin2hex(((struct zonemd *)rrp2->rdata)->hash, ((struct zonemd *)rrp2->rdata)->hashlen));
 		}
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
@@ -7327,114 +7564,4 @@ update_soa_serial(ddDB *db, char *zonename, time_t serial)
 
 		((struct soa *)rrp->rdata)->serial = serial;
 	}
-
-
-}
-
-char *
-canonical_sort(char **canonsort, int csort, int *rlen)
-{
-	int totallen = 0;
-	int i;
-	uint16_t len;
-	char *p, *q, *rp = NULL;
-	char *array, *r;
-
-	
-	array = calloc(csort, 68000);
-	if (array == NULL)
-		return NULL;
-
-	r = array;
-
-	for (i = 0; i < csort; i++) {
-		p = canonsort[i];
-		len = unpack16(p);	
-		totallen += len;
-
-		memcpy(r, p, len + 2);
-		r += 68000;
-	}
-	
-
-	qsort((void*)array, csort, 68000, cs_cmp);
-
-	rp = malloc(totallen);
-	if (rp == NULL) {
-		return NULL;
-	}
-
-	q = &rp[0];
-	r = array;
-
-	for (i = 0; i < csort; i++) {
-		len = unpack16(r);	
-		r += 2;
-		unpack(q, r, len);
-		q += len;
-		r += (68000 - 2);
-	}
-
-	free(array);
-
-#if 0
-	printf("dumping canonsort\n");
-	for (i = 0; i < totallen; i++) {
-		if (i && i % 16 == 0)
-			printf("\n");
-		printf("%02x, ", rp[i] & 0xff);
-	}
-	printf("\n");
-#endif
-
-	*rlen = totallen;
-	return (rp);
-}
-
-int
-cs_cmp(const void *a, const void *b)
-{
-	uint16_t lena = unpack16((char *)a);
-	uint16_t lenb = unpack16((char *)b);
-	u_char *a2 = ((u_char *)a + 2);
-	u_char *b2 = ((u_char *)b + 2);
-	int i, mlen, ret;
-
-	mlen = MIN(lena, lenb);
-
-	/* skip the dnsname (no compression here) */
-	for (i = 0; i < mlen; i++) {
-		if (a2[i] != 0) {
-			i += a2[i];
-		} else {
-			break;
-		}
-	}
-
-	i++;	/* advance 1 to the ttl */
-	i += 2;  /* type */
-	i += 2;  /* class */
-	i += 4;	 /* ttl */
-
-	ret = memcmp(&a2[0], &b2[0], i);
-	if (ret != 0)
-		return (ret);
-
-	i += 2;  /* rdlen */
-
-	for (; i < mlen; i++) {
-		if (a2[i] < b2[i])
-			return -1;
-		else if (a2[i] > b2[i])
-			return 1;
-	}
-
-	/* if they are still equal the shorter one wins */
-		
-	if (lena < lenb)
-		return -1;
-	else if (lena > lenb)
-		return 1;
-	else
-		return 0;
 }

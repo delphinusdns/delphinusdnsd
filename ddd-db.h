@@ -239,7 +239,18 @@ struct aaaa {
         struct in6_addr aaaa;     /* IPv6 addresses */
 };
 
+struct zonemd {
+	uint32_t	serial;		/* reflects SOA serial */
+	uint8_t 	scheme;		/* usually SIMPLE SCHEME */
+#define ZONEMD_SIMPLE	1
+	uint8_t		algorithm;	/* algorithm used for hash */
+#define ZONEMD_SHA384	1
+#define ZONEMD_SHA512	2		/* probably not ever used */
+	char		hash[4096];	/* the hash itself */
+	uint16_t	hashlen;	/* the length of the hash used */
+};	
 
+	
 
 struct sreply {
 	int so;			/* socket */
@@ -590,5 +601,7 @@ RB_HEAD(pntree, pnentry);
 RB_PROTOTYPE(pntree, pnentry, pn_entry, pncmp);
 
 extern int pncmp(struct pnentry *, struct pnentry *);
+
+#define MAX_RECORDS_IN_RRSET		100		/* from sign.c */
 
 #endif /* _DB_H */

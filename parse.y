@@ -234,6 +234,7 @@ int		fill_ds(ddDB *, char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, c
 int		fill_rp(ddDB *, char *, char *, int, char *, char *);
 int		fill_hinfo(ddDB *, char *, char *, int, char *, char *);
 int		fill_caa(ddDB *, char *, char *, int, uint8_t, char *, char *);
+int 		fill_zonemd(ddDB *, char *, char *, int, uint32_t, uint8_t, uint8_t, char *, int);
 
 void		create_nsec_bitmap(char *, char *, int *);
 int             findeol(void);
@@ -909,7 +910,14 @@ zonestatement:
 				if (debug)
 					printf("SRV\n");
 #endif
+			} else if (strcasecmp($3, "zonemd") == 0) { 
+				int hexlen;
+				char tmpbuf[4096];
 
+				hexlen = hex2bin($13, strlen($13), tmpbuf);
+				if (fill_zonemd(mydb, $1, $3, $5, $7, $9, $11, tmpbuf, hexlen) < 0) {
+					return -1;
+				}
 			} else {
 				if (debug)
 					printf("2 another record I don't know about?");
@@ -3617,6 +3625,55 @@ fill_soa(ddDB *db, char *name, char *type, int myttl, char *auth, char *contact,
 
 }
 
+int
+fill_zonemd(ddDB *db, char *name, char *type, int myttl, uint32_t serial, uint8_t scheme, uint8_t alg, char *hash, int hashlen)
+{
+	struct rbtree *rbt;
+	struct zonemd *zonemd;
+	int converted_namelen;
+	char *converted_name;
+	int i;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_ZONEMD, &converted_namelen);
+	if (converted_name == NULL) {
+		dolog(LOG_ERR, "error input line %d\n", file->lineno);
+		return (-1);
+	}
+
+	if (dnssec) {
+		insert_apex(name, converted_name, converted_namelen);
+		current_zone = strdup(name);
+	}
+
+	if ((zonemd = (struct zonemd *)calloc(1, sizeof(struct zonemd))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+	zonemd->serial = serial;
+	zonemd->scheme = scheme;
+	zonemd->algorithm = alg;
+
+	memcpy(&zonemd->hash, hash, hashlen);
+	zonemd->hashlen = hashlen;
+
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_ZONEMD, zonemd, myttl, 0);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+	
+	if (converted_name)
+		free (converted_name);
+
+	
+	return (0);
+
+}
 struct file *
 pushfile(const char *name, int secret, int descend, int rzone)
 {

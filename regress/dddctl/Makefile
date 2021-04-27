@@ -1,3 +1,3 @@
-SUBDIR= sign
+SUBDIR= sign zonemd
 
 .include <bsd.subdir.mk>
