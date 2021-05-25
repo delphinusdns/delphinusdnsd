@@ -610,12 +610,16 @@ struct querycache {
 	struct {
 		char digest[MD5_DIGEST_LENGTH];
 		uint16_t crc;
+		char *request;
+		int requestlen;
 		char *reply;
 		int replylen;
-		int requestlen;
 	} cs[10];
 	int cp;
 	int cm;
 };
+
+#define QC_REQUESTSIZE	384
+#define QC_REPLYSIZE	65536
 	
 #endif /* _DB_H */

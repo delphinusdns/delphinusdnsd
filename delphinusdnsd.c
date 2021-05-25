@@ -1405,14 +1405,15 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		exit(1);
 	}
 
-	qc.bufsize = 65536;
+	qc.bufsize = QC_REPLYSIZE;
 	qc.cm = sizeof(qc.cs) / sizeof(qc.cs[0]);
 	qc.cp = 0;
 
 	for (i = 0; i < qc.cm; i++) {
 		qc.cs[i].replylen = qc.bufsize;
 		qc.cs[i].reply = malloc(qc.bufsize);
-		if (qc.cs[i].reply == NULL) {
+		qc.cs[i].request = malloc(QC_REQUESTSIZE);
+		if ((qc.cs[i].reply == NULL) || (qc.cs[i].request == NULL)) {
 			dolog(LOG_ERR, "malloc: %s\n", strerror(errno));
 			ddd_shutdown();
 			exit(1);
@@ -4520,17 +4521,20 @@ add_cache(struct querycache *qc, char *buf, int len, char *address, int addrlen,
 	if (replylen > qc->bufsize)
 		return -1;
 
-	qc->cp = qc->cp % qc->cm;
+	qc->cp = (qc->cp + 1) % qc->cm;
 
 	memcpy(qc->cs[qc->cp].reply, reply, replylen);
 	qc->cs[qc->cp].replylen = replylen;
 
-	ctx = EVP_MD_CTX_new();
-	EVP_DigestInit_ex(ctx, md, NULL);
-	EVP_DigestUpdate(ctx, buf, len);
-	//EVP_DigestUpdate(ctx, address, addrlen);
-	EVP_DigestFinal_ex(ctx, rdigest, &md_len);
-	EVP_MD_CTX_free(ctx);
+	if (len > QC_REQUESTSIZE) {
+		ctx = EVP_MD_CTX_new();
+		EVP_DigestInit_ex(ctx, md, NULL);
+		EVP_DigestUpdate(ctx, buf, len);
+		EVP_DigestFinal_ex(ctx, rdigest, &md_len);
+		EVP_MD_CTX_free(ctx);
+	} else {
+		memcpy(qc->cs[qc->cp].request, buf, len);
+	}
 
 	qc->cs[qc->cp].crc = crc;
 	memcpy(qc->cs[qc->cp].digest, rdigest, MD5_DIGEST_LENGTH);
@@ -4550,27 +4554,37 @@ reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char 
 	if (ctx == NULL)
 		ctx = EVP_MD_CTX_new();
 
-
-
 	for (i = 0; i < qc->cm; i++) {
 		if (len == qc->cs[i].requestlen) {
-			if (needhash) {
-				EVP_DigestInit_ex(ctx, md, NULL);
-				EVP_DigestUpdate(ctx, &buf[2], len - 2);
-				EVP_DigestFinal_ex(ctx, rdigest, &md_len);
-				needhash = 0;
-			}
+			if ((len - 2) <= QC_REQUESTSIZE) {
+				if (memcmp(&buf[2], qc->cs[i].request, len - 2) == 0) {
+					goto sendit;
+				}
+			} else {
+				if (needhash) {
+					EVP_DigestInit_ex(ctx, md, NULL);
+					EVP_DigestUpdate(ctx, &buf[2], len - 2);
+					EVP_DigestFinal_ex(ctx, rdigest, &md_len);
+					needhash = 0;
+				}
 
-			if (memcmp(rdigest, qc->cs[i].digest, MD5_DIGEST_LENGTH) == 0) {
-				*crc = qc->cs[i].crc;	/* crc accounting */
-				memcpy(qc->cs[i].reply, buf, 2);    /* add query ID */
-				return (sendto(so, qc->cs[i].reply, 
-					qc->cs[i].replylen, 0, sa, salen));
+				if (memcmp(rdigest, qc->cs[i].digest, MD5_DIGEST_LENGTH) == 0) {
+					goto sendit;
+				}
 			}
 		}
 	}
 
 	return (0);
+
+sendit:
+
+	*crc = qc->cs[i].crc;					/* crc accounting */
+	memcpy(qc->cs[i].reply, buf, 2);    	/* add query ID */
+
+	return (sendto(so, qc->cs[i].reply, 
+		qc->cs[i].replylen, 0, sa, salen));
+	
 }
 
 uint16_t
