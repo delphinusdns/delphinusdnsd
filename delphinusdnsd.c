@@ -73,6 +73,7 @@
 #include "endian.h"
 #endif
 
+#include <openssl/evp.h>
 #include <openssl/md5.h>
 
 #include "ddd-dns.h"
@@ -186,7 +187,10 @@ char *			sm_init(size_t, size_t);
 size_t			sm_size(size_t, size_t);
 void			sm_lock(char *, size_t);
 void			sm_unlock(char *, size_t);
-int			same_refused(u_char *, void *, int, void *, int);
+int			same_refused(EVP_MD *, u_char *, void *, int, void *, int);
+int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, EVP_MD *, uint16_t *);
+int			add_cache(struct querycache *, char *, int, char *, int,  char *, int, EVP_MD *, uint16_t);
+uint16_t		crc16(uint8_t *, int);
 
 /* aliases */
 
@@ -232,8 +236,6 @@ static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_ZONEMD, DNS_TYPE_ZONEMD, BUILD_OTHER, reply_zonemd },
 	{ 0, 0, 0, NULL }
 };
-	
-
 
 TAILQ_HEAD(, tcpentry) tcphead;
 
@@ -358,7 +360,6 @@ main(int argc, char *argv[], char *environ[])
 #if __linux__
 	setproctitle_init(argc, av, environ);
 #endif
-
 
 	while ((ch = getopt(argc, argv, "b:df:I:i:ln:p:s:v")) != -1) {
 		switch (ch) {
@@ -912,12 +913,20 @@ main(int argc, char *argv[], char *environ[])
 		ddd_shutdown();
 		exit(1);
 	}
-	if (unveil(pw->pw_dir, "wc") < 0) {
-		perror("unveil");
-		ddd_shutdown();
-		exit(1);
+	/* XXX pjp */
+	if (strcmp(pw->pw_dir, DELPHINUS_RZONE_PATH) == 0) {
+		if (unveil(pw->pw_dir, "wc") < 0) {
+			perror("unveil");
+			ddd_shutdown();
+			exit(1);
+		}
+	} else {
+		if (unveil(pw->pw_dir, "r") < 0) {
+			perror("unveil");
+			ddd_shutdown();
+			exit(1);
+		}
 	}
-
 #endif
 
 	/*
@@ -1261,6 +1270,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	int rcheck = 0;
 	int blocklist = 1;
 	int require_tsig = 0;
+	int addrlen;
 	pid_t idata;
 
 	u_int32_t received_ttl;
@@ -1309,16 +1319,20 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	struct pq_imsg *pq0;
 
 	struct sforward *sforward;
+	static struct querycache qc;
 
 	ssize_t n, datalen;
 	int ix;
 	int sretlen;
 	int passnamewc;
 	int pq_offset;
+	u_int md_len;
 
-	MD5_CTX rctx;
+	EVP_MD_CTX *rctx;
+	EVP_MD *md;
 	u_char rdigest[MD5_DIGEST_LENGTH];
 	time_t refusedtime = 0;
+	uint16_t crc;
 
 	memset(&rectv0, 0, sizeof(struct timeval));
 	memset(&rectv1, 0, sizeof(struct timeval));
@@ -1374,11 +1388,35 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		exit(1);
 	}
 
+	md = (EVP_MD *)EVP_get_digestbyname("md5");
+	if (md == NULL) {
+		dolog(LOG_ERR, "unknown message digest 'md5'\n");
+		ddd_shutdown();
+		exit(1);
+	}
+
+	rctx = EVP_MD_CTX_new();
+	
+
 	replybuf = calloc(1, 65536);
 	if (replybuf == NULL) {
 		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
 		ddd_shutdown();
 		exit(1);
+	}
+
+	qc.bufsize = 65536;
+	qc.cm = sizeof(qc.cs) / sizeof(qc.cs[0]);
+	qc.cp = 0;
+
+	for (i = 0; i < qc.cm; i++) {
+		qc.cs[i].replylen = qc.bufsize;
+		qc.cs[i].reply = malloc(qc.bufsize);
+		if (qc.cs[i].reply == NULL) {
+			dolog(LOG_ERR, "malloc: %s\n", strerror(errno));
+			ddd_shutdown();
+			exit(1);
+		}
 	}
 
 	udp_ibuf = register_cortex(ibuf, MY_IMSG_UDP);
@@ -1557,6 +1595,7 @@ axfrentry:
 					fromlen = sizeof(struct sockaddr_in6);
 					sin6 = (struct sockaddr_in6 *)from;
 					inet_ntop(AF_INET6, (void *)&sin6->sin6_addr, (char *)&address, sizeof(address));
+					addrlen = strlen(address);
 					if (ratelimit) {
 						add_rrlimit(ratelimit_backlog, (u_int16_t *)&sin6->sin6_addr, sizeof(sin6->sin6_addr), rptr);
 
@@ -1580,6 +1619,7 @@ axfrentry:
 					fromlen = sizeof(struct sockaddr_in);
 					sin = (struct sockaddr_in *)from;
 					inet_ntop(AF_INET, (void *)&sin->sin_addr, (char *)&address, sizeof(address));
+					addrlen = strlen(address);
 					if (ratelimit) {
 						add_rrlimit(ratelimit_backlog, (u_int16_t *)&sin->sin_addr.s_addr, sizeof(sin->sin_addr.s_addr), rptr);
 
@@ -1609,19 +1649,20 @@ axfrentry:
 					goto drop;
 				}
 
-				if ((time(NULL) & ~3) == (refusedtime & ~3) && same_refused(rdigest, (void *)&buf[2], len - 2, (void *)address, strlen(address))) {
+				if ((time(NULL) & ~3) == (refusedtime & ~3) && same_refused(md, rdigest, (void *)&buf[2], len - 2, (void *)address, addrlen)) {
 					dolog(LOG_INFO, "short circuiting multiple refused from %s, drop\n", address);	
 					goto drop;
 				}
 				refusedtime = 0;
 
+
 				if (filter && require_tsig == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					MD5_Init(&rctx);
-					MD5_Update(&rctx, (void *)&buf[2], len - 2);
-					MD5_Update(&rctx, address, strlen(address));
-					MD5_Final(rdigest, &rctx);
+					EVP_DigestInit_ex(rctx, md, NULL);
+					EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+					EVP_DigestUpdate(rctx, address, addrlen);
+					EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 					refusedtime = time(NULL);
 
 					slen = reply_refused(&sreply, &sretlen, NULL, 0);
@@ -1633,10 +1674,10 @@ axfrentry:
 				if (passlist && blocklist == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					MD5_Init(&rctx);
-					MD5_Update(&rctx, (void *)&buf[2], len - 2);
-					MD5_Update(&rctx, (void *)address, strlen(address));
-					MD5_Final(rdigest, &rctx);
+					EVP_DigestInit_ex(rctx, md, NULL);
+					EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+					EVP_DigestUpdate(rctx, address, addrlen);
+					EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 					refusedtime = time(NULL);
 					slen = reply_refused(&sreply, &sretlen, NULL, 0);
 
@@ -1648,8 +1689,37 @@ axfrentry:
 					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) ratelimit policy dropping packet\n", so, cfg->ident[i], address, received_ttl, aregion);
 					goto drop;
 				}
-					
-				/* pjp - branch to pledge parser here */
+				/*
+				 * before we parse the message, check our
+				 * cache if we've seen it before, and short
+				 * circuit with a somewhat pretty message
+				 */
+
+				if ((slen = reply_cache(so, from, fromlen, &qc, buf, len, md, &crc)) > 0) {
+					if (lflag) {
+						double diffms;
+
+						/* we have no struct question so give back a small answer */
+
+						gettimeofday(&rectv1, NULL);
+						if (rectv1.tv_sec - rectv0.tv_sec > 0) {
+							rectv1.tv_usec += 1000000;
+							rectv1.tv_sec--;
+						}
+						diffms = (((double)rectv1.tv_sec - (double)rectv0.tv_sec) \
+								* 1000) + \
+							(double)(rectv1.tv_usec - rectv0.tv_usec) / 1000;
+
+						dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d, tta=%2.3fms) answering \"CACHEHIT\" (%d/%d) %x\n", so, cfg->ident[i], address, received_ttl, aregion, diffms,len, slen, crc);
+					/* post-filling of build_reply for stats */
+					}
+
+					goto drop;
+				}
+
+				crc = crc16(buf, len);
+
+				/* branch to pledge parser here */
 				imsg_type = IMSG_PARSE_MESSAGE;
 				
 				if (imsg_compose(pibuf, imsg_type, 
@@ -1722,6 +1792,9 @@ axfrentry:
 										/* format error */
 										build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 										slen = reply_fmterror(&sreply, &sretlen, NULL);
+										/* add this reply to the cache */
+										add_cache(&qc, &buf[2], len - 2, address, 
+													addrlen, sreply.replybuf, sretlen, md, crc);
 										dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
 										imsg_free(&imsg);
 										goto drop;
@@ -1736,10 +1809,10 @@ axfrentry:
 									case PARSE_RETURN_NOTAUTH:
 										if (filter && pq.tsig.have_tsig == 0) {
 											build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-											MD5_Init(&rctx);
-											MD5_Update(&rctx, (void *)&buf[2], len - 2);
-											MD5_Update(&rctx, (void *)address, strlen(address));
-											MD5_Final(rdigest, &rctx);
+											EVP_DigestInit_ex(rctx, md, NULL);
+											EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+											EVP_DigestUpdate(rctx, address, addrlen);
+											EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 	refusedtime = time(NULL);
 											slen = reply_refused(&sreply, &sretlen, NULL, 0);
 											dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, received_ttl, aregion);
@@ -1776,7 +1849,6 @@ axfrentry:
 							snprintf(replystring, DNS_MAXNAME, "NOTIFY");
 							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 							slen = reply_notify(&sreply, &sretlen, NULL);
-
 							/* send notify to replicant process */
 							idata = (pid_t)question->hdr->namelen;
 							imsg_compose(udp_ibuf, IMSG_NOTIFY_MESSAGE, 
@@ -1797,7 +1869,6 @@ axfrentry:
 						snprintf(replystring, DNS_MAXNAME, "NOTIFY");
 						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 						slen = reply_notify(&sreply, &sretlen, NULL);
-							/* send notify to replicant process */
 							idata = (pid_t)question->hdr->namelen;
 							imsg_compose(udp_ibuf, IMSG_NOTIFY_MESSAGE, 
 									0, 0, -1, question->hdr->name, idata);
@@ -1808,10 +1879,10 @@ axfrentry:
 						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of PRIMARY servers replying REFUSED\n", so, cfg->ident[i], address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-						MD5_Init(&rctx);
-						MD5_Update(&rctx, (void *)&buf[2], len - 2);
-						MD5_Update(&rctx, (void *)address, strlen(address));
-						MD5_Final(rdigest, &rctx);
+						EVP_DigestInit_ex(rctx, md, NULL);
+						EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+						EVP_DigestUpdate(rctx, address, addrlen);
+						EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 						refusedtime = time(NULL);
 
 						slen = reply_refused(&sreply, &sretlen, NULL, 1);
@@ -1832,6 +1903,9 @@ axfrentry:
 							snprintf(replystring, DNS_MAXNAME, "NOTAUTH");
 							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 							slen = reply_notauth(&sreply, &sretlen, NULL);
+							/* add this reply to the cache */
+							add_cache(&qc, &buf[2], len - 2, address, 
+									addrlen, sreply.replybuf, sretlen, md, crc);
 							goto udpout;
 					}
 				}
@@ -1839,8 +1913,11 @@ axfrentry:
 				if (question->ednsversion != 0) {
 					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 					slen = reply_badvers(&sreply, &sretlen, NULL);
+					/* add this reply to the cache */
+					add_cache(&qc, &buf[2], len - 2, address, 
+							addrlen, sreply.replybuf, sretlen, md, crc);
 
-					dolog(LOG_INFO, "on TCP descriptor %u interface \"%s\" edns version is %u from %s, replying badvers\n", so, cfg->ident[i], question->ednsversion, address);
+					dolog(LOG_INFO, "on descriptor %u interface \"%s\" edns version is %u from %s, replying badvers\n", so, cfg->ident[i], question->ednsversion, address);
 
 					snprintf(replystring, DNS_MAXNAME, "BADVERS");
 					goto udpout;
@@ -1852,6 +1929,9 @@ axfrentry:
 							snprintf(replystring, DNS_MAXNAME, "VERSION");
 							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 							slen = reply_version(&sreply, &sretlen, NULL);
+							/* add this reply to the cache */
+							add_cache(&qc, &buf[2], len - 2, address, 
+									addrlen, sreply.replybuf, sretlen, md, crc);
 							goto udpout;
 				}
 
@@ -1871,10 +1951,10 @@ axfrentry:
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 
 						build_reply(&sreply, so, buf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
-						MD5_Init(&rctx);
-						MD5_Update(&rctx, (void *)&buf[2], len - 2);
-						MD5_Update(&rctx, (void *)address, strlen(address));
-						MD5_Final(rdigest, &rctx);
+						EVP_DigestInit_ex(rctx, md, NULL);
+						EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+						EVP_DigestUpdate(rctx, address, addrlen);
+						EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 						refusedtime = time(NULL);
 						slen = reply_refused(&sreply, &sretlen, NULL, 1);
 
@@ -1897,6 +1977,10 @@ axfrentry:
 							0, replybuf);
 
 							slen = reply_nxdomain(&sreply, &sretlen, cfg->db);
+							/* add this reply to the cache */
+							add_cache(&qc, &buf[2], len - 2, address, 
+									addrlen, sreply.replybuf, sretlen, md, crc);
+
 						}
 						goto udpout;
 						break;
@@ -1915,10 +1999,10 @@ axfrentry:
 							if (forward)
 								goto forwardudp;
 							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
-							MD5_Init(&rctx);
-							MD5_Update(&rctx, (void *)&buf[2], len - 2);
-							MD5_Update(&rctx, (void *)address, strlen(address));
-							MD5_Final(rdigest, &rctx);
+							EVP_DigestInit_ex(rctx, md, NULL);
+							EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+							EVP_DigestUpdate(rctx, address, addrlen);
+							EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 							refusedtime = time(NULL);
 
 
@@ -1947,11 +2031,11 @@ forwardudp:
 											snprintf(replystring, DNS_MAXNAME, "REFUSED");
 											build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
 
-											MD5_Init(&rctx);
-											MD5_Update(&rctx, (void *)&buf[2], len - 2);
-	MD5_Update(&rctx, (void *)address, strlen(address));
-											MD5_Final(rdigest, &rctx);
-	refusedtime = time(NULL);
+											EVP_DigestInit_ex(rctx, md, NULL);
+											EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+											EVP_DigestUpdate(rctx, address, addrlen);
+											EVP_DigestFinal_ex(rctx, rdigest, &md_len);
+											refusedtime = time(NULL);
 
 											slen = reply_refused(&sreply, &sretlen, cfg->db, 1);
 											goto udpout;
@@ -2054,6 +2138,9 @@ forwardudp:
 								replybuf);
 
 							slen = reply_noerror(&sreply, &sretlen, cfg->db);
+							/* add this reply to the cache */
+							add_cache(&qc, &buf[2], len - 2, address, 
+									addrlen, sreply.replybuf, sretlen, md, crc);
 
 							goto udpout;
 						} 
@@ -2069,6 +2156,9 @@ forwardudp:
 							0, replybuf);
 
 							slen = reply_ns(&sreply, &sretlen, cfg->db);
+							/* add this reply to the cache */
+							add_cache(&qc, &buf[2], len - 2, address, 
+									addrlen, sreply.replybuf, sretlen, md, crc);
 						} else {
 							slen = 0;
 							snprintf(replystring, DNS_MAXNAME, "DROP");
@@ -2122,6 +2212,9 @@ forwardudp:
 							replybuf);
 
 					slen = reply_notimpl(&sreply, &sretlen, NULL);
+					/* add this reply to the cache */
+					add_cache(&qc, &buf[2], len - 2, address, 
+							addrlen, sreply.replybuf, sretlen, md, crc);
 					snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					goto udpout;
 				}
@@ -2144,8 +2237,11 @@ forwardudp:
 						} else {
 							continue;
 						}
-							
+
 						slen = (*rl->reply)(&sreply, &sretlen, cfg->db);
+						/* add this reply to the cache */
+						add_cache(&qc, &buf[2], len - 2, address, 
+								addrlen, sreply.replybuf, sretlen, md, crc);
 						break;
 					} /* if rl->rrtype == */
 				}
@@ -2165,6 +2261,9 @@ forwardudp:
 							replybuf);
 
 						slen = reply_ns(&sreply, &sretlen, cfg->db);
+						/* add this reply to the cache */
+						add_cache(&qc, &buf[2], len - 2, address, 
+								addrlen, sreply.replybuf, sretlen, md, crc);
 					} else {
 
 
@@ -2173,6 +2272,10 @@ forwardudp:
 							replybuf);
 
 						slen = reply_notimpl(&sreply, &sretlen, NULL);
+						/* add this reply to the cache */
+						add_cache(&qc, &buf[2], len - 2, address, 
+								addrlen, sreply.replybuf, sretlen, md, crc);
+
 						snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					}
 				}
@@ -2190,7 +2293,7 @@ forwardudp:
 							* 1000) + \
 						(double)(rectv1.tv_usec - rectv0.tv_usec) / 1000;
 
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d, tta=%2.3fms) for \"%s\" type=%s class=%u, %s%s%sanswering \"%s\" (%d/%d)\n", so, cfg->ident[i], address, received_ttl, aregion, diffms, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, " : ""), (question->dnssecok ? "dnssecok, " : ""), (question->tsig.tsigverified ? "tsig, " : "") , replystring, len, slen);
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d, tta=%2.3fms) for \"%s\" type=%s class=%u, %s%s%sanswering \"%s\" (%d/%d) %x\n", so, cfg->ident[i], address, received_ttl, aregion, diffms, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, " : ""), (question->dnssecok ? "dnssecok, " : ""), (question->tsig.tsigverified ? "tsig, " : "") , replystring, len, slen, crc);
 
 				}
 
@@ -2277,6 +2380,10 @@ setup_primary(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 		exit(1);
 	}
 	if (unveil("/usr/local/sbin/delphinusdnsd", "rx")  < 0) {
+		perror("unveil");
+		exit(1);
+	}
+	if (unveil(NULL, NULL) < 0) {
 		perror("unveil");
 		exit(1);
 	}
@@ -3991,10 +4098,12 @@ setup_cortex(struct imsgbuf *ibuf)
 	}
 
 #if __OpenBSD__
+#if 0
 	if (unveil("/", "") == -1) {
 		dolog(LOG_INFO, "unveil cortex: %s\n", strerror(errno));
 		/* XXX notice no exit here */
 	}
+#endif
 
 	if (unveil(NULL, NULL) == -1) {
 		dolog(LOG_INFO, "unveil cortex: %s\n", strerror(errno));
@@ -4374,18 +4483,123 @@ sm_unlock(char *shm, size_t end)
 }
 
 int
-same_refused(u_char *old_digest, void *buf, int len, void *address, int addrlen)
+same_refused(EVP_MD *md, u_char *old_digest, void *buf, int len, void *address, int addrlen)
 {
-	MD5_CTX ctx;
+	EVP_MD_CTX *ctx;
 	u_char rdigest[MD5_DIGEST_LENGTH];	
+	u_int md_len;
 
-	MD5_Init(&ctx);
-	MD5_Update(&ctx, buf, len);
-	MD5_Update(&ctx, address, addrlen);
-	MD5_Final(rdigest, &ctx);
+	ctx = EVP_MD_CTX_new();
+	EVP_DigestInit_ex(ctx, md, NULL);
+	EVP_DigestUpdate(ctx, buf, len);
+	EVP_DigestUpdate(ctx, address, addrlen);
+	EVP_DigestFinal_ex(ctx, rdigest, &md_len);
+	EVP_MD_CTX_free(ctx);
+
+	if (md_len != MD5_DIGEST_LENGTH)
+		return (0);
 
 	if (memcmp(rdigest, old_digest, sizeof(rdigest)) == 0)
 		return (1);
 
 	return (0);
+}
+
+/*
+ * ADD_CACHE - add up to (size of cache) entries to the cache.
+ *
+ */
+
+int
+add_cache(struct querycache *qc, char *buf, int len, char *address, int addrlen,  char *reply, int replylen, EVP_MD *md, uint16_t crc)
+{
+	EVP_MD_CTX *ctx;
+	u_char rdigest[MD5_DIGEST_LENGTH];	
+	u_int md_len;
+
+	if (replylen > qc->bufsize)
+		return -1;
+
+	qc->cp = qc->cp % qc->cm;
+
+	memcpy(qc->cs[qc->cp].reply, reply, replylen);
+	qc->cs[qc->cp].replylen = replylen;
+
+	ctx = EVP_MD_CTX_new();
+	EVP_DigestInit_ex(ctx, md, NULL);
+	EVP_DigestUpdate(ctx, buf, len);
+	//EVP_DigestUpdate(ctx, address, addrlen);
+	EVP_DigestFinal_ex(ctx, rdigest, &md_len);
+	EVP_MD_CTX_free(ctx);
+
+	qc->cs[qc->cp].crc = crc;
+	memcpy(qc->cs[qc->cp].digest, rdigest, MD5_DIGEST_LENGTH);
+	qc->cs[qc->cp].requestlen = len + 2; /* XXX */
+
+	return 0;
+}
+
+int
+reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char *buf, int len, EVP_MD *md, uint16_t *crc)
+{
+	static EVP_MD_CTX *ctx = NULL;
+	u_char rdigest[MD5_DIGEST_LENGTH];	
+	u_int md_len;
+	int i, needhash = 1;
+
+	if (ctx == NULL)
+		ctx = EVP_MD_CTX_new();
+
+
+
+	for (i = 0; i < qc->cm; i++) {
+		if (len == qc->cs[i].requestlen) {
+			if (needhash) {
+				EVP_DigestInit_ex(ctx, md, NULL);
+				EVP_DigestUpdate(ctx, &buf[2], len - 2);
+				EVP_DigestFinal_ex(ctx, rdigest, &md_len);
+				needhash = 0;
+			}
+
+			if (memcmp(rdigest, qc->cs[i].digest, MD5_DIGEST_LENGTH) == 0) {
+				*crc = qc->cs[i].crc;	/* crc accounting */
+				memcpy(qc->cs[i].reply, buf, 2);    /* add query ID */
+				return (sendto(so, qc->cs[i].reply, 
+					qc->cs[i].replylen, 0, sa, salen));
+			}
+		}
+	}
+
+	return (0);
+}
+
+uint16_t
+crc16(uint8_t *buf, int len)
+{
+	uint16_t ret = 0;
+	int i, rem;
+
+	rem = len % 4;
+
+	for (i = 0; i < (len - rem); i += 4) {
+		ret += buf[i]; ret += buf[i + 1];
+		ret += buf[i + 2]; ret += buf[i + 3];
+	}
+
+	switch (rem) {
+	case 3:
+		ret += buf[(len - rem) + 0]; ret += buf[(len - rem) + 1];
+		ret += buf[(len - rem) + 2];
+		break;
+	case 2:
+		ret += buf[(len - rem) + 0]; ret += buf[(len - rem) + 1];
+		break;
+	case 1:
+		ret += buf[(len - rem) + 0];
+		break;
+	default:
+		break;
+	}
+
+	return (ret);
 }

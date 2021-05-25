@@ -4204,9 +4204,22 @@ drop_privs(char *chrootpath, struct passwd *pw)
 	}
 
 #if __OpenBSD__
-	if (unveil("/", "rwc") < 0) {
-		dolog(LOG_INFO, "unveil: %s\n", strerror(errno));
-		return -1;
+	/*
+	 * XXX - further research shows that we should "rwc" in /var/..
+	 * 	 but we don't need this in /home/_ddd if we just created
+	 * 	 the user with useradd -m _ddd for example...  If _ddd
+	 *	 has a $HOME that is right on /var this would cause problems.
+	 */
+	if (strcmp(chrootpath, pw->pw_dir) == 0) {
+		if (unveil("/", "r") < 0) {
+			dolog(LOG_INFO, "unveil: %s\n", strerror(errno));
+			return -1;
+		}
+	} else {
+		if (unveil("/", "rwc") < 0) {
+			dolog(LOG_INFO, "unveil: %s\n", strerror(errno));
+			return -1;
+		}
 	}
 #endif
 

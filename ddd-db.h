@@ -22,6 +22,7 @@
 #include <limits.h>
 
 #include <openssl/hmac.h>
+#include <openssl/md5.h>
 #include "ddd-config.h"
 
 #ifndef DEFAULT_CONFFILE
@@ -604,4 +605,17 @@ extern int pncmp(struct pnentry *, struct pnentry *);
 
 #define MAX_RECORDS_IN_RRSET		100		/* from sign.c */
 
+struct querycache {
+	int bufsize;
+	struct {
+		char digest[MD5_DIGEST_LENGTH];
+		uint16_t crc;
+		char *reply;
+		int replylen;
+		int requestlen;
+	} cs[10];
+	int cp;
+	int cm;
+};
+	
 #endif /* _DB_H */

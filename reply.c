@@ -346,7 +346,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -576,7 +577,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else { 
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+				reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -819,7 +821,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -1039,7 +1042,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -1255,7 +1259,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -1466,7 +1471,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -1675,7 +1681,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -1890,7 +1897,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -2108,7 +2116,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -2324,7 +2333,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -2464,7 +2474,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -2658,7 +2669,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -3018,7 +3030,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -3447,7 +3460,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -3808,7 +3822,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}	
 		}
@@ -4016,7 +4031,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -4288,7 +4304,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -4508,7 +4525,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -4629,7 +4647,8 @@ reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -4838,7 +4857,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -5047,7 +5067,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -5291,7 +5312,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -5505,7 +5527,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -5575,7 +5598,8 @@ reply_notimpl(struct sreply  *sreply, int *sretlen, ddDB *db)
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, len, 0, sa, salen)) < 0) {
+		if ((*sretlen = retlen = sendto(so, 
+				reply, len, 0, sa, salen)) < 0) {
 			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
@@ -5684,7 +5708,8 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 			if (q->rawsocket) {
 				*sretlen = retlen = outlen;
 			} else {
-				if ((retlen = sendto(so, reply, len, 0, sa, salen)) < 0) {
+				if ((*sretlen = retlen = sendto(so, 
+					reply, len, 0, sa, salen)) < 0) {
 					dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 				}
 			}
@@ -5988,7 +6013,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -6082,7 +6108,8 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
 		if (haveq && q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+				reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -6166,7 +6193,8 @@ reply_notauth(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -6254,7 +6282,8 @@ reply_notify(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -6320,7 +6349,8 @@ reply_fmterror(struct sreply *sreply, int *sretlen, ddDB *db)
 		}
 		free(tmpbuf);
 	} else {
-		if ((retlen = sendto(so, reply, sizeof(struct dns_header), 0, sa, salen)) < 0) {
+		if ((*sretlen = retlen = sendto(so, 
+			reply, sizeof(struct dns_header), 0, sa, salen)) < 0) {
 			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 		}
 	}
@@ -6420,7 +6450,8 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 			if (q->rawsocket) {
 				*sretlen = retlen = outlen;
 			} else {
-				if ((retlen = sendto(so, reply, len, 0, sa, salen)) < 0) {
+				if ((*sretlen = retlen = sendto(so, 
+					reply, len, 0, sa, salen)) < 0) {
 					dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 				}
 			}
@@ -6655,7 +6686,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -6783,7 +6815,8 @@ skip:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -8233,7 +8266,8 @@ reply_badvers(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
@@ -8452,7 +8486,8 @@ out:
 		if (q->rawsocket) {
 			*sretlen = retlen = outlen;
 		} else {
-			if ((retlen = sendto(so, reply, outlen, 0, sa, salen)) < 0) {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, outlen, 0, sa, salen)) < 0) {
 				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
 			}
 		}
