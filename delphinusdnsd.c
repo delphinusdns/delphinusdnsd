@@ -191,9 +191,15 @@ int			same_refused(EVP_MD *, u_char *, void *, int, void *, int);
 int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, EVP_MD *, uint16_t *);
 int			add_cache(struct querycache *, char *, int, char *, int,  char *, int, EVP_MD *, uint16_t);
 uint16_t		crc16(uint8_t *, int);
+int			intcmp(struct csnode *, struct csnode *);
+
+/* trees */
+
+RB_HEAD(qctree, csnode) qchead = RB_INITIALIZER(&qchead);
+RB_PROTOTYPE(qctree, csnode, entry, intcmp)
+RB_GENERATE(qctree, csnode, entry, intcmp)
 
 /* aliases */
-
 
 #define MYDB_PATH "/var/db/delphinusdns"
 
@@ -1333,6 +1339,8 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	u_char rdigest[MD5_DIGEST_LENGTH];
 	time_t refusedtime = 0;
 	uint16_t crc;
+	struct csnode *ni;
+	struct csentry *ei;
 
 	memset(&rectv0, 0, sizeof(struct timeval));
 	memset(&rectv1, 0, sizeof(struct timeval));
@@ -1409,6 +1417,14 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	qc.cm = sizeof(qc.cs) / sizeof(qc.cs[0]);
 	qc.cp = 0;
 
+	if ((ni = malloc(sizeof(struct csnode))) == NULL) {
+		dolog(LOG_ERR, "malloc: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+	ni->requestlen = QC_REQUESTSIZE;
+	TAILQ_INIT(&ni->head);
+
 	for (i = 0; i < qc.cm; i++) {
 		qc.cs[i].replylen = qc.bufsize;
 		qc.cs[i].reply = malloc(qc.bufsize);
@@ -1418,7 +1434,18 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 			ddd_shutdown();
 			exit(1);
 		}
+
+		if ((ei = malloc(sizeof(struct csentry))) == NULL) {
+			dolog(LOG_ERR, "malloc: %s\n", strerror(errno));
+			ddd_shutdown();
+			exit(1);
+		}
+		ei->cs = &qc.cs[i];
+		TAILQ_INSERT_HEAD(&ni->head, ei, entries);
 	}
+
+	/* we initialize the RB only once as its requestsize is static */
+	RB_INSERT(qctree, &qchead, ni);
 
 	udp_ibuf = register_cortex(ibuf, MY_IMSG_UDP);
 	if (udp_ibuf == NULL) {
@@ -4517,14 +4544,34 @@ add_cache(struct querycache *qc, char *buf, int len, char *address, int addrlen,
 	EVP_MD_CTX *ctx;
 	u_char rdigest[MD5_DIGEST_LENGTH];	
 	u_int md_len;
+	struct csnode *n, *res;
+	struct csentry *np;
 
 	if (replylen > qc->bufsize)
 		return -1;
 
 	qc->cp = (qc->cp + 1) % qc->cm;
+	
+	/* find the node tailq with the appropriate slot */
+	RB_FOREACH(n, qctree, &qchead) {
+		TAILQ_FOREACH(np, &n->head, entries)
+			if (np->cs == &qc->cs[qc->cp])
+				goto next;
+	}
 
-	memcpy(qc->cs[qc->cp].reply, reply, replylen);
-	qc->cs[qc->cp].replylen = replylen;
+	if (n == NULL) {
+		dolog(LOG_INFO, "querycache damaged\n");
+		return (-1);
+	}
+next:
+	/* remove the tailq */
+	TAILQ_REMOVE(&n->head, np, entries);
+	/* if the tree node is empty remove it too */
+	if (TAILQ_EMPTY(&n->head))
+		RB_REMOVE(qctree, &qchead, n);
+
+	memcpy(np->cs->reply, reply, replylen);
+	np->cs->replylen = replylen;
 
 	if (len > QC_REQUESTSIZE) {
 		ctx = EVP_MD_CTX_new();
@@ -4533,12 +4580,23 @@ add_cache(struct querycache *qc, char *buf, int len, char *address, int addrlen,
 		EVP_DigestFinal_ex(ctx, rdigest, &md_len);
 		EVP_MD_CTX_free(ctx);
 	} else {
-		memcpy(qc->cs[qc->cp].request, buf, len);
+		memcpy(np->cs->request, buf, len);
 	}
 
-	qc->cs[qc->cp].crc = crc;
-	memcpy(qc->cs[qc->cp].digest, rdigest, MD5_DIGEST_LENGTH);
-	qc->cs[qc->cp].requestlen = len + 2; /* XXX */
+	np->cs->crc = crc;
+	memcpy(np->cs->digest, rdigest, MD5_DIGEST_LENGTH);
+	np->cs->requestlen = len + 2; /* XXX */
+
+	n->requestlen = len + 2;
+	/* search for a node with the same length index */
+	if ((res = RB_FIND(qctree, &qchead, n)) == NULL) {
+		/* not found, insert what we have in a new node */
+		RB_INSERT(qctree, &qchead, n);
+		res = n;
+	}
+
+	/* add our tailq at the end of head */
+	TAILQ_INSERT_HEAD(&res->head, np, entries);
 
 	return 0;
 }
@@ -4549,15 +4607,20 @@ reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char 
 	static EVP_MD_CTX *ctx = NULL;
 	u_char rdigest[MD5_DIGEST_LENGTH];	
 	u_int md_len;
-	int i, needhash = 1;
+	int needhash = 1;
+	struct csnode find, *res;
+	struct csentry *np;
 
 	if (ctx == NULL)
 		ctx = EVP_MD_CTX_new();
 
-	for (i = 0; i < qc->cm; i++) {
-		if (len == qc->cs[i].requestlen) {
+	find.requestlen = len;
+	res = RB_FIND(qctree, &qchead, &find); 
+
+	if (res != NULL) {
+		TAILQ_FOREACH(np, &res->head, entries) {
 			if ((len - 2) <= QC_REQUESTSIZE) {
-				if (memcmp(&buf[2], qc->cs[i].request, len - 2) == 0) {
+				if (memcmp(&buf[2], np->cs->request, len - 2) == 0) {
 					goto sendit;
 				}
 			} else {
@@ -4568,7 +4631,7 @@ reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char 
 					needhash = 0;
 				}
 
-				if (memcmp(rdigest, qc->cs[i].digest, MD5_DIGEST_LENGTH) == 0) {
+				if (memcmp(rdigest, np->cs->digest, MD5_DIGEST_LENGTH) == 0) {
 					goto sendit;
 				}
 			}
@@ -4579,11 +4642,11 @@ reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char 
 
 sendit:
 
-	*crc = qc->cs[i].crc;					/* crc accounting */
-	memcpy(qc->cs[i].reply, buf, 2);    	/* add query ID */
+	*crc = np->cs->crc;					/* crc accounting */
+	memcpy(np->cs->reply, buf, 2);    	/* add query ID */
 
-	return (sendto(so, qc->cs[i].reply, 
-		qc->cs[i].replylen, 0, sa, salen));
+	return (sendto(so, np->cs->reply, 
+		np->cs->replylen, 0, sa, salen));
 	
 }
 
@@ -4616,4 +4679,11 @@ crc16(uint8_t *buf, int len)
 	}
 
 	return (ret);
+}
+
+int
+intcmp(struct csnode *e1, struct csnode *e2)
+{
+	return (e1->requestlen < e2->requestlen ? -1 : e1->requestlen > \
+		e2->requestlen);
 }

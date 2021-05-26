@@ -605,16 +605,32 @@ extern int pncmp(struct pnentry *, struct pnentry *);
 
 #define MAX_RECORDS_IN_RRSET		100		/* from sign.c */
 
+/* querycache stuff below here */
+
+struct cs {
+	char digest[MD5_DIGEST_LENGTH];
+	uint16_t crc;
+	char *request;
+	int requestlen;
+	char *reply;
+	int replylen;
+}; 
+
+struct csentry {
+	TAILQ_ENTRY(csentry) entries;
+	struct cs *cs;
+};
+
+struct csnode {
+	RB_ENTRY(csnode) entry;
+	TAILQ_HEAD(, csentry) head;
+	int requestlen;
+};
+
 struct querycache {
 	int bufsize;
-	struct {
-		char digest[MD5_DIGEST_LENGTH];
-		uint16_t crc;
-		char *request;
-		int requestlen;
-		char *reply;
-		int replylen;
-	} cs[10];
+	struct csnode tree;
+	struct cs cs[10];
 	int cp;
 	int cm;
 };
