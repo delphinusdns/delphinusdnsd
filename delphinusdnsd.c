@@ -4544,7 +4544,7 @@ add_cache(struct querycache *qc, char *buf, int len, char *address, int addrlen,
 	EVP_MD_CTX *ctx;
 	u_char rdigest[MD5_DIGEST_LENGTH];	
 	u_int md_len;
-	struct csnode *n, *res;
+	struct csnode *n, *res, find;
 	struct csentry *np;
 
 	if (replylen > qc->bufsize)
@@ -4567,8 +4567,10 @@ next:
 	/* remove the tailq */
 	TAILQ_REMOVE(&n->head, np, entries);
 	/* if the tree node is empty remove it too */
-	if (TAILQ_EMPTY(&n->head))
+	if (TAILQ_EMPTY(&n->head)) {
 		RB_REMOVE(qctree, &qchead, n);
+		free(n);
+	}
 
 	memcpy(np->cs->reply, reply, replylen);
 	np->cs->replylen = replylen;
@@ -4587,10 +4589,20 @@ next:
 	memcpy(np->cs->digest, rdigest, MD5_DIGEST_LENGTH);
 	np->cs->requestlen = len + 2; /* XXX */
 
-	n->requestlen = len + 2;
+		
+	find.requestlen = len + 2;
 	/* search for a node with the same length index */
-	if ((res = RB_FIND(qctree, &qchead, n)) == NULL) {
+	if ((res = RB_FIND(qctree, &qchead, &find)) == NULL) {
 		/* not found, insert what we have in a new node */
+		n = malloc(sizeof(struct csnode));
+		if (n == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+			return -1;
+		}
+
+		n->requestlen = len + 2;
+		TAILQ_INIT(&n->head);
+			
 		RB_INSERT(qctree, &qchead, n);
 		res = n;
 	}
