@@ -965,7 +965,8 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		qlen = question->hdr->namelen;
 
 		if (have_zone(q, qlen) != 1) {
-			dolog(LOG_INFO, "not in our list of zones, drop\n");
+			dolog(LOG_INFO, "%s not in our list of zones, drop\n",
+				question->converted_name);
 			goto drop;
 		}
 
