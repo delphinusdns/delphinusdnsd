@@ -614,6 +614,9 @@ struct cs {
 	int requestlen;
 	char *reply;
 	int replylen;
+	char *domainname;
+	uint16_t type;
+	uint16_t class;
 }; 
 
 struct csentry {
