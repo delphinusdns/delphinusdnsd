@@ -1,4 +1,4 @@
-/*	$OpenBSD: imsg-buffer.c,v 1.3 2013/11/13 20:40:24 benno Exp $	*/
+/*	$OpenBSD: imsg-buffer.c,v 1.13 2021/03/31 17:42:24 eric Exp $	*/
 
 /*
  * Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -21,16 +21,18 @@
 #include <sys/socket.h>
 #include <sys/uio.h>
 
+#include <limits.h>
 #include <errno.h>
-#include <stdlib.h>
+#include <bsd/stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+
 #include "imsg.h"
 
-int	ibuf_realloc(struct ibuf *, size_t);
-void	ibuf_enqueue(struct msgbuf *, struct ibuf *);
-void	ibuf_dequeue(struct msgbuf *, struct ibuf *);
+static int	ibuf_realloc(struct ibuf *, size_t);
+static void	ibuf_enqueue(struct msgbuf *, struct ibuf *);
+static void	ibuf_dequeue(struct msgbuf *, struct ibuf *);
 
 struct ibuf *
 ibuf_open(size_t len)
@@ -66,18 +68,18 @@ ibuf_dynamic(size_t len, size_t max)
 	return (buf);
 }
 
-int
+static int
 ibuf_realloc(struct ibuf *buf, size_t len)
 {
-	u_char	*b;
+	unsigned char	*b;
 
 	/* on static buffers max is eq size and so the following fails */
 	if (buf->wpos + len > buf->max) {
-		errno = ENOMEM;
+		errno = ERANGE;
 		return (-1);
 	}
 
-	b = realloc(buf->buf, buf->wpos + len);
+	b = reallocarray(buf->buf, buf->wpos + len, 1);
 	if (b == NULL)
 		return (-1);
 	buf->buf = b;
@@ -148,7 +150,7 @@ ibuf_write(struct msgbuf *msgbuf)
 	unsigned int	 i = 0;
 	ssize_t	n;
 
-	bzero(&iov, sizeof(iov));
+	memset(&iov, 0, sizeof(iov));
 	TAILQ_FOREACH(buf, &msgbuf->bufs, entry) {
 		if (i >= IOV_MAX)
 			break;
@@ -179,6 +181,10 @@ again:
 void
 ibuf_free(struct ibuf *buf)
 {
+	if (buf == NULL)
+		return;
+	
+	memset(buf->buf, 0, buf->size);
 	free(buf->buf);
 	free(buf);
 }
@@ -222,7 +228,7 @@ int
 msgbuf_write(struct msgbuf *msgbuf)
 {
 	struct iovec	 iov[IOV_MAX];
-	struct ibuf	*buf;
+	struct ibuf	*buf, *buf0 = NULL;
 	unsigned int	 i = 0;
 	ssize_t		 n;
 	struct msghdr	 msg;
@@ -232,29 +238,32 @@ msgbuf_write(struct msgbuf *msgbuf)
 		char		buf[CMSG_SPACE(sizeof(int))];
 	} cmsgbuf;
 
-	bzero(&iov, sizeof(iov));
-	bzero(&msg, sizeof(msg));
+	memset(&iov, 0, sizeof(iov));
+	memset(&msg, 0, sizeof(msg));
+	memset(&cmsgbuf, 0, sizeof(cmsgbuf));
 	TAILQ_FOREACH(buf, &msgbuf->bufs, entry) {
 		if (i >= IOV_MAX)
+			break;
+		if (i > 0 && buf->fd != -1)
 			break;
 		iov[i].iov_base = buf->buf + buf->rpos;
 		iov[i].iov_len = buf->wpos - buf->rpos;
 		i++;
 		if (buf->fd != -1)
-			break;
+			buf0 = buf;
 	}
 
 	msg.msg_iov = iov;
 	msg.msg_iovlen = i;
 
-	if (buf != NULL && buf->fd != -1) {
+	if (buf0 != NULL) {
 		msg.msg_control = (caddr_t)&cmsgbuf.buf;
 		msg.msg_controllen = sizeof(cmsgbuf.buf);
 		cmsg = CMSG_FIRSTHDR(&msg);
 		cmsg->cmsg_len = CMSG_LEN(sizeof(int));
 		cmsg->cmsg_level = SOL_SOCKET;
 		cmsg->cmsg_type = SCM_RIGHTS;
-		*(int *)CMSG_DATA(cmsg) = buf->fd;
+		*(int *)CMSG_DATA(cmsg) = buf0->fd;
 	}
 
 again:
@@ -275,9 +284,9 @@ again:
 	 * assumption: fd got sent if sendmsg sent anything
 	 * this works because fds are passed one at a time
 	 */
-	if (buf != NULL && buf->fd != -1) {
-		close(buf->fd);
-		buf->fd = -1;
+	if (buf0 != NULL) {
+		close(buf0->fd);
+		buf0->fd = -1;
 	}
 
 	msgbuf_drain(msgbuf, n);
@@ -285,14 +294,14 @@ again:
 	return (1);
 }
 
-void
+static void
 ibuf_enqueue(struct msgbuf *msgbuf, struct ibuf *buf)
 {
 	TAILQ_INSERT_TAIL(&msgbuf->bufs, buf, entry);
 	msgbuf->queued++;
 }
 
-void
+static void
 ibuf_dequeue(struct msgbuf *msgbuf, struct ibuf *buf)
 {
 	TAILQ_REMOVE(&msgbuf->bufs, buf, entry);
