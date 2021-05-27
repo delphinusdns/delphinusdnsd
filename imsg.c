@@ -20,6 +20,9 @@
 #include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include <errno.h>
 #include <stdio.h>
@@ -306,22 +309,103 @@ imsg_clear(struct imsgbuf *ibuf)
 }
 
 static int
-getdtablecount(void)
+setbit(int fd, uint8_t *bitmap)
 {
-	char path[PATH_MAX];
-	DIR *dirp;
-	struct dirent *dp;
+	int block;
+	int bit;
+
+	block = fd / 8;
+	bit = fd % 8;
+
+	bitmap[block] |= (1 << bit);
+
+	return (block);
+}
+
+static int
+countbitmap(uint8_t *bitmap, int limit)
+{
+	int i;
+	int block, bit;
 	int ret = 0;
 
-	snprintf(path, sizeof(path), "/proc/%d/fd/", getpid());
-	dirp = opendir(path);
-	if (dirp == NULL) {
-		return (0); 	/* lies! (but better than -1) */
-	}
-	while ((dp = readdir(dirp)) != NULL)
-		ret++;
+	for (i = 0; i < limit; i++) {
+		block = i / 8;
+		bit = i % 8;
 
-	closedir(dirp);
+		if (bitmap[block] & (1 << bit))
+			ret++;
+	}
 	
 	return (ret);
+}
+
+
+/*
+ * really there is no way to know what descriptors are open in linux in an
+ * atomic manner, this function is really bad for general usage, but it may
+ * do it for my daemon, AND you don't know how many glasses of vodkas I had!
+ */
+
+#ifndef MIN
+#define     MIN(a,b) (((a)<(b))?(a):(b))
+#endif
+
+static int
+getdtablecount(void)
+{
+	int fd, i = 0, save;
+	struct rlimit rl;
+	struct stat sb;
+	static char *bitmap = NULL;
+	static int bc = 0, hb = 0;
+	int block, bit;
+
+	if (getrlimit(RLIMIT_NOFILE, &rl) < 0)
+		return 0;
+
+	if (bitmap == NULL) {
+		bitmap = calloc((rl.rlim_cur + 7) / 8, 1);
+		if (bitmap == NULL)
+			return (rl.rlim_cur); /* XXX */
+	
+		goto scanbitmap;
+	}
+
+	for (fd = 0; fd <= (hb * 8); fd++) {
+		block = fd / 8;
+		bit = fd % 8;
+
+		if (bitmap[block] & (1 << bit)) {
+			if (fstat(fd, &sb) == 0)
+				i++;
+		}
+	}
+
+	if (i != bc) {
+		/* scan entire bitmap again */
+		memset(bitmap, 0, (rl.rlim_cur + 7) / 8);
+		goto scanbitmap;
+	} else {
+		save = (hb * 8);
+		for (fd = save + 1; fd < MIN(rl.rlim_cur, save + 128); fd++) {
+			if (fstat(fd, &sb) == 0) {
+				hb = setbit(fd, bitmap);
+			}
+		}
+	}
+
+	bc = countbitmap((uint8_t *)bitmap, rl.rlim_cur);	
+	return (bc);
+
+scanbitmap:
+
+	for (fd = 0; fd < rl.rlim_cur; fd++) {
+		if (fstat(fd, &sb) == 0) {
+			hb = setbit(fd, bitmap);
+		}
+	}
+
+	bc = countbitmap((uint8_t *)bitmap, rl.rlim_cur);	
+	return (bc);
 }
