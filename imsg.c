@@ -21,7 +21,6 @@
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <sys/time.h>
-#include <sys/resource.h>
 
 #include <errno.h>
 #include <stdio.h>
@@ -29,7 +28,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <dirent.h>
-#include <fcntl.h>
 
 #include "imsg.h"
 
