@@ -354,7 +354,7 @@ countbitmap(uint8_t *bitmap, int limit)
 static int
 getdtablecount(void)
 {
-	int fd, i = 0, save;
+	int fd, i = 0, save, limit;
 	struct rlimit rl;
 	struct stat sb;
 	static char *bitmap = NULL;
@@ -365,15 +365,24 @@ getdtablecount(void)
 		return 0;
 
 	if (bitmap == NULL) {
-		bitmap = calloc((rl.rlim_cur + 7) / 8, 1);
+		bitmap = calloc((rl.rlim_max + 7) / 8, 1);
 		if (bitmap == NULL)
 			return (rl.rlim_cur); /* XXX */
 	
-		goto scanbitmap;
+		for (fd = 0; fd < rl.rlim_cur; fd++) {
+			if (fstat(fd, &sb) == 0) {
+				hb = setbit(fd, bitmap);
+			}
+		}
+
+		bc = countbitmap((uint8_t *)bitmap, rl.rlim_cur);	
+		return (bc);
 	}
 
 	/* check for filled holes */
 	save = (hb + 1) * 8;
+	limit = MIN(rl.rlim_cur, save + 64);
+
 	for (fd = 0; fd <= save; fd++) {
 		block = fd / 8;
 		bit = fd % 8;
@@ -385,24 +394,11 @@ getdtablecount(void)
 	}
 
 	if (i != bc) {
-		/* scan entire bitmap again */
-		memset(bitmap, 0, (rl.rlim_cur + 7) / 8);
-		goto scanbitmap;
-	} else {
-		/* I don't expect holes over 64 in size per process */
-		for (fd = save + 1; fd < MIN(rl.rlim_cur, save + 64); fd++) {
-			if (fstat(fd, &sb) == 0) {
-				hb = setbit(fd, bitmap);
-			}
-		}
+		/* increase limit to max, scan the entire range */
+		limit = rl.rlim_cur;
 	}
 
-	bc = countbitmap((uint8_t *)bitmap, rl.rlim_cur);	
-	return (bc);
-
-scanbitmap:
-
-	for (fd = 0; fd < rl.rlim_cur; fd++) {
+	for (fd = save + 1; fd < limit; fd++) {
 		if (fstat(fd, &sb) == 0) {
 			hb = setbit(fd, bitmap);
 		}
