@@ -372,13 +372,15 @@ getdtablecount(void)
 		goto scanbitmap;
 	}
 
-	for (fd = 0; fd <= (hb * 8); fd++) {
+	/* check for filled holes */
+	save = (hb + 1) * 8;
+	for (fd = 0; fd <= save; fd++) {
 		block = fd / 8;
 		bit = fd % 8;
 
-		if (bitmap[block] & (1 << bit)) {
-			if (fstat(fd, &sb) == 0)
-				i++;
+		if (fstat(fd, &sb) == 0) {
+			hb = setbit(fd, bitmap);
+			i++;
 		}
 	}
 
@@ -387,8 +389,8 @@ getdtablecount(void)
 		memset(bitmap, 0, (rl.rlim_cur + 7) / 8);
 		goto scanbitmap;
 	} else {
-		save = (hb * 8);
-		for (fd = save + 1; fd < MIN(rl.rlim_cur, save + 128); fd++) {
+		/* I don't expect holes over 64 in size per process */
+		for (fd = save + 1; fd < MIN(rl.rlim_cur, save + 64); fd++) {
 			if (fstat(fd, &sb) == 0) {
 				hb = setbit(fd, bitmap);
 			}
