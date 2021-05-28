@@ -20,7 +20,6 @@
 #include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
-#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 
@@ -30,13 +29,37 @@
 #include <string.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <fcntl.h>
 
 #include "imsg.h"
 
 int	 imsg_fd_overhead = 0;
 
 static int	 imsg_get_fd(struct imsgbuf *);
-static int	 getdtablecount(void);
+
+static int
+available_fds(unsigned int n)
+{
+	unsigned int	i;
+	int		ret, fds[256];
+
+	if (n > (sizeof(fds)/sizeof(fds[0])))
+		return (1);
+
+	ret = 0;
+	for (i = 0; i < n; i++) {
+		fds[i] = -1;
+		if ((fds[i] = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+			ret = 1;
+			break;
+		}
+	}
+
+	for (i = 0; i < n && fds[i] >= 0; i++)
+		close(fds[i]);
+
+	return (ret);
+}
 
 void
 imsg_init(struct imsgbuf *ibuf, int fd)
@@ -77,14 +100,13 @@ imsg_read(struct imsgbuf *ibuf)
 		return (-1);
 
 again:
-	if (getdtablecount() + imsg_fd_overhead +
-	    (int)((CMSG_SPACE(sizeof(int))-CMSG_SPACE(0))/sizeof(int))
-	    >= getdtablesize()) {
+	if (available_fds(imsg_fd_overhead +
+	    (CMSG_SPACE(sizeof(int))-CMSG_SPACE(0))/sizeof(int))) {
 		errno = EAGAIN;
 		free(ifd);
 		return (-1);
 	}
-
+	
 	if ((n = recvmsg(ibuf->fd, &msg, 0)) == -1) {
 		if (errno == EINTR)
 			goto again;
@@ -306,104 +328,4 @@ imsg_clear(struct imsgbuf *ibuf)
 	msgbuf_clear(&ibuf->w);
 	while ((fd = imsg_get_fd(ibuf)) != -1)
 		close(fd);
-}
-
-static int
-setbit(int fd, uint8_t *bitmap)
-{
-	int block;
-	int bit;
-
-	block = fd / 8;
-	bit = fd % 8;
-
-	bitmap[block] |= (1 << bit);
-
-	return (block);
-}
-
-static int
-countbitmap(uint8_t *bitmap, int limit)
-{
-	int i;
-	int block, bit;
-	int ret = 0;
-
-	for (i = 0; i < limit; i++) {
-		block = i / 8;
-		bit = i % 8;
-
-		if (bitmap[block] & (1 << bit))
-			ret++;
-	}
-	
-	return (ret);
-}
-
-
-/*
- * really there is no way to know what descriptors are open in linux in an
- * atomic manner, this function is really bad for general usage, but it may
- * do it for my daemon, AND you don't know how many glasses of vodkas I had!
- */
-
-#ifndef MIN
-#define     MIN(a,b) (((a)<(b))?(a):(b))
-#endif
-
-static int
-getdtablecount(void)
-{
-	int fd, i = 0, save, limit;
-	struct rlimit rl;
-	struct stat sb;
-	static char *bitmap = NULL;
-	static int bc = 0, hb = 0;
-	int block, bit;
-
-	if (getrlimit(RLIMIT_NOFILE, &rl) < 0)
-		return 0;
-
-	if (bitmap == NULL) {
-		bitmap = calloc((rl.rlim_max + 7) / 8, 1);
-		if (bitmap == NULL)
-			return (rl.rlim_cur); /* XXX */
-	
-		for (fd = 0; fd < rl.rlim_cur; fd++) {
-			if (fstat(fd, &sb) == 0) {
-				hb = setbit(fd, bitmap);
-			}
-		}
-
-		bc = countbitmap((uint8_t *)bitmap, rl.rlim_cur);	
-		return (bc);
-	}
-
-	/* check for filled holes */
-	save = (hb + 1) * 8;
-	limit = MIN(rl.rlim_cur, save + 64);
-
-	for (fd = 0; fd <= save; fd++) {
-		block = fd / 8;
-		bit = fd % 8;
-
-		if (fstat(fd, &sb) == 0) {
-			hb = setbit(fd, bitmap);
-			i++;
-		}
-	}
-
-	if (i != bc) {
-		/* increase limit to max, scan the entire range */
-		limit = rl.rlim_cur;
-	}
-
-	for (fd = save + 1; fd < limit; fd++) {
-		if (fstat(fd, &sb) == 0) {
-			hb = setbit(fd, bitmap);
-		}
-	}
-
-	bc = countbitmap((uint8_t *)bitmap, rl.rlim_cur);	
-	return (bc);
 }
