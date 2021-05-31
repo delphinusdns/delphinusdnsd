@@ -124,6 +124,11 @@ void zonemd_hash_caa(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_mx(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_tlsa(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_sshfp(SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_ds(SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_dnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_rrsig(SHA512_CTX *, struct rrset *, struct rbtree *, int);
+void zonemd_hash_nsec3(SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_nsec3param(SHA512_CTX *, struct rrset *, struct rbtree *);
 struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
 
 char *canonical_sort(char **, int, int *);
@@ -4119,4 +4124,432 @@ zonemd_hash_zonemd(struct rrset *rrset, struct rbtree *rbt)
 	memcpy(zonemd, rrp->rdata, sizeof(struct zonemd));
 
 	return (zonemd);
+}
+
+void
+zonemd_hash_ds(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_DS));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+		pack16(q, htons(2 + 1 + 1 + ((struct ds *)rrp2->rdata)->digestlen));
+		q += 2;
+		pack16(q, htons(((struct ds *)rrp2->rdata)->key_tag));
+		q += 2;
+		pack8(q, ((struct ds *)rrp2->rdata)->algorithm);
+		q++;
+		pack8(q, ((struct ds *)rrp2->rdata)->digest_type);
+		q++;
+		pack(q, ((struct ds *)rrp2->rdata)->digest, ((struct ds *)rrp2->rdata)->digestlen);
+		q += ((struct ds *)rrp2->rdata)->digestlen;
+		
+		r = canonsort[csort] = malloc(68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+		
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+
+		csort++;
+	}
+
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+	free(tmpkey);
+
+}
+
+void
+zonemd_hash_dnskey(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_DNSKEY));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+		pack16(q, htons(2 + 1 + 1 + ((struct dnskey *)rrp2->rdata)->publickey_len));
+		q += 2;
+		pack16(q, htons(((struct dnskey *)rrp2->rdata)->flags));
+		q += 2;
+		pack8(q, ((struct dnskey *)rrp2->rdata)->protocol);
+		q++;
+		pack8(q, ((struct dnskey *)rrp2->rdata)->algorithm);
+		q++;
+		pack(q, ((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len);
+		q += ((struct dnskey *)rrp2->rdata)->publickey_len;
+		
+		r = canonsort[csort] = malloc(68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+		
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+
+		csort++;
+	}
+
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+	free(tmpkey);
+
+}
+
+void
+zonemd_hash_rrsig(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt, int skip_zonemd)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		if (skip_zonemd && 
+			((struct rrsig *)rrp2->rdata)->type_covered == \
+			DNS_TYPE_ZONEMD)
+			continue;
+	
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_RRSIG));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+		pack16(q, htons(2 + 1 + 1 + 4 + 4 + 4 + 2 + ((struct rrsig *)rrp2->rdata)->signame_len) + ((struct rrsig *)rrp2->rdata)->signature_len);
+		q += 2;
+		pack16(q, htons(((struct rrsig *)rrp2->rdata)->type_covered));
+		q += 2;
+		pack8(q, ((struct rrsig *)rrp2->rdata)->algorithm);
+		q++;
+		pack8(q, ((struct rrsig *)rrp2->rdata)->labels);
+		q++;
+		pack32(q, htonl(((struct rrsig *)rrp2->rdata)->original_ttl));
+		q += 4;
+		pack32(q, htonl(((struct rrsig *)rrp2->rdata)->signature_expiration));
+		q += 4;
+		pack32(q, htonl(((struct rrsig *)rrp2->rdata)->signature_inception));
+		q += 4;
+		pack16(q, htons(((struct rrsig *)rrp2->rdata)->key_tag));
+		q += 2;
+		pack(q, ((struct rrsig *)rrp2->rdata)->signers_name, ((struct rrsig *)rrp2->rdata)->signame_len);
+		q += ((struct rrsig *)rrp2->rdata)->signame_len;
+		pack(q, ((struct rrsig *)rrp2->rdata)->signature, ((struct rrsig *)rrp2->rdata)->signature_len);
+		q += ((struct rrsig *)rrp2->rdata)->signature_len;
+		
+		r = canonsort[csort] = malloc(68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+		
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+
+		csort++;
+	}
+
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+	free(tmpkey);
+
+}
+
+void
+zonemd_hash_nsec3(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_NSEC3));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+		pack16(q, htons(1 + 1 + 2 + 1 + 1 + ((struct nsec3 *)rrp2->rdata)->saltlen) + ((struct nsec3 *)rrp2->rdata)->nextlen + ((struct nsec3 *)rrp2->rdata)->bitmap_len);
+		q += 2;
+		pack8(q, ((struct nsec3 *)rrp2->rdata)->algorithm);
+		q++;
+		pack8(q, ((struct nsec3 *)rrp2->rdata)->flags);
+		q++;
+		pack16(q, htons(((struct nsec3 *)rrp2->rdata)->iterations));
+		q += 2;
+		pack8(q, ((struct nsec3 *)rrp2->rdata)->saltlen);
+		q += 2;
+		pack(q, ((struct nsec3 *)rrp2->rdata)->salt, ((struct nsec3 *)rrp2->rdata)->saltlen);
+		q += ((struct nsec3 *)rrp2->rdata)->saltlen;
+		pack8(q, ((struct nsec3 *)rrp2->rdata)->nextlen);
+		q++;
+		pack(q, ((struct nsec3 *)rrp2->rdata)->next, ((struct nsec3 *)rrp2->rdata)->nextlen);
+		q += ((struct nsec3 *)rrp2->rdata)->nextlen;
+		pack(q, ((struct nsec3 *)rrp2->rdata)->bitmap, ((struct nsec3 *)rrp2->rdata)->bitmap_len);
+		q += ((struct nsec3 *)rrp2->rdata)->bitmap_len;
+		
+		r = canonsort[csort] = malloc(68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+		
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+
+		csort++;
+	}
+
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+	free(tmpkey);
+}
+
+void
+zonemd_hash_nsec3param(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_NSEC3PARAM));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+		pack16(q, htons(1 + 1 + 2 + 1 + ((struct nsec3 *)rrp2->rdata)->saltlen));
+		q += 2;
+		pack8(q, ((struct nsec3 *)rrp2->rdata)->algorithm);
+		q++;
+		pack8(q, ((struct nsec3 *)rrp2->rdata)->flags);
+		q++;
+		pack16(q, htons(((struct nsec3 *)rrp2->rdata)->iterations));
+		q += 2;
+		pack8(q, ((struct nsec3 *)rrp2->rdata)->saltlen);
+		q += 2;
+		pack(q, ((struct nsec3 *)rrp2->rdata)->salt, ((struct nsec3 *)rrp2->rdata)->saltlen);
+		q += ((struct nsec3 *)rrp2->rdata)->saltlen;
+		
+		r = canonsort[csort] = malloc(68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+		
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+
+		csort++;
+	}
+
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+	free(tmpkey);
 }

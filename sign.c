@@ -115,6 +115,7 @@ static struct keysentry {
 
 int	add_dnskey(ddDB *);
 int	add_zonemd(ddDB *, char *, int);
+int	fixup_zonemd(ddDB *, char *, int, int);
 char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
 char *  key2zone(char *, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
 char *  get_key(struct keysentry *,uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int, int *);
@@ -131,6 +132,7 @@ int 	construct_nsec3(ddDB *, char *, int, char *);
 int 	calculate_rrsigs(ddDB *, char *, int, int);
 
 static int	sign_hinfo(ddDB *, char *, int, struct rbtree *, int);
+static int	sign_zonemd(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_rp(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_caa(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_dnskey(ddDB *, char *, int, struct rbtree *, int);
@@ -249,6 +251,11 @@ extern void zonemd_hash_caa(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_mx(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_tlsa(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_sshfp(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_ds(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_dnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_rrsig(SHA512_CTX *, struct rrset *, struct rbtree *, int);
+extern void zonemd_hash_nsec3(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_nsec3param(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
 
 extern char *		canonical_sort(char **, int, int *);
@@ -418,6 +425,7 @@ signmain(int argc, char *argv[])
 	int algorithm = ALGORITHM_ECDSAP256SHA256;
 	int expiry = DEFAULT_EXPIRYTIME;
 	int iterations = 10;
+	int zonemd = 0;
 	u_int32_t mask = (MASK_PARSE_FILE | MASK_ADD_DNSKEY | MASK_CONSTRUCT_NSEC3 | MASK_CALCULATE_RRSIGS | MASK_CREATE_DS | MASK_DUMP_DB);
 
 	char *salt = "-";
@@ -455,7 +463,7 @@ signmain(int argc, char *argv[])
 #endif
 
 
-	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:m:n:o:R:S:s:t:vXx:Zz:")) != -1) {
+	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:Mm:n:o:R:S:s:t:vXx:Zz:")) != -1) {
 		switch (ch) {
 		case 'a':
 			/* algorithm */
@@ -540,6 +548,10 @@ signmain(int argc, char *argv[])
 			numkeys++;
 			numksk++;
 
+			break;
+
+		case 'M':
+			zonemd = 1;
 			break;
 
 		case 'm':
@@ -871,6 +883,11 @@ signmain(int argc, char *argv[])
 		dolog(LOG_INFO, "parsing config file failed\n");
 		exit(1);
 	}
+	
+	if (zonemd) {
+		/* add placeholder */
+		add_zonemd(db, zonename, 0);
+	}
 
 	/* create ENT list */
 	if (init_entlist(db) < 0) {
@@ -910,6 +927,12 @@ signmain(int argc, char *argv[])
 			dolog(LOG_INFO, "create_ds failed\n");
 			exit(1);
 		}
+	}
+
+	/* fixup zonemd */
+	if (zonemd) {
+		if (fixup_zonemd(db, zonename, expiry, rollmethod) < 0)
+			exit(1);
 	}
 
 	/* free private keys */
@@ -1858,6 +1881,12 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 		if ((rrset = find_rr(rbt, DNS_TYPE_HINFO)) != NULL) {
 			if (sign_hinfo(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_hinfo error\n");
+				return -1;
+			}
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_ZONEMD)) != NULL) {
+			if (sign_zonemd(db, zonename, expiry, rbt, rollmethod) < 0) {
+				fprintf(stderr, "sign_zonemd error\n");
 				return -1;
 			}
 		}
@@ -4344,6 +4373,227 @@ sign_rp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 }
 
 static int
+sign_zonemd(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
+{
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
+
+	char tmp[4096];
+	char signature[4096];
+	char shabuf[64];
+	
+
+	char *dnsname;
+	char *p, *q, *r;
+	char **canonsort;
+	char *key, *tmpkey;
+	char *zone;
+
+	uint32_t ttl;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
+
+	int labellen;
+	int keyid;
+	int len, rlen, clen, i;
+	int keylen, siglen = sizeof(signature);
+	int labels;
+	int nzk = 0;
+	int csort = 0;
+
+	char timebuf[32];
+	struct tm tm;
+	u_int32_t expiredon2, signedon2;
+
+	memset(&shabuf, 0, sizeof(shabuf));
+
+	key = malloc(10 * 4096);
+	if (key == NULL) {
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
+		return -1;
+	}
+	
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
+		return -1;
+	}
+
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
+		}
+	}
+
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag(key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			return -1;
+		}
+		
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
+
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
+
+		if ((rrset = find_rr(rbt, DNS_TYPE_ZONEMD)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no ZONEMD records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no ZONEMD records\n");
+			return -1;
+		}
+		
+		p = key;
+
+		pack16(p, htons(DNS_TYPE_ZONEMD));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(rrset->ttl));
+		p += 4;
+			
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
+
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_ZONEMD));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(rrset->ttl));
+			q += 4;
+			pack16(q, htons(4 + 1 + 1 + ((struct zonemd *)rrp2->rdata)->hashlen));
+			q += 2;
+
+			pack32(q, htonl(((struct zonemd *)rrp2->rdata)->serial));
+			q += 4;
+			pack8(q, ((struct zonemd *)rrp2->rdata)->scheme);
+			q++;
+			pack8(q, ((struct zonemd *)rrp2->rdata)->algorithm);
+			q++;
+			pack(q, ((struct zonemd *)rrp2->rdata)->hash, ((struct zonemd *)rrp2->rdata)->hashlen);
+			q += ((struct zonemd *)rrp2->rdata)->hashlen;
+
+			r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
+
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
+
+			csort++;
+		}
+
+
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
+		}
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
+
+		keylen = (p - key);	
+
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "ZONEMD", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+		
+	} while ((*++zsk_key) != NULL);
+
+	return 0;
+}
+
+static int
 sign_hinfo(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 {
 	struct rrset *rrset = NULL;
@@ -6555,16 +6805,18 @@ store_private_key(struct keysentry *kn, char *zonename, int keyid, int algorithm
 }
 
 int
-add_zonemd(ddDB *db, char *zonename, int check)
+fixup_zonemd(ddDB *db, char *zonename, int expiry, int rollmethod)
 {
 	struct rbtree *rbt = NULL;
 	struct node *n, *nx;
-	struct zonemd *zonemd = NULL;
 	int rs;
 	uint32_t serial;
 	struct rrset *rrset = NULL;
+	struct rr *rrp;
 	SHA512_CTX ctx;
 	uint8_t sharesult[SHA384_DIGEST_LENGTH];
+	char *dnsname;
+	int labellen;
 
 	SHA384_Init(&ctx);
 
@@ -6622,6 +6874,159 @@ add_zonemd(ddDB *db, char *zonename, int check)
 		if ((rrset = find_rr(rbt, DNS_TYPE_CAA)) != NULL) {
 			zonemd_hash_caa(&ctx, rrset, rbt);
 		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
+			zonemd_hash_ds(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
+			zonemd_hash_dnskey(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) != NULL) {
+			zonemd_hash_rrsig(&ctx, rrset, rbt, 1); /*skip zonemd*/
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
+			zonemd_hash_nsec3(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
+			zonemd_hash_nsec3param(&ctx, rrset, rbt);
+		}
+		free(rbt);
+	}
+
+	SHA384_Final(sharesult, &ctx);
+
+	/* remove old zonemd */
+	
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL)
+		return -1;
+
+	if ((rbt = Lookup_zone(db, dnsname, labellen, DNS_TYPE_ZONEMD, 0)) == NULL) {
+		return -1;
+	}
+
+	rrset = find_rr(rbt, DNS_TYPE_ZONEMD);
+	if (rrset == NULL)
+		return -1;
+
+	rrp = TAILQ_FIRST(&rrset->rr_head);
+	if (rrp == NULL)
+		return -1;
+
+	/* just replace the sharesult */
+	memcpy(((struct zonemd *)rrp->rdata)->hash, sharesult, 
+		((struct zonemd *)rrp->rdata)->hashlen);
+
+	/* fixup rrsig */
+	rrset = find_rr(rbt, DNS_TYPE_RRSIG);
+	if (rrset == NULL)
+		return -1;
+
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (((struct rrsig *)rrp->rdata)->type_covered == \
+			DNS_TYPE_ZONEMD) {
+			break;
+		}
+	}
+	if (rrp == NULL) {
+		return -1;
+	}
+
+	TAILQ_REMOVE(&rrset->rr_head, rrp, entries);	 /* remove the ol' entry */
+
+	free(rrp);
+
+	if (sign_zonemd(db, zonename, expiry, rbt, rollmethod) < 0) {
+		fprintf(stderr, "fixup_zonemd: sign_zonemd error\n");
+		return -1;
+	}
+		
+	return 0;
+}
+
+int
+add_zonemd(ddDB *db, char *zonename, int check)
+{
+	struct rbtree *rbt = NULL;
+	struct node *n, *nx;
+	struct zonemd *zonemd = NULL;
+	int rs, labellen;
+	uint32_t serial, ttl;
+	struct rrset *rrset = NULL;
+	SHA512_CTX ctx;
+	uint8_t sharesult[SHA384_DIGEST_LENGTH];
+	char *dnsname;
+
+	SHA384_Init(&ctx);
+
+	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
+		rs = n->datalen;
+		if ((rbt = calloc(1, rs)) == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			exit(1);
+		}
+
+		memcpy((char *)rbt, (char *)n->data, n->datalen);
+
+		if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
+			zonemd_hash_a(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
+			zonemd_hash_ns(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
+			zonemd_hash_cname(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
+			zonemd_hash_soa(&ctx, rrset, rbt, &serial);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {
+			zonemd_hash_ptr(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_HINFO)) != NULL) {
+			zonemd_hash_hinfo(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != NULL) {
+			zonemd_hash_mx(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
+			zonemd_hash_txt(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_RP)) != NULL) {
+			zonemd_hash_rp(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
+			zonemd_hash_aaaa(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) != NULL) {
+			zonemd_hash_srv(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) != NULL) {
+			zonemd_hash_naptr(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
+			zonemd_hash_sshfp(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
+			zonemd_hash_tlsa(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_CAA)) != NULL) {
+			zonemd_hash_caa(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
+			zonemd_hash_ds(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
+			zonemd_hash_dnskey(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) != NULL) {
+			zonemd_hash_rrsig(&ctx, rrset, rbt, 1); /*skip zonemd*/
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
+			zonemd_hash_nsec3(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
+			zonemd_hash_nsec3param(&ctx, rrset, rbt);
+		}
 		if (check && (rrset = find_rr(rbt, DNS_TYPE_ZONEMD)) != NULL) {
 			if ((zonemd = zonemd_hash_zonemd(rrset, rbt)) == NULL)
 				return -1;
@@ -6632,8 +7037,22 @@ add_zonemd(ddDB *db, char *zonename, int check)
 
 	SHA384_Final(sharesult, &ctx);
 
+	dnsname = dns_label(zonename, &labellen);
+	if (dnsname == NULL)
+		return -1;
+
+	if ((rbt = Lookup_zone(db, dnsname, labellen, DNS_TYPE_SOA, 0)) == NULL) {
+		return -1;
+	}
+
+	rrset = find_rr(rbt, DNS_TYPE_SOA);
+	if (rrset == NULL)
+		return -1;
+
+	ttl = rrset->ttl;
+
 	if (check == 0) {
-		if (fill_zonemd(db, zonename, "zonemd", 3600, serial, ZONEMD_SIMPLE, ZONEMD_SHA384, sharesult, SHA384_DIGEST_LENGTH) < 0) {
+		if (fill_zonemd(db, zonename, "zonemd", ttl, serial, ZONEMD_SIMPLE, ZONEMD_SHA384, sharesult, SHA384_DIGEST_LENGTH) < 0) {
 			printf("fill_zonemd failed\n");
 			return -1;
 		}
