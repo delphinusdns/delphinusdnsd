@@ -883,11 +883,6 @@ signmain(int argc, char *argv[])
 		dolog(LOG_INFO, "parsing config file failed\n");
 		exit(1);
 	}
-	
-	if (zonemd) {
-		/* add placeholder */
-		add_zonemd(db, zonename, 0);
-	}
 
 	/* create ENT list */
 	if (init_entlist(db) < 0) {
@@ -898,6 +893,11 @@ signmain(int argc, char *argv[])
 	/* update any serial updates here */
 	if (serial)
 		update_soa_serial(db, zonename, serial);
+
+	/* add RFC 8976 ZONEMD placeholder */
+	if (zonemd) {
+		add_zonemd(db, zonename, 0);
+	}
 
 	/* three passes to "sign" our zones */
 	/* first pass, add dnskey records, on apex */
