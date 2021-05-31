@@ -7,6 +7,8 @@ Changes in RELEASE_1_6 from RELEASE_1_5
   systems that have multiple delphinusdnsd running
 - change every instance of "master" to "primary"
 - add a 10-query query cache which speeds up subsequent answers
+- ZONEMD RR's can now be added to a zone in both DNSSEC and non-DNSSEC zones.
+  They can also be integrity checked with dddctl zonemd.
 
 
 Changes in RELEASE_1_5 from RELEASE_1_4

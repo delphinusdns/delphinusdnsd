@@ -266,6 +266,7 @@ usage(int argc, char *argv[])
 	if (argc == 2 && strcmp(argv[1], "sign") == 0) {
 		fprintf(stderr, "usage: dddctl sign [-KXZ] [-a algorithm] [-B bits] [-e seconds] [-I iterations] [-i inputfile] [-k KSK] [-m mask] [-n zonename] [-o output] [-R keyword] [-S pid] [-s salt] [-t ttl] [-x serial] [-z ZSK]\n");
 		fprintf(stderr, "\t-K\t\tcreate a new KSK key.\n");
+		fprintf(stderr, "\t-M\t\tadd a ZONEMD RR before signing.\n");
 		fprintf(stderr, "\t-X\t\tupdate the serial to YYYYMMDD01.\n");
 		fprintf(stderr, "\t-Z\t\tcreate a new ZSK key.\n");
 		fprintf(stderr, "\t-a algorithm	use algorithm (integer)\n");
@@ -305,7 +306,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\tconfigtest [-cn] [configfile]\n");
 		fprintf(stderr, "\tquery [-DITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
-		fprintf(stderr, "\tsign [-KXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask]\n\t\t[-n zonename] [-o output] [-R keyword] [-S pid] [-s salt]\n\t\t[-t ttl] [-x serial] [-z ZSK]\n");
+		fprintf(stderr, "\tsign [-KMXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask]\n\t\t[-n zonename] [-o output] [-R keyword] [-S pid] [-s salt]\n\t\t[-t ttl] [-x serial] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
 		fprintf(stderr, "\tstart [-f configfile] [-I ident] [-s socket]\n");
 		fprintf(stderr, "\tstop [-I ident] [-s socket]\n");

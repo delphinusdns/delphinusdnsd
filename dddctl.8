@@ -86,7 +86,7 @@ Use a TSIG keyname and password.  The keyname is plaintext in a DNS name format
 type is omitted because it's always type 'hmac-sha256'.
 .El
 .It Xo Cm sign 
-.Op Fl KXZ
+.Op Fl KMXZ
 .Op Fl a Ar algorithm
 .Op Fl B Ar bits
 .Op Fl e Ar seconds
@@ -107,6 +107,10 @@ performs signing operations on a zonefile for DNSSEC operations.
 .Bl -tag -width "-I iterations"
 .It Fl K
 create a new KSK key.
+.It Fl M
+add a ZONEMD RR to the zone (Will not work with already present ZONEMD's).
+Please see the zonemd command, for what algorithms are used.  A DNSSEC signed
+zone can be integrity checked with the zonemd command.
 .It Fl X
 update serial to YYYYMMDD01.
 .It Fl Z
