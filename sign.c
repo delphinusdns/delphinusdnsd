@@ -220,7 +220,6 @@ extern char * hash_name(char *, int, struct nsec3param *);
 extern char * base32hex_encode(u_char *input, int len);
 extern int  	init_entlist(ddDB *);
 extern int	check_ent(char *, int);
-extern struct question          *build_question(char *, int, int, char *);
 struct rrtab    *rrlookup(char *);
 
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);

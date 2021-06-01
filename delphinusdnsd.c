@@ -1872,8 +1872,18 @@ axfrentry:
 				} else { 	 /* FD_ISSET */
 					goto drop;
 				}
-
+		
 				/* goto drop beyond this point should goto out instead */
+
+				/* check if there was cookies that had errors */
+				if (question->cookie.have_cookie && question->cookie.error == 1) {
+						dolog(LOG_INFO, "on descriptor %u interface \"%s\" BADCOOKIE from %s, replying format error\n", so, cfg->ident[i], address);
+						snprintf(replystring, DNS_MAXNAME, "FMTERROR");
+						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
+						slen = reply_fmterror(&sreply, &sretlen, NULL);
+						goto udpout;
+				}
+
 				/* handle notifications */
 				if (question->notify) {
 					if (question->tsig.have_tsig && notifysource(question, (struct sockaddr_storage *)from) &&
@@ -2316,7 +2326,7 @@ forwardudp:
 							* 1000) + \
 						(double)(rectv1.tv_usec - rectv0.tv_usec) / 1000;
 
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d, tta=%2.3fms) for \"%s\" type=%s class=%u, %s%s%sanswering \"%s\" (%d/%d) %x\n", so, cfg->ident[i], address, received_ttl, aregion, diffms, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, " : ""), (question->dnssecok ? "dnssecok, " : ""), (question->tsig.tsigverified ? "tsig, " : "") , replystring, len, slen, crc);
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=%u, region=%d, tta=%2.3fms) for \"%s\" type=%s class=%u, %s%s%s%sanswering \"%s\" (%d/%d) %x\n", so, cfg->ident[i], address, received_ttl, aregion, diffms, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len ? "edns0, " : ""), (question->dnssecok ? "dnssecok, " : ""), (question->tsig.tsigverified ? "tsig, " : ""), (question->cookie.have_cookie ? "cookie, " : "") , replystring, len, slen, crc);
 
 				}
 
@@ -3256,7 +3266,7 @@ forwardtcp:
 						slen = 0;
 
 						if (lflag)
-							dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d, tta=NA) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (%d/%d)\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), replystring, len, slen);
+							dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d, tta=NA) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (%d/%d)\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), (question->cookie.have_cookie ? "cookie, " : ""),  replystring, len, slen);
 
 						if (fakequestion != NULL) {
 							free_question(fakequestion);
@@ -3726,6 +3736,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 					pq.tsig.tsig_timefudge = question->tsig.tsig_timefudge;
 					pq.tsig.tsigorigid = question->tsig.tsigorigid;
 					pq.notify = question->notify;
+					memcpy((char *)&pq.cookie, (char *)&question->cookie, sizeof(struct dns_cookie));
 
 					/* put it in shared memory */
 					sm_lock(cfg->shptr_pq, cfg->shptr_pqsize);
@@ -3840,6 +3851,8 @@ convert_question(struct parsequestion *pq, int authoritative)
 
 	q->notify = pq->notify;
 	q->rawsocket = 0;
+
+	memcpy((char *)&q->cookie, (char *)&pq->cookie, sizeof(struct dns_cookie));
 
 	return (q);
 }

@@ -1199,6 +1199,57 @@ build_question(char *buf, int len, int additional, char *mac)
 		if (ttl & DNSSEC_OK)
 			q->dnssecok = 1;
 
+		/* do go into the RDATA of the OPT */
+		if (ntohs(opt->rdlen) >= 4) {
+			int j = 0;
+			uint16_t option_code, option_length;
+
+			do {
+				/* length 11 is the fixed part of OPT */
+				option_code = unpack16(&buf[11 + i + j]);
+				j += 2;
+				option_length = unpack16(&buf[11 + i + j]);
+				j += 2;
+
+				if (j + ntohs(option_length) > ntohs(opt->rdlen)) {
+					j += ntohs(option_length);
+					break;
+				}
+
+				switch (ntohs(option_code)) {
+				/* RFC 7873 DNS Cookies */
+				case DNS_OPT_CODE_COOKIE:
+					q->cookie.have_cookie = 1;
+					if (ntohs(option_length) != 8) {
+						/*
+						 * we need to reply with 
+						 * FORMERR here 
+						 */
+						q->cookie.error = 1;
+						goto optskip;
+					}
+					unpack((char *)&q->cookie.clientcookie,
+						(char *)&buf[11 + i + j], 8);			
+					break;
+				default:
+					/* skip */
+					break;
+				}
+
+				j += ntohs(option_length);
+
+			} while ((j + 4) <= ntohs(opt->rdlen));
+
+			if (j > ntohs(opt->rdlen)) {
+				/* full stop */
+				free_question(q);
+				dolog(LOG_INFO, "parsing EDNS options failed, options too long\n");
+				return NULL;
+			}
+		}
+
+optskip:
+
 		i += 11 + ntohs(opt->rdlen);
 		additional--;
 	} while (0);

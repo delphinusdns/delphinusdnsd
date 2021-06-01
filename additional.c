@@ -26,6 +26,9 @@
 #include <string.h>
 
 #include <syslog.h>
+#if __OpenBSD__
+#include <siphash.h>
+#endif
 
 #ifdef __linux__
 #include <grp.h>
@@ -56,7 +59,7 @@ int additional_a(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_aaaa(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_ds(char *, int, struct rbtree *, char *, int, int, int *);
-int additional_opt(struct question *, char *, int, int);
+int additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t);
 int additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 int additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int *, int);
@@ -80,6 +83,9 @@ extern void      dolog(int, char *, ...);
 
 
 
+extern int cookies;
+extern char *cookiesecret;
+extern int cookiesecret_len;
 extern int dnssec;
 
 
@@ -642,7 +648,7 @@ out:
  */
 
 int 
-additional_opt(struct question *question, char *reply, int replylen, int offset)
+additional_opt(struct question *question, char *reply, int replylen, int offset, struct sockaddr *sa, socklen_t salen)
 {
 	struct dns_optrr *answer;
 	int rcode = 0;
@@ -665,9 +671,73 @@ additional_opt(struct question *question, char *reply, int replylen, int offset)
 	answer->ttl = htonl(rcode); 	/* EXTENDED RCODE */
 
 	answer->rdlen = htons(0);
-
 	offset += sizeof(struct dns_optrr);
 
+	/* if we've been given a client cookie reply with a server cookie */
+	if (cookies && salen > 0 && 
+		question->cookie.have_cookie && question->cookie.error == 0) {
+#if __OpenBSD__
+		SIPHASH_CTX ctx;
+		char digest[SIPHASH_DIGEST_LENGTH];
+		uint8_t version = 1, reserved = 0;
+		uint16_t opt_codelen;
+		uint32_t timestamp;
+		struct sockaddr_in *sin;
+		struct sockaddr_in6 *sin6;
+		
+		timestamp = (uint32_t)time(NULL);
+		HTONL(timestamp);
+
+		SipHash24_Init(&ctx, (const SIPHASH_KEY *)cookiesecret);
+		SipHash24_Update(&ctx, question->cookie.clientcookie, sizeof(question->cookie.clientcookie));
+		
+		SipHash24_Update(&ctx, (char *)&version, 1);
+		SipHash24_Update(&ctx, (char *)&reserved, 1);
+		SipHash24_Update(&ctx, (char *)&reserved, 1);
+		SipHash24_Update(&ctx, (char *)&reserved, 1);
+		SipHash24_Update(&ctx, (char *)&timestamp, sizeof(timestamp));
+
+		switch (sa->sa_family) {	
+		case AF_INET:
+			sin = (struct sockaddr_in *)sa;
+			SipHash24_Update(&ctx, (char *)&sin->sin_addr.s_addr, sizeof(uint32_t));
+			break;	
+		case AF_INET6:
+			sin6 = (struct sockaddr_in6 *)sa;
+			SipHash24_Update(&ctx, (char *)&sin6->sin6_addr, sizeof(struct in6_addr));
+			break;
+		default:
+			return (offset);
+			break;
+		}
+
+		SipHash24_Update(&ctx, cookiesecret, cookiesecret_len);
+		SipHash24_Final(&digest, &ctx);
+
+		/* check if we can pack opt code and length and payload (24) */
+		if (offset + 24 + 4 > replylen)
+			goto out;
+
+		opt_codelen = DNS_OPT_CODE_COOKIE;
+		pack16(&reply[offset], htons(opt_codelen));
+		offset += 2;
+		pack16(&reply[offset], htons(24));
+		offset += 2;
+
+		pack(&reply[offset], (char *)&question->cookie.clientcookie, 8);
+		offset += 8;
+		pack8(&reply[offset++], version);
+		pack8(&reply[offset++], reserved);
+		pack8(&reply[offset++], reserved);
+		pack8(&reply[offset++], reserved);
+		pack32(&reply[offset], timestamp);
+		offset += sizeof(timestamp);
+		pack((char *)&reply[offset], (char *)&digest, sizeof(digest));
+		offset += sizeof(digest);
+
+		answer->rdlen = htons(4 + 24);
+#endif
+	}
 out:
 	return (offset);
 

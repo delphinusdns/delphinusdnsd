@@ -68,6 +68,8 @@ struct dns_optrr {
 	char rdata[0];				/* attribute, value pairs */
 }__attribute__((packed));
 
+#define DNS_OPT_CODE_COOKIE	10		/* RFC 7873 */
+
 /*
  * TSIG RR, based on dns_rr 
  * RFC 2845  and RFC 4635 (for SHA-256)
@@ -268,6 +270,16 @@ struct tsig {
 
 #define DEFAULT_TSIG_FUDGE	300
 
+struct dns_cookie {
+	int have_cookie;
+	int error;
+	char clientcookie[8];
+	uint8_t version;
+	uint32_t timestamp;
+	char servercookie[32];
+	uint8_t servercookie_len;
+};
+
 struct question {
 	struct dns_question_hdr *hdr;
 	char *converted_name;
@@ -280,6 +292,7 @@ struct question {
 	int badvers;
 	int notify;
 	struct tsig tsig;
+	struct dns_cookie cookie;
 };
 
 struct parsequestion {
@@ -296,6 +309,7 @@ struct parsequestion {
 	int notify;
 	int badvers;
 	struct tsig tsig;
+	struct dns_cookie cookie;
 	int rc;		/* return code */
 #define PARSE_RETURN_ACK	0
 #define PARSE_RETURN_NAK	1

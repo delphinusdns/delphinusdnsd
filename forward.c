@@ -140,9 +140,8 @@ extern void     pack32(char *, u_int32_t);
 extern uint16_t unpack16(char *);
 extern uint32_t unpack32(char *);
 extern void     ddd_shutdown(void);
-extern int      additional_opt(struct question *, char *, int, int);
+extern int      additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t);
 extern int      additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
-extern struct question	*build_question(char *, int, int, char *);
 extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
 extern int	free_question(struct question *);
 extern char *	dns_label(char *, int *);
@@ -1144,7 +1143,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 		q->dnssecok = 1;
 	}
 
-	outlen = additional_opt(q, packet, 0xffff, len);
+	outlen = additional_opt(q, packet, 0xffff, len, NULL, 0);
 	len = outlen;
 
 	if (tsigname) {

@@ -71,7 +71,7 @@ extern int 		additional_aaaa(char *, int, struct rbtree *, char *, int, int, int
 extern int 		additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_ds(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
-extern int 		additional_opt(struct question *, char *, int, int);
+extern int 		additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t);
 extern int 		additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
 extern int 		additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 extern int 		additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int);
@@ -317,7 +317,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -547,7 +547,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -792,7 +792,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -1013,7 +1013,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -1230,7 +1230,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -1442,7 +1442,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -1652,7 +1652,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -1868,7 +1868,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -2087,7 +2087,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -2304,7 +2304,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -2445,7 +2445,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -2639,7 +2639,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -3002,7 +3002,7 @@ out:
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -3432,7 +3432,7 @@ out:
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -3793,7 +3793,7 @@ out:
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -4002,7 +4002,7 @@ out:
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 	
 	if (q->tsig.tsigverified == 1) {
@@ -4274,7 +4274,7 @@ out:
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	
@@ -4495,7 +4495,7 @@ out:
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -4626,7 +4626,7 @@ reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (istcp) {
@@ -4829,7 +4829,7 @@ out:
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -5039,7 +5039,7 @@ out:
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -5284,7 +5284,7 @@ out:
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -5499,7 +5499,7 @@ out:
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -5983,7 +5983,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 
@@ -6087,7 +6087,7 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
 		if (q->edns0len > 512)
 			replysize = MIN(q->edns0len, max_udp_payload);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (istcp) {
@@ -6657,7 +6657,7 @@ out:
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 	
 	if (q->tsig.tsigverified == 1) {
@@ -6786,7 +6786,7 @@ skip:
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 			
 	if (q->tsig.tsigverified == 1) {
@@ -8245,7 +8245,7 @@ reply_badvers(struct sreply *sreply, int *sretlen, ddDB *db)
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		q->badvers = 1;
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (istcp) {
@@ -8457,7 +8457,7 @@ out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
 	if (q->tsig.tsigverified == 1) {

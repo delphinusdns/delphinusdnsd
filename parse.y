@@ -45,6 +45,11 @@
 #include <time.h>
 #include <pwd.h>
 
+#if __OpenBSD__
+#include <siphash.h>
+#endif
+
+
 #ifdef __linux__
 #include <grp.h>
 #define __USE_BSD 1
@@ -196,6 +201,9 @@ static int pullzone = 1;
 YYSTYPE yylval;
 
 
+int cookies = 1;
+char *cookiesecret;
+int cookiesecret_len;
 char *converted_name;
 int converted_namelen;
 uint32_t zonenumber = 0;
@@ -1335,6 +1343,9 @@ optionsstatement:
 			} else if (strcasecmp($1, "tcp-on-any-only") == 0) {
 				dolog(LOG_DEBUG, "TCP on ANY only\n");
 				tcpanyonly = 1;
+			} else if (strcasecmp($1, "nocookies") == 0) {
+				dolog(LOG_DEBUG, "turning cookies off\n");
+				cookies = 0;
 			}
 		}
 	}
@@ -1359,6 +1370,20 @@ optionsstatement:
 
 				versionstring = strdup($2);
 				vslen = strlen(versionstring);
+			} else if (strcasecmp($1, "cookie-secret") == 0) {
+				cookiesecret_len = 
+					mybase64_decode($2, cookiesecret,
+						cookiesecret_len);
+
+				if (cookiesecret_len < 0) {
+					dolog(LOG_ERR, "cookie-secret had errors (base64)\n");
+					return (-1);
+				}
+				if (cookiesecret_len < SIPHASH_KEY_LENGTH) {
+					dolog(LOG_ERR, "cookie-secret too short (16 bytes min)\n");
+					return (-1);
+				}
+
 			}
 		}
 	}
@@ -1912,6 +1937,13 @@ parse_file(ddDB *db, char *filename, uint32_t flags)
 	if (flags & PARSEFILE_FLAG_NOSOCKET)
 		pullzone = 0;
 
+	cookiesecret_len = 128;
+	cookiesecret = malloc(cookiesecret_len);
+	if (cookiesecret == NULL) {
+		dolog(LOG_ERR, "malloc: %s\n", strerror(errno));
+		return (-1);
+	}
+	arc4random_buf(cookiesecret, cookiesecret_len);
 
 	(void)add_rzone();
 

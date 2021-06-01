@@ -260,7 +260,7 @@ comment = ( ; | pound ) line
 options = "options" ("string") [ "{" optionlist "}" ]
 optionlist = ( optrecurse | optinterface | optfork | optport | 
 		optratelimit | optbind | optdnssec | opttcponanyonly |
-		optmaxudppayload)
+		optmaxudppayload | optnocookies | optcookiesecret)
 optrecurse = "recurse" ;
 optinterface = "interface" ("string") ;
 optfork = "fork" number ; 
@@ -269,6 +269,8 @@ optbind = "bind" cidr-address ;
 optdnssec = "dnssec" ; 
 opttcponanyonly = "tcp-on-any-only" ;
 optmaxudppayload = "max-udp-payload" number ;
+optnocookies = "nocookies" ;
+optcookiesecret = "cookie-secret" ("base64string") ;
 
 .Ed
 .Sh FILES
