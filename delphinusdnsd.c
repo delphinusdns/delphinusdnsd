@@ -271,6 +271,7 @@ extern int raxfrflag;
 extern u_int max_udp_payload;
 extern uint8_t rdomain;
 extern uint8_t forward_rdomain;
+extern int cookies;
 
 static int reload = 0;
 static int mshutdown = 0;
@@ -4557,6 +4558,10 @@ add_cache(struct querycache *qc, char *buf, int len, struct question *q,  char *
 
 	if (replylen > qc->bufsize)
 		return -1;
+
+	/* don't cache cookied requests, it's not an error either */
+	if (cookies && q->cookie.have_cookie && q->cookie.error == 0)
+		return 0;
 
 	qc->cp = (qc->cp + 1) % qc->cm;
 	
