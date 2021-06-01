@@ -711,7 +711,6 @@ additional_opt(struct question *question, char *reply, int replylen, int offset,
 			break;
 		}
 
-		SipHash24_Update(&ctx, cookiesecret, cookiesecret_len);
 		SipHash24_Final(&digest, &ctx);
 
 		/* check if we can pack opt code and length and payload (24) */
