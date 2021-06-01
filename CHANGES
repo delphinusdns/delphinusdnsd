@@ -9,6 +9,7 @@ Changes in RELEASE_1_6 from RELEASE_1_5
 - add a 10-query query cache which speeds up subsequent answers
 - ZONEMD RR's can now be added to a zone in both DNSSEC and non-DNSSEC zones.
   They can also be integrity checked with dddctl zonemd.
+- RFC 9018/7873 Server DNS Cookies support, at first for OpenBSD only
 
 
 Changes in RELEASE_1_5 from RELEASE_1_4
