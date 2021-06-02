@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 6, 2021
+.Dd June 2, 2021
 .Dt DELPHINUSDNSD 8
 .Os 
 .Sh NAME
@@ -130,6 +130,94 @@ control socket
 .Sh SEE ALSO
 .Xr delphinusdns.conf 5 , 
 .Xr dddctl 8
+.Sh STANDARDS
+.Rs
+.%A P. Mockapetris
+.%D November 1987
+.%R RFC 1035
+.%T DOMAIN NAMES - IMPLEMENTATION AND SPECIFICATION
+.Re
+.Pp
+.Rs
+.%A P. Vixie
+.%D August 1996
+.%R RFC 1996
+.%T A Mechanism for Prompt Notification of Zone Changes (DNS NOTIFY)
+.Re
+.Pp
+.Rs
+.%A S. Thomson
+.%A C. Huitema
+.%A V. Ksinant
+.%A M. Souissi
+.%D October 2003
+.%R RFC 3596
+.%T DNS Extensions to Support IP Version 6
+.Re
+.Pp
+.Rs
+.%A R. Arends
+.%A R. Austein
+.%A M. Larson
+.%A D. Massey
+.%A S. Rose
+.%D March 2005
+.%R RFC 4034
+.%T Resource Records for the DNS Security Extensions
+.Re
+.Pp
+.Rs
+.%A B. Laurie
+.%A G. Sisson
+.%A R. Arends
+.%A D. Blacka
+.%D March 2008
+.%R RFC 5155
+.%T DNS Security (DNSSEC) Hashed Authenticated Denial of Existence
+.Re
+.Pp
+.Rs
+.%A J. Damas
+.%A M. Graff
+.%A P. Vixie
+.%D April 2013
+.%R RFC 6891
+.%T Extension Mechanisms for DNS (EDNS(0))
+.Re
+.Pp
+.Rs
+.%A J. Dickinson
+.%A S. Dickinson
+.%A R. Bellis
+.%A A. Mankin
+.%A D. Wessels
+.%D March 2016
+.%R RFC 7766
+.%T DNS Transport over TCP - Implementation Requirements
+.Re
+.Pp
+.Rs
+.%A F. Dupont
+.%A S. Morris
+.%A P. Vixie
+.%A D. Eastlake 3rd
+.%A O. Gudmundsson
+.%A B. Wellington
+.%D November 2020
+.%R RFC 8945
+.%T Secret Key Transaction Authentication for DNS (TSIG)
+.Re
+.Pp
+.Rs
+.%A O. Sury
+.%A W. Toorop
+.%A D. Eastlake 3rd
+.%A M. Andrews
+.%D April 2021
+.%R RFC 9018
+.%T Interoperable Domain Name System (DNS) Server Cookies
+.Re
+.Pp
 .Sh AUTHORS
 This software was written by
 .An Peter J. Philipp Aq petphi@delphinusdns.org
