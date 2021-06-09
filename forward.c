@@ -103,6 +103,8 @@ struct forwardqueue {
 	int oldsel;				/* this indicates which sock */
 	int so;					/* open connected socket */
 	int returnso;				/* return socket (TCP) */
+	int answered;				/* return was given flag */
+	uint16_t type;				/* the type of query */
 	int istcp;				/* whether we're tcp */
 	int family;				/* our family */
 	char *tsigkey;				/* which key we use for query */
@@ -122,7 +124,7 @@ void	init_forward(void);
 int	insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
 void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
 void	forwardthis(ddDB *, struct cfg *, int, struct sforward *);
-void	sendit(struct forwardqueue *, struct sforward *);
+int	sendit(struct forwardqueue *, struct sforward *);
 void	returnit(ddDB *, struct cfg *, struct forwardqueue *, char *, int, struct imsgbuf *);
 struct tsig * check_tsig(char *, int, char *);
 void	fwdparseloop(struct imsgbuf *, struct imsgbuf *, struct cfg *);
@@ -668,6 +670,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	struct sockaddr_storage *from = NULL;
 	struct dns_header *dh;
 	struct rbtree *rbt = NULL;
+	struct dns_header *odh;
 
 	char buf[512];
 	char replystring[DNS_MAXNAME + 1];
@@ -702,10 +705,44 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 		memset(replybuf, 0, 0xffff + 2);
 	
 	now = time(NULL);
-	p = sforward->buf;
 
 	SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwq2) {
-		if (difftime(now, fwq1->time) > 15) {
+		if (difftime(now, fwq1->time) > 5) {
+			odh = (struct dns_header *)&buf[fwq1->istcp ? 2 : 0];
+			/* send a servfail and remove from list */
+			odh->id = fwq1->oldid;
+			odh->query = DNS_REPLY;
+			SET_DNS_RCODE_SERVFAIL(odh);
+			HTONS(odh->query);
+			odh->question = htons(1);
+			odh->answer = 0;
+			odh->nsrr = 0;
+			odh->additional = 0;
+
+			p = &buf[sizeof(struct dns_header)];
+			pack(p, fwq1->orig_dnsname, fwq1->dnsnamelen);
+			p += fwq1->dnsnamelen;
+			pack16(p, htons(DNS_CLASS_IN));
+			p += 2;
+			pack16(p, fwq1->type);
+			p += 2;
+
+			if (fwq1->answered == 0) {
+				if (fwq1->istcp) {
+					pack16(&buf[0], htons(p - &buf[2]));
+					send(fwq1->returnso, buf, p - &buf[0], 0);
+				} else {
+					switch (fwq1->oldfamily) {
+					case AF_INET:
+						rawsend(cfg->raw[0], buf, p - &buf[0], &fwq1->oldhost4, fwq1->oldsel, cfg);
+						break;
+					case AF_INET6:
+						rawsend6(cfg->raw[1], buf, p - &buf[0], &fwq1->oldhost6, fwq1->oldsel, cfg);
+						break;
+					}
+				}
+			}
+			
 			SLIST_REMOVE(&fwqhead, fwq1, forwardqueue, entries);
 			if (fwq1->returnso != -1) {
 				close(fwq1->returnso);
@@ -719,6 +756,8 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 			free(fwq1);
 			continue;
 		}
+
+		p = sforward->buf;
 	
 		found = 0;
 		switch (fwq1->oldfamily) {
@@ -983,6 +1022,7 @@ newqueue:
 
 		fwq1->oldport = sforward->rport;
 		fwq1->oldid = sforward->header.id;
+		fwq1->type = sforward->type;
 
 		fwq1->port = fw2->destport;
 		fwq1->cur_forwardentry = fw2;
@@ -1049,20 +1089,61 @@ newqueue:
 				
 		SLIST_INSERT_HEAD(&fwqhead, fwq1, entries);
 
-		sendit(fwq1, sforward);
+		if (sendit(fwq1, sforward) < 0)
+			goto servfail;
 	} else {
 		/* resend this one */
 		
 		/* fwq1->time = now; */
 		if (difftime(now, fwq1->time + (fwq1->tries * fwq1->tries)) > -1) {
-			sendit(fwq1, sforward);
+			if (sendit(fwq1, sforward) < 0)
+				goto servfail;
 		}
 	}
 
 	return;	
+
+servfail:
+
+	odh = (struct dns_header *)&buf[fwq1->istcp ? 2 : 0];
+	/* send a servfail and remove from list */
+	odh->id = fwq1->oldid;
+	odh->query = DNS_REPLY;
+	SET_DNS_RCODE_SERVFAIL(odh);
+	HTONS(odh->query);
+	odh->question = htons(1);
+	odh->answer = 0;
+	odh->nsrr = 0;
+	odh->additional = 0;
+
+	p = &buf[sizeof(struct dns_header)];
+	pack(p, fwq1->orig_dnsname, fwq1->dnsnamelen);
+	p += fwq1->dnsnamelen;
+	pack16(p, htons(DNS_CLASS_IN));
+	p += 2;
+	pack16(p, fwq1->type);
+	p += 2;
+
+	if (fwq1->istcp) {
+		pack16(&buf[0], htons(p - &buf[2]));
+		send(fwq1->returnso, buf, p - &buf[0], 0);
+	} else {
+		switch (fwq1->oldfamily) {
+		case AF_INET:
+			rawsend(cfg->raw[0], buf, p - &buf[0], &fwq1->oldhost4, fwq1->oldsel, cfg);
+			break;
+		case AF_INET6:
+			rawsend6(cfg->raw[1], buf, p - &buf[0], &fwq1->oldhost6, fwq1->oldsel, cfg);
+			break;
+		}
+	}
+
+	fwq1->answered = 1;
+
+	return;
 }
 
-void
+int
 sendit(struct forwardqueue *fwq, struct sforward *sforward)
 {
 	struct dns_header *dh;
@@ -1077,7 +1158,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	buf = calloc(1, (0xffff + 2));
 	if (buf == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-		return;	
+		return (-1);
 	}
 
 	if (fwq->tsigkey) {
@@ -1085,7 +1166,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 		if (tsigname == NULL) {
 			dolog(LOG_INFO, "dns_label failed\n");
 			free(buf);
-			return;
+			return (-1);
 		}
 	} else {
 		tsigname = NULL;
@@ -1097,7 +1178,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	if (q == NULL) {
 		dolog(LOG_INFO, "build_fake_question failed\n");
 		free(buf);
-		return;
+		return (-1);
 	}
 
 	q->edns0len = sforward->edns0len;
@@ -1161,11 +1242,13 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 		if (fwq->so != -1 && send(fwq->so, buf, len + 2, 0) < 0) {
 			dolog(LOG_INFO, "send() failed changing forwarder: %s\n", strerror(errno));
 			changeforwarder(fwq);
+			goto fail;
 		}
 	} else {
 		if (fwq->so != -1 && send(fwq->so, buf, len, 0) < 0) {
 			dolog(LOG_INFO, "send() failed (udp) changing forwarder %s\n", strerror(errno));
 			changeforwarder(fwq);
+			goto fail;
 		}
 	}
 
@@ -1173,7 +1256,13 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	free(buf);
 	free_question(q);
 
-	return;
+	return (0);
+
+fail:
+	free(buf);
+	free_question(q);
+
+	return (-1);
 }
 
 void
@@ -1506,6 +1595,8 @@ endimsg:
 			break;
 		}
 	}
+
+	fwq->answered = 1;
 
 	return;
 }
