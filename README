@@ -6,7 +6,6 @@
  3.2 FreeBSD
  3.3 OpenBSD
  3.4 NetBSD
- 3.5 Mac OS X
 4. COMPATIBILITY
 5. EXAMPLES
 6. DNSSEC
@@ -15,7 +14,6 @@
  6.3 What to do with the .signed file
  6.4 How can I sub-delegate a zone with DNSSEC
  6.5 What algorithms are supported with dddctl sign
- 6.6 What happened to dd-convert
 7. WHAT IT CAN'T DO
 
 1. README 
@@ -33,10 +31,10 @@ port (port 19/tcp) on job.delphinusdns.org.
 1.1 AUTHOR
 ----------
 
-So far it's just me, Peter J. Philipp <petphi@delphinusdns.org>.  I have 
-had some patches from other people from the east and some people from the 
-west.  Sound advice came from people in #dns at irc.freenode.net, you may
-find me there, but for now I've given up on IRC (after 25 years).
+Peter J. Philipp <petphi@delphinusdns.org> who wrote delphinusdnsd while 
+residing in Schweinfurt, Germany.
+
+Some contribution came from other people (worldwide) with minor patches.
 
 
 2. WHY DELPHINUSDNS?
@@ -148,13 +146,6 @@ $ make
 $ make install
 ## done, create a config file and start delphinusdnsd
 
-3.5 Mac OS X
-------------
-
-Mac OS X port has been dropped in version 1.1.0.  If anyone wants to revive
-it they can send patches for the Makefile.
-
-
 4. COMPATIBILITY
 ----------------
 
@@ -165,13 +156,11 @@ FreeBSD 12.2      |        yes         |       yes           |
 ------------------+--------------------+---------------------+
 NetBSD 9.1        |        yes         |       yes           |
 ------------------+--------------------+---------------------+
-OpenBSD 6.8       |        yes         |       yes           |
+OpenBSD 6.9       |        yes         |       yes           |
 ------------------+--------------------+---------------------+
-Linux*		  |        yes         |       yes           |
+Linux 		  |        yes         |       yes           |
 ------------------+--------------------+---------------------+
 
-* Devuan and OpenSuse were tested for version 1.3.0
-** Mac OS X support has been dropped in version 1.1.0
 
 5. EXAMPLES
 -----------
@@ -261,12 +250,6 @@ Currently only 4 algorithms are supported.   There is RSASHA1-NSEC3-SHA1
 which has algorithm 7, there is RSASHA256 which has algorithm 8, 
 and there is RSASHA512 which has algorithm 10.  Finally the ECDSAP256SHA256
 algorithm (alg 13) (is now default), is supported.
-
-6.6 What happened to dd-convert
--------------------------------
-
-The BIND-reliant dd-convert.rb has been replaced with a native C program called
-dddctl.c.  It is what's being used now.
 
 
 7. WHAT IT CAN'T DO
