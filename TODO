@@ -17,7 +17,6 @@ to have replicant compatibility for NSEC
 - add DNS64 (RFC 6147) capability to forwarding mode
 - add DNS over TLS (RFC 7858) capability to forwarding mode
 - an OpenBSD port/package starting with 1.5.0 release
-- a port to windows 10 and windows server 2019
 - fudgesize in forwarding mode for setting higher FUDGE value [DONE]
 - ntphack in main daemon for allowing *.ntp.org through [DONE]
 - rdomains throughout the daemon (forwarding and especially main daemon) [DONE]
