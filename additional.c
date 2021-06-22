@@ -681,11 +681,40 @@ additional_opt(struct question *question, char *reply, int replylen, int offset,
 		char digest[SIPHASH_DIGEST_LENGTH];
 		uint8_t version = 1, reserved = 0;
 		uint16_t opt_codelen;
-		uint32_t timestamp;
+		uint32_t timestamp, compts;
 		struct sockaddr_in *sin;
 		struct sockaddr_in6 *sin6;
 		
 		timestamp = (uint32_t)time(NULL);
+
+		if (question->cookie.servercookie_len > 0) {
+			int32_t dt32;
+
+			compts = unpack32(&question->cookie.servercookie[4]);
+			NTOHL(compts);
+			dt32 = timestamp - compts;
+			/* 1 hour in the past and 5 minutes in future is OK */
+			if ((dt32 <= 3600) && (dt32 >= -300)) {
+				/* check if we can pack opt code and length and payload (24) */
+				if (offset + 8 + question->cookie.servercookie_len + 4 > replylen)
+					goto out;
+
+				opt_codelen = DNS_OPT_CODE_COOKIE;
+				pack16(&reply[offset], htons(opt_codelen));
+				offset += 2;
+				pack16(&reply[offset], htons(8 + question->cookie.servercookie_len));
+				offset += 2;
+
+				pack(&reply[offset], (char *)&question->cookie.clientcookie, 8);
+				offset += 8;
+				pack((char *)&reply[offset], (char *)&question->cookie.servercookie, question->cookie.servercookie_len);
+				offset += question->cookie.servercookie_len;
+
+				answer->rdlen = htons(4 + 8 + question->cookie.servercookie_len);
+				goto out;
+			}
+		}
+
 		HTONL(timestamp);
 
 		SipHash24_Init(&ctx, (const SIPHASH_KEY *)cookiesecret);

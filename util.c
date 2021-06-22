@@ -142,6 +142,7 @@ extern int *ptr;
 extern int tsig;
 extern int forward;
 extern int zonecount;
+extern int cookies;
 
 extern void 	dolog(int, char *, ...);
 
@@ -1202,7 +1203,7 @@ build_question(char *buf, int len, int additional, char *mac)
 		/* do go into the RDATA of the OPT */
 		if (ntohs(opt->rdlen) >= 4) {
 			int j = 0;
-			uint16_t option_code, option_length;
+			uint16_t option_code, option_length, convlen;
 
 			do {
 				/* length 11 is the fixed part of OPT */
@@ -1219,17 +1220,30 @@ build_question(char *buf, int len, int additional, char *mac)
 				switch (ntohs(option_code)) {
 				/* RFC 7873 DNS Cookies */
 				case DNS_OPT_CODE_COOKIE:
-					q->cookie.have_cookie = 1;
-					if (ntohs(option_length) != 8) {
-						/*
-						 * we need to reply with 
-						 * FORMERR here 
-						 */
-						q->cookie.error = 1;
-						goto optskip;
-					}
-					unpack((char *)&q->cookie.clientcookie,
-						(char *)&buf[11 + i + j], 8);			
+					if (cookies) {
+							q->cookie.have_cookie = 1;
+							convlen = ntohs(option_length);
+							if (convlen <= 40 && convlen >= 16) {
+								unpack((char *)&q->cookie.clientcookie,
+									(char *)&buf[11 + i + j], 8);			
+
+								unpack((char *)&q->cookie.servercookie,
+									(char *)&buf[11 + i + j + 8], convlen - 8);			
+								q->cookie.servercookie_len = convlen - 8;
+							} else if (convlen == 8) {
+								unpack((char *)&q->cookie.clientcookie,
+									(char *)&buf[11 + i + j], 8);			
+
+								q->cookie.servercookie_len = 0;
+							} else {
+								/*
+								 * we need to reply with 
+								 * FORMERR here 
+								 */
+								q->cookie.error = 1;
+								goto optskip;
+							}
+					}	
 					break;
 				default:
 					/* skip */
