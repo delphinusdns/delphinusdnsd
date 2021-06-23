@@ -2238,7 +2238,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			char mac[DNS_HMAC_SHA256_SIZE];
 
 			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format, ctx, name, zonelen, 1)) < 0) {
-				fprintf(stderr, "not a SOA reply, or ERROR\n");
+				fprintf(stderr, "raxfr_peek() ERROR\n");
 				return -1;
 			}
 

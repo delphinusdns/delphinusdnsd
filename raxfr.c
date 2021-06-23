@@ -277,7 +277,7 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 		char *humanzone;
 
 		humanzone = convert_name(zonename, zonelen);
-		dolog(LOG_INFO, "possible poison in AXFR, %s not part of %s", humanname, humanzone);
+		dolog(LOG_INFO, "possible poison in AXFR, %s not part of %s\n", humanname, humanzone);
 		free(humanname);
 		free(humanzone);
 		return -1;
