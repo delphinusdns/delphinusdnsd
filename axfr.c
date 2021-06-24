@@ -65,7 +65,7 @@
 
 void	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *ibuf);
 void	axfr_connection(int, char *, int, ddDB *, char *, int);
-int	build_header(ddDB *, char *, char *, struct question *, int);
+int	build_header(ddDB *, char *, char *, struct question *, int, int);
 int	build_soa(ddDB *, char *, int, struct rbtree *, struct question *);
 int	checklabel(ddDB *, struct rbtree *, struct rbtree *, struct question *);
 int	find_axfr(struct sockaddr_storage *, int);
@@ -93,7 +93,7 @@ extern void		reply_fmterror(struct sreply *, ddDB *);
 extern void		reply_nxdomain(struct sreply *, ddDB *);
 extern struct rbtree *	get_soa(ddDB *, struct question *);
 extern int		compress_label(u_char *, int, int);
-extern u_int16_t	create_anyreply(struct sreply *, char *, int, int, int, uint32_t);
+extern u_int16_t	create_anyreply(struct sreply *, char *, int, int, int, uint32_t, uint);
 extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
 extern struct question	*build_question(char *, int, int, char *);
 extern int		free_question(struct question *);
@@ -120,6 +120,7 @@ extern int tsig;
 extern long glob_time_offset;
 extern struct zonetree zonehead;
 extern struct walkentry *we1, *wep;
+extern int primary_axfr_old_behaviour;
 
 SLIST_HEAD(, axfrentry) axfrhead;
 
@@ -1005,7 +1006,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		if (ntohs(question->hdr->qtype) == DNS_TYPE_SOA) {
 			dolog(LOG_INFO, "TCP SOA request for zone \"%s\", replying...\n", question->converted_name);
 			outlen = 0;
-			outlen = build_header(db, (reply + 2), (p + 2), question, 1);
+			outlen = build_header(db, (reply + 2), (p + 2), question, 1, 1);
 			outlen = build_soa(db, (reply + 2), outlen, soa, question);
 			if (question->tsig.tsigverified == 1) {
 				struct dns_header *odh;
@@ -1054,7 +1055,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				: "IXFR"), question->converted_name);
 
 
-		outlen = build_header(db, (reply + 2), (p + 2), question, 0);
+		outlen = build_header(db, (reply + 2), (p + 2), question, 0, 1);
 		outlen = build_soa(db, (reply + 2), outlen, soa, question);
 		rrcount = 1;
 		envelopcount = 1;
@@ -1075,7 +1076,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				fq->aa = 1;
 				build_reply(&sreply, so, (p + 2), dnslen, fq, NULL, 0, rbt, NULL, 0xff, 1, 0, replybuf);
 				
-				outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0, res->zonenumber);
+				outlen = create_anyreply(&sreply, (reply + 2), 65535, outlen, 0, res->zonenumber, 0);
 				free_question(fq);
 			} /* if checklabel */
 
@@ -1105,11 +1106,13 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 							dolog(LOG_ERR, "AXFR tsig initialization error, drop\n");
 							goto drop;
 						}
-					}
+
+					} 
+
+					pack16(reply, htons(outlen));
 
 					envelopcount++;
 
-					pack16(reply, htons(outlen));
 				}
 
 				len = send(so, reply, outlen + 2, 0);
@@ -1118,7 +1121,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				}
 			
 				rrcount = 0;
-				outlen = build_header(db, (reply + 2), (p + 2), question, 0);
+				outlen = build_header(db, (reply + 2), (p + 2), question, 0, primary_axfr_old_behaviour ? 1 : 0);
 			}
 
 			memset(&key, 0, sizeof(key));	
@@ -1206,7 +1209,7 @@ reap(int sig)
  */
 
 int 
-build_header(ddDB *db, char *reply, char *buf, struct question *q, int answercount)
+build_header(ddDB *db, char *reply, char *buf, struct question *q, int answercount, int questioncount)
 {
 	struct dns_header *odh;
 	u_int16_t outlen;
@@ -1214,12 +1217,14 @@ build_header(ddDB *db, char *reply, char *buf, struct question *q, int answercou
 	odh = (struct dns_header *)reply;
 	outlen = sizeof(struct dns_header);
 
-	/* copy question to reply */
-	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+	if (questioncount) {
+		/* copy question to reply */
+		memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+		outlen += (q->hdr->namelen + 4);
+	}
+
 	/* blank query */
 	memset((char *)&odh->query, 0, sizeof(u_int16_t));
-
-	outlen += (q->hdr->namelen + 4);
 
 	SET_DNS_REPLY(odh);
 	SET_DNS_AUTHORITATIVE(odh);
@@ -1227,7 +1232,11 @@ build_header(ddDB *db, char *reply, char *buf, struct question *q, int answercou
 	/* XXX */
 	HTONS(odh->query);
 
-	odh->question = htons(1);
+	if (questioncount)
+		odh->question = htons(1);
+	else
+		odh->question = 0;
+
 	odh->answer = htons(answercount);
 	odh->nsrr = 0;
 	odh->additional = 0;
@@ -1251,7 +1260,6 @@ build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question
 	int tmplen;
 
         struct answer {
-                char name[2];
                 u_int16_t type;
                 u_int16_t class;
                 u_int32_t ttl;
@@ -1270,15 +1278,16 @@ build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question
 		return 0;
 	}
 	
+	pack(&reply[offset], q->hdr->name, q->hdr->namelen);
+	offset += q->hdr->namelen;
+
 	answer = (struct answer *)(&reply[offset]);
 
-	answer->name[0] = 0xc0;
-	answer->name[1] = 0x0c;
 	answer->type = htons(DNS_TYPE_SOA);
 	answer->class = htons(DNS_CLASS_IN);
 	answer->ttl = htonl(rrset->ttl);
 
-	offset += 12;			/* up to rdata length */
+	offset += 10;			/* up to rdata length */
 
 	label = ((struct soa *)rrp->rdata)->nsserver;
 	labellen = ((struct soa *)rrp->rdata)->nsserver_len;

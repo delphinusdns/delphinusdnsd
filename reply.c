@@ -97,7 +97,7 @@ extern int 			dn_contains(char *, int, char *, int);
 extern struct zoneentry *	zone_findzone(struct rbtree *);
 
 
-u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int, uint32_t);
+u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int, uint32_t, uint);
 int		reply_zonemd(struct sreply *, int *, ddDB *);
 int		reply_caa(struct sreply *, int *, ddDB *);
 int		reply_hinfo(struct sreply *, int *, ddDB *);
@@ -6768,7 +6768,7 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 		return -1;
 	}
 
-	outlen = create_anyreply(sreply, (char *)reply, replysize, outlen, 1, res->zonenumber);
+	outlen = create_anyreply(sreply, (char *)reply, replysize, outlen, 1, res->zonenumber, 1);
 	if (outlen == 0) {
 		return (retlen);
 	} else if (istcp == 0 && outlen == 65535) {
@@ -6831,7 +6831,7 @@ skip:
  */
 
 u_int16_t
-create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int soa, uint32_t zonenumberx)
+create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int soa, uint32_t zonenumberx, uint compress)
 {
 	int a_count, aaaa_count, ns_count, mx_count, srv_count, sshfp_count;
 	int txt_count;
@@ -6886,9 +6886,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 		offset += q->hdr->namelen;
 
-		if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-			offset = tmplen;
-		} 
+		if (compress) {
+			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+				offset = tmplen;
+			} 
+		}
 
 		answer = (struct answer *)&reply[offset];
 
@@ -6923,9 +6925,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		offset = i;
 	
 		/* compress the label if possible */
-        	if ((tmplen = compress_label((u_char*)reply, offset, labellen)) > 0) {
-                	offset = tmplen;
-        	}
+		if (compress) {
+			if ((tmplen = compress_label((u_char*)reply, offset, labellen)) > 0) {
+				offset = tmplen;
+			}
+		}
 
 		label = ((struct soa *)rrp->rdata)->responsible_person;
 		labellen = ((struct soa *)rrp->rdata)->rp_len;
@@ -6946,9 +6950,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
         	/* 2 compress the label if possible */
 
-		if ((tmplen = compress_label((u_char*)reply, offset, labellen)) > 0) {
-                	offset = tmplen;
-        	}
+		if (compress) {
+			if ((tmplen = compress_label((u_char*)reply, offset, labellen)) > 0) {
+				offset = tmplen;
+			}
+		}
 
 		if ((offset + sizeof(u_int32_t)) > rlen) {
 			goto truncate;
@@ -7012,9 +7018,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 			answer = (struct answer *)&reply[offset];
 
@@ -7074,9 +7082,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 			answer = (struct answer *)&reply[offset];
 
@@ -7129,9 +7139,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 			answer = (struct answer *)&reply[offset];
 
@@ -7181,9 +7193,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 			answer = (struct answer *)&reply[offset];
 
@@ -7235,9 +7249,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 			answer = (struct answer *)&reply[offset];
 
@@ -7294,9 +7310,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 		offset += q->hdr->namelen;
 
-		if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-			offset = tmplen;
-		} 
+		if (compress) {
+			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+				offset = tmplen;
+			} 
+		}
 
 		answer = (struct answer *)&reply[offset];
 
@@ -7376,9 +7394,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 		offset += q->hdr->namelen;
 
-		if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-			offset = tmplen;
-		} 
+		if (compress) {
+			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+				offset = tmplen;
+			} 
+		}
 
 		answer = (struct answer *)&reply[offset];
 
@@ -7442,9 +7462,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 		offset += q->hdr->namelen;
 
-		if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-			offset = tmplen;
-		} 
+		if (compress) {
+			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+				offset = tmplen;
+			} 
+		}
 
 		answer = (struct answer *)&reply[offset];
 
@@ -7494,9 +7516,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 			answer = (struct answer *)&reply[offset];
 
@@ -7523,8 +7547,10 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			offset += namelen;
 			
 			/* compress the label if possible */
-			if ((tmplen = compress_label((u_char*)reply, offset, namelen)) > 0) {
-				offset = tmplen;
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, namelen)) > 0) {
+					offset = tmplen;
+				}
 			}
 
 			answer->rdlength = htons(&reply[offset] - answer->rdata);
@@ -7554,9 +7580,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 		offset += q->hdr->namelen;
 
-		if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-			offset = tmplen;
-		} 
+		if (compress) {
+			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+				offset = tmplen;
+			} 
+		}
 
 		answer = (struct answer *)&reply[offset];
 
@@ -7590,9 +7618,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		offset = i;
 	
 		/* compress the label if possible */
-        	if ((tmplen = compress_label((u_char*)reply, offset, labellen)) > 0) {
-                	offset = tmplen;
-        	}
+		if (compress) {
+			if ((tmplen = compress_label((u_char*)reply, offset, labellen)) > 0) {
+				offset = tmplen;
+			}
+		}
 
 		answer->rdlength = htons(&reply[offset] - answer->rdata);
 	}
@@ -7609,9 +7639,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 		
 			if (offset + 12 > rlen)
@@ -7641,9 +7673,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct smx *)rrp->rdata)->exchangelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, ((struct smx *)rrp->rdata)->exchangelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, ((struct smx *)rrp->rdata)->exchangelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 			answer->rdlength = htons(&reply[offset] - answer->rdata);
 			mx_count++;
@@ -7667,9 +7701,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 			answer = (struct answer *)&reply[offset];
 
@@ -7717,9 +7753,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 		
 			if (offset + 12 > rlen)
@@ -7774,9 +7812,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 		
 			if (offset + 12 > rlen)
@@ -7841,9 +7881,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 		
 			if (offset + 12 > rlen)
@@ -7900,9 +7942,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 		
 			if (offset + 12 > rlen)
@@ -7965,9 +8009,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct naptr *)rrp->rdata)->replacementlen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, ((struct naptr *)rrp->rdata)->replacementlen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, ((struct naptr *)rrp->rdata)->replacementlen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 			answer->rdlength = htons(&reply[offset] - answer->rdata);
 			naptr_count++;
@@ -7990,9 +8036,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 		
 			if (offset + 12 > rlen)
@@ -8027,9 +8075,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct srv *)rrp->rdata)->targetlen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, ((struct srv *)rrp->rdata)->targetlen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, ((struct srv *)rrp->rdata)->targetlen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 			answer->rdlength = htons(&reply[offset] - answer->rdata);
 			srv_count++;
@@ -8057,9 +8107,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 		offset += q->hdr->namelen;
 
-		if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-			offset = tmplen;
-		} 
+		if (compress) {
+			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+				offset = tmplen;
+			} 
+		}
 
 		answer = (struct answer *)&reply[offset];
 
@@ -8093,9 +8145,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		offset = i;
 	
 		/* compress the label if possible */
-        	if ((tmplen = compress_label((u_char*)reply, offset, labellen)) > 0) {
-                	offset = tmplen;
-        	}
+		if (compress) {
+        		if ((tmplen = compress_label((u_char*)reply, offset, labellen)) > 0) {
+                		offset = tmplen;
+        		}
+		}
 
 		answer->rdlength = htons(&reply[offset] - answer->rdata);
 	}
@@ -8111,9 +8165,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 			answer = (struct answer *)&reply[offset];
 
@@ -8153,9 +8209,11 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
 			offset += q->hdr->namelen;
 
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
 			answer = (struct answer *)&reply[offset];
 

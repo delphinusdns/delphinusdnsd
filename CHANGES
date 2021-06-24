@@ -10,6 +10,12 @@ Changes in RELEASE_1_6 from RELEASE_1_5
 - ZONEMD RR's can now be added to a zone in both DNSSEC and non-DNSSEC zones.
   They can also be integrity checked with dddctl zonemd.
 - RFC 9018/7873 Server DNS Cookies support, at first for OpenBSD only
+- BIND & nsd by default dropped the question in the header on subsequent AXFR's
+  (with the first envelope having it, after that no), adjust to this and add
+  primary-axfr-old-behaviour and replicant-axfr-old-behaviour options to the
+  global options in order to keep functionality of the old way, however this
+  will not be documented in the manpages.  Also see -O switch in dddctl query
+  in the source.
 
 
 Changes in RELEASE_1_5 from RELEASE_1_4
