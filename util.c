@@ -2221,7 +2221,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			p += sizeof(u_int16_t);		/* class */
 			/* end of question */
 
-			have_question = 0;
+			if (! ob)
+				have_question = 0;
 		}
 
 		estart = (u_char *)&rwh->dh;
