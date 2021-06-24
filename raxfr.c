@@ -82,6 +82,7 @@ struct myschedule {
 
 
 extern struct rzone *rz0, *rz;
+extern int replicant_axfr_old_behaviour;
 
 int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
@@ -153,7 +154,7 @@ extern void	dolog(int, char *, ...);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int namelen);               
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);    
 extern struct question         *build_question(char *, int, int, char *);
-extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t);
+extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t, int);
 extern int     find_tsig_key(char *, int, char *, int);
 extern int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 
@@ -2377,7 +2378,7 @@ do_raxfr(FILE *f, struct rzone *rzone)
 	if ((format & ZONE_FORMAT) && f != NULL) 
 		fprintf(f, "zone \"%s\" {\n", rzone->zonename);
 
-	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), humanpass, &segment, &answers, &additionalcount, &rzone->constraints, rzone->bytelimit) < 0) {
+	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), humanpass, &segment, &answers, &additionalcount, &rzone->constraints, rzone->bytelimit, replicant_axfr_old_behaviour) < 0) {
 		/* close the zone */
 		if ((format & ZONE_FORMAT) && f != NULL)
 			fprintf(f, "}\n");

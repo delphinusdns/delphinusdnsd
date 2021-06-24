@@ -148,7 +148,7 @@ extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_
 
 extern int                      memcasecmp(u_char *, u_char *, int);
 extern int 			tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
-extern int  lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t);
+extern int  lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t, int);
 extern int 			insert_tsig(char *, char *);
 extern int  			find_tsig_key(char *, int, char *, int);
 extern int  			insert_tsig_key(char *, int, char *);
@@ -202,9 +202,10 @@ dig(int argc, char *argv[])
 	int segment = 0;
 	int answers = 0;
 	int additionalcount = 0;
+	int oldbehaviour = 0;
 	struct soa_constraints constraints = { 0, 0, 0 };
 
-	while ((ch = getopt(argc, argv, "c:@:DIP:TZp:Q:y:")) != -1) {
+	while ((ch = getopt(argc, argv, "c:@:DIOP:TZp:Q:y:")) != -1) {
 		switch (ch) {
 		case 'c':
 			class = atoi(optarg);
@@ -219,6 +220,9 @@ dig(int argc, char *argv[])
 		case 'I':
 			format |= INDENT_FORMAT;
 			break;
+		case 'O':
+			oldbehaviour = 1;
+			break;	
 		case 'P':
 			port = atoi(optarg);
 			break;
@@ -326,7 +330,7 @@ dig(int argc, char *argv[])
 		if ((format & ZONE_FORMAT) && f != NULL) 
 			fprintf(f, "zone \"%s\" {\n", domainname);
 
-		if (lookup_axfr(f, so, domainname, &mysoa, format, tsigkey, tsigpass, &segment, &answers, &additionalcount, &constraints, 0xffffffff) < 0) {
+		if (lookup_axfr(f, so, domainname, &mysoa, format, tsigkey, tsigpass, &segment, &answers, &additionalcount, &constraints, 0xffffffff, oldbehaviour) < 0) {
 			exit(1);
 		}
 

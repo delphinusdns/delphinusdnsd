@@ -104,7 +104,7 @@ int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 char * 	bin2hex(char *, int);
 u_int64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
-int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t);
+int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t, int);
 int dn_contains(char *name, int len, char *anchorname, int alen);
 uint16_t udp_cksum(u_int16_t *, uint16_t, struct ip *, struct udphdr *);
 uint16_t udp_cksum6(u_int16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
@@ -1912,7 +1912,7 @@ bitmap2human(char *bitmap, int len)
 
 
 int
-lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass, int *segment, int *answers, int *additionalcount, struct soa_constraints *constraints, uint32_t bytelimit)
+lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass, int *segment, int *answers, int *additionalcount, struct soa_constraints *constraints, uint32_t bytelimit, int ob)
 {
 	char query[512];
 	char pseudo_packet[512];
@@ -1933,6 +1933,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	int soacount = 0;
 	int segmentcount = 0;
 	int count = 0;
+	int have_question = 1;
 	u_int16_t rdlen, *plen;
 	u_int16_t tcplen;
 	
@@ -2213,10 +2214,15 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		}
 		
 		p = (char *)&rwh[1];		
-		p += q->hdr->namelen;
-		p += sizeof(u_int16_t);	 	/* type */
-		p += sizeof(u_int16_t);		/* class */
-		/* end of question */
+
+		if (have_question) {
+			p += q->hdr->namelen;
+			p += sizeof(u_int16_t);	 	/* type */
+			p += sizeof(u_int16_t);		/* class */
+			/* end of question */
+
+			have_question = 0;
+		}
 
 		estart = (u_char *)&rwh->dh;
 
@@ -2272,6 +2278,40 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 				if (soacount > 1)
 					goto out;
+
+				/*
+				 * oldbehaviour did not account for another 
+				 * header 
+				 */
+
+				if (! ob) {
+					len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL);
+					if (len <= 0) {
+						fprintf(stderr, "mangled AXFR\n");
+						return -1;
+					}
+
+					tcplen = ntohs(unpack16(reply));
+
+					if (tcplen < sizeof(struct whole_header)) {
+						fprintf(stderr, "parsing header after TSIG failed, boundary problem\n");
+						return -1;
+					}
+						
+					len = recv(so, reply, sizeof(struct whole_header), MSG_PEEK | MSG_WAITALL);
+					if (len < 0) {
+						perror("recv");
+						return -1;
+					}
+
+					rwh = (struct whole_header *)&reply[0];
+
+					if (ntohs(unpack16((char *)&rwh->dh.question)) == 1) {
+						have_question = 1;
+					} 
+					
+					break;
+				}
 			} else
 				p = (estart + rrlen);
 

@@ -213,6 +213,7 @@ time_t time_changed;
 int dnssec = 0;
 int raxfrflag = 0;
 int tcpanyonly = 0;
+int replicant_axfr_old_behaviour = 0;
 u_int max_udp_payload = 0xffff; /* 65535 */
 uint16_t fudge_forward = DEFAULT_TSIG_FUDGE;
 uint8_t rdomain = 0;
@@ -1346,6 +1347,9 @@ optionsstatement:
 			} else if (strcasecmp($1, "nocookies") == 0) {
 				dolog(LOG_DEBUG, "turning cookies off\n");
 				cookies = 0;
+			} else if (strcasecmp($1, "replicant-axfr-old-behaviour") == 0) {
+				dolog(LOG_DEBUG, "using old AXFR behaviour (broken)\n");
+				replicant_axfr_old_behaviour = 1;
 			}
 		}
 	}
