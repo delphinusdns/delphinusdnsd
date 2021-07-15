@@ -24,9 +24,7 @@ search.  Since version 1.5.0 it does forward (with TSIG security even).
 This program is written to a BSD Style License.  BSD's tree(3) Red Black 
 btree macros are used for the main in-memory database.  
 
-You can download delphinusdnsd from github or for a limited time only there
-is a base64'ed tarball (gzipped) of the latest source found on the chargen
-port (port 19/tcp) on job.delphinusdns.org.
+You can download delphinusdnsd from github.com for a limited time.
 
 1.1 AUTHOR
 ----------
