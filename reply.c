@@ -553,7 +553,7 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 		outlen = tmplen;
 
 		if (outlen > origlen)
-			odh->answer = htons(a_count + retcount + 1);	
+			odh->answer = htons(a_count + retcount);	
 	}
 
 out:
