@@ -16,13 +16,14 @@ to have replicant compatibility for NSEC
 - DNS Update (RFC 2136 and 3007) must be Secure with TSIG, and do DNSSEC signing
 - add DNS64 (RFC 6147) capability to forwarding mode
 - add DNS over TLS (RFC 7858) capability to forwarding mode
-- an OpenBSD port/package starting with 1.5.0 release
 - fudgesize in forwarding mode for setting higher FUDGE value [DONE]
 - ntphack in main daemon for allowing *.ntp.org through [DONE]
 - rdomains throughout the daemon (forwarding and especially main daemon) [DONE]
 - setproctitle setting of an identifier for identifying a delphinusdnsd when
 many are in the system, also dddctl should be modified to set up killing such
 an ident (ie. /var/run/delphinusdnsd-${ID}.sock) [DONE]
+- fix CNAME answers
+- fix/add wildcard support including AXFR
 
 
 For 1.5.0 release
