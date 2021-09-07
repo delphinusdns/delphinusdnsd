@@ -688,6 +688,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 		if (find_rr(rbt, DNS_TYPE_SOA) != NULL) {
 			returnval = DNS_TYPE_SOA;
 			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) { /* XXX */
+			returnval = DNS_TYPE_CNAME;
+			break;
 		}
 
 		if (nxdomain)
@@ -701,6 +704,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 		if (find_rr(rbt, DNS_TYPE_TLSA) != NULL) {
 			returnval = DNS_TYPE_TLSA;
 			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
 		}
 
 		*error = -1;
@@ -709,6 +715,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 	case DNS_TYPE_CAA:
 		if (find_rr(rbt, DNS_TYPE_CAA) != NULL) {
 			returnval = DNS_TYPE_CAA;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
 			break;
 		}
 
@@ -719,6 +728,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 		if (find_rr(rbt, DNS_TYPE_RP) != NULL) {
 			returnval = DNS_TYPE_RP;
 			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
 		}
 
 		*error = -1;
@@ -727,6 +739,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 	case DNS_TYPE_HINFO:
 		if (find_rr(rbt, DNS_TYPE_HINFO) != NULL) {
 			returnval = DNS_TYPE_HINFO;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
 			break;
 		}
 
@@ -737,6 +752,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 		if (find_rr(rbt, DNS_TYPE_SSHFP) != NULL) {
 			returnval = DNS_TYPE_SSHFP;
 			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
 		}
 
 		*error = -1;
@@ -745,6 +763,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 	case DNS_TYPE_SRV:	
 		if (find_rr(rbt, DNS_TYPE_SRV) != NULL) {
 			returnval = DNS_TYPE_SRV;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
 			break;
 		}
 
@@ -755,6 +776,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 		if (find_rr(rbt, DNS_TYPE_NAPTR) != NULL) {
 				returnval = DNS_TYPE_NAPTR;
 				break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
 		}
 
 		*error = -1;
@@ -772,6 +796,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 		if (find_rr(rbt, DNS_TYPE_NS) != NULL) {
 			returnval = DNS_TYPE_NS;
 			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
 		}
 
 		*error = -1;
@@ -779,6 +806,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 	case DNS_TYPE_TXT:
 		if (find_rr(rbt, DNS_TYPE_TXT) != NULL) {
 			returnval = DNS_TYPE_TXT;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
 			break;
 		}
 
@@ -788,6 +818,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 		if (find_rr(rbt, DNS_TYPE_RRSIG) != NULL) {
 			returnval = DNS_TYPE_RRSIG;
 			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
 		}
 
 		*error = -1;
@@ -795,6 +828,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 	case DNS_TYPE_NSEC3PARAM:
 		if (find_rr(rbt, DNS_TYPE_NSEC3PARAM) != NULL) {
 			returnval = DNS_TYPE_NSEC3PARAM;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
 			break;
 		}
 
@@ -804,6 +840,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 		if (find_rr(rbt, DNS_TYPE_NSEC3) != NULL) {
 			returnval = DNS_TYPE_NSEC3;
 			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
 		}
 
 		*error = -1;
@@ -811,6 +850,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 	case DNS_TYPE_NSEC:
 		if (find_rr(rbt, DNS_TYPE_NSEC) != NULL) {
 			returnval = DNS_TYPE_NSEC;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
 			break;
 		}
 
@@ -820,6 +862,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 		if (find_rr(rbt, DNS_TYPE_DS) != NULL) {
 			returnval = DNS_TYPE_DS;
 			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
 		}
 
 		*error = -1;
@@ -828,6 +873,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 		if (find_rr(rbt, DNS_TYPE_DNSKEY) != NULL) {
 			returnval = DNS_TYPE_DNSKEY;
 			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
 		}
 
 		*error = -1;
@@ -835,6 +883,9 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 	case DNS_TYPE_ZONEMD:
 		if (find_rr(rbt, DNS_TYPE_ZONEMD) != NULL) {
 			returnval = DNS_TYPE_ZONEMD;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
 			break;
 		}
 

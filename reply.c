@@ -3488,7 +3488,6 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
-	int addcount;
 
 	struct answer {
 		char name[2];
@@ -3509,7 +3508,6 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rrset *rrset = NULL;
-	struct rbtree *rbt1 = sreply->rbt2;
 	struct rr *rrp = NULL;
 	int istcp = sreply->istcp;
 	int replysize = 512;
@@ -3640,152 +3638,6 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 		HTONS(odh->answer);
 	}
 	
-	if (ntohs(q->hdr->qtype) == DNS_TYPE_A && rbt1 != 0) {
-		tmplen = additional_a(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, rbt1, reply, replysize, outlen, &addcount);
-
-		if (tmplen > 0)
-			outlen = tmplen;
-
-		NTOHS(odh->answer);
-		odh->answer += addcount;
-		HTONS(odh->answer);
-
-		if (dnssec && q->dnssecok && (rbt1->flags & RBT_DNSSEC)) {
-			int retcount;
-
-			tmplen = additional_rrsig(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, DNS_TYPE_A, rbt1, reply, replysize, outlen, &retcount, q->aa);
-		
-			if (tmplen == 0) {
-				/* we're forwarding and had no RRSIG return with -1 */
-				if (q->aa != 1)
-					return -1;
-
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				odh->answer = 0;
-				odh->nsrr = 0; 
-				odh->additional = 0;
-				outlen = rollback;
-				goto out;
-			}
-
-			outlen = tmplen;
-
-			NTOHS(odh->answer);
-			odh->answer += retcount;
-			HTONS(odh->answer);
-		}
-	} else if (ntohs(q->hdr->qtype) == DNS_TYPE_AAAA && rbt1 != 0) {
-		tmplen = additional_aaaa(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, rbt1, reply, replysize, outlen, &addcount);
-
-		if (tmplen > 0)
-			outlen = tmplen;
-
-		NTOHS(odh->answer);
-		odh->answer += addcount;
-		HTONS(odh->answer);
-
-		if (dnssec && q->dnssecok && (rbt1->flags & RBT_DNSSEC)) {
-			int retcount;
-
-			tmplen = additional_rrsig(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, DNS_TYPE_AAAA, rbt1, reply, replysize, outlen, &retcount, q->aa);
-		
-			if (tmplen == 0) {
-				/* we're forwarding and had no RRSIG return with -1 */
-				if (q->aa != 1)
-					return -1;
-
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				odh->answer = 0;
-				odh->nsrr = 0; 
-				odh->additional = 0;
-				outlen = rollback;
-				goto out;
-			}
-
-			outlen = tmplen;
-
-			NTOHS(odh->answer);
-			odh->answer += retcount;
-			HTONS(odh->answer);
-		}
-	} else if (ntohs(q->hdr->qtype) == DNS_TYPE_MX && rbt1 != 0) {
-		tmplen = additional_mx(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, rbt1, reply, replysize, outlen, &addcount);
-
-		if (tmplen > 0)
-			outlen = tmplen;
-
-		NTOHS(odh->answer);
-		odh->answer += addcount;
-		HTONS(odh->answer);
-
-		if (dnssec && q->dnssecok && (rbt1->flags & RBT_DNSSEC)) {
-			int retcount;
-
-			tmplen = additional_rrsig(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, DNS_TYPE_MX, rbt1, reply, replysize, outlen, &retcount, q->aa);
-		
-			if (tmplen == 0) {
-				/* we're forwarding and had no RRSIG return with -1 */
-				if (q->aa != 1)
-					return -1;
-
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				odh->answer = 0;
-				odh->nsrr = 0; 
-				odh->additional = 0;
-				outlen = rollback;
-				goto out;
-			}
-
-			outlen = tmplen;
-
-			NTOHS(odh->answer);
-			odh->answer += retcount;
-			HTONS(odh->answer);
-		}
-	} else if (ntohs(q->hdr->qtype) == DNS_TYPE_PTR && rbt1 != 0) {
-		tmplen = additional_ptr(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, rbt1, reply, replysize, outlen, &addcount);
-
-		if (tmplen > 0)
-			outlen = tmplen;
-
-		NTOHS(odh->answer);
-		odh->answer += addcount;
-		HTONS(odh->answer);
-
-		if (dnssec && q->dnssecok && (rbt1->flags & RBT_DNSSEC)) {
-			int retcount;
-
-			tmplen = additional_rrsig(((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen, DNS_TYPE_PTR, rbt1, reply, replysize, outlen, &retcount, q->aa);
-		
-			if (tmplen == 0) {
-				/* we're forwarding and had no RRSIG return with -1 */
-				if (q->aa != 1)
-					return -1;
-
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				odh->answer = 0;
-				odh->nsrr = 0; 
-				odh->additional = 0;
-				outlen = rollback;
-				goto out;
-			}
-
-			outlen = tmplen;
-
-			NTOHS(odh->answer);
-			odh->answer += retcount;
-			HTONS(odh->answer);
-		}
-	}	
-
 out:
 	if (q->edns0len) {
 		/* tag on edns0 opt record */
@@ -6073,7 +5925,9 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
 
 	odh->answer = 0;			/* reset any answers */
 	odh->nsrr = 0;				/* reset any authoritave */
+#if 0
 	odh->additional = 0;			/* reset any additionals */
+#endif
 
 	if (haveq)
 		set_reply_flags(NULL, odh, q);

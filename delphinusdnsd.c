@@ -213,32 +213,49 @@ static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_AAAA, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_AAAA, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
 	{ DNS_TYPE_AAAA, DNS_TYPE_AAAA, BUILD_OTHER, reply_aaaa },
+	{ DNS_TYPE_DNSKEY, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_DNSKEY, DNS_TYPE_DNSKEY, BUILD_OTHER, reply_dnskey },
 	{ DNS_TYPE_SOA, DNS_TYPE_SOA, BUILD_OTHER, reply_soa },
 	{ DNS_TYPE_SOA, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
 	{ DNS_TYPE_MX, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_MX, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
 	{ DNS_TYPE_MX, DNS_TYPE_MX, BUILD_OTHER, reply_mx },
+	{ DNS_TYPE_TXT, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_TXT, DNS_TYPE_TXT, BUILD_OTHER, reply_txt },
+	{ DNS_TYPE_NS, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_NS, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
+	{ DNS_TYPE_ANY, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_ANY, DNS_TYPE_ANY, BUILD_OTHER, reply_any },
+	{ DNS_TYPE_DS, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_DS, DNS_TYPE_DS, BUILD_OTHER, reply_ds },
+	{ DNS_TYPE_SSHFP, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_SSHFP, DNS_TYPE_SSHFP, BUILD_OTHER, reply_sshfp },
+	{ DNS_TYPE_TLSA, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_TLSA, DNS_TYPE_TLSA, BUILD_OTHER, reply_tlsa },
+	{ DNS_TYPE_SRV, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_SRV, DNS_TYPE_SRV, BUILD_OTHER, reply_srv },
 	{ DNS_TYPE_CNAME, DNS_TYPE_CNAME, BUILD_OTHER, reply_cname },
 	{ DNS_TYPE_CNAME, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
+	{ DNS_TYPE_NSEC3PARAM, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_NSEC3PARAM, DNS_TYPE_NSEC3PARAM, BUILD_OTHER, reply_nsec3param },
 	{ DNS_TYPE_PTR, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_PTR, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
 	{ DNS_TYPE_PTR, DNS_TYPE_PTR, BUILD_OTHER, reply_ptr },
+	{ DNS_TYPE_NAPTR, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_NAPTR, DNS_TYPE_NAPTR, BUILD_OTHER, reply_naptr },
+	{ DNS_TYPE_NSEC3, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_NSEC3, DNS_TYPE_NSEC3, BUILD_OTHER, reply_nsec3 },
+	{ DNS_TYPE_NSEC, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_NSEC, DNS_TYPE_NSEC, BUILD_OTHER, reply_nsec },
+	{ DNS_TYPE_RRSIG, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_RRSIG, DNS_TYPE_RRSIG, BUILD_OTHER, reply_rrsig },
+	{ DNS_TYPE_CAA, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_CAA, DNS_TYPE_CAA, BUILD_OTHER, reply_caa },
+	{ DNS_TYPE_RP, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_RP, DNS_TYPE_RP, BUILD_OTHER, reply_rp },
+	{ DNS_TYPE_HINFO, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_HINFO, DNS_TYPE_HINFO, BUILD_OTHER, reply_hinfo },
+	{ DNS_TYPE_ZONEMD, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_ZONEMD, DNS_TYPE_ZONEMD, BUILD_OTHER, reply_zonemd },
 	{ 0, 0, 0, NULL }
 };
@@ -2287,7 +2304,7 @@ forwardudp:
 					 * ANY unkown RR TYPE gets a NOTIMPL
 					 */
 					/*
-					 * except for delegations 
+					 * except for delegations
 					 */
 					
 					if (type0 == DNS_TYPE_NS) {
@@ -2300,7 +2317,6 @@ forwardudp:
 						/* add this reply to the cache */
 						add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, md, crc);
 					} else {
-
 
 						build_reply(&sreply, so, buf, len, question, from, \
 							fromlen, NULL, NULL, aregion, istcp, 0, \
