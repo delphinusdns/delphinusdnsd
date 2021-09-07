@@ -22,7 +22,7 @@ to have replicant compatibility for NSEC
 - setproctitle setting of an identifier for identifying a delphinusdnsd when
 many are in the system, also dddctl should be modified to set up killing such
 an ident (ie. /var/run/delphinusdnsd-${ID}.sock) [DONE]
-- fix CNAME answers
+- fix CNAME answers	[DONE]
 - fix/add wildcard support including AXFR
 
 
