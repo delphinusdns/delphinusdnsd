@@ -284,15 +284,20 @@ struct rbtree *
 find_rrsetwild(ddDB *db, char *name, int len)
 {
 	static ddDBT key, data;
-	char *p = name;
-	char *save = name;
+	char *p = NULL, *fake = NULL;
+	char *save = NULL;
 
 	if (name == NULL || len == 0)
 		return NULL;
 
-	
-	if (len <= *p)
+	if (len <= *name)
 		return NULL;
+
+	if ((p = malloc(len)) == NULL)
+		return NULL;
+
+	memcpy(p, name, len);
+	fake = save = p;
 
 	p = p + (*p - 1);
 	len -= (p - save);
@@ -309,8 +314,11 @@ find_rrsetwild(ddDB *db, char *name, int len)
 	key.size = len;
 
 	if (db->get(db, &key, &data) != 0) {
+		free(fake);
 		return (NULL);
 	}
+
+	free(fake);
 
 	return ((struct rbtree *)data.data);
 }
