@@ -49,6 +49,7 @@
 
 struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
 struct rbtree * find_rrset(ddDB *db, char *name, int len);
+struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
 struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 int display_rr(struct rrset *rrset);
@@ -270,6 +271,41 @@ find_rrset(ddDB *db, char *name, int len)
 	memset(&data, 0, sizeof(data));
 
 	key.data = (char *)name;
+	key.size = len;
+
+	if (db->get(db, &key, &data) != 0) {
+		return (NULL);
+	}
+
+	return ((struct rbtree *)data.data);
+}
+
+struct rbtree *
+find_rrsetwild(ddDB *db, char *name, int len)
+{
+	static ddDBT key, data;
+	char *p = name;
+	char *save = name;
+
+	if (name == NULL || len == 0)
+		return NULL;
+
+	
+	if (len <= *p)
+		return NULL;
+
+	p = p + (*p - 1);
+	len -= (p - save);
+	save = p;
+	*p = '\001';
+	p++;
+	*p = '*';	
+
+	
+	memset(&key, 0, sizeof(key));
+	memset(&data, 0, sizeof(data));
+
+	key.data = (char *)save;
 	key.size = len;
 
 	if (db->get(db, &key, &data) != 0) {

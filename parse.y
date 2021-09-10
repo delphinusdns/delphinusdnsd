@@ -1008,6 +1008,7 @@ zonestatement:
 		{
 			if (strcasecmp($3, "a") == 0) { 
 				if (fill_a(mydb, $1, $3, $5, $7) < 0) {
+					dolog(LOG_DEBUG, "fill_a returns");
 					return -1;
 				}
 
@@ -2127,21 +2128,8 @@ yylex(void)
 			return QUOTEDSTRING;
 		}
 
-		if (c == '*') {
-			yylval.v.string = strdup("*");
-			if (yylval.v.string == NULL) {
-				dolog(LOG_ERR, "yylex: %s\n", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
-#ifdef LEXDEBUG
-			if (debug)
-				printf("returning %s\n", "string");
-#endif
-			return STRING;
-		}
-
-		if (isalnum(c) || c == '.' || c == ':' || c == '-' || c == '_') {
+		if (isalnum(c) || c == '.' || c == ':' || c == '-' || \
+				c == '_' || c == '*') {
 			lungetc(c);
 			get_string(buf, sizeof(buf) - 1);
 		

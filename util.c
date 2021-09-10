@@ -147,6 +147,7 @@ extern int cookies;
 extern void 	dolog(int, char *, ...);
 
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
+extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 extern int display_rr(struct rrset *rrset);
@@ -273,16 +274,23 @@ int
 label_count(char *name)
 {
 	int lc = 0;
+	int wildcard = 0;
 	char *p;
 	
 	if (name == NULL) 
 		return -1;
 
 	p = name;
+	if (*p == '\001' && *(p + 1) == '*')
+		wildcard = 1;
+
 	while (*p != '\0') {
 		lc++;
 		p += (*p + 1);
 	}
+
+	if (wildcard)
+		return (lc - 1);
 
 	return (lc);
 }
@@ -404,7 +412,8 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 		}
 	}
 	/* if the find_rrset fails, the find_rr will not get questioned */
-	if ((rbt = find_rrset(db, p, plen)) == NULL ||
+	if ((((rbt = find_rrset(db, p, plen)) == NULL) &&
+		((rbt = find_rrsetwild(db, p, plen)) == NULL)) ||
 		((ntohs(question->hdr->qtype) != DNS_TYPE_DS) && 
 			(rbt->flags & RBT_GLUE)) ||
 		((rbt->flags & RBT_DNSSEC) && (rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL)) {
