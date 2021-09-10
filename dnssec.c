@@ -89,6 +89,7 @@ extern int		check_ent(char *, int);
 extern int 		memcasecmp(u_char *, u_char *, int);
 
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
+extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 
@@ -884,6 +885,10 @@ find_nsec3_match_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 
+	if (rbt->flags & RBT_WILDCARD) {
+		return (find_nsec3_wildcard_closest(name, namelen, rbt, db));
+	}
+
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL) {
 		return NULL;
 	}
@@ -1102,6 +1107,7 @@ find_nsec3_match_qname(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 	char *dname;
 	int backnamelen;
 	struct rbtree *rbt0 = NULL;
+	struct rbtree *wrbt = NULL;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 
@@ -1113,7 +1119,12 @@ find_nsec3_match_qname(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 		return NULL;
 	}
 
-	hashname = hash_name(name, namelen,  (struct nsec3param *)rrp->rdata);
+	if ((wrbt = find_rrsetwild(db, name, namelen)) == NULL)
+		hashname = hash_name(name, namelen,  
+					(struct nsec3param *)rrp->rdata);
+	else
+		hashname = hash_name(wrbt->zone, wrbt->zonelen, 
+					(struct nsec3param *)rrp->rdata);
 	if (hashname == NULL) {
 		dolog(LOG_INFO, "unable to get hashname\n");
 		return NULL;

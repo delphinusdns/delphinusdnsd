@@ -174,6 +174,7 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, ui
 	struct rrset *rrset = NULL;
 	struct rr *myrr = NULL;
 	char *humanname = NULL;
+	int wildcard = 0;
 
 	rbt = find_rrset(db, name, len);
 	if (rbt == NULL) {
@@ -188,6 +189,13 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, ui
 		humanname = convert_name(name, len);
 		strlcpy(rbt->humanname, humanname, sizeof(rbt->humanname));
 		rbt->flags &= ~RBT_DNSSEC;	 /* by default not dnssec'ed */
+
+		if (strlen(humanname) >= 2 && humanname[0] == '*' &&
+			humanname[1] == '.')
+			wildcard = 1;
+
+		if (wildcard == 1)
+			flag_rr(rbt, RBT_WILDCARD);
 
 		TAILQ_INIT(&rbt->rrset_head);
 

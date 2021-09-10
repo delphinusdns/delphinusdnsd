@@ -337,6 +337,7 @@ struct rbtree {
 #define RBT_APEX		0x2 /* this rbtree entry is the apex of zone */
 #define RBT_GLUE		0x4 /* this rbtree entry is GLUE data */
 #define RBT_CACHE		0x8 /* this rbtree lies in the cache */
+#define RBT_WILDCARD		0x10 /* this rbtree is a wildcard */
 
 	TAILQ_HEAD(rrseth, rrset) rrset_head;
 };
