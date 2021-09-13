@@ -65,6 +65,7 @@ extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
 
 extern int     		checklabel(ddDB *, struct rbtree *, struct rbtree *, struct question *);
+extern int		additional_wildcard(char *, int, struct rbtree *, char *, int, int, int *, ddDB *);
 extern int 		additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 extern int 		additional_a(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_aaaa(char *, int, struct rbtree *, char *, int, int, int *);
@@ -177,6 +178,7 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 	int salen = sreply->salen;
 
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp;
 	
@@ -311,6 +313,30 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(a_count + retcount);	
 
+		
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
+
 	}
 
 out:
@@ -397,6 +423,7 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 	int salen = sreply->salen;
 
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	
@@ -541,6 +568,29 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		if (outlen > origlen)
 			odh->answer = htons(a_count + retcount);	
+
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -622,6 +672,7 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	
@@ -786,6 +837,29 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		if (outlen > origlen)
 			odh->answer = htons(a_count + retcount + 1);	
+
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -861,6 +935,7 @@ reply_zonemd(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;	
 	
@@ -1007,6 +1082,28 @@ reply_zonemd(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(zonemd_count + retcount);	
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -1083,6 +1180,7 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;	
 	
@@ -1224,6 +1322,28 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(caa_count + retcount);	
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -1295,6 +1415,7 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;	
 	
@@ -1436,6 +1557,28 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(hinfo_count + retcount);	
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -1507,6 +1650,7 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;	
 	
@@ -1646,6 +1790,28 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(rp_count + retcount);	
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -1722,6 +1888,7 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;	
 	
@@ -1862,6 +2029,28 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(a_count + retcount + 1);	
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -1941,6 +2130,7 @@ reply_ds(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	
@@ -2081,6 +2271,29 @@ reply_ds(struct sreply *sreply, int *sretlen, ddDB *db)
 			odh->answer += retcount;
 			HTONS(odh->answer);
 		}
+
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -2161,6 +2374,7 @@ reply_dnskey(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	
@@ -2298,6 +2512,31 @@ reply_dnskey(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		if (outlen > origlen)
 			odh->answer = htons(dnskey_count + rrsig_count);	
+
+		if (rbt->flags & RBT_WILDCARD) {
+			int retcount;
+
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -2517,6 +2756,7 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rr *rrp = NULL;
 	struct rrset *rrset = NULL;
 	int istcp = sreply->istcp;
@@ -2633,6 +2873,28 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(aaaa_count + retcount);	
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -2717,6 +2979,7 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *rbt0 = NULL;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int istcp = sreply->istcp;
@@ -2877,6 +3140,28 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(mx_count + retcount);	
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 	/* tack on additional A or AAAA records */
@@ -2982,6 +3267,29 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 				HTONS(odh->additional);
 
 				outlen = tmplen;
+
+				if (rbt->flags & RBT_WILDCARD) {
+					authority = get_soa(db, q);
+					if (authority == NULL) {
+						if (q->aa != 1)
+							return -1;
+
+						NTOHS(odh->query);
+						SET_DNS_TRUNCATION(odh);
+						HTONS(odh->query);
+						odh->answer = 0;
+						odh->nsrr = 0; 
+						odh->additional = 0;
+						outlen = rollback;
+						goto out;
+					}
+					tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+					if (tmplen != 0) {
+						outlen = tmplen;
+						odh->nsrr = htons(retcount);	
+					}
+				}
+					
 			}
 
 			rbt0 = NULL;
@@ -3074,6 +3382,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *rbt0 = NULL, *rbt1 = NULL;
+	struct rbtree *authority;
 	struct rbtree *nrbt = NULL;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -3416,6 +3725,27 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 			rbt0 = NULL;
 		}
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
 	}
 
 out:
@@ -3507,6 +3837,7 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int istcp = sreply->istcp;
@@ -3636,6 +3967,29 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 		NTOHS(odh->answer);
 		odh->answer += retcount;
 		HTONS(odh->answer);
+
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 	
 out:
@@ -3717,6 +4071,7 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int istcp = sreply->istcp;
@@ -3845,6 +4200,28 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 		odh->answer += retcount;
 		HTONS(odh->answer);
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -3927,6 +4304,7 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int istcp = sreply->istcp;
@@ -4117,6 +4495,29 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 			odh->answer += retcount;
 			HTONS(odh->answer);
 		}
+
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -4198,6 +4599,7 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int istcp = sreply->istcp;
@@ -4338,6 +4740,28 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 			HTONS(odh->answer);
 		}
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -4544,6 +4968,7 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int istcp = sreply->istcp;
@@ -4672,6 +5097,28 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(tlsa_count + retcount);	
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -4754,6 +5201,7 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int istcp = sreply->istcp;
@@ -4882,6 +5330,28 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(sshfp_count + retcount);	
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -4964,6 +5434,7 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int istcp = sreply->istcp;
@@ -5127,6 +5598,28 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(naptr_count + retcount);	
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -5210,6 +5703,7 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct sockaddr *sa = sreply->sa;
 	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int istcp = sreply->istcp;
@@ -5342,6 +5836,28 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(srv_count + retcount);	
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:
@@ -6630,6 +7146,33 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 		odh->nsrr = 0;
 		odh->additional = 0;
 		outlen = rollback;
+	}
+
+	if (dnssec && q->dnssecok && (rbt->flags & RBT_DNSSEC)) {
+		if (rbt->flags & RBT_WILDCARD) {
+			struct rbtree *authority;
+			int retcount, tmplen;
+
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto skip;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
 	}
 
 skip:
@@ -8233,6 +8776,7 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 	int salen = sreply->salen;
 
 	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp;
 	
@@ -8363,6 +8907,28 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (outlen > origlen)
 			odh->answer = htons(gen_count + retcount);	
 
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
 	}
 
 out:

@@ -65,6 +65,7 @@ int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *,
 int additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 int additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
+int additional_wildcard(char *, int, struct rbtree *, char *, int, int, int *, ddDB *);
 
 extern void 	pack(char *, char *, int);
 extern void 	pack32(char *, u_int32_t);
@@ -80,6 +81,11 @@ extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern int  find_tsig_key(char *, int, char *, int);
 extern void      dolog(int, char *, ...);
+extern char * hash_name(char *name, int len, struct nsec3param *n3p);
+extern char * dns_label(char *, int *);
+extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
+extern struct zoneentry * zone_findzone(struct rbtree *);
+extern char * find_next_closer_nsec3(char *zonename, int zonelen, char *hashname);
 
 
 
@@ -1149,4 +1155,235 @@ additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 	pack32((char *)retcount, tmpcount);
 
 	return (offset);
+}
+
+/*
+ * ADDITIONAL_WILDCARD - tag on NS, RRSIG and next closer NSEC3
+ */
+
+int 
+additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *reply, int replylen, int offset, int *count, ddDB *db)
+{
+        struct answer_ns {
+                u_int16_t type;
+                u_int16_t class;
+                u_int32_t ttl;
+                u_int16_t rdlength;      /* 12 */
+                char ns[0];
+        } __attribute__((packed));
+
+	struct answer_nsec3 {
+		u_int16_t type;
+		u_int16_t class;
+		u_int32_t ttl;
+		u_int16_t rdlength;	 /* 12 */
+		u_int8_t algorithm;
+		u_int8_t flags;
+		u_int16_t iterations;
+		u_int8_t saltlen;
+	} __attribute__((packed));
+
+	struct rbtree *rbt0;
+	struct answer_ns *answerns;
+	struct answer_nsec3 *answer;
+	struct rrset *rrset;
+	struct rr *rrp;
+
+	int tmplen;
+	u_int8_t *somelen;
+	int retcount;
+	time_t now;
+	int zonenumberx;
+
+	now = time(NULL);
+
+	char *name;
+	int namelen;
+
+	char *hashname;
+	char *nextcloser;
+	struct zoneentry *res = NULL;
+
+	if ((rrset = find_rr(authority, DNS_TYPE_NS)) == NULL)
+		goto out;
+
+	res = zone_findzone(authority);
+	if (res != NULL)
+		zonenumberx = res->zonenumber;
+	else
+		zonenumberx = (uint32_t)-1;
+
+	*count = 0;
+		
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
+
+		name = authority->zone;
+		namelen = authority->zonelen;
+
+		/* check if we go over our return length */
+		if ((offset + namelen) > replylen)
+			return 0;
+
+		memcpy(&reply[offset], name, namelen);
+		offset += namelen;
+		tmplen = compress_label((u_char*)reply, offset, namelen);
+
+		if (tmplen != 0) {
+			offset = tmplen;
+		}
+
+		if ((offset + 10) > replylen) /* struct answer_ns */
+			return 0;
+		
+		answerns = (struct answer_ns *)(&reply[offset]);
+		answerns->type = htons(DNS_TYPE_NS);
+		answerns->class = htons(DNS_CLASS_IN);
+		
+		answerns->ttl = htonl(rrset->ttl);
+
+		name = ((struct ns *)rrp->rdata)->nsserver;
+		namelen = ((struct ns *)rrp->rdata)->nslen;
+
+		answerns->rdlength = htons(namelen);
+		offset += 10;	/* struct answer_ns */
+
+		if ((offset + namelen) > replylen)
+			return 0;
+		
+		memcpy((char *)&answerns->ns, (char *)name, namelen);
+		offset += namelen;
+
+		tmplen = compress_label((u_char*)reply, offset, namelen);
+
+		if (tmplen != 0) {
+			offset = tmplen;
+		}
+
+		/* next round*/
+		(*count)++;
+	}
+
+	/* tag on an additional rrsig to this */
+
+	tmplen = additional_rrsig(authority->zone, authority->zonelen, DNS_TYPE_NS
+		, authority, reply, replylen, offset, &retcount, 1);
+
+	if (tmplen != 0)
+		offset = tmplen;
+	else
+		return 0;
+
+	(*count)++;
+
+	rbt0 = find_rrsetwild(db, qname, qnamelen);
+	if (rbt0 == NULL) {
+		return 0;
+	}
+
+	if ((rrset = find_rr(authority, DNS_TYPE_NSEC3PARAM)) == NULL) {
+		return 0;
+	}
+
+	if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL)  {
+		return 0;
+	}
+	
+	hashname = hash_name(rbt0->zone, rbt0->zonelen, 
+					(struct nsec3param *)rrp->rdata);
+
+	if (hashname == NULL) {
+		return 0;
+	}
+
+	nextcloser = find_next_closer_nsec3(authority->zone, authority->zonelen, hashname);
+
+	if (nextcloser == NULL) 
+		return 0;
+
+	name = dns_label(nextcloser, &namelen);
+	
+	authority = find_rrset(db, name, namelen);
+	if (authority == NULL) {
+		dolog(LOG_INFO, "find_rrset failed\n");
+		return 0;
+	}
+	
+	if ((rrset = find_rr(authority, DNS_TYPE_NSEC3)) == NULL) {
+		dolog(LOG_INFO, "find_rr failed\n");
+		return 0;
+	}
+
+	rrp = TAILQ_FIRST(&rrset->rr_head);
+	if (rrp == NULL)
+		return 0;
+	
+
+	/* check if we go over our return length */
+	if ((offset + namelen) > replylen)
+		return 0;
+
+	memcpy(&reply[offset], name, namelen);
+	offset += namelen;
+	tmplen = compress_label((u_char*)reply, offset, namelen);
+
+	if (tmplen != 0) {
+		offset = tmplen;
+	}
+
+	if ((offset + sizeof(struct answer_nsec3)) > replylen) {
+		return 0;
+	}
+
+	answer = (struct answer_nsec3 *)&reply[offset];
+	answer->type = htons(DNS_TYPE_NSEC3);
+	answer->class = htons(DNS_CLASS_IN);
+
+	answer->ttl = htonl(rrset->ttl);
+
+	answer->rdlength = htons(6 + ((struct nsec3 *)rrp->rdata)->saltlen + 
+			((struct nsec3 *)rrp->rdata)->nextlen + 
+			((struct nsec3 *)rrp->rdata)->bitmap_len);
+	answer->algorithm = ((struct nsec3 *)rrp->rdata)->algorithm;
+	answer->flags = ((struct nsec3 *)rrp->rdata)->flags;
+	answer->iterations = htons(((struct nsec3 *)rrp->rdata)->iterations);
+	answer->saltlen = ((struct nsec3 *)rrp->rdata)->saltlen;
+	
+	offset += sizeof(*answer);
+
+	if (((struct nsec3 *)rrp->rdata)->saltlen) {
+		memcpy(&reply[offset], &((struct nsec3 *)rrp->rdata)->salt, 
+				((struct nsec3 *)rrp->rdata)->saltlen);
+		offset += ((struct nsec3 *)rrp->rdata)->saltlen;
+	}
+
+	somelen = (u_int8_t *)&reply[offset];
+	*somelen = ((struct nsec3 *)rrp->rdata)->nextlen;
+
+	offset += 1;
+
+	memcpy(&reply[offset], ((struct nsec3 *)rrp->rdata)->next, 
+			((struct nsec3 *)rrp->rdata)->nextlen);
+
+	offset += ((struct nsec3 *)rrp->rdata)->nextlen;
+
+	memcpy(&reply[offset], ((struct nsec3 *)rrp->rdata)->bitmap, 
+			((struct nsec3 *)rrp->rdata)->bitmap_len);
+	offset += ((struct nsec3 *)rrp->rdata)->bitmap_len;
+
+	(*count)++;
+
+	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, authority, reply, replylen, offset, &retcount, 1);
+
+	if (tmplen == 0) {
+		return 0;
+	}
+
+	offset = tmplen;
+	(*count)++;
+
+out:
+	return (offset);
+
 }
