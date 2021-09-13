@@ -89,6 +89,7 @@ extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern int rotate_rr(struct rrset *rrset);
+extern char * find_next_closer_nsec3(char *zonename, int zonelen, char *hashname);
 extern struct rbtree * find_nsec3_cover_next_closer(char *name, int namelen, struct rbtree *, ddDB *db);
 extern struct rbtree * find_nsec3_match_closest(char *name, int namelen, struct rbtree *, ddDB *db);
 extern struct rbtree * find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *, ddDB *db);
@@ -7015,16 +7016,15 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		rbt0 = find_rrsetwild(db, q->hdr->name, q->hdr->namelen);
 		if (rbt0) {
-			struct rbtree *ncn;
+			struct rbtree *ncn, *rbt1;
 			char nst[DNS_MAXNAME + 1];
-			char *hashname, *name;
+			char *hashname, *name, *nextcloser;
 			int namelen;
 
 			ncn = find_closest_encloser(db, rbt0->zone,
 					rbt0->zonelen);
 
 			if (ncn == NULL) {
-				dolog(LOG_INFO, "ncn failed\n");
 				goto out;
 			}
 
@@ -7047,11 +7047,53 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 			if (name == NULL)
 				goto out;
 
-			rbt0 = find_rrset(db, name, namelen);
-			if (rbt0 == NULL)
+			rbt1 = find_rrset(db, name, namelen);
+			if (rbt1 == NULL)
 				goto out;
 
-			tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa);
+			tmplen = additional_nsec3(rbt1->zone, rbt1->zonelen, DNS_TYPE_NSEC3, rbt1, reply, replysize, outlen, &retcount, q->aa);
+
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+
+			outlen = tmplen;
+
+			NTOHS(odh->nsrr);
+			odh->nsrr += retcount;
+			HTONS(odh->nsrr);
+
+
+			hashname = hash_name(rbt0->zone, rbt0->zonelen,
+					(struct nsec3param *)rrp->rdata);
+
+			if (hashname == NULL)
+				goto out;
+
+			nextcloser = find_next_closer_nsec3(rbt->zone, rbt->zonelen, hashname);
+
+			if (nextcloser == NULL)  {
+				goto out;
+			}
+
+
+			name = dns_label(nextcloser, &namelen);
+			if (name == NULL) {
+				goto out;
+			}
+
+			rbt1 = find_rrset(db, name, namelen);
+			if (rbt1 == NULL)
+				goto out;
+
+			tmplen = additional_nsec3(rbt1->zone, rbt1->zonelen, DNS_TYPE_NSEC3, rbt1, reply, replysize, outlen, &retcount, q->aa);
 
 			if (tmplen == 0) {
 				NTOHS(odh->query);
