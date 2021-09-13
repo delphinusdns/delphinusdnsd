@@ -81,9 +81,11 @@ extern int 		compress_label(u_char *, int, int);
 extern void 		dolog(int, char *, ...);
 extern int 		free_question(struct question *);
 extern int 		get_record_size(ddDB *, char *, int);
-extern char *		dns_label(char *, int *);
 
+extern char *		dns_label(char *, int *);
+extern char * hash_name(char *name, int len, struct nsec3param *n3p);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
+extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern int rotate_rr(struct rrset *rrset);
@@ -91,6 +93,7 @@ extern struct rbtree * find_nsec3_cover_next_closer(char *name, int namelen, str
 extern struct rbtree * find_nsec3_match_closest(char *name, int namelen, struct rbtree *, ddDB *db);
 extern struct rbtree * find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *, ddDB *db);
 extern struct rbtree * find_nsec3_match_qname(char *name, int namelen, struct rbtree *, ddDB *db);
+extern struct rbtree * find_closest_encloser(ddDB *db, char *name, int namelen);
 extern struct rbtree *		get_soa(ddDB *, struct question *);
 extern struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
 extern struct rbtree *		Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
@@ -6980,7 +6983,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 			}
 		} else if (find_rr(rbt, DNS_TYPE_NSEC3PARAM)) {
 			rbt0 = find_nsec3_match_qname(q->hdr->name, q->hdr->namelen, rbt, db);
-			if (rbt0 == 0)
+			if (rbt0 == NULL)
 				goto out;
 
 			memcpy(&uniq[rruniq].name, rbt0->zone, rbt0->zonelen);
@@ -7003,6 +7006,66 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 		outlen = tmplen;
 
 		if (outlen > origlen) {
+			NTOHS(odh->nsrr);
+			odh->nsrr += retcount;
+			HTONS(odh->nsrr);
+		}
+
+		
+
+		rbt0 = find_rrsetwild(db, q->hdr->name, q->hdr->namelen);
+		if (rbt0) {
+			struct rbtree *ncn;
+			char nst[DNS_MAXNAME + 1];
+			char *hashname, *name;
+			int namelen;
+
+			ncn = find_closest_encloser(db, rbt0->zone,
+					rbt0->zonelen);
+
+			if (ncn == NULL) {
+				dolog(LOG_INFO, "ncn failed\n");
+				goto out;
+			}
+
+			if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL) {
+				goto out;
+			}
+
+			if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL)  {
+				goto out;
+			}
+			
+			hashname = hash_name(ncn->zone, ncn->zonelen,
+					(struct nsec3param *)rrp->rdata);
+
+			if (hashname == NULL)
+				goto out;
+			
+			snprintf(nst, sizeof(nst), "%s.%s", hashname, rbt->humanname);
+			name = dns_label(nst, &namelen);
+			if (name == NULL)
+				goto out;
+
+			rbt0 = find_rrset(db, name, namelen);
+			if (rbt0 == NULL)
+				goto out;
+
+			tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa);
+
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+
+			outlen = tmplen;
+
 			NTOHS(odh->nsrr);
 			odh->nsrr += retcount;
 			HTONS(odh->nsrr);
