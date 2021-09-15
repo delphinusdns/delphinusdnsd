@@ -7018,7 +7018,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (rbt0) {
 			struct rbtree *ncn, *rbt1;
 			char nst[DNS_MAXNAME + 1];
-			char *hashname, *name, *nextcloser;
+			char *hashname, *name;
 			int namelen;
 
 			ncn = find_closest_encloser(db, rbt0->zone,
@@ -7071,25 +7071,8 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 			HTONS(odh->nsrr);
 
 
-			hashname = hash_name(rbt0->zone, rbt0->zonelen,
-					(struct nsec3param *)rrp->rdata);
+			rbt1 = find_nsec3_cover_next_closer(rbt->zone, rbt->zonelen, rbt, db);
 
-			if (hashname == NULL)
-				goto out;
-
-			nextcloser = find_next_closer_nsec3(rbt->zone, rbt->zonelen, hashname);
-
-			if (nextcloser == NULL)  {
-				goto out;
-			}
-
-
-			name = dns_label(nextcloser, &namelen);
-			if (name == NULL) {
-				goto out;
-			}
-
-			rbt1 = find_rrset(db, name, namelen);
 			if (rbt1 == NULL)
 				goto out;
 

@@ -83,9 +83,11 @@ extern int  find_tsig_key(char *, int, char *, int);
 extern void      dolog(int, char *, ...);
 extern char * hash_name(char *name, int len, struct nsec3param *n3p);
 extern char * dns_label(char *, int *);
-extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
+extern struct rbtree * find_rrsetwild(ddDB *, char *, int);
 extern struct zoneentry * zone_findzone(struct rbtree *);
-extern char * find_next_closer_nsec3(char *zonename, int zonelen, char *hashname);
+extern char * find_next_closer_nsec3(char *, int, char *);
+extern struct rbtree * find_nsec3_cover_next_closer(char *, int, struct rbtree *, ddDB *);
+
 
 
 
@@ -1200,8 +1202,6 @@ additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *r
 	char *name;
 	int namelen;
 
-	char *hashname;
-	char *nextcloser;
 	struct zoneentry *res = NULL;
 
 	if ((rrset = find_rr(authority, DNS_TYPE_NS)) == NULL)
@@ -1277,40 +1277,11 @@ additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *r
 
 	(*count)++;
 
-	rbt0 = find_rrsetwild(db, qname, qnamelen);
-	if (rbt0 == NULL) {
-		return 0;
-	}
-
-	if ((rrset = find_rr(authority, DNS_TYPE_NSEC3PARAM)) == NULL) {
-		return 0;
-	}
-
-	if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL)  {
-		return 0;
-	}
-	
-	hashname = hash_name(rbt0->zone, rbt0->zonelen, 
-					(struct nsec3param *)rrp->rdata);
-
-	if (hashname == NULL) {
-		return 0;
-	}
-
-	nextcloser = find_next_closer_nsec3(authority->zone, authority->zonelen, hashname);
-
-	if (nextcloser == NULL) 
+	rbt0 = find_nsec3_cover_next_closer(qname, qnamelen, authority, db);
+	if (rbt0 == NULL)
 		return 0;
 
-	name = dns_label(nextcloser, &namelen);
-	
-	authority = find_rrset(db, name, namelen);
-	if (authority == NULL) {
-		dolog(LOG_INFO, "find_rrset failed\n");
-		return 0;
-	}
-	
-	if ((rrset = find_rr(authority, DNS_TYPE_NSEC3)) == NULL) {
+	if ((rrset = find_rr(rbt0, DNS_TYPE_NSEC3)) == NULL) {
 		dolog(LOG_INFO, "find_rr failed\n");
 		return 0;
 	}
@@ -1319,6 +1290,8 @@ additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *r
 	if (rrp == NULL)
 		return 0;
 	
+	name = rbt0->zone;
+	namelen = rbt0->zonelen;
 
 	/* check if we go over our return length */
 	if ((offset + namelen) > replylen)
@@ -1374,7 +1347,7 @@ additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *r
 
 	(*count)++;
 
-	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, authority, reply, replylen, offset, &retcount, 1);
+	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, rbt0, reply, replylen, offset, &retcount, 1);
 
 	if (tmplen == 0) {
 		return 0;

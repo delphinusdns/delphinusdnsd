@@ -998,6 +998,8 @@ find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *rbt, ddDB *d
 #endif
 	
 	dname = find_next_closer_nsec3(rbt->zone, rbt->zonelen, hashname);
+	if (dname == NULL)
+		return NULL;
 	
 	/* found it, get it via db after converting it */	
 
