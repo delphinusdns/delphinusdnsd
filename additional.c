@@ -31,6 +31,7 @@
 #endif
 
 #ifdef __linux__
+#include "siphash.h"
 #include <grp.h>
 #define __USE_BSD 1
 #include <endian.h>
