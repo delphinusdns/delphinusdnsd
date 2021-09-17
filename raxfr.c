@@ -1637,7 +1637,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 			if (n == 0) {
 				/* child died? */
 				dolog(LOG_INFO, "sigpipe on child?  raxfr process exiting.\n");
-				continue;
+				exit(1);
 			}
 
 			for (;;) {
