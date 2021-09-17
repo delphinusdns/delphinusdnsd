@@ -16,6 +16,9 @@ Changes in RELEASE_1_6 from RELEASE_1_5
   global options in order to keep functionality of the old way, however this
   will not be documented in the manpages.  Also see -O switch in dddctl query
   in the source.
+- reworked the CNAME code (we now reply to more RR's)
+- added wildcarding for *.domain.tld domainnames (with DNSSEC support).
+- fixed an endless loop in raxfr process when cortex process died
 
 
 Changes in RELEASE_1_5 from RELEASE_1_4
