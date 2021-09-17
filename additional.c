@@ -87,7 +87,7 @@ extern char * dns_label(char *, int *);
 extern struct rbtree * find_rrsetwild(ddDB *, char *, int);
 extern struct zoneentry * zone_findzone(struct rbtree *);
 extern char * find_next_closer_nsec3(char *, int, char *);
-extern struct rbtree * find_nsec3_cover_next_closer(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * find_nsec3_match_qname_wild(char *, int, struct rbtree *, ddDB *);
 
 
 
@@ -1278,7 +1278,7 @@ additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *r
 
 	(*count)++;
 
-	rbt0 = find_nsec3_cover_next_closer(qname, qnamelen, authority, db);
+	rbt0 = find_nsec3_match_qname_wild(qname, qnamelen, authority, db);
 	if (rbt0 == NULL)
 		return 0;
 

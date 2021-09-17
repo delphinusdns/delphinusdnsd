@@ -109,6 +109,7 @@ extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern void flag_rr(struct rbtree *, uint32_t);
 extern int pull_rzone(struct rzone *, time_t);
+extern int finalize_nsec3(void);
 
 extern int tsigpassname;
 extern int passlist;
@@ -1985,6 +1986,8 @@ parse_file(ddDB *db, char *filename, uint32_t flags)
 		popfile();
 	}
 
+	if (dnssec)
+		finalize_nsec3();
 
 #if DEBUG
 	dolog(LOG_INFO, "configuration file read\n");

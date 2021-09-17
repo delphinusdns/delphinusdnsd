@@ -79,6 +79,8 @@ char * hash_name(char *name, int len, struct nsec3param *n3p);
 char * base32hex_encode(u_char *input, int len);
 int 	base32hex_decode(u_char *, u_char *);
 void 	mysetbit(u_char *, int);
+int finalize_nsec3(void);
+struct rbtree * find_closest_encloser_nsec3(char *, int, struct rbtree *, ddDB *);
 
 extern int              get_record_size(ddDB *, char *, int);
 extern char *           dns_label(char *, int *);
@@ -93,22 +95,32 @@ extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
 
+extern int debug;
+
 SLIST_HEAD(listhead, dnssecentry) dnssechead;
 
-static struct nsec3entry {
+struct nsec3entry {
 	char domainname[DNS_MAXNAME + 1];
 	char dname[DNS_MAXNAME];
 	int dnamelen;
 	TAILQ_ENTRY(nsec3entry) nsec3_entries;	
+        RB_ENTRY(nsec3entry) nsec3_entry;
 } *n3, *ns3p;
 
-static struct dnssecentry {
+
+struct dnssecentry {
 	char zonename[DNS_MAXNAME + 1];
 	char zone[DNS_MAXNAME];
 	int zonelen;
 	SLIST_ENTRY(dnssecentry) dnssec_entry;
 	TAILQ_HEAD(aa, nsec3entry) nsec3head;
+	RB_HEAD(nsec3tree, nsec3entry) tree;
 } *dn, *dnp;
+
+int nsec3cmp(struct nsec3entry *, struct nsec3entry *);
+
+RB_PROTOTYPE(nsec3tree, nsec3entry, nsec3_entry, nsec3cmp);
+RB_GENERATE(nsec3tree, nsec3entry, nsec3_entry, nsec3cmp);
 
 
 void
@@ -137,6 +149,7 @@ insert_apex(char *zonename, char *zone, int zonelen)
 	dn->zonelen = zonelen;
 
 	TAILQ_INIT(&dn->nsec3head);
+	RB_INIT(&dn->tree);
 
 	SLIST_INSERT_HEAD(&dnssechead, dn, dnssec_entry);
 
@@ -166,35 +179,35 @@ insert_nsec3(char *zonename, char *domainname, char *dname, int dnamelen)
 		return -1;
 	}
 
-	memcpy(n3->dname, dname, dnamelen);
-	n3->dnamelen = dnamelen;
+	RB_INSERT(nsec3tree, &dnp->tree, n3);
+	
+	return (0);
+}
 
 
-	/*
-	 * sort the tailq here 
-	 */
 
-	if (TAILQ_EMPTY(&dn->nsec3head)) {
-		TAILQ_INSERT_TAIL(&dn->nsec3head, n3, nsec3_entries);
-	} else {
-		ns3p = TAILQ_FIRST(&dn->nsec3head);
-		if (strcmp(n3->domainname, ns3p->domainname) < 0) {
-			TAILQ_INSERT_BEFORE(ns3p, n3, nsec3_entries);
-		} else {
-			while ((ns3p = TAILQ_NEXT(ns3p, nsec3_entries)) != NULL) {
-				if (strcmp(n3->domainname, ns3p->domainname) < 0) {
-					TAILQ_INSERT_BEFORE(ns3p, n3, nsec3_entries);
-					break;
-				}
-			}
+
+int
+finalize_nsec3(void)
+{
+	SLIST_FOREACH(dnp, &dnssechead, dnssec_entry) {
+		RB_FOREACH(n3, nsec3tree, &dnp->tree) {
+			TAILQ_INSERT_TAIL(&dnp->nsec3head, n3, nsec3_entries);
 		}
-		if (ns3p == NULL) {
-			TAILQ_INSERT_TAIL(&dn->nsec3head, n3, nsec3_entries);
+
+		TAILQ_FOREACH(n3, &dnp->nsec3head, nsec3_entries) {
+			if (debug)
+				dolog(LOG_INFO, "%s ---> %s\n", dnp->zonename, n3->domainname);
 		}
 	}
 
-
 	return (0);
+}
+
+int
+nsec3cmp(struct nsec3entry *a, struct nsec3entry *b)
+{
+	return (strcmp((void *)a->domainname, (void *)b->domainname));
 }
 
 char * 
@@ -885,10 +898,6 @@ find_nsec3_match_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 
-	if (rbt->flags & RBT_WILDCARD) {
-		return (find_nsec3_wildcard_closest(name, namelen, rbt, db));
-	}
-
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL) {
 		return NULL;
 	}
@@ -1173,4 +1182,200 @@ find_nsec3_match_qname(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 #endif
 
 	return (rbt0);
+}
+
+char * 
+find_match_nsec3_wild(char *zonename, int zonelen, char *hashname)
+{
+	int hashlen;
+
+	hashlen = strlen(hashname);
+
+	SLIST_FOREACH(dnp, &dnssechead, dnssec_entry) {
+		if (zonelen == dnp->zonelen && 
+			(memcmp(dnp->zone, zonename, zonelen) == 0))
+			break;
+	}
+
+	if (dnp == NULL)
+		return NULL;
+
+	/* we have found the zone, now find the next closer hash for nsec3 */
+
+	TAILQ_FOREACH(n3, &dnp->nsec3head, nsec3_entries) {
+		if (strncasecmp(hashname, n3->domainname, hashlen) > 0) {
+			continue;
+		}  else
+			break;
+	}
+	
+	/* wraparound on first entry */
+	if (TAILQ_FIRST(&dnp->nsec3head) == n3)
+		n3 = TAILQ_LAST(&dnp->nsec3head, aa);
+	else if (n3 == NULL) {
+		n3 = TAILQ_LAST(&dnp->nsec3head, aa);
+	} else
+		n3 = TAILQ_PREV(n3, aa, nsec3_entries);
+
+	if (n3 == NULL) {
+		return (NULL);
+	}
+
+#ifdef DEBUG
+	dolog(LOG_INFO, "resolved at %s\n", n3->domainname);
+#endif
+
+	return (n3->domainname);
+}
+
+/*
+ * FIND_NSEC3_MATCH_QNAME_WILD - find the matching QNAME and return NSEC3
+ *
+ */
+
+struct rbtree *
+find_nsec3_match_qname_wild(char *name, int namelen, struct rbtree *rbt, ddDB *db)
+{
+	char *hashname;
+	char *backname;
+	char *dname;
+	int backnamelen;
+	struct rbtree *rbt0 = NULL;
+	struct rbtree *wrbt = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+
+
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL) {
+		return NULL;
+	}
+	if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+		return NULL;
+	}
+
+	if ((wrbt = find_rrsetwild(db, name, namelen)) == NULL)
+		return (NULL);
+
+
+	hashname = hash_name(name, namelen, (struct nsec3param *)rrp->rdata);
+	if (hashname == NULL) {
+		dolog(LOG_INFO, "unable to get hashname\n");
+		return NULL;
+	}
+
+#if DEBUG
+	dolog(LOG_INFO, "hashname  = %s\n", hashname);
+#endif
+
+	dname = find_match_nsec3_wild(rbt->zone, rbt->zonelen, hashname);
+	
+	if (dname == NULL) {
+		return NULL;
+	}
+	
+	/* found it, get it via db after converting it */	
+	
+#if DEBUG
+	dolog(LOG_INFO, "converting %s\n", dname);
+#endif
+
+	backname = dns_label(dname, &backnamelen);
+	if (backname == NULL) {
+		return NULL;
+	}
+
+	rbt0 = find_rrset(db, backname, backnamelen);
+	if (rbt0 == NULL) {
+		free (backname);
+		return (NULL);
+	}
+	
+
+	free (backname);
+
+#ifdef DEBUG
+	dolog(LOG_INFO, "returning %s\n", rbt0->humanname);
+#endif
+
+	return (rbt0);
+}
+
+/* 
+ * FIND_CLOSEST_ENCLOSER_NSEC3 - find the closest encloser record
+ */
+
+struct rbtree *
+find_closest_encloser_nsec3(char *qname, int qnamelen, struct rbtree *rbt, ddDB *db)
+{
+	char nst[DNS_MAXNAME + 1];
+	char *hashname, *name;
+	int namelen;
+	struct rbtree *rbt0 = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+
+	int plen;
+	
+	char *p;
+
+	p = qname;
+	plen = qnamelen;
+
+	/* advance one label */
+	plen -= (*p + 1);
+	p = (p + (*p + 1));
+
+
+	do {
+		rbt0 = find_rrset(db, p, plen);
+		if (rbt0 == NULL) {
+			if (check_ent(p, plen)) {
+				rbt0 = NULL;
+				goto nsec3;
+			}
+			plen -= (*p + 1);
+			p = (p + (*p + 1));
+			continue;
+		}
+		
+		if ((rrset = find_rr(rbt0, DNS_TYPE_NSEC3)) != NULL) {
+			plen -= (*p + 1);
+			p = (p + (*p + 1));
+			continue;
+		}
+
+		goto nsec3;
+
+	} while (*p);
+
+	return NULL;
+
+nsec3:
+
+	if (rbt0 != NULL) {
+		p = rbt->zone;
+		plen = rbt->zonelen;
+	}
+
+	
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL) {
+		return (NULL);
+	}
+
+	if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL)  {
+		return (NULL);
+	}
+
+
+	hashname = hash_name(p, plen, (struct nsec3param *)rrp->rdata);
+
+	if (hashname == NULL)
+		return (NULL);			
+
+	snprintf(nst, sizeof(nst), "%s.%s", hashname, rbt->humanname);
+	name = dns_label(nst, &namelen);
+	if (name == NULL)
+		return (NULL);
+
+	return (find_rrset(db, name, namelen));
 }
