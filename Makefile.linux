@@ -8,8 +8,8 @@ AR=ar
 
 all: delphinusdnsd dddctl
 
-delphinusdnsd: imsg-buffer.o imsg.o additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o
-	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o imsg-buffer.o imsg.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o $(LDADD)
+delphinusdnsd: imsg-buffer.o imsg.o additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o
+	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o imsg-buffer.o imsg.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o $(LDADD)
 
 dddctl:  dddctl.o util.o dnssec.o parse.o base64.o ent.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o
 	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o $(LDADD)
@@ -94,6 +94,9 @@ cache.o: cache.c
 
 zone.o: zone.c
 	$(CC) $(CFLAGS) -c zone.c
+
+siphash.o: siphash.o
+	$(CC) $(CFLAGS) -c siphash.c
 
 install: install-delphinusdnsd install-dddctl
 
