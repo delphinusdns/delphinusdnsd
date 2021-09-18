@@ -187,7 +187,7 @@ char *			sm_init(size_t, size_t);
 size_t			sm_size(size_t, size_t);
 void			sm_lock(char *, size_t);
 void			sm_unlock(char *, size_t);
-int			same_refused(EVP_MD *, u_char *, void *, int, void *, int);
+int			same_refused(u_char *, void *, int, void *, int);
 int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, char *, uint16_t *, uint16_t *, EVP_MD *, uint16_t *);
 int			add_cache(struct querycache *, char *, int, struct question *,  char *, int, EVP_MD *, uint16_t);
 uint16_t		crc16(uint8_t *, int);
@@ -1703,7 +1703,7 @@ axfrentry:
 					goto drop;
 				}
 
-				if ((time(NULL) & ~3) == (refusedtime & ~3) && same_refused(md, rdigest, (void *)&buf[2], len - 2, (void *)address, addrlen)) {
+				if ((time(NULL) & ~3) == (refusedtime & ~3) && same_refused(rdigest, (void *)&buf[2], len - 2, (void *)address, addrlen)) {
 					dolog(LOG_INFO, "short circuiting multiple refused from %s, drop\n", address);	
 					goto drop;
 				}
@@ -4536,11 +4536,17 @@ sm_unlock(char *shm, size_t end)
 }
 
 int
-same_refused(EVP_MD *md, u_char *old_digest, void *buf, int len, void *address, int addrlen)
+same_refused(u_char *old_digest, void *buf, int len, void *address, int addrlen)
 {
 	EVP_MD_CTX *ctx;
+	const EVP_MD *md;
 	u_char rdigest[MD5_DIGEST_LENGTH];	
 	u_int md_len;
+
+	md = (EVP_MD *)EVP_md5();
+	if (md == NULL) {
+		return 0;
+	}
 
 	ctx = EVP_MD_CTX_new();
 	EVP_DigestInit_ex(ctx, md, NULL);
