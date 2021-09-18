@@ -95,7 +95,7 @@ cache.o: cache.c
 zone.o: zone.c
 	$(CC) $(CFLAGS) -c zone.c
 
-siphash.o: siphash.o
+siphash.o: siphash.c
 	$(CC) $(CFLAGS) -c siphash.c
 
 install: install-delphinusdnsd install-dddctl
