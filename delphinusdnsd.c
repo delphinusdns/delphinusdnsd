@@ -189,7 +189,7 @@ void			sm_lock(char *, size_t);
 void			sm_unlock(char *, size_t);
 int			same_refused(u_char *, void *, int, void *, int);
 int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, char *, uint16_t *, uint16_t *, EVP_MD *, uint16_t *);
-int			add_cache(struct querycache *, char *, int, struct question *,  char *, int, EVP_MD *, uint16_t);
+int			add_cache(struct querycache *, char *, int, struct question *,  char *, int, uint16_t);
 uint16_t		crc16(uint8_t *, int);
 int			intcmp(struct csnode *, struct csnode *);
 
@@ -1965,7 +1965,7 @@ axfrentry:
 							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 							slen = reply_notauth(&sreply, &sretlen, NULL);
 							/* add this reply to the cache */
-							add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, md, crc);
+							add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, crc);
 							goto udpout;
 					}
 				}
@@ -1974,7 +1974,7 @@ axfrentry:
 					build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 					slen = reply_badvers(&sreply, &sretlen, NULL);
 					/* add this reply to the cache */
-					add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, md, crc);
+					add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, crc);
 
 					dolog(LOG_INFO, "on descriptor %u interface \"%s\" edns version is %u from %s, replying badvers\n", so, cfg->ident[i], question->ednsversion, address);
 
@@ -1989,7 +1989,7 @@ axfrentry:
 							build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
 							slen = reply_version(&sreply, &sretlen, NULL);
 							/* add this reply to the cache */
-							add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, md, crc);
+							add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, crc);
 							goto udpout;
 				}
 
@@ -2036,7 +2036,7 @@ axfrentry:
 
 							slen = reply_nxdomain(&sreply, &sretlen, cfg->db);
 							/* add this reply to the cache */
-							add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, md, crc);
+							add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, crc);
 
 						}
 						goto udpout;
@@ -2196,7 +2196,7 @@ forwardudp:
 
 							slen = reply_noerror(&sreply, &sretlen, cfg->db);
 							/* add this reply to the cache */
-							add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, md, crc);
+							add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, crc);
 
 							goto udpout;
 						} 
@@ -2213,7 +2213,7 @@ forwardudp:
 
 							slen = reply_ns(&sreply, &sretlen, cfg->db);
 							/* add this reply to the cache */
-							add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, md, crc);
+							add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, crc);
 						} else {
 							slen = 0;
 							snprintf(replystring, DNS_MAXNAME, "DROP");
@@ -2268,7 +2268,7 @@ forwardudp:
 
 					slen = reply_notimpl(&sreply, &sretlen, NULL);
 					/* add this reply to the cache */
-					add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, md, crc);
+					add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, crc);
 					snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					goto udpout;
 				}
@@ -2294,7 +2294,7 @@ forwardudp:
 
 						slen = (*rl->reply)(&sreply, &sretlen, cfg->db);
 						/* add this reply to the cache */
-						add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, md, crc);
+						add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, crc);
 						break;
 					} /* if rl->rrtype == */
 				}
@@ -2315,7 +2315,7 @@ forwardudp:
 
 						slen = reply_ns(&sreply, &sretlen, cfg->db);
 						/* add this reply to the cache */
-						add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, md, crc);
+						add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, crc);
 					} else {
 
 						build_reply(&sreply, so, buf, len, question, from, \
@@ -2324,7 +2324,7 @@ forwardudp:
 
 						slen = reply_notimpl(&sreply, &sretlen, NULL);
 						/* add this reply to the cache */
-						add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, md, crc);
+						add_cache(&qc, &buf[2], len - 2, question, sreply.replybuf, sretlen, crc);
 
 						snprintf(replystring, DNS_MAXNAME, "NOTIMPL");
 					}
@@ -4570,9 +4570,10 @@ same_refused(u_char *old_digest, void *buf, int len, void *address, int addrlen)
  */
 
 int
-add_cache(struct querycache *qc, char *buf, int len, struct question *q,  char *reply, int replylen, EVP_MD *md, uint16_t crc)
+add_cache(struct querycache *qc, char *buf, int len, struct question *q,  char *reply, int replylen, uint16_t crc)
 {
 	EVP_MD_CTX *ctx;
+	const EVP_MD *md;
 	u_char rdigest[MD5_DIGEST_LENGTH];	
 	u_int md_len;
 	struct csnode *n, *res, find;
@@ -4612,6 +4613,10 @@ next:
 
 	if (len > QC_REQUESTSIZE) {
 		ctx = EVP_MD_CTX_new();
+		md = (EVP_MD *)EVP_md5();
+		if (md == NULL) {
+			return -1;
+		}
 		EVP_DigestInit_ex(ctx, md, NULL);
 		EVP_DigestUpdate(ctx, buf, len);
 		EVP_DigestFinal_ex(ctx, rdigest, &md_len);
