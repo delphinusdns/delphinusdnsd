@@ -785,6 +785,7 @@ cache_srv(struct scache *scache)
 	}
 
 	memcpy(&s.target, expand, sizeof(s.target));
+	s.targetlen = elen;
 		
 	transmit_rr(scache, (void*)&s, sizeof(s));
 
