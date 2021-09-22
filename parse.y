@@ -2018,7 +2018,7 @@ yylex(void)
 	if (c == '\n') {
 		file->lineno++;
 
-		while ((c = lgetc(0)) != EOF && (c == '\n' || c == '\t'))
+		while ((c = lgetc(0)) != EOF && (c == '\n' || c == ' ' || c == '\t'))
 			if (c == '\n')
 				file->lineno++;
 		lungetc(c);
