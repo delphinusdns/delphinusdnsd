@@ -993,6 +993,7 @@ main(int argc, char *argv[], char *environ[])
 #if __OpenBSD__
 			if (pledge("stdio inet proc id sendfd recvfd unveil", NULL) < 0) {
 				perror("pledge");
+				ddd_shutdown();
 				exit(1);
 			}
 #endif
@@ -1143,6 +1144,7 @@ main(int argc, char *argv[], char *environ[])
 			}
 			if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
 				perror("pledge");
+				ddd_shutdown();
 				exit(1);
 			}
 #endif
@@ -1201,6 +1203,7 @@ main(int argc, char *argv[], char *environ[])
 	}
 	if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
 		perror("pledge");
+		ddd_shutdown();
 		exit(1);
 	}
 #endif
@@ -1369,6 +1372,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	switch (pid) {
 	case -1:
 		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
+		ddd_shutdown();
 		exit(1);
 	case 0:
 		for (i = 0; i < cfg->sockcount; i++)  {
@@ -1489,6 +1493,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	switch (pid) {
 	case -1:
 		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
+		ddd_shutdown();
 		exit(1);
 	case 0:
 #ifndef __OpenBSD__
@@ -1524,6 +1529,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 #if __OpenBSD__
 	if (pledge("stdio inet sendfd recvfd", NULL) < 0) {
 		perror("pledge");
+		ddd_shutdown();
 		exit(1);
 	}
 #endif
@@ -2427,18 +2433,22 @@ setup_primary(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 #if __OpenBSD__
 	if (unveil(socketpath, "rwc")  < 0) {
 		perror("unveil");
+		ddd_shutdown();
 		exit(1);
 	}
 	if (unveil("/usr/local/sbin/delphinusdnsd", "rx")  < 0) {
 		perror("unveil");
+		ddd_shutdown();
 		exit(1);
 	}
 	if (unveil(NULL, NULL) < 0) {
 		perror("unveil");
+		ddd_shutdown();
 		exit(1);
 	}
 	if (pledge("stdio wpath cpath exec proc", NULL) < 0) {
 		perror("pledge");
+		ddd_shutdown();
 		exit(1);
 	}
 #endif
@@ -2520,6 +2530,7 @@ setup_primary(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 			if (n == 0) {
 				/* child died? */
 				dolog(LOG_INFO, "sigpipe on child?  delphinusdnsd primary process exiting.\n");
+				ddd_shutdown();
 				exit(1);
 			}
 
@@ -2679,6 +2690,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	switch (pid) {
 	case -1:
 		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
+		ddd_shutdown();
 		exit(1);
 	case 0:
 #ifndef __OpenBSD__
@@ -2711,6 +2723,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 #if __OpenBSD__
 	if (pledge("stdio inet sendfd recvfd", NULL) < 0) {
 		perror("pledge");
+		ddd_shutdown();
 		exit(1);
 	}
 #endif
@@ -4194,7 +4207,20 @@ setup_cortex(struct imsgbuf *ibuf)
 				if (n == 0) {
 					/* child died? */
 					dolog(LOG_INFO, "sigpipe on child?  delphinusdnsd cortex process exiting.\n");
-					exit(1);
+					SLIST_FOREACH(neup2, &neuronhead, entries) {
+						if (neup2->desc == MY_IMSG_PRIMARY)
+							break;
+					}
+					/* didn't find it?  skip */
+					if (neup2 == NULL) {
+						ddd_shutdown(); /* last resort */
+						exit(1);
+					}
+					imsg_compose(&neup2->ibuf, IMSG_SHUTDOWN_MESSAGE, 0, 0, -1, NULL, 0);
+					msgbuf_write(&neup2->ibuf.w);
+
+					for (;;)
+						sleep(1);
 				}
 
 				for (;;) {
@@ -4315,7 +4341,20 @@ setup_cortex(struct imsgbuf *ibuf)
 			if (n == 0) {
 				/* child died? */
 				dolog(LOG_INFO, "sigpipe on child?  delphinusdnsd cortex process exiting.\n");
-				exit(1);
+				SLIST_FOREACH(neup2, &neuronhead, entries) {
+					if (neup2->desc == MY_IMSG_PRIMARY)
+						break;
+				}
+				/* didn't find it?  skip */
+				if (neup2 == NULL) {
+					ddd_shutdown(); /* last resort */
+					exit(1);
+				}
+				imsg_compose(&neup2->ibuf, IMSG_SHUTDOWN_MESSAGE, 0, 0, -1, NULL, 0);
+				msgbuf_write(&neup2->ibuf.w);
+
+				for (;;)
+					sleep(1);
 			}
 
 			for (;;) {
@@ -4489,6 +4528,7 @@ sm_init(size_t members, size_t size_member)
 
 	if (shptr == MAP_FAILED) {
 		dolog(LOG_ERR, "failed to setup  mmap segment, exit\n");
+		ddd_shutdown();
 		exit(1);
 	}
 
