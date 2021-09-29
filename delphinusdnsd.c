@@ -1809,8 +1809,8 @@ axfrentry:
 				if (FD_ISSET(pibuf->fd, &rset)) {
 	
 						if (((n = imsg_read(pibuf)) == -1 && errno != EAGAIN) || n == 0) {
-							dolog(LOG_ERR, "internal error, timeout on parse imsg, drop\n");
-							goto drop;
+							dolog(LOG_ERR, "internal error, parse child likely died, exit\n");
+							exit(1);
 						}
 
 						for (;;) {
@@ -2530,7 +2530,6 @@ setup_primary(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 			if (n == 0) {
 				/* child died? */
 				dolog(LOG_INFO, "sigpipe on child?  delphinusdnsd primary process exiting.\n");
-				ddd_shutdown();
 				exit(1);
 			}
 
@@ -2978,8 +2977,9 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				}
 	
 				if (((n = imsg_read(pibuf)) == -1 && errno != EAGAIN) || n == 0) {
-					dolog(LOG_ERR, "tcploop internal error, timeout on parse imsg, drop\n");
-					goto drop;
+					dolog(LOG_ERR, "tcploop internal error, parse child likely died, exit\n");
+					ddd_shutdown();
+					exit(1);
 				}
 
 				for (;;) {
@@ -3909,9 +3909,11 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	sun.sun_family = AF_UNIX;
 	if (strlcpy(sun.sun_path, socketpath, sizeof(sun.sun_path)) >= sizeof(sun.sun_path)) {
 		ddd_shutdown();
-		for (;;) {
+		for (int count=0;count < 10;) {
 			sleep(1);
+			count++;
 		}
+		exit(1);
 	}
 #ifndef __linux__
 	sun.sun_len = SUN_LEN(&sun);
@@ -4219,8 +4221,10 @@ setup_cortex(struct imsgbuf *ibuf)
 					imsg_compose(&neup2->ibuf, IMSG_SHUTDOWN_MESSAGE, 0, 0, -1, NULL, 0);
 					msgbuf_write(&neup2->ibuf.w);
 
-					for (;;)
+					for (int count=0;count < 10;count++) {
 						sleep(1);
+					}
+					exit(1);
 				}
 
 				for (;;) {
@@ -4353,8 +4357,10 @@ setup_cortex(struct imsgbuf *ibuf)
 				imsg_compose(&neup2->ibuf, IMSG_SHUTDOWN_MESSAGE, 0, 0, -1, NULL, 0);
 				msgbuf_write(&neup2->ibuf.w);
 
-				for (;;)
+				for (int count = 0; count < 10; count++) {
 					sleep(1);
+				}
+				exit(1);
 			}
 
 			for (;;) {
