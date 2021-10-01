@@ -188,7 +188,7 @@ size_t			sm_size(size_t, size_t);
 void			sm_lock(char *, size_t);
 void			sm_unlock(char *, size_t);
 int			same_refused(u_char *, void *, int, void *, int);
-int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, char *, uint16_t *, uint16_t *, EVP_MD *, uint16_t *);
+int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, char *, uint16_t *, uint16_t *, uint16_t *);
 int			add_cache(struct querycache *, char *, int, struct question *,  char *, int, uint16_t);
 uint16_t		crc16(uint8_t *, int);
 int			intcmp(struct csnode *, struct csnode *);
@@ -1428,6 +1428,11 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	}
 
 	rctx = EVP_MD_CTX_new();
+	if (rctx == NULL) {
+		dolog(LOG_ERR, "EVP_MD_CTX_new failed\n");
+		ddd_shutdown();
+		exit(1);
+	}
 	
 
 	replybuf = calloc(1, 65536);
@@ -1755,7 +1760,7 @@ axfrentry:
 				 * circuit with a somewhat pretty message
 				 */
 
-				if ((slen = reply_cache(so, from, fromlen, &qc, buf, len, (char *)&cdomainname, &cclass, &ctype, md, &crc)) > 0) {
+				if ((slen = reply_cache(so, from, fromlen, &qc, buf, len, (char *)&cdomainname, &cclass, &ctype, &crc)) > 0) {
 					if (lflag) {
 						double diffms;
 
@@ -4595,6 +4600,10 @@ same_refused(u_char *old_digest, void *buf, int len, void *address, int addrlen)
 	}
 
 	ctx = EVP_MD_CTX_new();
+	if (ctx == NULL) {
+		return 0;
+	}
+
 	EVP_DigestInit_ex(ctx, md, NULL);
 	EVP_DigestUpdate(ctx, buf, len);
 	EVP_DigestUpdate(ctx, address, addrlen);
@@ -4659,6 +4668,8 @@ next:
 
 	if (len > QC_REQUESTSIZE) {
 		ctx = EVP_MD_CTX_new();
+		if (ctx == NULL)
+			return -1;
 		md = (EVP_MD *)EVP_md5();
 		if (md == NULL) {
 			return -1;
@@ -4703,17 +4714,23 @@ next:
 }
 
 int
-reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char *buf, int len, char *dn, uint16_t *class, uint16_t *type, EVP_MD *md, uint16_t *crc)
+reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char *buf, int len, char *dn, uint16_t *class, uint16_t *type, uint16_t *crc)
 {
-	static EVP_MD_CTX *ctx = NULL;
 	u_char rdigest[MD5_DIGEST_LENGTH];	
 	u_int md_len;
 	int needhash = 1;
 	struct csnode find, *res;
 	struct csentry *np;
+	EVP_MD_CTX *ctx = NULL;
+	EVP_MD *md;
 
+	ctx = EVP_MD_CTX_new();
 	if (ctx == NULL)
-		ctx = EVP_MD_CTX_new();
+		return -1;
+
+	md = (EVP_MD *)EVP_md5();
+	if (md == NULL)
+		return -1;
 
 	find.requestlen = len;
 	res = RB_FIND(qctree, &qchead, &find); 
@@ -4739,10 +4756,12 @@ reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char 
 		}
 	}
 
+	EVP_MD_CTX_free(ctx);
 	return (0);
 
 sendit:
-
+	
+	EVP_MD_CTX_free(ctx);
 	strlcpy(dn, np->cs->domainname, DNS_MAXNAME + 1);
 	*class = np->cs->class;
 	*type = np->cs->type;

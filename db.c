@@ -301,18 +301,31 @@ find_rrsetwild(ddDB *db, char *name, int len)
 	if (len <= *name)
 		return NULL;
 
-	if ((p = malloc(len)) == NULL)
-		return NULL;
+	if (len == 1 && *name == '\0') {
+		if ((p = malloc(3)) == NULL)
+			return NULL;
+		
+		*p = '\001';
+		*(p + 1) = '*';
+		*(p + 2) = '\0';
 
-	memcpy(p, name, len);
-	fake = save = p;
+		save = p;
+	} else {
+		if ((p = malloc(len)) == NULL)
+			return NULL;
 
-	p = p + (*p - 1);
-	len -= (p - save);
-	save = p;
-	*p = '\001';
-	p++;
-	*p = '*';	
+		memcpy(p, name, len);
+
+		save = p;
+		fake = p;
+
+		fake = fake + (*fake - 1);
+		len -= (fake - save);
+		save = fake;
+		*fake = '\001';
+		fake++;
+		*fake = '*';	
+	}
 
 	
 	memset(&key, 0, sizeof(key));
@@ -322,11 +335,11 @@ find_rrsetwild(ddDB *db, char *name, int len)
 	key.size = len;
 
 	if (db->get(db, &key, &data) != 0) {
-		free(fake);
+		free(p);
 		return (NULL);
 	}
 
-	free(fake);
+	free(p);
 
 	return ((struct rbtree *)data.data);
 }
