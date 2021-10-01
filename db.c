@@ -309,6 +309,7 @@ find_rrsetwild(ddDB *db, char *name, int len)
 		*(p + 1) = '*';
 		*(p + 2) = '\0';
 
+		len = 3;
 		save = p;
 	} else {
 		if ((p = malloc(len)) == NULL)
