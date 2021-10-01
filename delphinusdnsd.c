@@ -153,7 +153,7 @@ extern char 	*rrlimit_setup(int);
 extern char 	*dns_label(char *, int *);
 extern void 	ddd_shutdown(void);
 extern int 	get_record_size(ddDB *, char *, int);
-extern struct question		*build_question(char *, int, int, char *);
+extern struct question		*build_question(char *, int, uint16_t, char *);
 extern int			free_question(struct question *);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);

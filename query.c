@@ -116,7 +116,7 @@ extern char * hash_name(char *, int, struct nsec3param *);
 extern char * base32hex_encode(u_char *input, int len);
 extern int  	init_entlist(ddDB *);
 extern int	check_ent(char *, int);
-extern struct question          *build_question(char *, int, int, char *);
+extern struct question          *build_question(char *, int, uint16_t, char *);
 struct rrtab    *rrlookup(char *);
 
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
@@ -466,7 +466,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	wh->dh.question = htons(1);
 	wh->dh.answer = 0;
 	wh->dh.nsrr = 0;
-	wh->dh.additional = htons(1);;
+	wh->dh.additional = htons(1);
 
 	SET_DNS_QUERY(&wh->dh);
 	SET_DNS_RECURSION(&wh->dh);
@@ -599,7 +599,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	}
 
 
-	q = build_question((char *)&wh->dh, len, wh->dh.additional, NULL);
+	q = build_question((char *)&wh->dh, len, ntohs(wh->dh.additional), NULL);
 	if (q == NULL) {
 		fprintf(stderr, "failed to build_question\n");
 		return -1;

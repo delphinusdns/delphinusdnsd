@@ -95,7 +95,7 @@ extern struct rbtree *	get_soa(ddDB *, struct question *);
 extern int		compress_label(u_char *, int, int);
 extern u_int16_t	create_anyreply(struct sreply *, char *, int, int, int, uint32_t, uint);
 extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
-extern struct question	*build_question(char *, int, int, char *);
+extern struct question	*build_question(char *, int, uint16_t, char *);
 extern int		free_question(struct question *);
 extern void		dolog(int, char *, ...);
 extern void 		build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, char *);

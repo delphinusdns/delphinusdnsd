@@ -153,7 +153,7 @@ extern char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, 
 extern void	dolog(int, char *, ...);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int namelen);               
 extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);    
-extern struct question         *build_question(char *, int, int, char *);
+extern struct question         *build_question(char *, int, uint16_t, char *);
 extern int                      lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t, int);
 extern int     find_tsig_key(char *, int, char *, int);
 extern int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
@@ -2167,7 +2167,7 @@ get_remote_soa(struct rzone *rzone)
 		return(MY_SOCK_TIMEOUT);
 	}
 
-	q = build_question((char *)dupreply + 2, len - 2, wh->dh.additional, NULL);
+	q = build_question((char *)dupreply + 2, len - 2, ntohs(wh->dh.additional), NULL);
 	if (q == NULL) {
 		dolog(LOG_INFO, "failed to build_question\n");
 		close(so);

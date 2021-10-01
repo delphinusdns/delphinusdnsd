@@ -95,7 +95,7 @@ struct question		*build_fake_question(char *, int, u_int16_t, char *, int);
 char 			*get_dns_type(int, int);
 int 			memcasecmp(u_char *, u_char *, int);
 int 			compress_label(u_char *, u_int16_t, int);
-struct question		*build_question(char *, int, int, char *);
+struct question		*build_question(char *, int, uint16_t, char *);
 int			free_question(struct question *);
 struct rrtab 	*rrlookup(char *);
 char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
@@ -1066,7 +1066,7 @@ memcasecmp(u_char *b1, u_char *b2, int len)
  */
 
 struct question *
-build_question(char *buf, int len, int additional, char *mac)
+build_question(char *buf, int len, uint16_t additional, char *mac)
 {
 	char pseudo_packet[4096];		/* for tsig */
 	u_int rollback, i;
