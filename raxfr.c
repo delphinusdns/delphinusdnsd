@@ -947,17 +947,21 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 int
 raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
-	int i;
+	int i, j;
 	u_char *q = p;
+	uint16_t segmentlen = 256;
 
 	BOUNDS_CHECK(p, q, rdlen, end);
 
 	if (f != NULL) 
 		fprintf(f, "\"");
 
-	for (i = 0; i < rdlen; i++) {
-		if (i % 256 == 0)
+	for (i = 0, j = 0; i < rdlen; i++, j++) {
+		if (j % segmentlen == 0) {
+			segmentlen = p[i] + 1;
+			j = 0;
 			continue;
+		}
 
 		if (f != NULL) 
 			fprintf(f, "%c", p[i]);	
