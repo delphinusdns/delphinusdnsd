@@ -144,6 +144,7 @@ int 		nsec_comp(const void *a, const void *b);
 int 		count_dots(char *name);
 char * 		base32hex_encode(u_char *input, int len);
 void 		set_reply_flags(struct rbtree *, struct dns_header *, struct question *);
+int		reply_sendpacket(char *, uint16_t, struct sreply *, int *);
 
 extern int debug, verbose, dnssec, tcpanyonly;
 extern char *versionstring;
@@ -176,12 +177,9 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
@@ -360,30 +358,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
+	retlen = reply_sendpacket(reply, outlen, sreply, sretlen);
 
 	/*
 	 * update order XXX 
@@ -421,12 +396,9 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
@@ -614,33 +586,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else { 
-			if ((*sretlen = retlen = sendto(so, 
-				reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 
@@ -671,12 +617,9 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -883,32 +826,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /*
@@ -934,12 +852,9 @@ reply_zonemd(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -1127,33 +1042,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 
@@ -1179,12 +1068,9 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -1367,33 +1253,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 int
@@ -1414,12 +1274,9 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -1602,33 +1459,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 int
@@ -1649,12 +1480,9 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -1835,33 +1663,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -1887,12 +1689,9 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -2074,33 +1873,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -2129,12 +1902,9 @@ reply_ds(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -2317,31 +2087,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
+	retlen = reply_sendpacket(reply, outlen, sreply, sretlen); 
 	rotate_rr(rrset);
 
 	return (retlen);
@@ -2373,12 +2119,9 @@ reply_dnskey(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -2560,32 +2303,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /*
@@ -2611,12 +2329,9 @@ reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 		in_addr_t rdata;		/* 16 */
 	} __attribute__((packed));
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	
 	int istcp = sreply->istcp;
@@ -2701,34 +2416,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
-
-
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -2944,6 +2632,7 @@ out:
 		}
 	}
 
+	retlen = reply_sendpacket(reply, outlen, sreply, sretlen);
 	rotate_rr(rrset);
 
 	return (retlen);
@@ -2977,12 +2666,9 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *rbt0 = NULL;
 	struct rbtree *authority;
@@ -3327,31 +3013,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -3492,9 +3154,6 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		name = ((struct ns *)rrp->rdata)->nsserver;
 		namelen = ((struct ns *)rrp->rdata)->nslen;
-#if 0
-		ns_type = ((struct ns *)rrp->rdata)->ns_type;
-#endif
 
 		answer->rdlength = htons(namelen);
 
@@ -3803,6 +3462,7 @@ out:
 		}
 	}
 
+	retlen = reply_sendpacket(reply, outlen, sreply, sretlen);
 	rotate_rr(rrset);
 
 	return (retlen);
@@ -3836,12 +3496,9 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -3917,10 +3574,6 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 		answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
 	outlen += 12;			/* up to rdata length */
-
-#if 0
-	p = (char *)&answer->rdata;
-#endif
 
 	label = (char *)&((struct cname *)rrp->rdata)->cname;
 	labellen = ((struct cname *)rrp->rdata)->cnamelen;
@@ -4016,32 +3669,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}	
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -4070,12 +3698,9 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -4150,10 +3775,6 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 		answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
 	outlen += 12;			/* up to rdata length */
-
-#if 0
-	p = (char *)&answer->rdata;
-#endif
 
 	label = ((struct ptr *)rrp->rdata)->ptr;
 	labellen = ((struct ptr *)rrp->rdata)->ptrlen;
@@ -4248,32 +3869,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -4303,12 +3899,9 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -4385,11 +3978,6 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 		answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
 	outlen += 12;			/* up to rdata length */
-
-#if 0
-	p = (char *)&answer->rdata;
-#endif
-
 
 	label = ((struct soa *)rrp->rdata)->nsserver;
 	labellen = ((struct soa *)rrp->rdata)->nsserver_len;
@@ -4545,32 +4133,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -4598,12 +4161,9 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -4788,33 +4348,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 
@@ -4843,12 +4377,9 @@ reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
@@ -4911,32 +4442,7 @@ reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -4967,12 +4473,9 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -5145,31 +4648,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 
@@ -5200,12 +4679,9 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -5378,31 +4854,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 
@@ -5433,12 +4885,9 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -5543,9 +4992,6 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		memcpy((char *)p, (char *)((struct naptr *)rrp->rdata)->replacement, ((struct naptr *)rrp->rdata)->replacementlen);
 	
-#if 0
-		name = ((struct naptr *)rrp->rdata)->replacement;
-#endif
 		namelen = ((struct naptr *)rrp->rdata)->replacementlen;
 
 		outlen += (12 + 4 + ((struct naptr *)rrp->rdata)->replacementlen);
@@ -5646,31 +5092,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 
@@ -5702,12 +5124,9 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -5789,11 +5208,6 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 		answer->srv_port = htons(((struct srv *)rrp->rdata)->port);
 
 		memcpy((char *)&answer->target, (char *)((struct srv *)rrp->rdata)->target, ((struct srv *)rrp->rdata)->targetlen);
-
-#if 0
-		name = ((struct srv *)rrp->rdata)->target;
-		namelen = ((struct srv *)rrp->rdata)->targetlen;
-#endif
 
 		outlen += (12 + 6 + ((struct srv *)rrp->rdata)->targetlen);
 
@@ -5884,31 +5298,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 
@@ -5925,11 +5315,8 @@ reply_notimpl(struct sreply  *sreply, int *sretlen, ddDB *db)
 	struct dns_header *odh;
 	u_int16_t outlen;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
@@ -5956,29 +5343,7 @@ reply_notimpl(struct sreply  *sreply, int *sretlen, ddDB *db)
 
 	HTONS(odh->query);		
 
-
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if ((*sretlen = retlen = sendto(so, 
-				reply, len, 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -6369,32 +5734,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	} 
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -6409,11 +5749,8 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
 	struct dns_header *odh;
 	u_int16_t outlen = 0;
 
-	int so = sreply->so;
 	int len = sreply->len;
 	char *buf = sreply->buf;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
@@ -6447,9 +5784,6 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
 
 	odh->answer = 0;			/* reset any answers */
 	odh->nsrr = 0;				/* reset any authoritave */
-#if 0
-	odh->additional = 0;			/* reset any additionals */
-#endif
 
 	if (haveq)
 		set_reply_flags(NULL, odh, q);
@@ -6466,32 +5800,7 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (haveq && q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-				reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -6507,11 +5816,8 @@ reply_notauth(struct sreply *sreply, int *sretlen, ddDB *db)
 	u_int16_t outlen = 0;
 	u_int16_t tmplen;
 
-	int so = sreply->so;
 	int len = sreply->len;
 	char *buf = sreply->buf;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
@@ -6551,32 +5857,7 @@ reply_notauth(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	odh->additional = htons(1);
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -6592,11 +5873,8 @@ reply_notify(struct sreply *sreply, int *sretlen, ddDB *db)
 	u_int16_t outlen = 0;
 	u_int16_t tmplen;
 
-	int so = sreply->so;
 	int len = sreply->len;
 	char *buf = sreply->buf;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
@@ -6640,32 +5918,7 @@ reply_notify(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 /* 
  * REPLY_FMTERROR() - replies a DNS question (*q) on socket (so)
@@ -6679,11 +5932,8 @@ reply_fmterror(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct dns_header *odh;
 	u_int16_t outlen;
 
-	int so = sreply->so;
 	int len = sreply->len;
 	char *buf = sreply->buf;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
@@ -6710,28 +5960,7 @@ reply_fmterror(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	HTONS(odh->query);		
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if ((*sretlen = retlen = sendto(so, 
-			reply, sizeof(struct dns_header), 0, sa, salen)) < 0) {
-			dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -7100,32 +6329,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 int
@@ -7135,13 +6339,10 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct dns_header *odh;
 	u_int16_t outlen;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct rbtree *rbt = sreply->rbt1;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
@@ -7256,32 +6457,7 @@ skip:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /*
@@ -8719,12 +7895,9 @@ reply_badvers(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct dns_header *odh;
 	u_int16_t outlen;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
@@ -8765,32 +7938,7 @@ reply_badvers(struct sreply *sreply, int *sretlen, ddDB *db)
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 
@@ -8830,12 +7978,9 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
@@ -9008,40 +8153,7 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
-#if 0
-	/*
-	 * update order XXX 
-	 */
-
-	rotate_rr(rrset);
-#endif
-	
-	return (retlen);
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 void
@@ -9068,4 +8180,44 @@ set_reply_flags(struct rbtree *rbt, struct dns_header *odh, struct question *q)
 	}
 
 	HTONS(odh->query);
+}
+
+int
+reply_sendpacket(char *reply, uint16_t len, struct sreply *sreply, int *sretlen)
+{
+	int so = sreply->so;
+	struct question *q = sreply->q;
+	struct sockaddr *sa = sreply->sa;
+	socklen_t salen = sreply->salen;
+
+	int retlen = -1;
+	int istcp = sreply->istcp;
+	char *tmpbuf;
+
+	if (istcp) {
+
+		tmpbuf = malloc(len + 2);
+		if (tmpbuf == 0) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+			return (-1);
+		}
+		pack16(tmpbuf, htons(len));
+		memcpy(&tmpbuf[2], reply, len);
+
+		if ((retlen = send(so, tmpbuf, len + 2, 0)) < 0) {
+			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		}
+		free(tmpbuf);
+	} else {
+		if (q->rawsocket) {
+			*sretlen = retlen = len;
+		} else {
+			if ((*sretlen = retlen = sendto(so, 
+					reply, len, 0, sa, salen)) < 0) {
+				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
+			}
+		}
+	}
+
+	return (retlen);
 }
