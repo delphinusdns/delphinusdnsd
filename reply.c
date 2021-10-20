@@ -8209,7 +8209,7 @@ reply_sendpacket(char *reply, uint16_t len, struct sreply *sreply, int *sretlen)
 		}
 		free(tmpbuf);
 	} else {
-		if (q->rawsocket) {
+		if (q && q->rawsocket) {
 			*sretlen = retlen = len;
 		} else {
 			if ((*sretlen = retlen = sendto(so, 
