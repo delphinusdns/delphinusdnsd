@@ -660,6 +660,9 @@ sshfp(int argc, char *argv[])
 
 	hostname = argv[1];
 
+	argv++;
+	argc--;
+
 	while ((ch = getopt(argc, argv, "f:k:t:")) != -1) {
 		switch (ch) {
 		case 'f':
