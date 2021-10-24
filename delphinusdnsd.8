@@ -109,11 +109,15 @@ Be more verbose in debug mode.  This shows configfile parsing logic.
 .El
 .Pp
 .Nm 
-is an authoritative and forwarding DNS server.  It can run as primary or 
-replicant.
+is an authoritative DNS server.  It can run as primary or replicant.
 When new configfiles are written it must be restarted.  For replicants that
 receive notifies or timeout on the refresh or retry SOA values the daemon is
 restarted automatically. 
+.Pp
+It should be noted that 
+.Nm
+has a forwarding mode since version 1.5.  This mode should be treated as 
+experimental.
 .Sh FILES
 .Bl -tag -width /var/delphinusdnsd/etc/delphinusdns.conf -compact
 .It Pa /var/delphinusdnsd/etc/delphinusdns.conf
