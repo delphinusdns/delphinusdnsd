@@ -19,7 +19,12 @@ Changes in RELEASE_1_6 from RELEASE_1_5
 - reworked the CNAME code (we now reply to more RR's)
 - added wildcarding for *.domain.tld domainnames (with DNSSEC support).
 - fixed an endless loop in raxfr process when cortex process died
-
+- added CDS/CDNSKEY support (RFC 8078 standard) this is rather an experimental
+  addition since I can't use it with my tld's which are not listed here:
+  https://github.com/oskar456/cds-updates/ and 
+	https://www.internetsociety.org/deploy360/dnssec/maps/
+  ... perhaps this standard will see more adoption in the future, and I can
+  use it.
 
 Changes in RELEASE_1_5 from RELEASE_1_4
 
