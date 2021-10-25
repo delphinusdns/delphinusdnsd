@@ -115,7 +115,9 @@ int		reply_nsec3(struct sreply *, int *, ddDB *);
 int		reply_nsec3param(struct sreply *, int *, ddDB *);
 int		reply_nsec(struct sreply *, int *,  ddDB *);
 int		reply_dnskey(struct sreply *, int *, ddDB *);
+int		reply_cdnskey(struct sreply *, int *, ddDB *);
 int		reply_ds(struct sreply *, int *, ddDB *);
+int		reply_cds(struct sreply *, int *, ddDB *);
 int		reply_rrsig(struct sreply *, int *, ddDB *);
 int 		reply_aaaa(struct sreply *, int *, ddDB *);
 int 		reply_mx(struct sreply *, int *, ddDB *);
@@ -145,6 +147,8 @@ int 		count_dots(char *name);
 char * 		base32hex_encode(u_char *input, int len);
 void 		set_reply_flags(struct rbtree *, struct dns_header *, struct question *);
 int		reply_sendpacket(char *, uint16_t, struct sreply *, int *);
+int		reply_generic_dnskey(struct sreply *, int *, ddDB *, uint16_t);
+int		reply_generic_ds(struct sreply *, int *, ddDB *, uint16_t);
 
 extern int debug, verbose, dnssec, tcpanyonly;
 extern char *versionstring;
@@ -1884,6 +1888,18 @@ out:
 int
 reply_ds(struct sreply *sreply, int *sretlen, ddDB *db)
 {
+	return (reply_generic_ds(sreply, sretlen, db, DNS_TYPE_DS));
+}
+
+int
+reply_cds(struct sreply *sreply, int *sretlen, ddDB *db)
+{
+	return (reply_generic_ds(sreply, sretlen, db, DNS_TYPE_CDS));
+}
+
+int
+reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
+{
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	u_int16_t outlen = 0;
@@ -1930,7 +1946,7 @@ reply_ds(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) == 0)
+	if ((rrset = find_rr(rbt, rrtype)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -2022,7 +2038,7 @@ reply_ds(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_DS, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, rrtype, rbt, reply, replysize, outlen, &retcount, q->aa);
 		
 		if (tmplen == 0) {
 
@@ -2101,6 +2117,22 @@ out:
 int
 reply_dnskey(struct sreply *sreply, int *sretlen, ddDB *db)
 {
+
+	return (reply_generic_dnskey(sreply, sretlen, db, DNS_TYPE_DNSKEY));
+
+}
+
+int
+reply_cdnskey(struct sreply *sreply, int *sretlen, ddDB *db)
+{
+
+	return (reply_generic_dnskey(sreply, sretlen, db, DNS_TYPE_CDNSKEY));
+
+}
+
+int
+reply_generic_dnskey(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
+{
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	u_int16_t outlen = 0;
@@ -2148,7 +2180,7 @@ reply_dnskey(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) == 0)
+	if ((rrset = find_rr(rbt, rrtype)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -2239,7 +2271,7 @@ reply_dnskey(struct sreply *sreply, int *sretlen, ddDB *db)
 		int tmplen = 0;
 		int origlen = outlen;
 	
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_DNSKEY, rbt, reply, replysize, outlen, &rrsig_count, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, rrtype, rbt, reply, replysize, outlen, &rrsig_count, q->aa);
 		
 		if (tmplen == 0) {
 
@@ -6642,6 +6674,71 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			odh->answer += rrsig_count;
 			HTONS(odh->answer);
 	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_CDNSKEY)) != 0) {
+		int cdnskey_count;
+
+		cdnskey_count = 0;
+		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
+			if (offset + q->hdr->namelen > rlen)
+				goto truncate;
+
+			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
+			offset += q->hdr->namelen;
+
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
+
+			answer = (struct answer *)&reply[offset];
+
+			answer->type = htons(DNS_TYPE_CDNSKEY);
+			answer->class = htons(DNS_CLASS_IN);
+		
+			if (q->aa)
+				answer->ttl = htonl(rrset->ttl);
+			else
+				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
+			answer->rdlength = htons(namelen);
+
+			offset += 10;		/* struct answer */
+
+			if (offset + sizeof(*dnskey_flags) + sizeof(*dnskey_protocol) + sizeof(*dnskey_alg) > rlen)
+				goto truncate;
+
+			pack16(&reply[offset], htons(((struct cdnskey *)rrp->rdata)->flags));
+			offset += sizeof(u_int16_t);
+			
+			dnskey_protocol = (u_int8_t *)&reply[offset];
+			*dnskey_protocol = ((struct cdnskey *)rrp->rdata)->protocol;
+	
+			offset++;
+
+			dnskey_alg = (u_int8_t *)&reply[offset];
+			*dnskey_alg = ((struct cdnskey *)rrp->rdata)->algorithm;
+
+			offset++;
+
+			memcpy(&reply[offset], 
+				((struct cdnskey *)rrp->rdata)->public_key,
+				((struct cdnskey *)rrp->rdata)->publickey_len);
+
+			offset += ((struct cdnskey *)rrp->rdata)->publickey_len;
+
+			answer->rdlength = htons(&reply[offset] - answer->rdata);
+
+			cdnskey_count++;
+
+		} 
+
+		NTOHS(odh->answer);
+		odh->answer += cdnskey_count;
+		HTONS(odh->answer);
+	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != 0) {
 		dnskey_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
@@ -6865,6 +6962,68 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			answer->rdlength = htons(&reply[offset] - answer->rdata);
 
 			caa_count++;
+
+			NTOHS(odh->answer);
+			odh->answer += 1;
+			HTONS(odh->answer);
+
+		} 
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_CDS)) != 0) {
+		int cds_count = 0;
+
+		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
+			if (offset + q->hdr->namelen > rlen)
+				goto truncate;
+
+			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
+			offset += q->hdr->namelen;
+
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
+
+			answer = (struct answer *)&reply[offset];
+
+			answer->type = htons(DNS_TYPE_CDS);
+			answer->class = htons(DNS_CLASS_IN);
+
+			if (q->aa)
+				answer->ttl = htonl(rrset->ttl);
+			else
+				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
+			answer->rdlength = htons(namelen);
+
+			offset += 10;		/* struct answer */
+
+			if (offset + sizeof(*ds_keytag) + sizeof(*ds_alg) + sizeof(*ds_digesttype) > rlen)
+				goto truncate;
+
+			pack16(&reply[offset], htons(((struct cds *)rrp->rdata)->key_tag));
+			offset += sizeof(u_int16_t);
+			
+			ds_alg = (u_int8_t *)&reply[offset];
+			*ds_alg = ((struct cds *)rrp->rdata)->algorithm;
+	
+			offset++;
+
+			ds_digesttype = (u_int8_t *)&reply[offset];
+			*ds_digesttype = ((struct cds *)rrp->rdata)->digest_type;
+
+			offset++;
+
+			memcpy(&reply[offset], ((struct cds *)rrp->rdata)->digest,((struct cds *)rrp->rdata)->digestlen);
+
+			offset += ((struct ds *)rrp->rdata)->digestlen;
+
+			answer->rdlength = htons(&reply[offset] - answer->rdata);
+
+			cds_count++;
 
 			NTOHS(odh->answer);
 			odh->answer += 1;

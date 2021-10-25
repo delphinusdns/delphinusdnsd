@@ -855,6 +855,21 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 				convert_name(((struct smx *)rrp2->rdata)->exchange, ((struct smx *)rrp2->rdata)->exchangelen));
 		}
 	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_CDS)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no cds in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			fprintf(of, "%s %d IN CDS %d %d %d (%s)\n", 
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl, 
+				((struct cds *)rrp2->rdata)->key_tag, 
+				((struct cds *)rrp2->rdata)->algorithm, 
+				((struct cds *)rrp2->rdata)->digest_type, 
+				bin2hex(((struct cds *)rrp2->rdata)->digest, ((struct cds *)rrp2->rdata)->digestlen));
+		}
+	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != NULL) {
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
 			dolog(LOG_INFO, "no ds in zone!\n");
@@ -1058,6 +1073,23 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			fprintf(of, "%s %d IN AAAA %s\n", 
 				convert_name(rbt->zone, rbt->zonelen),
 				rrset->ttl,
+				buf);
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_CDNSKEY)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no a RR in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			len = mybase64_encode(((struct cdnskey *)rrp2->rdata)->public_key, ((struct cdnskey *)rrp2->rdata)->publickey_len, buf, sizeof(buf));
+			buf[len] = '\0';
+			fprintf(of, "%s %d IN CDNSKEY %d %d %d (%s)\n", 
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl, 
+				((struct cdnskey *)rrp2->rdata)->flags, 
+				((struct cdnskey *)rrp2->rdata)->protocol,
+				((struct cdnskey *)rrp2->rdata)->algorithm,
 				buf);
 		}
 	}

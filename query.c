@@ -137,10 +137,16 @@ extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16
 extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_zonemd(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *, struct soa_constraints *);
@@ -174,9 +180,16 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_TLSA, 0, raxfr_tlsa },
 	{ DNS_TYPE_SRV, 0, raxfr_srv },
 	{ DNS_TYPE_NAPTR, 0, raxfr_naptr },
+	/* new support, 20221025 */
+	{ DNS_TYPE_RP, 0, raxfr_rp },
+	{ DNS_TYPE_HINFO, 0, raxfr_hinfo },
+	{ DNS_TYPE_CAA, 0, raxfr_caa },
+	{ DNS_TYPE_ZONEMD, 0, raxfr_zonemd },
+	{ DNS_TYPE_CDNSKEY, 1, raxfr_cdnskey },
+	{ DNS_TYPE_CDS, 1, raxfr_cds },
+	/* end new support */
 	{ 0, 0, NULL }
 };
-
 
 /*
  * DDDCTL QUERY 

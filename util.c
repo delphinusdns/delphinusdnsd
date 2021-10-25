@@ -126,6 +126,8 @@ void zonemd_hash_tlsa(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_sshfp(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_ds(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_dnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_cds(SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_cdnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_rrsig(SHA512_CTX *, struct rrset *, struct rbtree *, int);
 void zonemd_hash_nsec3(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_nsec3param(SHA512_CTX *, struct rrset *, struct rbtree *);
@@ -167,10 +169,12 @@ extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16
 extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
@@ -210,6 +214,8 @@ struct typetable {
 	{ "HINFO", DNS_TYPE_HINFO },
 	{ "CAA", DNS_TYPE_CAA },
 	{ "ZONEMD", DNS_TYPE_ZONEMD },
+	{ "CDS", DNS_TYPE_CDS },
+	{ "CDNSKEY", DNS_TYPE_CDNSKEY },
 	{ NULL, 0}
 };
 
@@ -217,6 +223,8 @@ static struct rrtab myrrtab[] =  {
  { "a",         DNS_TYPE_A, 		DNS_TYPE_A } ,
  { "aaaa",      DNS_TYPE_AAAA,		DNS_TYPE_AAAA },
  { "caa",	DNS_TYPE_CAA,		DNS_TYPE_CAA },
+ { "cdnskey", 	DNS_TYPE_CDNSKEY,	DNS_TYPE_CDNSKEY },
+ { "cds", 	DNS_TYPE_CDS,		DNS_TYPE_CDS },
  { "cname",     DNS_TYPE_CNAME, 	DNS_TYPE_CNAME },
  { "delegate",  DNS_TYPE_NS, 		DNS_TYPE_NS },
  { "dnskey", 	DNS_TYPE_DNSKEY, 	DNS_TYPE_DNSKEY },
@@ -263,6 +271,8 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_HINFO, 0, raxfr_hinfo },
 	{ DNS_TYPE_CAA, 0, raxfr_caa },
 	{ DNS_TYPE_ZONEMD, 0, raxfr_zonemd },
+	{ DNS_TYPE_CDNSKEY, 0, raxfr_cdnskey },
+	{ DNS_TYPE_CDS, 0, raxfr_cds },
 	{ 0, 0, NULL }
 };
 
@@ -878,9 +888,31 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 
 		*error = -1;
 		return 0;
+	case DNS_TYPE_CDS:
+		if (find_rr(rbt, DNS_TYPE_CDS) != NULL) {
+			returnval = DNS_TYPE_CDS;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
+		}
+
+		*error = -1;
+		return 0;
 	case DNS_TYPE_DNSKEY:
 		if (find_rr(rbt, DNS_TYPE_DNSKEY) != NULL) {
 			returnval = DNS_TYPE_DNSKEY;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
+		}
+
+		*error = -1;
+		return 0;
+	case DNS_TYPE_CDNSKEY:
+		if (find_rr(rbt, DNS_TYPE_CDNSKEY) != NULL) {
+			returnval = DNS_TYPE_CDNSKEY;
 			break;
 		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
 			returnval = DNS_TYPE_CNAME;
@@ -2853,6 +2885,9 @@ compress_label(u_char *buf, u_int16_t offset, int labellen)
 			break;
 	
 		case DNS_TYPE_DNSKEY:
+		case DNS_TYPE_CDNSKEY:
+		case DNS_TYPE_DS:
+		case DNS_TYPE_CDS:
 		case DNS_TYPE_NSEC3:
 		case DNS_TYPE_NSEC3PARAM:
 		case DNS_TYPE_RRSIG:
@@ -4293,6 +4328,87 @@ zonemd_hash_zonemd(struct rrset *rrset, struct rbtree *rbt)
 }
 
 void
+zonemd_hash_cds(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_CDS));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+		pack16(q, htons(2 + 1 + 1 + ((struct cds *)rrp2->rdata)->digestlen));
+		q += 2;
+		pack16(q, htons(((struct cds *)rrp2->rdata)->key_tag));
+		q += 2;
+		pack8(q, ((struct cds *)rrp2->rdata)->algorithm);
+		q++;
+		pack8(q, ((struct cds *)rrp2->rdata)->digest_type);
+		q++;
+		pack(q, ((struct cds *)rrp2->rdata)->digest, ((struct cds *)rrp2->rdata)->digestlen);
+		q += ((struct cds *)rrp2->rdata)->digestlen;
+		
+		r = canonsort[csort] = malloc(68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+		
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+
+		csort++;
+	}
+
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+	free(tmpkey);
+
+}
+
+void
 zonemd_hash_ds(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
@@ -4421,6 +4537,87 @@ zonemd_hash_dnskey(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		q++;
 		pack(q, ((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len);
 		q += ((struct dnskey *)rrp2->rdata)->publickey_len;
+		
+		r = canonsort[csort] = malloc(68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+		
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+
+		csort++;
+	}
+
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+	free(tmpkey);
+
+}
+
+void
+zonemd_hash_cdnskey(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_CDNSKEY));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+		pack16(q, htons(2 + 1 + 1 + ((struct cdnskey *)rrp2->rdata)->publickey_len));
+		q += 2;
+		pack16(q, htons(((struct cdnskey *)rrp2->rdata)->flags));
+		q += 2;
+		pack8(q, ((struct cdnskey *)rrp2->rdata)->protocol);
+		q++;
+		pack8(q, ((struct cdnskey *)rrp2->rdata)->algorithm);
+		q++;
+		pack(q, ((struct cdnskey *)rrp2->rdata)->public_key, ((struct cdnskey *)rrp2->rdata)->publickey_len);
+		q += ((struct cdnskey *)rrp2->rdata)->publickey_len;
 		
 		r = canonsort[csort] = malloc(68000);
 		if (r == NULL) {

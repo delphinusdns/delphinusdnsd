@@ -211,6 +211,9 @@ struct dns_question_hdr {
 #define DNS_TYPE_NSEC3PARAM	51	/* RFC 5155, section 4 */
 #define DNS_TYPE_TLSA	52		/* RFC 6698, section 7.1 */
 
+#define DNS_TYPE_CDS		59	/* RFC 7344 */
+#define DNS_TYPE_CDNSKEY	60	/* RFC 7344 */
+
 #define DNS_TYPE_ZONEMD	63		/* RFC 8976 */
 
 #define DNS_TYPE_TKEY	249		/* RFC 2930 */

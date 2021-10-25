@@ -237,12 +237,12 @@ int 		fill_sshfp(ddDB *, char *, char *, int, int, int, char *);
 int 		fill_srv(ddDB *, char *, char *, int, int, int, int, char *);
 int 		fill_tlsa(ddDB *, char *, char *,int, uint8_t, uint8_t, uint8_t, char *);
 int 		fill_txt(ddDB *, char *, char *, int, char *);
-int		fill_dnskey(ddDB *, char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
+int		fill_dnskey(ddDB *, char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, char *, uint16_t);
 int		fill_rrsig(ddDB *, char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
 int 		fill_nsec(ddDB *, char *, char *, u_int32_t, char *, char *);
 int		fill_nsec3param(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
 int		fill_nsec3(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
-int		fill_ds(ddDB *, char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
+int		fill_ds(ddDB *, char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, char *, uint16_t);
 int		fill_rp(ddDB *, char *, char *, int, char *, char *);
 int		fill_hinfo(ddDB *, char *, char *, int, char *, char *);
 int		fill_caa(ddDB *, char *, char *, int, uint8_t, char *, char *);
@@ -1107,7 +1107,7 @@ zonestatement:
 			}
 
 			if (strcasecmp($3, "dnskey") == 0) {
-				if (fill_dnskey(mydb, $1, $3, $5, $7, $9, $11, $13) < 0) {	
+				if (fill_dnskey(mydb, $1, $3, $5, $7, $9, $11, $13, DNS_TYPE_DNSKEY) < 0) {	
 					return -1;
 				}
 
@@ -1115,8 +1115,25 @@ zonestatement:
 				if (debug)
 					printf(" %s DNSKEY\n", $1);
 #endif
+			} else if (strcasecmp($3, "cdnskey") == 0) {
+				if (fill_dnskey(mydb, $1, $3, $5, $7, $9, $11, $13, DNS_TYPE_CDNSKEY) < 0) {	
+					return -1;
+				}
+
+#if DEBUG
+				if (debug)
+					printf(" %s CDNSKEY\n", $1);
+#endif
 			} else if (strcasecmp($3, "ds") == 0) {
-				if (fill_ds(mydb, $1, $3, $5, $7, $9, $11, $13) < 0) {
+				if (fill_ds(mydb, $1, $3, $5, $7, $9, $11, $13, DNS_TYPE_DS) < 0) {
+					return -1;
+				}
+#if DEBUG
+				if (debug)
+					printf(" %s DS\n", $1);
+#endif
+			} else if (strcasecmp($3, "cds") == 0) {
+				if (fill_ds(mydb, $1, $3, $5, $7, $9, $11, $13, DNS_TYPE_CDS) < 0) {
 					return -1;
 				}
 #if DEBUG
@@ -2497,7 +2514,7 @@ fill_ptr(ddDB *db, char *name, char *type, int myttl, char *hostname)
 
 /* first two dnssec RRs! */
 int		
-fill_dnskey(ddDB *db, char *name, char *type, u_int32_t myttl, u_int16_t flags, u_int8_t protocol, u_int8_t algorithm, char *pubkey)
+fill_dnskey(ddDB *db, char *name, char *type, uint32_t myttl, uint16_t flags, uint8_t protocol, uint8_t algorithm, char *pubkey, uint16_t rrtype)
 {
 	struct dnskey *dnskey;
 	struct rbtree *rbt;
@@ -2509,7 +2526,7 @@ fill_dnskey(ddDB *db, char *name, char *type, u_int32_t myttl, u_int16_t flags, 
 		name[i] = tolower((int)name[i]);
 	}
 
-	converted_name = check_rr(name, type, DNS_TYPE_DNSKEY, &converted_namelen);
+	converted_name = check_rr(name, type, rrtype, &converted_namelen);
 	if (converted_name == NULL) {
 		return -1;
 	}
@@ -2531,7 +2548,7 @@ fill_dnskey(ddDB *db, char *name, char *type, u_int32_t myttl, u_int16_t flags, 
 	dnskey->publickey_len = ret;
 	
 	
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_DNSKEY, dnskey, myttl, 0);
+	rbt = create_rr(db, converted_name, converted_namelen, rrtype, dnskey, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
@@ -2662,7 +2679,7 @@ fill_rrsig(ddDB *db, char *name, char *type, u_int32_t myttl, char *typecovered,
 }
 
 int
-fill_ds(ddDB *db, char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_int8_t algorithm, u_int8_t digesttype, char *digest)
+fill_ds(ddDB *db, char *name, char *type, uint32_t myttl, uint16_t keytag, uint8_t algorithm, uint8_t digesttype, char *digest, uint16_t rrtype)
 {
 	struct rbtree *rbt;
 	struct ds *ds;
@@ -2675,7 +2692,7 @@ fill_ds(ddDB *db, char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_i
 		name[i] = tolower((int)name[i]);
 	}
 
-	converted_name = check_rr(name, type, DNS_TYPE_DS, &converted_namelen);
+	converted_name = check_rr(name, type, rrtype, &converted_namelen);
 	if (converted_name == NULL) {
 		return -1;
 	}
@@ -2692,7 +2709,8 @@ fill_ds(ddDB *db, char *name, char *type, u_int32_t myttl, u_int16_t keytag, u_i
 	ret = hex2bin(digest, strlen(digest), ds->digest);
 	ds->digestlen = ret;
 
-	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_DS, ds, myttl, 0);
+	/* rrtype = DNS_TYPE_DS / DNS_TYPE_CDS */
+	rbt = create_rr(db, converted_name, converted_namelen, rrtype, ds, myttl, 0);
 	if (rbt == NULL) {
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;

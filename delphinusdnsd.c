@@ -142,10 +142,12 @@ extern int 	reply_txt(struct sreply *, int *, ddDB *);
 extern int 	reply_version(struct sreply *, int *, ddDB *);
 extern int      reply_rrsig(struct sreply *, int *, ddDB *);
 extern int	reply_dnskey(struct sreply *, int *, ddDB *);
+extern int	reply_cdnskey(struct sreply *, int *, ddDB *);
 extern int	reply_caa(struct sreply *, int *, ddDB *);
 extern int	reply_rp(struct sreply *, int *, ddDB *);
 extern int	reply_hinfo(struct sreply *, int *, ddDB *);
 extern int	reply_ds(struct sreply *, int *, ddDB *);
+extern int	reply_cds(struct sreply *, int *, ddDB *);
 extern int	reply_nsec(struct sreply *, int *, ddDB *);
 extern int	reply_nsec3(struct sreply *, int *, ddDB *);
 extern int	reply_nsec3param(struct sreply *, int *, ddDB *);
@@ -215,6 +217,8 @@ static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_AAAA, DNS_TYPE_AAAA, BUILD_OTHER, reply_aaaa },
 	{ DNS_TYPE_DNSKEY, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_DNSKEY, DNS_TYPE_DNSKEY, BUILD_OTHER, reply_dnskey },
+	{ DNS_TYPE_CDNSKEY, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_CDNSKEY, DNS_TYPE_CDNSKEY, BUILD_OTHER, reply_cdnskey },
 	{ DNS_TYPE_SOA, DNS_TYPE_SOA, BUILD_OTHER, reply_soa },
 	{ DNS_TYPE_SOA, DNS_TYPE_NS, BUILD_OTHER, reply_ns },
 	{ DNS_TYPE_MX, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
@@ -228,6 +232,8 @@ static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_ANY, DNS_TYPE_ANY, BUILD_OTHER, reply_any },
 	{ DNS_TYPE_DS, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_DS, DNS_TYPE_DS, BUILD_OTHER, reply_ds },
+	{ DNS_TYPE_CDS, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_CDS, DNS_TYPE_CDS, BUILD_OTHER, reply_cds },
 	{ DNS_TYPE_SSHFP, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_SSHFP, DNS_TYPE_SSHFP, BUILD_OTHER, reply_sshfp },
 	{ DNS_TYPE_TLSA, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },

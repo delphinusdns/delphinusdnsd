@@ -96,10 +96,12 @@ int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMA
 int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
@@ -200,6 +202,8 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_HINFO, 0, raxfr_hinfo },
 	{ DNS_TYPE_CAA, 0, raxfr_caa },
 	{ DNS_TYPE_ZONEMD, 0, raxfr_zonemd },
+	{ DNS_TYPE_CDNSKEY, 1, raxfr_cdnskey },
+	{ DNS_TYPE_CDS, 1, raxfr_cds },
 	{ 0, 0, NULL }
 };
 
@@ -676,6 +680,42 @@ raxfr_hinfo(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 }
 
 int 
+raxfr_cds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
+{
+	struct cds d;
+	u_int16_t tmpshort;
+	u_char *q = p;
+
+	BOUNDS_CHECK((p + 2), q, rdlen, end);
+	tmpshort = unpack16(p);
+	d.key_tag = ntohs(tmpshort);
+	p += 2;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	d.algorithm = *p++;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	d.digest_type = *p++;
+
+	if ((rdlen - 4) < 0)
+		return -1;
+	d.digestlen = (rdlen - 4);
+	if (d.digestlen > sizeof(d.digest))
+		return -1;
+	memcpy(&d.digest, p, d.digestlen);
+	p += d.digestlen;
+
+
+	if (f != NULL) {
+		fprintf(f, "%u,%u,%u,\"%s\"\n", d.key_tag, d.algorithm, 
+			d.digest_type, bin2hex(d.digest, d.digestlen));
+	}
+
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
+	return (p - estart);
+}
+
+int 
 raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
 {
 	struct ds d;
@@ -738,6 +778,59 @@ raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	if (f != NULL) {
 		fprintf(f, "%u,%u,\"%s\"\n", s.algorithm, s.fptype, hex);
 	}
+
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
+	return (p - estart);
+}
+
+int 
+raxfr_cdnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
+{
+	struct cdnskey dk;
+	u_int16_t tmpshort;
+	char *b;
+	u_char *q = p;
+	int len;
+
+	BOUNDS_CHECK((p + 2), q, rdlen, end);
+	tmpshort = unpack16(p);
+	dk.flags = ntohs(tmpshort);
+	p += 2;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	dk.protocol = *p++;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	dk.algorithm = *p++;
+	
+	if (rdlen - 4 < 0)
+		return -1;
+	dk.publickey_len = (rdlen - 4);
+	if (dk.publickey_len > sizeof(dk.public_key))
+		return -1;
+
+	memcpy(&dk.public_key, p, dk.publickey_len);
+	p += dk.publickey_len;
+
+	b = calloc(1, dk.publickey_len * 2);
+	if (b == NULL) {
+		perror("calloc");
+		return -1;
+	}
+
+	if ((len = mybase64_encode(dk.public_key, dk.publickey_len, b, dk.publickey_len * 2)) < 0) {
+		free(b);
+		return -1;
+	}
+
+	b[len] = '\0';
+
+	if (f != NULL) {
+		fprintf(f, "%u,%u,%u,\"%s\"\n", dk.flags, dk.protocol, 
+			dk.algorithm, b);
+	}
+
+	free(b);
 
 	if (ctx != NULL)
 		HMAC_Update(ctx, q, p - q);

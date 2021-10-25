@@ -79,6 +79,14 @@ struct dnskey {
 	u_int16_t publickey_len;
 };
 
+struct cdnskey {
+	u_int16_t flags;
+	u_int8_t protocol;
+	u_int8_t algorithm;
+	char public_key[4096];
+	u_int16_t publickey_len;
+};
+
 struct rrsig {
 	u_int16_t type_covered;
 	u_int8_t algorithm;	/* usually 5, RFC3110 */
@@ -131,6 +139,13 @@ struct ds {
 	u_int16_t digestlen;
 };
 
+struct cds {
+	u_int16_t key_tag;
+	u_int8_t algorithm;
+	u_int8_t digest_type;
+	char digest[4096];
+	u_int16_t digestlen;
+};
 
 struct soa {
 	char nsserver[DNS_MAXNAME];
