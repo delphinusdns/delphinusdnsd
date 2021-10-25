@@ -204,7 +204,7 @@ extern void 	pack(char *, char *, int);
 extern void 	pack32(char *, u_int32_t);
 extern void 	pack16(char *, u_int16_t);
 extern void 	pack8(char *, u_int8_t);
-extern int fill_dnskey(ddDB *,char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
+extern int fill_dnskey(ddDB *,char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *, uint16_t);
 extern int fill_rrsig(ddDB *,char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
 extern int fill_nsec3param(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
 extern int fill_nsec3(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
@@ -972,7 +972,7 @@ add_dnskey(ddDB *db)
 				dolog(LOG_INFO, "get_key: %s\n", knp->keyname);
 				return -1;
 			}
-			if (fill_dnskey(db, zone, "dnskey", ttl, flags, protocol, algorithm, key) < 0) {
+			if (fill_dnskey(db, zone, "dnskey", ttl, flags, protocol, algorithm, key, DNS_TYPE_DNSKEY) < 0) {
 				return -1;
 			}
 		} /* if ZSK */
@@ -985,7 +985,7 @@ add_dnskey(ddDB *db)
 				dolog(LOG_INFO, "get_key %s\n", knp->keyname);
 				return -1;
 			}
-			if (fill_dnskey(db, zone, "dnskey", ttl, flags, protocol, algorithm, key) < 0) {
+			if (fill_dnskey(db, zone, "dnskey", ttl, flags, protocol, algorithm, key, DNS_TYPE_DNSKEY) < 0) {
 				return -1;
 			}
 		} /* if KSK */
