@@ -547,7 +547,7 @@ display_rr(struct rrset *rrset)
 	struct rr *rrp, *rrp0;
 
 	TAILQ_FOREACH_SAFE(rrp, &rrset->rr_head, entries, rrp0) {
-#if __linux__
+#if __linux__ || __FreeBSD__
 		printf("%ld:%u:%s\n", rrp->changed, rrset->ttl, (char *)rrp->rdata);
 #else
 		printf("%lld:%u:%s\n", rrp->changed, rrset->ttl, (char *)rrp->rdata);

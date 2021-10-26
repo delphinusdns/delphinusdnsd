@@ -1332,7 +1332,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 				return;
 			}
 		} else {
-			if (memcasecmp((char *)&dh[1], fwq->dnsname, fwq->dnsnamelen) != 0) {
+			if (memcasecmp((u_char *)&dh[1], (u_char *)fwq->dnsname, fwq->dnsnamelen) != 0) {
 				dolog(LOG_INFO, "reply for a question we didn't send, drop\n");
 				return;
 			}
@@ -1859,17 +1859,17 @@ check_tsig(char *buf, int len, char *mac)
 		/* now check for MAC type, since it's given once again */
 		if (elen == 11) {
 			if (expand[0] != 9 ||
-				memcasecmp(&expand[1], "hmac-sha1", 9) != 0) {
+				memcasecmp((u_char *)&expand[1], (u_char *)"hmac-sha1", 9) != 0) {
 				break;
 			}
 		} else if (elen == 13) {
 			if (expand[0] != 11 ||
-				memcasecmp(&expand[1], "hmac-sha256", 11) != 0) {
+				memcasecmp((u_char *)&expand[1], (u_char *)"hmac-sha256", 11) != 0) {
 				break;
 			}
 		} else if (elen == 26) {
 			if (expand[0] != 8 ||
-				memcasecmp(&expand[1], "hmac-md5", 8) != 0) {
+				memcasecmp((u_char *)&expand[1], (u_char *)"hmac-md5", 8) != 0) {
 				break;
 			}
 		} else {
@@ -2229,11 +2229,11 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 					/* check for cache */
 					if (unpack32((char *)&pi->pkt_s.cache)) {
-							estart = packet;
+							estart = (u_char *)packet;
 							rlen = tmp;
-							end = &packet[rlen];
+							end = (u_char *)&packet[rlen];
 
-							if (cacheit(packet, estart, end, ibuf, bibuf, cfg) < 0) {
+							if (cacheit((u_char *)packet, estart, end, ibuf, bibuf, cfg) < 0) {
 								dolog(LOG_INFO, "cacheit failed\n");
 							}
 					}

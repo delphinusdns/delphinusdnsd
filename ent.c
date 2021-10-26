@@ -146,7 +146,7 @@ ent_contains(char *name, int len, char *entname, int entlen)
 		if (l != len)
 			continue;
 
-		if (memcasecmp(name, p, l) == 0)
+		if (memcasecmp((u_char *)name, (u_char *)p, l) == 0)
 			goto exists; /* ? */
 	}
 
@@ -162,7 +162,7 @@ exists:
 		if (ent2->len != l)
 			continue;
 
-		if (memcasecmp(ent2->name, p, l) == 0)
+		if (memcasecmp((u_char *)ent2->name, (u_char *)p, l) == 0)
 			return 0;
 	}
 

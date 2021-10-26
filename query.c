@@ -492,14 +492,14 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	else
 		totallen = sizeof(struct whole_header);
 
-	name = dns_label(zonename, &len);
+	name = (u_char*)dns_label(zonename, &len);
 	if (name == NULL) {
 		return -1;
 	}
 
 	zonelen = len;
 	
-	p = (char *)&wh[1];	
+	p = (u_char *)&wh[1];	
 	
 	memcpy(p, name, len);
 	totallen += len;
@@ -571,7 +571,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 
 	bytes_received += len;
 
-	end = &reply[len];
+	end = (u_char*)&reply[len];
 
 	if (rwh->dh.id != wh->dh.id) {
 		fprintf(stderr, "DNS ID mismatch 2\n");
@@ -665,7 +665,7 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 skip:
 
 
-		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, NULL, name, zonelen, 0)) < 0) {
+		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, NULL, (char *)name, zonelen, 0)) < 0) {
 			fprintf(stderr, "not a SOA reply, or ERROR\n");
 			return -1;
 		}

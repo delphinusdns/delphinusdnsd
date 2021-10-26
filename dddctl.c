@@ -779,7 +779,7 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 		memcpy((char *)rbt0, (char *)n->data, n->datalen);
 
 		if (rbt->zonelen == rbt0->zonelen && 
-			memcasecmp(rbt->zone, rbt0->zone, rbt->zonelen) == 0) {
+			memcasecmp((u_char *)rbt->zone, (u_char *)rbt0->zone, rbt->zonelen) == 0) {
 			continue;
 		}
 
@@ -1082,7 +1082,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			return -1;
 		}
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-			len = mybase64_encode(((struct cdnskey *)rrp2->rdata)->public_key, ((struct cdnskey *)rrp2->rdata)->publickey_len, buf, sizeof(buf));
+			len = mybase64_encode((const u_char *)((struct cdnskey *)rrp2->rdata)->public_key, ((struct cdnskey *)rrp2->rdata)->publickey_len, buf, sizeof(buf));
 			buf[len] = '\0';
 			fprintf(of, "%s %d IN CDNSKEY %d %d %d (%s)\n", 
 				convert_name(rbt->zone, rbt->zonelen),
@@ -1099,7 +1099,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			return -1;
 		}
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-			len = mybase64_encode(((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len, buf, sizeof(buf));
+			len = mybase64_encode((const u_char *)((struct dnskey *)rrp2->rdata)->public_key, ((struct dnskey *)rrp2->rdata)->publickey_len, buf, sizeof(buf));
 			buf[len] = '\0';
 			fprintf(of, "%s %d IN DNSKEY %d %d %d (%s)\n", 
 				convert_name(rbt->zone, rbt->zonelen),
@@ -1150,7 +1150,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			((struct nsec3 *)rrp->rdata)->flags,
 			((struct nsec3 *)rrp->rdata)->iterations,
 			(((struct nsec3 *)rrp->rdata)->saltlen == 0) ? "-" : bin2hex(((struct nsec3 *)rrp->rdata)->salt, ((struct nsec3 *)rrp->rdata)->saltlen),
-			base32hex_encode(((struct nsec3 *)rrp->rdata)->next, ((struct nsec3 *)rrp->rdata)->nextlen),
+			base32hex_encode((u_char *)((struct nsec3 *)rrp->rdata)->next, ((struct nsec3 *)rrp->rdata)->nextlen),
 			bitmap2human(((struct nsec3 *)rrp->rdata)->bitmap, ((struct nsec3 *)rrp->rdata)->bitmap_len));
 
 	}
@@ -1160,10 +1160,14 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			return -1;
 		}
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-			len = mybase64_encode(((struct rrsig *)rrp2->rdata)->signature, ((struct rrsig *)rrp2->rdata)->signature_len, buf, sizeof(buf));
+			len = mybase64_encode((u_char *)((struct rrsig *)rrp2->rdata)->signature, ((struct rrsig *)rrp2->rdata)->signature_len, buf, sizeof(buf));
 			buf[len] = '\0';
 
+#if __FreeBSD__
+			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %lu %lu %d %s %s)\n", 
+#else
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 
+#endif
 				convert_name(rbt->zone, rbt->zonelen),
 				rrset->ttl,
 				get_dns_type(((struct rrsig *)rrp2->rdata)->type_covered, 0), 

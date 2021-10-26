@@ -230,33 +230,33 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 		fprintf(stderr, "expanding compression failure 0\n");
 		return -1;
 	} else 
-		q = save;
+		q = (u_char *)save;
 	
 	if ((q + 2) > end)
 		return -1;
 
 
-	rtype = unpack16(q);
+	rtype = unpack16((char *)q);
 	q += 2;
 
 	if ((q + 2) > end)
 		return -1;
 
 #if 0
-	rclass = unpack16(q);
+	rclass = unpack16((char *)q);
 #endif
 	q += 2;
 
 	if ((q + 4) > end)
 		return -1;
 
-	rttl = unpack32(q);
+	rttl = unpack32((char *)q);
 	q += 4;
 
 	if ((q + 2) > end)
 		return -1;
 
-	rdtmp = unpack16(q);	
+	rdtmp = unpack16((char *)q);	
 	pack16((char *)rdlen, ntohs(rdtmp));
 	
 	q += 2;
@@ -272,13 +272,13 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 	if (*rrtype == 41 || *rrtype == DNS_TYPE_TSIG)	
 		goto out;
 
-	humanname = convert_name(expand, elen);
+	humanname = convert_name((char *)expand, elen);
 	if (humanname == NULL) {
 		return -1;
 	}
 
 	/* check for poison */
-	if (axfr && !dn_contains(expand, elen, zonename, zonelen)) {
+	if (axfr && !dn_contains((char *)expand, elen, zonename, zonelen)) {
 		char *humanzone;
 
 		humanzone = convert_name(zonename, zonelen);
@@ -333,7 +333,7 @@ raxfr_skip(FILE *f, u_char *p, u_char *estart)
 	if ((q = p - 2) <= estart)
 		return 0;
 	
-	rdlen = unpack16(q);
+	rdlen = unpack16((char *)q);
 	
 	return ((u_int16_t)ntohs(rdlen));
 }
@@ -355,7 +355,7 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
 	BOUNDS_CHECK(q, p, rdlen, end);
@@ -386,7 +386,7 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 		fprintf(stderr, "expanding compression failure 4\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
 	BOUNDS_CHECK(q, p, rdlen, end);
@@ -412,23 +412,23 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	free(humanname);
 
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	rvalue = unpack32(q);
+	rvalue = unpack32((char *)q);
 	mysoa->serial = rvalue;
 	q += sizeof(u_int32_t);
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	rvalue = unpack32(q);
+	rvalue = unpack32((char *)q);
 	mysoa->refresh = rvalue;
 	q += sizeof(u_int32_t);
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	rvalue = unpack32(q);
+	rvalue = unpack32((char *)q);
 	mysoa->retry = rvalue;
 	q += sizeof(u_int32_t);
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	rvalue = unpack32(q);
+	rvalue = unpack32((char *)q);
 	mysoa->expire = rvalue;
 	q += sizeof(u_int32_t);
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	rvalue = unpack32(q);
+	rvalue = unpack32((char *)q);
 	mysoa->minttl = rvalue;
 	q += sizeof(u_int32_t);
 
@@ -474,7 +474,7 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	u_char *b;
 
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp = unpack16(q);
+	tmp = unpack16((char *)q);
 	rs.type_covered = ntohs(tmp);
 	q += 2;
 	BOUNDS_CHECK((q + 1), p, rdlen, end);
@@ -482,19 +482,19 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	BOUNDS_CHECK((q + 1), p, rdlen, end);
 	rs.labels = *q++;
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	tmp4 = unpack32(q);
+	tmp4 = unpack32((char *)q);
 	rs.original_ttl = ntohl(tmp4);
 	q += 4;
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	tmp4 = unpack32(q);
+	tmp4 = unpack32((char *)q);
 	rs.signature_expiration = ntohl(tmp4);
 	q += 4;
 	BOUNDS_CHECK((q + 4), p, rdlen, end);
-	tmp4 = unpack32(q);
+	tmp4 = unpack32((char *)q);
 	rs.signature_inception = ntohl(tmp4);
 	q += 4;
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp = unpack16(q);
+	tmp = unpack16((char *)q);
 	rs.key_tag = ntohs(tmp);
 	q += 2;
 	
@@ -504,7 +504,7 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
 	memcpy(&rs.signers_name, expand, elen);
@@ -521,7 +521,7 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	if (b == NULL)
 		return -1;
 
-	if ((len = mybase64_encode(rs.signature, rs.signature_len, b, rs.signature_len * 2)) < 0) {
+	if ((len = mybase64_encode((const u_char *)rs.signature, rs.signature_len, (char *)b, rs.signature_len * 2)) < 0) {
 		free(b);
 		return -1;
 	}
@@ -529,14 +529,18 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	b[len] = '\0';
 
 
-	humanname = convert_name(expand, elen);
+	humanname = convert_name((char *)expand, elen);
 	if (humanname == NULL) {
 		free(b);
 		return -1;
 	}
 
 	if (f != NULL) {
+#if __FreeBSD__
+		fprintf(f, "%s,%u,%u,%u,%lu,%lu,%u,%s,\"%s\"\n", 
+#else
 		fprintf(f, "%s,%u,%u,%u,%llu,%llu,%u,%s,\"%s\"\n", 
+#endif
 			get_dns_type(rs.type_covered, 0),
 			rs.algorithm, rs.labels, rs.original_ttl, 
 			timethuman(rs.signature_expiration), 
@@ -687,7 +691,7 @@ raxfr_cds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 	u_char *q = p;
 
 	BOUNDS_CHECK((p + 2), q, rdlen, end);
-	tmpshort = unpack16(p);
+	tmpshort = unpack16((char *)p);
 	d.key_tag = ntohs(tmpshort);
 	p += 2;
 	BOUNDS_CHECK((p + 1), q, rdlen, end);
@@ -723,7 +727,7 @@ raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 	u_char *q = p;
 
 	BOUNDS_CHECK((p + 2), q, rdlen, end);
-	tmpshort = unpack16(p);
+	tmpshort = unpack16((char *)p);
 	d.key_tag = ntohs(tmpshort);
 	p += 2;
 	BOUNDS_CHECK((p + 1), q, rdlen, end);
@@ -795,7 +799,7 @@ raxfr_cdnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa
 	int len;
 
 	BOUNDS_CHECK((p + 2), q, rdlen, end);
-	tmpshort = unpack16(p);
+	tmpshort = unpack16((char *)p);
 	dk.flags = ntohs(tmpshort);
 	p += 2;
 	BOUNDS_CHECK((p + 1), q, rdlen, end);
@@ -818,7 +822,7 @@ raxfr_cdnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa
 		return -1;
 	}
 
-	if ((len = mybase64_encode(dk.public_key, dk.publickey_len, b, dk.publickey_len * 2)) < 0) {
+	if ((len = mybase64_encode((const u_char *)dk.public_key, dk.publickey_len, b, dk.publickey_len * 2)) < 0) {
 		free(b);
 		return -1;
 	}
@@ -848,7 +852,7 @@ raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 	int len;
 
 	BOUNDS_CHECK((p + 2), q, rdlen, end);
-	tmpshort = unpack16(p);
+	tmpshort = unpack16((char *)p);
 	dk.flags = ntohs(tmpshort);
 	p += 2;
 	BOUNDS_CHECK((p + 1), q, rdlen, end);
@@ -871,7 +875,7 @@ raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 		return -1;
 	}
 
-	if ((len = mybase64_encode(dk.public_key, dk.publickey_len, b, dk.publickey_len * 2)) < 0) {
+	if ((len = mybase64_encode((const u_char *)dk.public_key, dk.publickey_len, b, dk.publickey_len * 2)) < 0) {
 		free(b);
 		return -1;
 	}
@@ -903,7 +907,7 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 	int elen = 0;
 
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	mxpriority = unpack16(q);
+	mxpriority = unpack16((char *)q);
 
 	if (f != NULL)
 		fprintf(f, "%u,", ntohs(mxpriority));
@@ -916,10 +920,10 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
-	humanname = convert_name(expand, elen);
+	humanname = convert_name((char *)expand, elen);
 	if (humanname == NULL) {
 		return -1;
 	}
@@ -958,7 +962,7 @@ raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	n.flags = *p++;
 
 	BOUNDS_CHECK((p + 2), brr, rdlen, end);
-	iter = unpack16(p);
+	iter = unpack16((char *)p);
 	n.iterations = ntohs(iter);
 	p += 2;
 
@@ -991,7 +995,7 @@ raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 			n.flags, n.iterations, 
 			(n.saltlen == 0 ? "-" : 
 				bin2hex(n.salt, n.saltlen)), 
-			base32hex_encode(n.next, n.nextlen), 
+			base32hex_encode((u_char *)n.next, n.nextlen), 
 			bitmap2human(n.bitmap, n.bitmap_len));
 	}
 
@@ -1013,7 +1017,7 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 	BOUNDS_CHECK((p + 1), q, rdlen, end);
 	np.flags = *p++;
 	BOUNDS_CHECK((p + 2), q, rdlen, end);
-	iter = unpack16(p);
+	iter = unpack16((char *)p);
 	np.iterations = ntohs(iter);
 	p += 2;
 	BOUNDS_CHECK((p + 1), q, rdlen, end);
@@ -1085,10 +1089,10 @@ raxfr_rp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
-	humanname = convert_name(expand, elen);
+	humanname = convert_name((char *)expand, elen);
 	if (humanname == NULL) {
 		return -1;
 	}
@@ -1106,10 +1110,10 @@ raxfr_rp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
-	humanname = convert_name(expand, elen);
+	humanname = convert_name((char *)expand, elen);
 	if (humanname == NULL) {
 		return -1;
 	}
@@ -1146,10 +1150,10 @@ raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_i
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
-	humanname = convert_name(expand, elen);
+	humanname = convert_name((char *)expand, elen);
 	if (humanname == NULL) {
 		return -1;
 	}
@@ -1185,7 +1189,7 @@ raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	u_char *q = p;
 
 	BOUNDS_CHECK((p + sizeof(ia)), q, rdlen, end);
-	unpack((char *)&ia, p, sizeof(struct in6_addr));
+	unpack((char *)&ia, (char *)p, sizeof(struct in6_addr));
 	inet_ntop(AF_INET6, &ia, buf, sizeof(buf));
 
 	if (f != NULL) 
@@ -1207,7 +1211,7 @@ raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_in
 	u_char *q = p;
 
 	BOUNDS_CHECK((p + sizeof(ia)), q, rdlen, end);
-	ia.s_addr = unpack32(p);
+	ia.s_addr = unpack32((char *)p);
 
 	inet_ntop(AF_INET, &ia, buf, sizeof(buf));
 	
@@ -1269,15 +1273,15 @@ raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 	int elen = 0;
 
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp16 = unpack16(q);
+	tmp16 = unpack16((char *)q);
 	s.priority = ntohs(tmp16);
 	q += 2;
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp16 = unpack16(q);
+	tmp16 = unpack16((char *)q);
 	s.weight = ntohs(tmp16);
 	q += 2;
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp16 = unpack16(q);
+	tmp16 = unpack16((char *)q);
 	s.port = ntohs(tmp16);
 	q += 2;
 
@@ -1287,10 +1291,10 @@ raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
-	humanname = convert_name(expand, elen);
+	humanname = convert_name((char *)expand, elen);
 	if (humanname == NULL) {
 		return -1;
 	}
@@ -1324,11 +1328,11 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	int len, i;
 
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp16 = unpack16(q);
+	tmp16 = unpack16((char *)q);
 	n.order = ntohs(tmp16);
 	q += 2;
 	BOUNDS_CHECK((q + 2), p, rdlen, end);
-	tmp16 = unpack16(q);
+	tmp16 = unpack16((char *)q);
 	n.preference = ntohs(tmp16);
 	q += 2;
 
@@ -1383,10 +1387,10 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
-	humanname = convert_name(expand, elen);
+	humanname = convert_name((char *)expand, elen);
 	if (humanname == NULL) {
 		return -1;
 	}
@@ -1430,9 +1434,9 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 		fprintf(stderr, "expanding compression failure 0\n");
 		goto out;
 	} else 
-		q = save;
+		q = (u_char *)save;
 
-	keyname = convert_name(expand, elen);
+	keyname = convert_name((char *)expand, elen);
 	if (keyname == NULL) {
 		goto out;
 	}
@@ -1447,7 +1451,7 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	if ((q + 2) > end)
 		goto out;
 
-	rtype = unpack16(q);
+	rtype = unpack16((char *)q);
 	q += 2;
 
 	if (ntohs(rtype) != DNS_TYPE_TSIG)	
@@ -1456,7 +1460,7 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	if ((q + 2) > end)
 		goto out;
 
-	rclass = unpack16(q);
+	rclass = unpack16((char *)q);
 	q += 2;
 
 	if (ntohs(rclass) != DNS_CLASS_ANY)
@@ -1465,7 +1469,7 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	if ((q + 4) > end)
 		goto out;
 
-	rttl = unpack32(q);
+	rttl = unpack32((char *)q);
 	q += 4;
 
 	if (rttl != 0)
@@ -1485,10 +1489,10 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 		fprintf(stderr, "expanding compression failure 0\n");
 		goto out;
 	} else 
-		q = save;
+		q = (u_char *)save;
 
 	
-	algname = convert_name(expand, elen);
+	algname = convert_name((char *)expand, elen);
 	if (algname == NULL) {
 		goto out;
 	}
@@ -1513,24 +1517,21 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	if ((q + 2) > end)
 		goto out;
 
-#if 0
-	origid = unpack16(q);
-#endif
 	q += 2;
 
 	if ((q + 2) > end)
 		goto out;
 
-	tsigerror = unpack16(q);
+	tsigerror = unpack16((char *)q);
 	q += 2;
 		
 	if ((q + 2) > end)
 		goto out;
 
-	otherlen = unpack16(q);
+	otherlen = unpack16((char *)q);
 	q += 2;
 
-	otherdata = q;
+	otherdata = (char *)q;
 	q += ntohs(otherlen);
 
 	if ((q - estart) != (rdlen + rlen)) {
@@ -1541,21 +1542,21 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 
 	if (standardanswer) {
 		/* dns message */
-		HMAC_Update(ctx, rawkeyname, rawkeynamelen);
-		HMAC_Update(ctx, (char *)&rclass, 2);
-		HMAC_Update(ctx, (char *)&rttl, 4);
-		HMAC_Update(ctx, rawalgname, rawalgnamelen);
-		HMAC_Update(ctx, (char *)&sdt->timefudge, 8);
-		HMAC_Update(ctx, (char *)&tsigerror, 2);
-		HMAC_Update(ctx, (char *)&otherlen, 2);
+		HMAC_Update(ctx, (const u_char *)rawkeyname, rawkeynamelen);
+		HMAC_Update(ctx, (const u_char *)&rclass, 2);
+		HMAC_Update(ctx, (const u_char *)&rttl, 4);
+		HMAC_Update(ctx, (const u_char *)rawalgname, rawalgnamelen);
+		HMAC_Update(ctx, (const u_char *)&sdt->timefudge, 8);
+		HMAC_Update(ctx, (const u_char *)&tsigerror, 2);
+		HMAC_Update(ctx, (const u_char *)&otherlen, 2);
 		if (ntohs(otherlen))
-			HMAC_Update(ctx, otherdata, ntohs(otherlen));
+			HMAC_Update(ctx, (const u_char *)otherdata, ntohs(otherlen));
 
 	} else {
-		HMAC_Update(ctx, (char *)&sdt->timefudge, 8);
+		HMAC_Update(ctx, (const u_char *)&sdt->timefudge, 8);
 	}
 
-	if (HMAC_Final(ctx, mac, &macsize) != 1) {
+	if (HMAC_Final(ctx, (u_char *)mac, (u_int *)&macsize) != 1) {
 		goto out;
 	}
 
@@ -1762,7 +1763,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 								continue;
 
 								if (datalen == lrz->zonelen &&
-										memcasecmp(lrz->zone, dn, datalen) == 0)
+										memcasecmp((u_char*)lrz->zone, (u_char*)dn, datalen) == 0)
 											break;
 						}
 
@@ -2089,7 +2090,7 @@ get_remote_soa(struct rzone *rzone)
 
 	totallen = sizeof(struct whole_header) + 2;
 
-	name = dns_label(rzone->zonename, &len);
+	name = (u_char *)dns_label(rzone->zonename, &len);
 	if (name == NULL) {
 		close(so);
 		return(MY_SOCK_TIMEOUT);
@@ -2097,7 +2098,7 @@ get_remote_soa(struct rzone *rzone)
 
 	zonelen = len;
 	
-	p = (char *)&wh[1];	
+	p = (u_char *)&wh[1];	
 	
 	memcpy(p, name, len);
 	totallen += len;
@@ -2112,7 +2113,7 @@ get_remote_soa(struct rzone *rzone)
 	if (dotsig) {
 		ctx = HMAC_CTX_new();
 		HMAC_Init_ex(ctx, tsigpass, tsigpasslen, EVP_sha256(), NULL);
-		HMAC_Update(ctx, &query[2], totallen - 2);
+		HMAC_Update(ctx, (const u_char *)&query[2], totallen - 2);
 
 		now = time(NULL);
 		if (tsig_pseudoheader(rzone->tsigkey, DEFAULT_TSIG_FUDGE, now, ctx) < 0) {
@@ -2120,7 +2121,7 @@ get_remote_soa(struct rzone *rzone)
 			return(MY_SOCK_TIMEOUT);
 		}
 
-		HMAC_Final(ctx, shabuf, &len);
+		HMAC_Final(ctx, (u_char *)shabuf, (u_int *) &len);
 
 		if (len != 32) {
 			fprintf(stderr, "not expected len != 32\n");
@@ -2236,7 +2237,7 @@ get_remote_soa(struct rzone *rzone)
 	memcpy(dupreply, reply, len);
 	rwh = (struct whole_header *)&reply[2];
 
-	end = &reply[len];
+	end = (u_char *)&reply[len];
 
 	if (rwh->dh.id != wh->dh.id) {
 		dolog(LOG_INFO, "DNS ID mismatch\n");
@@ -2272,7 +2273,7 @@ get_remote_soa(struct rzone *rzone)
 		return(MY_SOCK_TIMEOUT);
 	}
 		
-	if (memcasecmp(q->hdr->name, name, q->hdr->namelen) != 0) {
+	if (memcasecmp((u_char *)q->hdr->name, (u_char *)name, q->hdr->namelen) != 0) {
 		dolog(LOG_INFO, "question name not for what we asked\n");
 		close(so);
 		free(reply);  free(dupreply);
@@ -2302,8 +2303,8 @@ get_remote_soa(struct rzone *rzone)
 		ctx = HMAC_CTX_new();
 		HMAC_Init_ex(ctx, tsigpass, tsigpasslen, EVP_sha256(), NULL);
 		hmaclen = htons(32);
-		HMAC_Update(ctx, (char *)&hmaclen, sizeof(hmaclen));
-		HMAC_Update(ctx, shabuf, sizeof(shabuf));
+		HMAC_Update(ctx, (u_char *)&hmaclen, sizeof(hmaclen));
+		HMAC_Update(ctx, (u_char *)shabuf, sizeof(shabuf));
 		hmaclen = rwh->dh.additional;		/* save additional */
 		NTOHS(rwh->dh.additional);
 		if (rwh->dh.additional)
@@ -2315,7 +2316,7 @@ get_remote_soa(struct rzone *rzone)
 
 
 	for (i = answers; i > 0; i--) {
-		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, (dotsig == 1) ? ctx : NULL, name, zonelen, 0)) < 0) {
+		if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, 0, &rdlen, format, (dotsig == 1) ? ctx : NULL, (char *)name, zonelen, 0)) < 0) {
 			dolog(LOG_INFO, "not a SOA reply, or ERROR\n");
 			close(so);
 			free(reply);  free(dupreply);
@@ -2457,7 +2458,7 @@ do_raxfr(FILE *f, struct rzone *rzone)
 
 		free(keyname);
 
-		if ((len = mybase64_encode(tsigpass, tsigpasslen, humanpass, sizeof(humanpass))) < 0) {
+		if ((len = mybase64_encode((const u_char *)tsigpass, tsigpasslen, humanpass, sizeof(humanpass))) < 0) {
 			dolog(LOG_ERR, "base64_encode() failed\n");
 			close(so);
 			return -1;
@@ -2540,8 +2541,8 @@ pull_rzone(struct rzone *rzone, time_t now)
 		return -1;
 	}
 
-#if __linux__
-	fprintf(f, "; REPLICANT file for zone %s gotten on %ld\n\n", rzone->zonename, now);
+#if __linux__ || __FreeBSD__
+	fprintf(f, "; REPLICANT file for zone %s gotten on %lu\n\n", rzone->zonename, now);
 #else
 	fprintf(f, "; REPLICANT file for zone %s gotten on %lld\n\n", rzone->zonename, now);
 #endif

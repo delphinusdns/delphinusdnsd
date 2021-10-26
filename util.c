@@ -1479,17 +1479,17 @@ optskip:
 		/* now check for MAC type, since it's given once again */
 		if (elen == 11) {
 			if (expand[0] != 9 ||
-				memcasecmp(&expand[1], "hmac-sha1", 9) != 0) {
+				memcasecmp((u_char *)&expand[1], (u_char *)"hmac-sha1", 9) != 0) {
 				break;
 			}
 		} else if (elen == 13) {
 			if (expand[0] != 11 ||
-				memcasecmp(&expand[1], "hmac-sha256", 11) != 0) {
+				memcasecmp((u_char *)&expand[1], (u_char *)"hmac-sha256", 11) != 0) {
 				break;
 			}
 		} else if (elen == 26) {
 			if (expand[0] != 8 ||
-				memcasecmp(&expand[1], "hmac-md5", 8) != 0) {
+				memcasecmp((u_char *)&expand[1], (u_char *)"hmac-md5", 8) != 0) {
 				break;
 			}
 		} else {
@@ -1730,7 +1730,7 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 			if (! save) {
 				save = p + 2;
 			}
-			offset = unpack16(p);
+			offset = unpack16((char *)p);
 			/* offsets into the dns header are a nono */
 			if ((ntohs(offset) & (~0xc000)) < sizeof(struct dns_header))
 				return NULL;
@@ -1765,10 +1765,10 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 	if (save == NULL) {
 		p++;
 		(*elen)++;
-		return (p);
+		return ((char *)p);
 	} else {
 		(*elen)++;
-		return (save);
+		return ((char *)save);
 	}
 }
 
@@ -1881,7 +1881,7 @@ tsig_pseudoheader(char *tsigkeyname, uint16_t fudge, time_t now, HMAC_CTX *ctx)
 	ppoffset += 2;
 	p += 2;
 
-	HMAC_Update(ctx, pseudo_packet, ppoffset);
+	HMAC_Update(ctx, (u_char *)pseudo_packet, ppoffset);
 
 	return 0;
 }
@@ -2055,24 +2055,24 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 	totallen = sizeof(struct whole_header);
 
-	name = dns_label(zonename, &len);
+	name = (u_char *)dns_label(zonename, &len);
 	if (name == NULL) {
 		return -1;
 	}
 
 	zonelen = len;
 	
-	p = (char *)&wh[1];	
+	p = (u_char *)&wh[1];	
 	
 	memcpy(p, name, len);
 	totallen += len;
 	p += len;
 
-	pack16(p, htons(DNS_TYPE_AXFR));
+	pack16((char *)p, htons(DNS_TYPE_AXFR));
 	totallen += sizeof(u_int16_t);
 	p += sizeof(u_int16_t);
 	
-	pack16(p, htons(DNS_CLASS_IN));
+	pack16((char *)p, htons(DNS_CLASS_IN));
 	totallen += sizeof(u_int16_t);
 	p += sizeof(u_int16_t);
 
@@ -2086,7 +2086,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		
 		ctx = HMAC_CTX_new();
 		HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
-		HMAC_Update(ctx, &query[2], totallen - 2);
+		HMAC_Update(ctx, (u_char *)&query[2], totallen - 2);
 
 		now = time(NULL);
 		if (tsig_pseudoheader(tsigkey, DEFAULT_TSIG_FUDGE, now, ctx) < 0) {
@@ -2094,7 +2094,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			return -1;
 		}
 
-		HMAC_Final(ctx, shabuf, &len);
+		HMAC_Final(ctx, (u_char *)shabuf, (u_int *)&len);
 
 		if (len != DNS_HMAC_SHA256_SIZE) {
 			fprintf(stderr, "not expected len != 32\n");
@@ -2103,7 +2103,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 		HMAC_CTX_free(ctx);
 
-		keyname = dns_label(tsigkey, &len);
+		keyname = (u_char *)dns_label(tsigkey, &len);
 		if (keyname == NULL) {
 			return -1;
 		}
@@ -2111,26 +2111,26 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		memcpy(&query[totallen], keyname, len);
 		totallen += len;
 		
-		p = &query[totallen];
-		pack16(p, htons(DNS_TYPE_TSIG));
+		p = (u_char *)&query[totallen];
+		pack16((char *)p, htons(DNS_TYPE_TSIG));
 		totallen += 2;
 		p += 2;
 
-		pack16(p, htons(DNS_CLASS_ANY));
+		pack16((char *)p, htons(DNS_CLASS_ANY));
 		totallen += 2;
 		p += 2;
 
-		pack32(p, htonl(0));
+		pack32((char *)p, htonl(0));
 		totallen += 4;
 		p += 4;
 
-		keyname = dns_label("hmac-sha256", &len);
+		keyname = (u_char *)dns_label("hmac-sha256", &len);
 		if (keyname == NULL) {
 			return -1;
 		}
 
 		/* rdlen */
-		pack16(p, htons(len + 2 + 4 + 2 + 2 + DNS_HMAC_SHA256_SIZE + 2 + 2 + 2));
+		pack16((char *)p, htons(len + 2 + 4 + 2 + 2 + DNS_HMAC_SHA256_SIZE + 2 + 2 + 2));
 		totallen += 2;
 		p += 2;
 
@@ -2141,24 +2141,24 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 		/* time 1 */
 		if (sizeof(time_t) == 4)		/* 32-bit time-t */
-			pack16(p, 0);
+			pack16((char *)p, 0);
 		else
-			pack16(p, htons((now >> 32) & 0xffff)); 
+			pack16((char *)p, htons((now >> 32) & 0xffff)); 
 		totallen += 2;
 		p += 2;
 
 		/* time 2 */
-		pack32(p, htonl(now & 0xffffffff));
+		pack32((char *)p, htonl(now & 0xffffffff));
 		totallen += 4;
 		p += 4;
 
 		/* fudge */
-		pack16(p, htons(DEFAULT_TSIG_FUDGE));
+		pack16((char *)p, htons(DEFAULT_TSIG_FUDGE));
 		totallen += 2;
 		p += 2;
 	
 		/* hmac size */
-		pack16(p, htons(sizeof(shabuf)));
+		pack16((char *)p, htons(sizeof(shabuf)));
 		totallen += 2;
 		p += 2;
 
@@ -2168,17 +2168,17 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		p += sizeof(shabuf);
 
 		/* original id */
-		pack16(p, wh->dh.id);
+		pack16((char *)p, wh->dh.id);
 		totallen += 2;
 		p += 2;
 
 		/* error */
-		pack16(p, 0);
+		pack16((char *)p, 0);
 		totallen += 2;
 		p += 2;
 		
 		/* other len */
-		pack16(p, 0);
+		pack16((char *)p, 0);
 		totallen += 2;
 		p += 2;
 
@@ -2213,8 +2213,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		ctx = HMAC_CTX_new();
 		HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
 		maclen = htons(DNS_HMAC_SHA256_SIZE);
-		HMAC_Update(ctx, (char *)&maclen, sizeof(maclen));
-		HMAC_Update(ctx, shabuf, sizeof(shabuf));
+		HMAC_Update(ctx, (u_char *)&maclen, sizeof(maclen));
+		HMAC_Update(ctx, (u_char *)shabuf, sizeof(shabuf));
 	} else
 		ctx = NULL;
 
@@ -2265,7 +2265,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		rwh = (struct whole_header *)&reply[0];
 		bytes_received += ntohs(rwh->len);
 
-		end = &reply[len];
+		end = (u_char *)&reply[len];
 		len = rwh->len;
 
 		if (rwh->dh.id != wh->dh.id) {
@@ -2305,7 +2305,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 			return -1;
 		}
 		
-		p = (char *)&rwh[1];		
+		p = (u_char *)&rwh[1];		
 
 		if (have_question) {
 			p += q->hdr->namelen;
@@ -2336,7 +2336,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		for (count = 0; count < segmentcount; count++) {
 			char mac[DNS_HMAC_SHA256_SIZE];
 
-			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format, ctx, name, zonelen, 1)) < 0) {
+			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format, ctx, (char *)name, zonelen, 1)) < 0) {
 				fprintf(stderr, "raxfr_peek() ERROR\n");
 				return -1;
 			}
@@ -2366,8 +2366,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 					return -1;
 				}
 				maclen = htons(DNS_HMAC_SHA256_SIZE);
-				HMAC_Update(ctx, (char *)&maclen, sizeof(maclen));
-				HMAC_Update(ctx, mac, sizeof(mac));
+				HMAC_Update(ctx, (u_char *)&maclen, sizeof(maclen));
+				HMAC_Update(ctx, (u_char *)mac, sizeof(mac));
 
 				if (soacount > 1)
 					goto out;
@@ -2480,7 +2480,7 @@ dn_contains(char *name, int len, char *anchorname, int alen)
 
 	while (plen >= alen) {
 		if (plen == alen &&
-			memcasecmp(p, anchorname, alen) == 0) {
+			memcasecmp((u_char *)p, (u_char *)anchorname, alen) == 0) {
 			return 1;
 		}
 
@@ -2684,7 +2684,7 @@ compress_label(u_char *buf, u_int16_t offset, int labellen)
 		return(0);
 	}
 
-	p = end_name;
+	p = (u_char *)end_name;
 
 	p += sizeof(struct question);	
 	p++;	/* one more */
@@ -2939,7 +2939,7 @@ out:
 	/* take off our compress length */
 	offset -= checklen;
 	/* write compressed label */
-	pack16(&buf[offset], htons((compressmark - &buf[0]) | 0xc000));
+	pack16((char *)&buf[offset], htons((compressmark - &buf[0]) | 0xc000));
 
 	offset += sizeof(u_int16_t);	
 

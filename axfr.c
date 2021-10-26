@@ -1535,7 +1535,7 @@ notifypacket(int so, void *vnotnp, void *vmd, int packetcount)
 	struct dns_header *dnh;
 	struct question *fq = NULL;
 	int outlen = 0, slen, ret;
-	int sinlen;
+	socklen_t sinlen;
 
 	
 	memcpy(&newsin, (char *)&mz->notifybind, sizeof(struct sockaddr_storage));

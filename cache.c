@@ -236,7 +236,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 	elen = 0,
 	memset(&expand, 0, sizeof(expand));
 	
-	pb = expand_compression(p, estart, end, (u_char *)&expand, &elen, sizeof
+	pb = (u_char *)expand_compression(p, estart, end, (u_char *)&expand, &elen, sizeof
 (expand));
 	if (pb == NULL) {
 		dolog(LOG_INFO, "expand_compression() failed in cacheit 1");
@@ -250,7 +250,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 		return (-1);
 	}
 
-	rrtype = ntohs(unpack16(pb));	
+	rrtype = ntohs(unpack16((char *)pb));	
 
 	/* caching ANY or RRSIG is a nono */
 	if (rrtype == DNS_TYPE_ANY || rrtype == DNS_TYPE_RRSIG
@@ -264,7 +264,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 		printf("%d out of %d\n", x, ntohs(dh->answer));
 		elen = 0;
 		memset(&expand, 0, sizeof(expand));
-		pb = expand_compression(pb, estart, end, (u_char *)&expand, &elen, sizeof(expand));
+		pb = (u_char *)expand_compression(pb, estart, end, (u_char *)&expand, &elen, sizeof(expand));
 		if (pb == NULL) {
 			dolog(LOG_INFO, "expand_compression() failed in cacheit 3");
 			return (-1);
@@ -283,10 +283,10 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 			return -1;
 		}
 
-		rrtype = ntohs(unpack16(pb));
+		rrtype = ntohs(unpack16((char *)pb));
 		/* class in here not parsed */
-		rrttl = ntohl(unpack32(pb + 4));
-		rdlen = ntohs(unpack16(pb + 8));
+		rrttl = ntohl(unpack32((char *)pb + 4));
+		rdlen = ntohs(unpack16((char *)pb + 8));
 		
 		pb += 10;   /* skip answerd */
 	
@@ -337,7 +337,7 @@ cache_rrsig(struct scache *scache)
 	memset(&rs, 0, sizeof(struct rrsig));
 
 	BOUNDS_CHECK((q + 2), scache->payload, scache->rdlen, scache->end);
-	tmp = unpack16(q);
+	tmp = unpack16((char *)q);
 	rs.type_covered = ntohs(tmp);
 	q += 2;
 	BOUNDS_CHECK((q + 1), scache->payload, scache->rdlen, scache->end);
@@ -345,19 +345,19 @@ cache_rrsig(struct scache *scache)
 	BOUNDS_CHECK((q + 1), scache->payload, scache->rdlen, scache->end);
 	rs.labels = *q++;
 	BOUNDS_CHECK((q + 4), scache->payload, scache->rdlen, scache->end);
-	tmp4 = unpack32(q);
+	tmp4 = unpack32((char *)q);
 	rs.original_ttl = ntohl(tmp4);
 	q += 4;
 	BOUNDS_CHECK((q + 4), scache->payload, scache->rdlen, scache->end);
-	tmp4 = unpack32(q);
+	tmp4 = unpack32((char *)q);
 	rs.signature_expiration = ntohl(tmp4);
 	q += 4;
 	BOUNDS_CHECK((q + 4), scache->payload, scache->rdlen, scache->end);
-	tmp4 = unpack32(q);
+	tmp4 = unpack32((char *)q);
 	rs.signature_inception = ntohl(tmp4);
 	q += 4;
 	BOUNDS_CHECK((q + 2), scache->payload, scache->rdlen, scache->end);
-	tmp = unpack16(q);
+	tmp = unpack16((char *)q);
 	rs.key_tag = ntohs(tmp);
 	q += 2;
 	
@@ -367,7 +367,7 @@ cache_rrsig(struct scache *scache)
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
 	memcpy(&rs.signers_name, expand, elen);
@@ -397,7 +397,7 @@ cache_ds(struct scache *scache)
 	memset(&d, 0, sizeof(struct ds));
 
 	BOUNDS_CHECK((scache->payload + 2), q, scache->rdlen, scache->end);
-	tmpshort = unpack16(p);
+	tmpshort = unpack16((char *)p);
 	d.key_tag = ntohs(tmpshort);
 	p += 2;
 	BOUNDS_CHECK((scache->payload + 1), q, scache->rdlen, scache->end);
@@ -462,7 +462,7 @@ cache_dnskey(struct scache *scache)
 	memset(&dk, 0, sizeof(struct dnskey));
 
 	BOUNDS_CHECK((scache->payload + 2), q, scache->rdlen, scache->end);
-	tmpshort = unpack16(p);
+	tmpshort = unpack16((char *)p);
 	dk.flags = ntohs(tmpshort);
 	p += 2;
 	BOUNDS_CHECK((scache->payload + 1), q, scache->rdlen, scache->end);
@@ -500,7 +500,7 @@ cache_mx(struct scache *scache)
 	memset(&mx, 0, sizeof(struct smx));
 
 	BOUNDS_CHECK((q + 2), scache->payload, scache->rdlen, scache->end);
-	mxpriority = unpack16(q);
+	mxpriority = unpack16((char *)q);
 
 	q += 2;
 
@@ -511,7 +511,7 @@ cache_mx(struct scache *scache)
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
 	memcpy(&mx.exchange, expand, sizeof(mx.exchange));
@@ -550,7 +550,7 @@ cache_nsec3(struct scache *scache)
 	n.flags = *p++;
 
 	BOUNDS_CHECK((scache->payload + 2), brr, scache->rdlen, scache->end);
-	iter = unpack16(p);
+	iter = unpack16((char *)p);
 	n.iterations = ntohs(iter);
 	p += 2;
 
@@ -597,7 +597,7 @@ cache_nsec3param(struct scache *scache)
 	BOUNDS_CHECK((scache->payload + 1), q, scache->rdlen, scache->end);
 	np.flags = *p++;
 	BOUNDS_CHECK((scache->payload + 2), q, scache->rdlen, scache->end);
-	iter = unpack16(p);
+	iter = unpack16((char *)p);
 	np.iterations = ntohs(iter);
 	p += 2;
 	BOUNDS_CHECK((scache->payload + 1), q, scache->rdlen, scache->end);
@@ -654,7 +654,7 @@ cache_ns(struct scache *scache)
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
 	memcpy(&nsi.nsserver, expand, sizeof(nsi.nsserver));
@@ -683,7 +683,7 @@ cache_aaaa(struct scache *scache)
 	memset(&aaaa, 0, sizeof(struct aaaa));
 
 	BOUNDS_CHECK((scache->payload + sizeof(ia)), q, scache->rdlen, scache->end);
-	unpack((char *)&ia, p, sizeof(struct in6_addr));
+	unpack((char *)&ia, (char *)p, sizeof(struct in6_addr));
 	p += sizeof(ia);
 
 
@@ -704,7 +704,7 @@ cache_a(struct scache *scache)
 	memset(&ar, 0, sizeof(ar));
 
 	BOUNDS_CHECK((scache->payload + sizeof(ia)), q, scache->rdlen, scache->end);
-	ar.a = unpack32(p);
+	ar.a = unpack32((char *)p);
 	p += sizeof(ia);
 
 	// memcpy(&ar.a, &ia, sizeof(ar.a));
@@ -763,15 +763,15 @@ cache_srv(struct scache *scache)
 	memset(&s, 0, sizeof(struct srv));
 
 	BOUNDS_CHECK((q + 2), scache->payload, scache->rdlen, scache->end);
-	tmp16 = unpack16(q);
+	tmp16 = unpack16((char *)q);
 	s.priority = ntohs(tmp16);
 	q += 2;
 	BOUNDS_CHECK((q + 2), scache->payload, scache->rdlen, scache->end);
-	tmp16 = unpack16(q);
+	tmp16 = unpack16((char *)q);
 	s.weight = ntohs(tmp16);
 	q += 2;
 	BOUNDS_CHECK((q + 2), scache->payload, scache->rdlen, scache->end);
-	tmp16 = unpack16(q);
+	tmp16 = unpack16((char *)q);
 	s.port = ntohs(tmp16);
 	q += 2;
 
@@ -781,7 +781,7 @@ cache_srv(struct scache *scache)
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
 	memcpy(&s.target, expand, elen);
@@ -844,7 +844,7 @@ cache_naptr(struct scache *scache)
 		fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
-		q = save;
+		q = (u_char *)save;
 	}
 
 	return (q - scache->estart);

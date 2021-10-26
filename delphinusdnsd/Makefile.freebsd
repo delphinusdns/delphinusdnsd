@@ -2,7 +2,7 @@
 
 PROG=delphinusdnsd
 
-SRCS=delphinusdnsd.c parse.y reply.c additional.c region.c log.c axfr.c filter.c ratelimit.c passlist.c base64.c dnssec.c util.c ent.c db.c imsg-buffer.c imsg.c tsig.c raxfr.c forward.c cache.c zone.c passname.c
+SRCS=delphinusdnsd.c parse.y reply.c additional.c region.c log.c axfr.c filter.c ratelimit.c passlist.c base64.c dnssec.c util.c ent.c db.c imsg-buffer.c imsg.c tsig.c raxfr.c forward.c cache.c zone.c passname.c siphash.c
 
 CFLAGS= -Wall -g -L/usr/local/lib
 CFLAGS+= -I${.CURDIR}/.. 

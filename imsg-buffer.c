@@ -23,7 +23,11 @@
 
 #include <limits.h>
 #include <errno.h>
+#if __linux__
 #include <bsd/stdlib.h>
+#else
+#include <stdlib.h>
+#endif
 #include <string.h>
 #include <unistd.h>
 

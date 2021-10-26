@@ -767,17 +767,17 @@ int
 base32hex_decode(u_char *input, u_char *output)
 {
 	u_int8_t tmp;
-	u_char *character = "0123456789abcdefghijklmnopqrstuv=";
-	u_char *start = character, *p = character;
+	char *character = "0123456789abcdefghijklmnopqrstuv=";
+	char *start = character, *p = character;
 	int i, j;
 	int len;
 	int bit = 0;
 
-	len = (strlen(input) * 5) / 8;
+	len = (strlen((const char *)input) * 5) / 8;
 
 	memset(output, 0, len);
 
-	for (i = 0; i < strlen(input); i++) {
+	for (i = 0; i < strlen((const char*)input); i++) {
 		if (input[i] == '=')
 			continue;
 
@@ -812,10 +812,10 @@ base32hex_encode(u_char *input, int len)
 	u_char *p;
 	static char ret[64];
 	
-	u_char *character = "0123456789abcdefghijklmnopqrstuv=";
+	char *character = "0123456789abcdefghijklmnopqrstuv=";
 
 	memset(&ret, 0, sizeof(ret));
-	p = &ret[0];
+	p = (u_char *)&ret[0];
 	ui = input;
 
 	for (i = 0; i < len; i += 5) {

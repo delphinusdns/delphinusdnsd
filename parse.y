@@ -47,11 +47,12 @@
 
 #if __OpenBSD__
 #include <siphash.h>
+#else
+#include "siphash.h"
 #endif
 
 
 #ifdef __linux__
-#include "siphash.h"
 #include <grp.h>
 #define __USE_BSD 1
 #include <endian.h>
@@ -439,7 +440,7 @@ tsigauth:
 		char *keyname;
 		int keylen, keynamelen;
 	
-		if ((keylen = mybase64_decode($3, key, sizeof(key))) < 0) {
+		if ((keylen = mybase64_decode($3, (u_char *)key, sizeof(key))) < 0) {
 			dolog(LOG_ERR, "can't decode tsig base64\n");
 			return -1;
 		}
@@ -1400,7 +1401,7 @@ optionsstatement:
 				vslen = strlen(versionstring);
 			} else if (strcasecmp($1, "cookie-secret") == 0) {
 				cookiesecret_len = 
-					mybase64_decode($2, cookiesecret,
+					mybase64_decode((const char *)$2, (u_char *)cookiesecret,
 						cookiesecret_len);
 
 				if (cookiesecret_len < 0) {
@@ -2541,7 +2542,7 @@ fill_dnskey(ddDB *db, char *name, char *type, uint32_t myttl, uint16_t flags, ui
 	dnskey->algorithm = algorithm;
 
 	/* feed our base64 key to the public key */
-	ret = mybase64_decode(pubkey, dnskey->public_key, sizeof(dnskey->public_key));
+	ret = mybase64_decode(pubkey, (u_char *)dnskey->public_key, sizeof(dnskey->public_key));
 	if (ret < 0) 
 		return (-1);
 
@@ -2611,14 +2612,22 @@ fill_rrsig(ddDB *db, char *name, char *type, u_int32_t myttl, char *typecovered,
 	rrsig->labels = labels;
 	rrsig->original_ttl = original_ttl;
 
+#if __FreeBSD__
+	snprintf(tmpbuf, sizeof(tmpbuf), "%lu", sig_expiration);
+#else
 	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_expiration);
+#endif
 	if (strptime(tmpbuf, "%Y%m%d%H%M%S", &tmbuf) == NULL) {
 		perror("sig_expiration");
 		return (-1);	
 	}
 	timebuf = timegm(&tmbuf);
 	rrsig->signature_expiration = timebuf;
+#if __FreeBSD__
+	snprintf(tmpbuf, sizeof(tmpbuf), "%lu", sig_inception);
+#else
 	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_inception);
+#endif
 	if (strptime(tmpbuf, "%Y%m%d%H%M%S", &tmbuf) == NULL) {
 		perror("sig_inception");
 		return (-1);	
@@ -2637,7 +2646,7 @@ fill_rrsig(ddDB *db, char *name, char *type, u_int32_t myttl, char *typecovered,
 
 	
 	/* feed our base64 key the signature */
-	ret = mybase64_decode(signature, rrsig->signature, sizeof(rrsig->signature));
+	ret = mybase64_decode(signature, (u_char *)rrsig->signature, sizeof(rrsig->signature));
 
 	if (ret < 0) 
 		return (-1);
@@ -2768,7 +2777,7 @@ fill_nsec3(ddDB *db, char *name, char *type, u_int32_t myttl, u_int8_t algorithm
 		hex2bin(salt, strlen(salt), nsec3->salt);
 	}
 
-	nsec3->nextlen = base32hex_decode(nextname, (u_char*)&nsec3->next);
+	nsec3->nextlen = base32hex_decode((u_char *)nextname, (u_char*)&nsec3->next);
 	if (nsec3->nextlen == 0) {
 		dolog(LOG_INFO, "base32_decode faulty");
 		return -1;
@@ -4181,9 +4190,9 @@ notifysource(struct question *q, struct sockaddr_storage *from)
 				}	
 				/* if we are the right zone, right tsigkey, and right primary IP/IP6 */
 				if ((zoneretlen == q->hdr->namelen) &&
-					(memcasecmp(zone, q->hdr->name, zoneretlen) == 0) && 
+					(memcasecmp((u_char *)zone, (u_char *)q->hdr->name, zoneretlen) == 0) && 
 					(tsigretlen == q->tsig.tsigkeylen) &&
-					(memcasecmp(tsigkey, q->tsig.tsigkey, tsigretlen) == 0) &&
+					(memcasecmp((u_char *)tsigkey, (u_char *)q->tsig.tsigkey, tsigretlen) == 0) &&
 					(rz->storage.ss_family == from->ss_family)) {
 						free(tsigkey);
 						free(zone);
@@ -4213,7 +4222,7 @@ notifysource(struct question *q, struct sockaddr_storage *from)
 				/* we don't have tsig here */
 
 				if ((zoneretlen == q->hdr->namelen) &&
-					(memcasecmp(zone, q->hdr->name, zoneretlen) == 0) && 
+					(memcasecmp((u_char *)zone, (u_char *)q->hdr->name, zoneretlen) == 0) && 
 					(rz->storage.ss_family == from->ss_family)) {
 						free(zone);
 						if (from->ss_family == AF_INET) {

@@ -269,7 +269,7 @@ find_tsig_key(char *keyname, int keynamelen, char *key, int keylen)
 {
 	SLIST_FOREACH(tknp, &tsigkeyhead, tsig_key_entry) {
 		if (keynamelen == tknp->keynamelen &&
-			memcasecmp(tknp->keyname, keyname, keynamelen) == 0) {
+			memcasecmp((u_char *)tknp->keyname, (u_char *)keyname, keynamelen) == 0) {
 		
 			if (keylen < tknp->keylen)
 				return -1;

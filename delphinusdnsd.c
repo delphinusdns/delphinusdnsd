@@ -1788,7 +1788,7 @@ axfrentry:
 					goto drop;
 				}
 
-				crc = crc16(buf, len);
+				crc = crc16((uint8_t *)buf, len);
 
 				/* branch to pledge parser here */
 				imsg_type = IMSG_PARSE_MESSAGE;
@@ -3902,7 +3902,8 @@ void
 setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 {
 	int so, nso;
-	int sel, slen = sizeof(struct sockaddr_un);
+	int sel;
+	socklen_t slen = sizeof(struct sockaddr_un);
 	int len;
 	char buf[512];
 	struct sockaddr_un sun, *psun;
@@ -3910,8 +3911,10 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	struct dddcomm *dc;
 	struct passwd *pw;
 	fd_set rset;
-	uid_t uid;
+#if __OpenBSD__
 	gid_t gid;
+	uid_t uid;
+#endif
 
 	setproctitle("unix controlling socket [%s]", 
 		(identstring != NULL ? identstring : ""));

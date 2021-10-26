@@ -43,6 +43,10 @@
  * https://131002.net/siphash/
  */
 
+#if __FreeBSD__
+#include <sys/endian.h>
+#endif
+
 #include <endian.h>
 #include <stdint.h>
 #include <string.h>

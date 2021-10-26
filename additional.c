@@ -26,12 +26,13 @@
 #include <string.h>
 
 #include <syslog.h>
-#if __OpenBSD__
+#if __OpenBSD__ 
 #include <siphash.h>
+#else
+#include "siphash.h"
 #endif
 
 #ifdef __linux__
-#include "siphash.h"
 #include <grp.h>
 #define __USE_BSD 1
 #include <endian.h>
@@ -444,7 +445,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 			memcpy(&tsig_timers[ttlen], question->tsig.tsigmac, question->tsig.tsigmaclen);
 			ttlen += question->tsig.tsigmaclen;
 
-			HMAC_Update(tsigctx, tsig_timers, ttlen);
+			HMAC_Update(tsigctx, (u_char *)tsig_timers, ttlen);
 
 			priordigest = 0;
 		}
@@ -473,7 +474,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	ppoffset += offset;
 
 	if (envelope > 1 || envelope < -1) {
-		HMAC_Update(tsigctx, reply, offset);
+		HMAC_Update(tsigctx, (u_char *)reply, offset);
 	}
 
 	if ((tsignamelen = find_tsig_key(question->tsig.tsigkey, 
