@@ -1,10 +1,20 @@
 The TODO's here are for delphinusdnsd which is the successor of wildcarddnsd.
 Please see https://delphinusdns.org for updates/news.
 
+For 1.9.0 release
+- This is Peter J. Philipp's last release, the 2.0.0 if that ever happens will
+be led by other people.  Peter will go on to do another project.
+
+For 1.8.0 release
+- make delphinusdnsd not restart the entire daemon upon axfr, just merge or
+internally build a new database and switch them.
+
 For 1.7.0 release
 
 - filter input to dddctl query for escape codes.
 - DNS Update (RFC 2136 and 3007) must be Secure with TSIG, and do DNSSEC signing
+- Shape up the NSEC code as it seems NSEC is having a renaissance, at least
+to have replicant compatibility for NSEC
 
 For 1.6.0 release
 
@@ -23,8 +33,7 @@ many are in the system, also dddctl should be modified to set up killing such
 an ident (ie. /var/run/delphinusdnsd-${ID}.sock) [DONE]
 - fix CNAME answers	[DONE]
 - fix/add wildcard support including AXFR [DONE]
-- HTTPS/SVCB, CDS/CDNSKEY and LOC RR support
-
+- HTTPS/SVCB, CDS/CDNSKEY and LOC RR support [partially DONE CDS/CDNSKEY]
 
 
 For 1.5.0 release
