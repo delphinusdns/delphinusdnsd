@@ -1317,17 +1317,17 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	char address[INET6_ADDRSTRLEN];
 	char replystring[DNS_MAXNAME + 1];
 	char fakereplystring[DNS_MAXNAME + 1];
-	char controlbuf[64];
-
 	union {
-		struct sockaddr sa;
-		struct sockaddr_in sin;
-		struct sockaddr_in6 sin6;
-	} sockaddr_large;
+		struct cmsghdr hdr;
+		u_char buf[CMSG_SPACE(sizeof(uint8_t)) + 
+				CMSG_SPACE(sizeof(struct timeval))];
+	} cmsgbuf;
 
-	socklen_t fromlen = sizeof(sockaddr_large);
+	struct sockaddr_storage ss;
 
-	struct sockaddr *from = (void *)&sockaddr_large;
+	socklen_t fromlen = sizeof(struct sockaddr_storage);
+
+	struct sockaddr *from = (void *)&ss;
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
 
@@ -1599,7 +1599,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				so = cfg->udp[i];
 				oldsel = i;
 axfrentry:
-				fromlen = sizeof(sockaddr_large);
+				fromlen = sizeof(struct sockaddr_storage);
 
 				memset(&msgh, 0, sizeof(msgh));
 				iov.iov_base = buf;
@@ -1608,12 +1608,18 @@ axfrentry:
 				msgh.msg_namelen = fromlen;
 				msgh.msg_iov = &iov;
 				msgh.msg_iovlen = 1;
-				msgh.msg_control = (struct cmsghdr*)&controlbuf;
-				msgh.msg_controllen = sizeof(controlbuf);
+				msgh.msg_control = (struct cmsghdr*)&cmsgbuf.buf;
+				msgh.msg_controllen = sizeof(cmsgbuf);
 			
 				len = recvmsg(so, &msgh, 0);
 				if (len < 0) {
 					dolog(LOG_INFO, "recvmsg: on descriptor %u interface \"%s\" %s\n", so, cfg->ident[i], strerror(errno));
+					continue;
+				}
+
+				if ((msgh.msg_flags & MSG_TRUNC) ||
+					(msgh.msg_flags & MSG_CTRUNC)) {
+					dolog(LOG_INFO, "recvmsg: on descriptor %u interface \"%s\" control message truncated\n", so, cfg->ident[i]);
 					continue;
 				}
 
@@ -2647,15 +2653,11 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	char replystring[DNS_MAXNAME + 1];
 	char fakereplystring[DNS_MAXNAME + 1];
 
-	union {
-		struct sockaddr sa;
-		struct sockaddr_in sin;
-		struct sockaddr_in6 sin6;
-	} sockaddr_large;
+	struct sockaddr_storage ss;
 
-	socklen_t fromlen = sizeof(sockaddr_large);
+	socklen_t fromlen = sizeof(struct sockaddr_storage);
 
-	struct sockaddr *from = (void *)&sockaddr_large;
+	struct sockaddr *from = (void *)&ss;
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
 
@@ -2800,7 +2802,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 			
 		for (i = 0; i < cfg->sockcount; i++) {
 			if (FD_ISSET(cfg->tcp[i], &rset)) {
-				fromlen = sizeof(sockaddr_large);
+				fromlen = sizeof(struct sockaddr_storage);
 
 				so = accept(cfg->tcp[i], (struct sockaddr*)from, &fromlen);
 		
