@@ -4221,11 +4221,11 @@ sign_loc(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			q++;
 			pack8(q, ((struct loc *)rrp2->rdata)->vert_pre);
 			q++;
-			pack32(q, ((struct loc *)rrp2->rdata)->latitude);
+			pack32(q, htonl(((struct loc *)rrp2->rdata)->latitude));
 			q += 4;
-			pack32(q, ((struct loc *)rrp2->rdata)->longitude);
+			pack32(q, htonl(((struct loc *)rrp2->rdata)->longitude));
 			q += 4;
-			pack32(q, ((struct loc *)rrp2->rdata)->altitude);
+			pack32(q, htonl(((struct loc *)rrp2->rdata)->altitude));
 			q += 4;
 
 			r = canonsort[csort] = malloc(68000);
@@ -8635,20 +8635,19 @@ print_rbt(FILE *of, struct rbtree *rbt)
 			return -1;
 		}
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-			if (((struct loc *)rrp2->rdata)->longitude > (1 << 31)) {  
-				longitude = 'N';
-				longval = ((struct loc *)rrp2->rdata)->longitude - (1 << 31);
-			} else {
-				longitude = 'S';
-				longval = ((struct loc *)rrp2->rdata)->longitude;
-			}
-			if (((struct loc *)rrp2->rdata)->latitude > (1 << 31)) {
-				latitude = 'E';
-				latval = ((struct loc *)rrp2->rdata)->latitude - (1 << 31);
-			} else {
-				latitude = 'W';
-				latval = ((struct loc *)rrp2->rdata)->latitude;
-			}
+			longval = (((struct loc *)rrp2->rdata)->longitude - (1<<31));
+			if (longval < 0) {
+				longitude = 'W';
+				longval = -longval;
+			} else
+				longitude = 'E';
+
+			latval = (((struct loc *)rrp2->rdata)->latitude - (1<<31));
+			if (latval < 0) {
+				latitude = 'S';
+				latval = -latval;
+			} else
+				latitude = 'N';
 
 			latsecfrac = latval % 1000;
 			latval = latval / 1000;

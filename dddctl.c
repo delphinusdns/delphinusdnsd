@@ -1014,6 +1014,10 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		uint32_t longsecfrac, longval, longsec, longmin, longdeg;
 		int mantissa, exponent;
 		uint32_t valsize, valhprec, valvprec;
+		int32_t altval;
+		int altmeters, altfrac, altsign;
+		const int referencealt = 100000 * 100;
+		char sizestr[64], hpstr[64], vpstr[64];
 
 
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
@@ -1021,20 +1025,19 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			return -1;
 		}
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-			if (((struct loc *)rrp2->rdata)->longitude > (1 << 31)) {  
-				longitude = 'N';
-				longval = ((struct loc *)rrp2->rdata)->longitude - (1 << 31);
-			} else {
-				longitude = 'S';
-				longval = ((struct loc *)rrp2->rdata)->longitude;
-			}
-			if (((struct loc *)rrp2->rdata)->latitude > (1 << 31)) {
-				latitude = 'E';
-				latval = ((struct loc *)rrp2->rdata)->latitude - (1 << 31);
-			} else {
-				latitude = 'W';
-				latval = ((struct loc *)rrp2->rdata)->latitude;
-			}
+			longval = (((struct loc *)rrp2->rdata)->longitude - (1<<31));
+			if (longval < 0) {
+				longitude = 'W';
+				longval = -longval;
+			} else
+				longitude = 'E';
+
+			latval = (((struct loc *)rrp2->rdata)->latitude - (1<<31));
+			if (latval < 0) {
+				latitude = 'S';
+				latval = -latval;
+			} else
+				latitude = 'N';
 
 			latsecfrac = latval % 1000;
 			latval = latval / 1000;
@@ -1067,13 +1070,27 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 
 			valvprec = mantissa * poweroften[exponent];
 
-			fprintf(of, "%s %d IN LOC ( %u %u %u.%.3u %c %u %u %u.%.3u %c %u %u %u %u )\n",
+			if (((struct loc *)rrp2->rdata)->altitude < referencealt) {
+				altval = referencealt - ((struct loc *)rrp2->rdata)->altitude; 
+				altsign = -1;
+			} else {
+				altval = ((struct loc *)rrp2->rdata)->altitude - referencealt;
+				altsign = 1;
+			}
+
+			altfrac = altval % 100;
+			altmeters = (altval / 100) * altsign;
+
+			snprintf(sizestr, sizeof(sizestr), "%d.%.2d", valsize / 100, valsize % 100);
+			snprintf(hpstr, sizeof(hpstr), "%d.%.2d", valhprec / 100, valhprec % 100);
+			snprintf(vpstr, sizeof(vpstr), "%d.%.2d", valvprec / 100, valvprec % 100);
+
+			fprintf(of, "%s %d IN LOC ( %u %u %u.%.3u %c %u %u %u.%.3u %c %d.%.2dm %sm %sm %sm )\n",
 				convert_name(rbt->zone, rbt->zonelen),
 				rrset->ttl,
 				latdeg, latmin, latsec, latsecfrac, latitude,
 				longdeg, longmin, longsec, longsecfrac, longitude,
-				((struct loc *)rrp2->rdata)->altitude, valsize,
-				valhprec, valvprec);
+				altmeters, altfrac,  sizestr, hpstr, vpstr);
 	
 		}
 	}

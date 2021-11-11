@@ -1247,18 +1247,18 @@ raxfr_loc(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 	}
 	
 	if (l.longitude > (1 << 31)) {	
-		longitude = 'N';
+		longitude = 'E';
 		longval = l.longitude - (1 << 31);
 	} else {
-		longitude = 'S';
+		longitude = 'W';
 		longval = l.longitude;
 	}
 
 	if (l.latitude > (1 << 31)) {
-		latitude = 'E';
+		latitude = 'N';
 		latval = l.latitude - (1 << 31);
 	} else {
-		latitude = 'W';
+		latitude = 'S';
 		latval = l.latitude;
 	}
 		
