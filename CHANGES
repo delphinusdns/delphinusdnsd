@@ -25,6 +25,7 @@ Changes in RELEASE_1_6 from RELEASE_1_5
 	https://www.internetsociety.org/deploy360/dnssec/maps/
   ... perhaps this standard will see more adoption in the future, and I can
   use it.
+- added LOC support (RFC 1876)
 
 Changes in RELEASE_1_5 from RELEASE_1_4
 

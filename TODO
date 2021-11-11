@@ -14,7 +14,8 @@ For 1.7.0 release
 - filter input to dddctl query for escape codes.
 - DNS Update (RFC 2136 and 3007) must be Secure with TSIG, and do DNSSEC signing
 - Shape up the NSEC code as it seems NSEC is having a renaissance, at least
-to have replicant compatibility for NSEC
+  to have replicant compatibility for NSEC
+- HTTPS/SVCB support (draft will enter standard soon)
 
 For 1.6.0 release
 
@@ -33,7 +34,7 @@ many are in the system, also dddctl should be modified to set up killing such
 an ident (ie. /var/run/delphinusdnsd-${ID}.sock) [DONE]
 - fix CNAME answers	[DONE]
 - fix/add wildcard support including AXFR [DONE]
-- HTTPS/SVCB, CDS/CDNSKEY and LOC RR support [partially DONE CDS/CDNSKEY]
+- HTTPS/SVCB, CDS/CDNSKEY and LOC RR support [DONE CDS/CDNSKEY/LOC]
 
 
 For 1.5.0 release
