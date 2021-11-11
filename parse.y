@@ -3427,7 +3427,7 @@ fill_loc(ddDB *db, char *name, char *type, int myttl, uint8_t deglat, uint8_t mi
 	loc->size = (mantissa << 4) | exponent;
 
 	secs = (int)seclat;
-	remsecs = (int)(seclat - secs) * 1000;	/* 0.999 -> 999 */
+	remsecs = (int)((seclat - (float)secs) * 1000);	/* 0.999 -> 999 */
 
 	switch (*ns) {
 	case 'N':
@@ -3444,7 +3444,7 @@ fill_loc(ddDB *db, char *name, char *type, int myttl, uint8_t deglat, uint8_t mi
 	}
 
 	secs = (int)seclong;
-	remsecs = (int)(seclong - secs) * 1000;
+	remsecs = (int)((seclong - (float)secs) * 1000);
 
 	switch (*ew) {
 	case 'E':
