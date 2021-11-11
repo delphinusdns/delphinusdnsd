@@ -255,6 +255,16 @@ struct aaaa {
         struct in6_addr aaaa;     /* IPv6 addresses */
 };
 
+struct loc {
+	uint8_t version;
+	uint8_t size;
+	uint8_t horiz_pre;
+	uint8_t vert_pre;
+	uint32_t latitude;
+	uint32_t longitude;
+	uint32_t altitude;
+};
+
 struct zonemd {
 	uint32_t	serial;		/* reflects SOA serial */
 	uint8_t 	scheme;		/* usually SIMPLE SCHEME */

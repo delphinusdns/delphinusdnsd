@@ -123,6 +123,7 @@ void zonemd_hash_naptr(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_caa(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_mx(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_tlsa(SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_loc(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_sshfp(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_ds(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_dnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
@@ -179,6 +180,7 @@ extern int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_
 extern int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_loc(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
 extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *, struct soa_constraints *);
 extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int, int);
@@ -216,6 +218,7 @@ struct typetable {
 	{ "ZONEMD", DNS_TYPE_ZONEMD },
 	{ "CDS", DNS_TYPE_CDS },
 	{ "CDNSKEY", DNS_TYPE_CDNSKEY },
+	{ "LOC", DNS_TYPE_LOC },
 	{ NULL, 0}
 };
 
@@ -231,6 +234,7 @@ static struct rrtab myrrtab[] =  {
  { "ds", 	DNS_TYPE_DS, 		DNS_TYPE_DS },
  { "hinfo",	DNS_TYPE_HINFO,		DNS_TYPE_HINFO },
  { "hint",      DNS_TYPE_HINT,		DNS_TYPE_NS }, 
+ { "loc",	DNS_TYPE_LOC,		DNS_TYPE_LOC },
  { "mx",        DNS_TYPE_MX, 		DNS_TYPE_MX },
  { "naptr", 	DNS_TYPE_NAPTR,		DNS_TYPE_NAPTR },
  { "ns",        DNS_TYPE_NS,		DNS_TYPE_NS },
@@ -271,8 +275,9 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_HINFO, 0, raxfr_hinfo },
 	{ DNS_TYPE_CAA, 0, raxfr_caa },
 	{ DNS_TYPE_ZONEMD, 0, raxfr_zonemd },
-	{ DNS_TYPE_CDNSKEY, 0, raxfr_cdnskey },
-	{ DNS_TYPE_CDS, 0, raxfr_cds },
+	{ DNS_TYPE_CDNSKEY, 1, raxfr_cdnskey },
+	{ DNS_TYPE_CDS, 1, raxfr_cds },
+	{ DNS_TYPE_LOC, 0, raxfr_loc },
 	{ 0, 0, NULL }
 };
 
@@ -717,6 +722,18 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
 		else
 			*error = -1;
 
+		return 0;
+
+	case DNS_TYPE_LOC:
+		if (find_rr(rbt, DNS_TYPE_LOC) != NULL) {
+			returnval = DNS_TYPE_LOC;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
+		}
+
+		*error = -1;
 		return 0;
 
 	case DNS_TYPE_TLSA:
@@ -2722,6 +2739,9 @@ compress_label(u_char *buf, u_int16_t offset, int labellen)
 		case DNS_TYPE_AAAA:
 			p += 16;		/* sizeof 4 * 32 bit */
 			break;
+		case DNS_TYPE_LOC:
+			p += (4 + (3 * sizeof(uint32_t)));
+			break;
 		case DNS_TYPE_TXT:
 			p += *p;
 			p++;
@@ -4036,6 +4056,90 @@ zonemd_hash_mx(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 	free(tmpkey);
 }
 
+void
+zonemd_hash_loc(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_LOC));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+		pack16(q, htons(4 + (3 * sizeof(uint32_t))));
+		q += 2;
+		pack8(q, ((struct loc *)rrp2->rdata)->version);
+		q++;
+		pack8(q, ((struct loc *)rrp2->rdata)->size);
+		q++;
+		pack8(q, ((struct loc *)rrp2->rdata)->horiz_pre);
+		q++;
+		pack8(q, ((struct loc *)rrp2->rdata)->vert_pre);
+		q++;
+		pack32(q, ((struct loc *)rrp2->rdata)->latitude);
+		q++;
+		pack32(q, ((struct loc *)rrp2->rdata)->longitude);
+		q++;
+		pack32(q, ((struct loc *)rrp2->rdata)->altitude);
+		q++;
+		r = canonsort[csort] = malloc(68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+		
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+
+		csort++;
+	}
+
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+	free(tmpkey);
+}
 
 void
 zonemd_hash_tlsa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)

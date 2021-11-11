@@ -131,6 +131,7 @@ extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int1
 extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+extern int raxfr_loc(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
@@ -180,13 +181,13 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_TLSA, 0, raxfr_tlsa },
 	{ DNS_TYPE_SRV, 0, raxfr_srv },
 	{ DNS_TYPE_NAPTR, 0, raxfr_naptr },
-	/* new support, 20221025 */
 	{ DNS_TYPE_RP, 0, raxfr_rp },
 	{ DNS_TYPE_HINFO, 0, raxfr_hinfo },
 	{ DNS_TYPE_CAA, 0, raxfr_caa },
 	{ DNS_TYPE_ZONEMD, 0, raxfr_zonemd },
 	{ DNS_TYPE_CDNSKEY, 1, raxfr_cdnskey },
 	{ DNS_TYPE_CDS, 1, raxfr_cds },
+	{ DNS_TYPE_LOC, 0, raxfr_loc },
 	/* end new support */
 	{ 0, 0, NULL }
 };

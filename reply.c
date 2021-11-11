@@ -135,6 +135,7 @@ int 		reply_srv(struct sreply *, int *, ddDB *);
 int 		reply_naptr(struct sreply *, int *, ddDB *);
 int 		reply_sshfp(struct sreply *, int *, ddDB *);
 int		reply_tlsa(struct sreply *, int *, ddDB *);
+int		reply_loc(struct sreply *, int *, ddDB *);
 int 		reply_cname(struct sreply *, int *, ddDB *);
 int 		reply_any(struct sreply *, int *, ddDB *);
 int 		reply_refused(struct sreply *, int *, ddDB *, int);
@@ -4478,6 +4479,204 @@ reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 }
 
 /* 
+ * REPLY_LOC() - replies a DNS question (*q) on socket (so)
+ *			(based on reply_tlsa)
+ */
+
+
+int
+reply_loc(struct sreply *sreply, int *sretlen, ddDB *db)
+{
+	char *reply = sreply->replybuf;
+	struct dns_header *odh;
+	int loc_count;
+	u_int16_t outlen;
+
+	struct answer {
+		char name[2];
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint8_t version;
+		uint8_t size;
+		uint8_t horiz_pre;
+		uint8_t vert_pre;
+		uint32_t latitude;
+		uint32_t longitude;
+		uint32_t altitude;
+	} __attribute__((packed));
+
+	struct answer *answer;
+
+	char *buf = sreply->buf;
+	int len = sreply->len;
+	struct question *q = sreply->q;
+	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	int istcp = sreply->istcp;
+	int replysize = 512;
+	int retlen = -1;
+	u_int16_t rollback;
+	time_t now;
+	uint32_t zonenumberx;
+	struct zoneentry *res = NULL;
+
+	if (rbt->flags & RBT_CACHE) {
+		zonenumberx = (uint32_t)-1;
+	} else {
+		res = zone_findzone(rbt);
+		if (res != NULL)
+			zonenumberx = res->zonenumber;
+		else
+			zonenumberx = (uint32_t)-1;
+	}
+
+	now = time(NULL);
+
+	if ((rrset = find_rr(rbt, DNS_TYPE_LOC)) == 0)
+		return -1;
+
+	if (istcp) {
+		replysize = 65535;
+	}
+
+	if (! istcp && q->edns0len > 512)
+		replysize = MIN(q->edns0len, max_udp_payload);
+	
+
+	odh = (struct dns_header *)&reply[0];
+
+	outlen = sizeof(struct dns_header);
+
+	if (len > replysize) {
+		return (retlen);
+	}
+
+	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+
+	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
+
+	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	set_reply_flags(rbt, odh, q);
+
+	odh->question = htons(1);
+	odh->answer = htons(0);
+	odh->nsrr = 0;
+	odh->additional = 0;
+
+	/* skip dns header, question name, qtype and qclass */
+	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
+		q->hdr->namelen + 4);
+
+	loc_count = 0;
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
+		answer->name[0] = 0xc0;
+		answer->name[1] = 0x0c;
+		answer->type = q->hdr->qtype;
+		answer->class = q->hdr->qclass;
+
+		if (q->aa)
+			answer->ttl = htonl(rrset->ttl);
+		else
+			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
+		answer->rdlength = htons((4 + (3 * sizeof(uint32_t)))); 
+		answer->version = ((struct loc *)rrp->rdata)->version;
+		answer->size = ((struct loc *)rrp->rdata)->size;
+		answer->horiz_pre = ((struct loc *)rrp->rdata)->horiz_pre;
+		answer->vert_pre = ((struct loc *)rrp->rdata)->vert_pre;
+		answer->latitude = htonl(((struct loc *)rrp->rdata)->latitude);
+		answer->longitude = htonl(((struct loc *)rrp->rdata)->longitude);
+		answer->altitude = htonl(((struct loc *)rrp->rdata)->altitude);
+
+		/* set new offset for answer */
+		outlen += (12 + 4 + 12); 
+		answer = (struct answer *)&reply[outlen];
+		loc_count++;
+	}
+
+	odh->answer = htons(loc_count);
+
+	/* RRSIG reply_loc */
+	if (dnssec && q->dnssecok && (rbt->flags & RBT_DNSSEC)) {
+		int tmplen = 0;
+		int origlen = outlen;
+		int retcount;
+
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_LOC, rbt, reply, replysize, outlen, &retcount, q->aa);
+	
+		if (tmplen == 0) {
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(loc_count + retcount);	
+
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
+	}
+
+out:
+	if (q->edns0len) {
+		/* tag on edns0 opt record */
+		NTOHS(odh->additional);
+		odh->additional++;
+		HTONS(odh->additional);
+
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+	}
+
+	if (q->tsig.tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL, DEFAULT_TSIG_FUDGE);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
+}
+
+/* 
  * REPLY_TLSA() - replies a DNS question (*q) on socket (so)
  *			(based on reply_sshfp)
  */
@@ -6852,6 +7051,69 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			answer->rdlength = htons(&reply[offset] - answer->rdata);
 
 			hinfo_count++;
+
+			NTOHS(odh->answer);
+			odh->answer += 1;
+			HTONS(odh->answer);
+
+		} 
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_LOC)) != 0) {
+		int loc_count = 0;
+
+		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
+			if (offset + q->hdr->namelen > rlen)
+				goto truncate;
+
+			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
+			offset += q->hdr->namelen;
+
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
+
+			answer = (struct answer *)&reply[offset];
+
+			answer->type = htons(DNS_TYPE_LOC);
+			answer->class = htons(DNS_CLASS_IN);
+
+			if (q->aa)
+				answer->ttl = htonl(rrset->ttl);
+			else
+				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
+			answer->rdlength = htons(namelen);
+
+			offset += 10;		/* struct answer */
+
+			if ((offset + 4 + (3 * sizeof(uint32_t))) > rlen)
+				goto truncate;
+
+			pack8(&reply[offset], ((struct loc *)rrp->rdata)->version);
+			offset++;
+			pack8(&reply[offset], ((struct loc *)rrp->rdata)->size);
+			offset++;
+			pack8(&reply[offset], ((struct loc *)rrp->rdata)->horiz_pre);
+			offset++;
+			pack8(&reply[offset], ((struct loc *)rrp->rdata)->vert_pre);
+			offset++;
+
+
+			pack32(&reply[offset], htonl(((struct loc *)rrp->rdata)->latitude));
+			offset += 4;
+			pack32(&reply[offset], htonl(((struct loc *)rrp->rdata)->longitude));
+			offset += 4;
+			pack32(&reply[offset], htonl(((struct loc *)rrp->rdata)->altitude));
+			offset += 4;
+			
+
+			answer->rdlength = htons(&reply[offset] - answer->rdata);
+
+			loc_count++;
 
 			NTOHS(odh->answer);
 			odh->answer += 1;

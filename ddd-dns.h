@@ -197,6 +197,7 @@ struct dns_question_hdr {
 #define DNS_TYPE_RP	17		/* RFC 1183 */
 
 #define DNS_TYPE_AAAA	28 		/* quad A - RFC 3596 */
+#define DNS_TYPE_LOC	29		/* RFC 1876 */
 
 #define DNS_TYPE_SRV	33		/* RFC 2782, page 8 */
 #define DNS_TYPE_NAPTR	35		/* RFC 2915, page 3 */

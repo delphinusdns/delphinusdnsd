@@ -184,6 +184,7 @@ typedef struct {
 	union {
 		char *string;
 		int64_t intval;
+		float floatval;
 	} v;
 	int lineno;
 } YYSTYPE;
@@ -269,6 +270,7 @@ static struct mzone * add_mzone(void);
 static int	pull_remote_zone(struct rzone *);
 int		notifysource(struct question *, struct sockaddr_storage *);
 int 		drop_privs(char *, struct passwd *);
+int		dottedquad(char *);
 
 
 %}
@@ -291,6 +293,7 @@ int 		drop_privs(char *, struct passwd *);
 %token <v.string> QUOTEDSTRING
 
 %token <v.intval> NUMBER
+%token <v.floatval> FLOAT
 
 %type <v.string> quotednumber quotedfilename ipcidr
 
@@ -893,6 +896,20 @@ zonestatement:
 			free ($3);
 			free ($7);
 			free ($9);
+		}
+		| 
+		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA FLOAT COMMA STRING COMMA NUMBER COMMA NUMBER COMMA FLOAT COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER CRLF
+		{
+			if (strcasecmp($3, "loc") == 0) {
+				if (fill_loc(mydb, $1, $3, $5, $7, $9, $11, $13, $15, $17, $19, $21, $23, $25, $27, $29) < 0) {
+					return -1;
+				}
+			}
+
+			free($1);
+			free($3);
+			free($13);
+			free($21);
 		}
 		|
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING CRLF
@@ -2206,7 +2223,7 @@ yylex(void)
 			}					
 
 			memset(&dst, 0, sizeof(dst));
-			if (strchr(buf, '.') != NULL &&
+			if (dottedquad(buf) && 
 			  inet_net_pton(AF_INET, buf, &dst, sizeof(dst)) != -1){
 #if LEXDEBUG
 				if (debug)
@@ -2232,6 +2249,12 @@ yylex(void)
 #endif
 
 			free (yylval.v.string);
+
+			if (strchr(buf, '.') != NULL) {
+				yylval.v.floatval = atof(buf);
+				return (FLOAT);
+			}
+	
 #if ! defined __APPLE__ && ! defined __NetBSD__
 			yylval.v.intval = strtonum(buf, 0, LLONG_MAX, &errstr);
 #else
@@ -3363,6 +3386,113 @@ fill_aaaa(ddDB *db, char *name, char *type, int myttl, char *aaaa)
 
 }
 
+int
+fill_loc(ddDB *db, char *name, char *type, int myttl, uint8_t deglat, uint8_t minlat, float seclat, char *ns, uint8_t deglong, uint8_t minlong, float seclong, char *ew, uint32_t altitude, uint32_t size, uint32_t horprec, uint32_t vertprec)
+{
+	struct loc *loc;
+	struct rbtree *rbt;
+	int converted_namelen;
+	char *converted_name;
+	int i, secs, remsecs;
+	int exponent, mantissa;
+
+	unsigned int poweroften[10] = {1, 10, 100, 1000, 10000, 100000,
+					1000000,10000000,100000000,1000000000};
+
+	
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_LOC, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	if ((loc = (struct loc *)calloc(1, sizeof(struct loc))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+	/* fill loc here */
+
+	loc->version = 0;
+
+	for (exponent = 0; exponent < 9; exponent++) {
+		if (size < poweroften[exponent + 1])
+			break;
+	}
+
+	mantissa = size / poweroften[exponent];
+	loc->size = (mantissa << 4) | exponent;
+
+	secs = (int)seclat;
+	remsecs = (int)(seclat - secs) * 1000;	/* 0.999 -> 999 */
+
+	switch (*ns) {
+	case 'N':
+	case 'n':
+		loc->latitude = ((uint32_t)1 << 31) \
+				+ (((((deglat * 60) + minlat) * 60) + secs) \
+				* 1000) + remsecs;
+		break;
+	default: /* South */
+		loc->latitude = ((uint32_t)1 << 31) \
+				- (((((deglat * 60) + minlat) * 60) + secs) \
+				* 1000) - remsecs;
+		break;
+	}
+
+	secs = (int)seclong;
+	remsecs = (int)(seclong - secs) * 1000;
+
+	switch (*ew) {
+	case 'E':
+	case 'e':
+		loc->longitude = ((uint32_t)1 << 31) \
+				+ (((((deglong * 60) + minlong) * 60) \
+				+ secs) * 1000) + remsecs;
+		break;
+	default:  /* West */
+		loc->longitude = ((uint32_t)1 << 31) \
+				- (((((deglong * 60) + minlong) * 60) \
+				+ secs) * 1000) - remsecs;
+		break;
+	}
+
+ 	loc->altitude =  altitude;
+
+	for (exponent = 0; exponent < 9; exponent++) {
+		if (horprec < poweroften[exponent + 1])
+			break;
+	}
+
+	mantissa = horprec / poweroften[exponent];
+	loc->horiz_pre = (mantissa << 4) | exponent;
+	
+	for (exponent = 0; exponent < 9; exponent++) {
+		if (vertprec < poweroften[exponent + 1])
+			break;
+	}
+
+	mantissa = vertprec / poweroften[exponent];
+	loc->vert_pre = (mantissa << 4) | exponent;
+
+
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_LOC, loc, myttl, 0);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+	
+	if (converted_name)
+		free (converted_name);
+
+	
+	return (0);
+
+}
+
 
 int
 fill_ns(ddDB *db, char *name, char *type, int myttl, char *nameserver)
@@ -4317,4 +4447,21 @@ drop_privs(char *chrootpath, struct passwd *pw)
 #endif
 
 	return 0;
+}
+
+int
+dottedquad(char *buf)
+{
+	char *q = buf, *p;
+	int i;
+
+	for (i = 0; i < 3; i++) {
+		p = strchr(q, '.');
+		if (p == NULL)
+			return 0;
+
+		q = p + 1;
+	}
+
+	return 1;
 }

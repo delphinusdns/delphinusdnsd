@@ -146,6 +146,7 @@ extern int	reply_cdnskey(struct sreply *, int *, ddDB *);
 extern int	reply_caa(struct sreply *, int *, ddDB *);
 extern int	reply_rp(struct sreply *, int *, ddDB *);
 extern int	reply_hinfo(struct sreply *, int *, ddDB *);
+extern int	reply_loc(struct sreply *, int *, ddDB *);
 extern int	reply_ds(struct sreply *, int *, ddDB *);
 extern int	reply_cds(struct sreply *, int *, ddDB *);
 extern int	reply_nsec(struct sreply *, int *, ddDB *);
@@ -263,6 +264,8 @@ static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_HINFO, DNS_TYPE_HINFO, BUILD_OTHER, reply_hinfo },
 	{ DNS_TYPE_ZONEMD, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_ZONEMD, DNS_TYPE_ZONEMD, BUILD_OTHER, reply_zonemd },
+	{ DNS_TYPE_LOC, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_LOC, DNS_TYPE_LOC, BUILD_OTHER, reply_loc },
 	{ 0, 0, 0, NULL }
 };
 

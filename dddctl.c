@@ -1006,6 +1006,77 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 				convert_name(((struct srv *)rrp2->rdata)->target,((struct srv *)rrp2->rdata)->targetlen));
 		}
 	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_LOC)) != NULL) {
+		static u_int poweroften[10] = {1, 10, 100, 1000, 10000, 100000,
+                                 1000000,10000000,100000000,1000000000};
+		char latitude, longitude;
+		uint32_t latsecfrac, latval, latsec, latmin, latdeg;
+		uint32_t longsecfrac, longval, longsec, longmin, longdeg;
+		int mantissa, exponent;
+		uint32_t valsize, valhprec, valvprec;
+
+
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no loc in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			if (((struct loc *)rrp2->rdata)->longitude > (1 << 31)) {  
+				longitude = 'N';
+				longval = ((struct loc *)rrp2->rdata)->longitude - (1 << 31);
+			} else {
+				longitude = 'S';
+				longval = ((struct loc *)rrp2->rdata)->longitude;
+			}
+			if (((struct loc *)rrp2->rdata)->latitude > (1 << 31)) {
+				latitude = 'E';
+				latval = ((struct loc *)rrp2->rdata)->latitude - (1 << 31);
+			} else {
+				latitude = 'W';
+				latval = ((struct loc *)rrp2->rdata)->latitude;
+			}
+
+			latsecfrac = latval % 1000;
+			latval = latval / 1000;
+			latsec = latval % 60;
+			latval = latval / 60;
+			latmin = latval % 60;
+			latval = latval / 60;
+			latdeg = latval;
+
+			longsecfrac = longval % 1000;
+			longval = longval / 1000;
+			longsec = longval % 60;
+			longval = longval / 60;
+			longmin = longval % 60;
+			longval = longval / 60;
+			longdeg = longval;
+
+			mantissa = (int)((((struct loc *)rrp2->rdata)->size >> 4) & 0x0f) % 10;
+			exponent = (int)((((struct loc *)rrp2->rdata)->size >> 0) & 0x0f) % 10;
+
+			valsize = mantissa * poweroften[exponent];
+
+			mantissa = (int)((((struct loc *)rrp2->rdata)->horiz_pre >> 4) & 0x0f) % 10;
+			exponent = (int)((((struct loc *)rrp2->rdata)->horiz_pre >> 0) & 0x0f) % 10;
+
+			valhprec = mantissa * poweroften[exponent];
+
+			mantissa = (int)((((struct loc *)rrp2->rdata)->vert_pre >> 4) & 0x0f) % 10;
+			exponent = (int)((((struct loc *)rrp2->rdata)->vert_pre >> 0) & 0x0f) % 10;
+
+			valvprec = mantissa * poweroften[exponent];
+
+			fprintf(of, "%s %d IN LOC ( %u %u %u.%.3u %c %u %u %u.%.3u %c %u %u %u %u )\n",
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl,
+				latdeg, latmin, latsec, latsecfrac, latitude,
+				longdeg, longmin, longsec, longsecfrac, longitude,
+				((struct loc *)rrp2->rdata)->altitude, valsize,
+				valhprec, valvprec);
+	
+		}
+	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) != NULL) {
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
 			dolog(LOG_INFO, "no tlsa in zone!\n");

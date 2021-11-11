@@ -102,6 +102,7 @@ int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16
 int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+int raxfr_loc(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
 int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
@@ -204,6 +205,7 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_ZONEMD, 0, raxfr_zonemd },
 	{ DNS_TYPE_CDNSKEY, 1, raxfr_cdnskey },
 	{ DNS_TYPE_CDS, 1, raxfr_cds },
+	{ DNS_TYPE_LOC, 0, raxfr_loc },
 	{ 0, 0, NULL }
 };
 
@@ -1201,6 +1203,107 @@ raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 		HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
+}
+
+int 
+raxfr_loc(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_int16_t rdlen, HMAC_CTX *ctx)
+{
+	struct loc l;
+	uint32_t tmp32;
+	char latitude, longitude;
+	uint32_t latsecfrac, latval, latsec, latmin, latdeg;
+	uint32_t longsecfrac, longval, longsec, longmin, longdeg;
+	int mantissa, exponent;
+	uint32_t valsize, valhprec, valvprec;
+	static u_int poweroften[10] = {1, 10, 100, 1000, 10000, 100000,
+                                 1000000,10000000,100000000,1000000000};
+
+	u_char *q = p;
+
+	BOUNDS_CHECK((q + 1), p, rdlen, end);
+	l.version = *q++;
+	BOUNDS_CHECK((q + 1), p, rdlen, end);
+	l.size = *q++;
+	BOUNDS_CHECK((q + 1), p, rdlen, end);
+	l.horiz_pre = *q++;
+	BOUNDS_CHECK((q + 1), p, rdlen, end);
+	l.vert_pre = *q++;
+	BOUNDS_CHECK((q + 4), p, rdlen, end);
+	tmp32 = unpack32((char *)q);
+	l.latitude = ntohl(tmp32);
+	q += 4;
+	BOUNDS_CHECK((q + 4), p, rdlen, end);
+	tmp32 = unpack32((char *)q);
+	l.longitude = ntohl(tmp32);
+	q += 4;
+	BOUNDS_CHECK((q + 4), p, rdlen, end);
+	tmp32 = unpack32((char *)q);
+	l.altitude = ntohl(tmp32);
+	q += 4;
+
+	if (l.version != 0) {
+		fprintf(stderr, "wrong version\n");
+		return -1;
+	}
+	
+	if (l.longitude > (1 << 31)) {	
+		longitude = 'N';
+		longval = l.longitude - (1 << 31);
+	} else {
+		longitude = 'S';
+		longval = l.longitude;
+	}
+
+	if (l.latitude > (1 << 31)) {
+		latitude = 'E';
+		latval = l.latitude - (1 << 31);
+	} else {
+		latitude = 'W';
+		latval = l.latitude;
+	}
+		
+	latsecfrac = latval % 1000;
+	latval = latval / 1000;
+	latsec = latval % 60;
+	latval = latval / 60;
+	latmin = latval % 60;
+	latval = latval / 60;
+	latdeg = latval;
+
+	longsecfrac = longval % 1000;
+	longval = longval / 1000;
+	longsec = longval % 60;
+	longval = longval / 60;
+	longmin = longval % 60;
+	longval = longval / 60;
+	longdeg = longval;
+
+	mantissa = (int)((l.size >> 4) & 0x0f) % 10;
+	exponent = (int)((l.size >> 0) & 0x0f) % 10;
+
+	valsize = mantissa * poweroften[exponent];
+
+	mantissa = (int)((l.horiz_pre >> 4) & 0x0f) % 10;
+	exponent = (int)((l.horiz_pre >> 0) & 0x0f) % 10;
+
+	valhprec = mantissa * poweroften[exponent];
+	
+	mantissa = (int)((l.vert_pre >> 4) & 0x0f) % 10;
+	exponent = (int)((l.vert_pre >> 0) & 0x0f) % 10;
+
+	valvprec = mantissa * poweroften[exponent];
+
+	if (f != NULL) {
+		fprintf(f, "%u,%u,%u.%.3u,%c,%u,%u,%u.%.3u,%c,%u,%u,%u,%u\n",
+			latdeg, latmin, latsec, latsecfrac, latitude,
+			longdeg, longmin, longsec, longsecfrac, longitude,
+			l.altitude, valsize, valhprec, valvprec);
+	}
+
+	if (ctx != NULL)
+		HMAC_Update(ctx, q, p - q);
+
+	return (q - estart);
 }
 
 int
