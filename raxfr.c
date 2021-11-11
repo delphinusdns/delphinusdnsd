@@ -1301,7 +1301,7 @@ raxfr_loc(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u_
 	}
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		HMAC_Update(ctx, p, q - p);
 
 	return (q - estart);
 }
