@@ -1,4 +1,9 @@
-Changes in RELEASE_1_6 from RELEASE_1_5
+Changes in RELEASE_1_7 from RELEASE_1_6
+
+None yet.
+
+
+[2021] Changes in RELEASE_1_6 from RELEASE_1_5
 
 - rdomain support in OpenBSD
 - fudgesize in forwarding mode for setting higher FUDGE value
@@ -27,7 +32,7 @@ Changes in RELEASE_1_6 from RELEASE_1_5
   use it.
 - added LOC support (RFC 1876)
 
-Changes in RELEASE_1_5 from RELEASE_1_4
+[2020] Changes in RELEASE_1_5 from RELEASE_1_4
 
 - implement a double-signature rollover method
 - allow ZSK and KSK keys to be created without signing
