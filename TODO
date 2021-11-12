@@ -35,6 +35,8 @@ an ident (ie. /var/run/delphinusdnsd-${ID}.sock) [DONE]
 - fix CNAME answers	[DONE]
 - fix/add wildcard support including AXFR [DONE]
 - HTTPS/SVCB, CDS/CDNSKEY and LOC RR support [DONE CDS/CDNSKEY/LOC]
+- change the repo to github fully instead of mirror'ing it from another server
+- add Ricardo Santos to have access to the tree
 
 
 For 1.5.0 release
