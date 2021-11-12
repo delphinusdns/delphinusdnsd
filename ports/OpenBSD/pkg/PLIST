@@ -7,7 +7,7 @@
 @man man/man5/delphinusdns.conf.5
 @man man/man8/dddctl.8
 @rcscript ${RCDIR}/delphinusdnsd
-@mode 770
+@mode 750
 @sample /var/delphinusdnsd/
 @sample /var/delphinusdnsd/etc/
 @owner _ddd
