@@ -35,8 +35,11 @@
  * or 4321 for big..
  */
 
+#if __NetBSD__
+#include <sys/endian.h>
+#else
 #define	NTOHL(x) (x) = ntohl((u_int32_t)(x))
 #define	NTOHS(x) (x) = ntohs((u_int16_t)(x))
 #define	HTONL(x) (x) = htonl((u_int32_t)(x))
 #define	HTONS(x) (x) = htons((u_int16_t)(x))
-
+#endif

@@ -2040,7 +2040,9 @@ yylex(void)
 	char *cp = NULL;
 	int c, cpos;
 	static int setupstate = 0;
+#ifndef __NetBSD__
 	const char *errstr;
+#endif
 
 
 	do {
@@ -2635,7 +2637,7 @@ fill_rrsig(ddDB *db, char *name, char *type, u_int32_t myttl, char *typecovered,
 	rrsig->labels = labels;
 	rrsig->original_ttl = original_ttl;
 
-#if __FreeBSD__
+#if __FreeBSD__ || __NetBSD__
 	snprintf(tmpbuf, sizeof(tmpbuf), "%lu", sig_expiration);
 #else
 	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_expiration);
@@ -2646,7 +2648,7 @@ fill_rrsig(ddDB *db, char *name, char *type, u_int32_t myttl, char *typecovered,
 	}
 	timebuf = timegm(&tmbuf);
 	rrsig->signature_expiration = timebuf;
-#if __FreeBSD__
+#if __FreeBSD__ || __NetBSD__
 	snprintf(tmpbuf, sizeof(tmpbuf), "%lu", sig_inception);
 #else
 	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_inception);

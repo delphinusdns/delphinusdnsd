@@ -686,7 +686,6 @@ additional_opt(struct question *question, char *reply, int replylen, int offset,
 	/* if we've been given a client cookie reply with a server cookie */
 	if (cookies && salen > 0 && 
 		question->cookie.have_cookie && question->cookie.error == 0) {
-#if __OpenBSD__
 		SIPHASH_CTX ctx;
 		char digest[SIPHASH_DIGEST_LENGTH];
 		uint8_t version = 1, reserved = 0;
@@ -774,7 +773,6 @@ additional_opt(struct question *question, char *reply, int replylen, int offset,
 		offset += sizeof(digest);
 
 		answer->rdlen = htons(4 + 24);
-#endif
 	}
 out:
 	return (offset);

@@ -26,6 +26,7 @@
 #if __linux__
 #include <bsd/stdlib.h>
 #else
+#define _OPENBSD_SOURCE
 #include <stdlib.h>
 #endif
 #include <string.h>

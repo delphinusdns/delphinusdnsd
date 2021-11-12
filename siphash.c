@@ -43,7 +43,7 @@
  * https://131002.net/siphash/
  */
 
-#if __FreeBSD__
+#if __FreeBSD__ || __NetBSD__
 #include <sys/endian.h>
 #endif
 
@@ -134,7 +134,11 @@ SipHash_End(SIPHASH_CTX *ctx, int rc, int rf)
 	SipHash_Rounds(ctx, rf);
 
 	r = (ctx->v[0] ^ ctx->v[1]) ^ (ctx->v[2] ^ ctx->v[3]);
+#if __NetBSD__
+	explicit_memset(ctx, 0, sizeof(*ctx));
+#else
 	explicit_bzero(ctx, sizeof(*ctx));
+#endif
 	return (r);
 }
 
