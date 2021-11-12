@@ -12,6 +12,12 @@ As soon as this port gets imported to OpenBSD, you'll be able to install it with
 
 ```shell
 $ doas pkg_add delphinusdnsd
+delphinusdnsd-1.4.3: ok
+Read shared items: ok
+The following new rcscripts were installed: /etc/rc.d/delphinusdnsd
+See rcctl(8) for details.
+New and changed readme(s):
+        /usr/local/share/doc/pkg-readmes/delphinusdnsd
 ```
 
 ## Thanks
@@ -19,4 +25,3 @@ $ doas pkg_add delphinusdnsd
 * [Peter J. Philipp](https://delphinusdns.org/credits.html) for developing the software in the first place and for his patience answering all my questions
 * [Brian Callahan](https://briancallahan.net) (`bcallah@`) for his awesome [workshop](https://www.youtube.com/watch?v=z_TnemhzbXQ) on how to port software for OpenBSD
 * gonzalo for helping with `post-install` instructions
-* Pedro Ramos for fixing the rc script
