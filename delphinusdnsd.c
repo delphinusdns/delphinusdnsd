@@ -4648,7 +4648,7 @@ add_cache(struct querycache *qc, char *buf, int len, struct question *q,  char *
 	struct csnode *n, *res, find;
 	struct csentry *np;
 
-	if (replylen > qc->bufsize)
+	if (replylen == -1 || replylen > qc->bufsize)
 		return -1;
 
 	/* don't cache cookied requests, it's not an error either */
