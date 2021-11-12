@@ -1,0 +1,17 @@
+@comment $OpenBSD: PLIST,v$
+@newgroup _ddd:871
+@newuser _ddd:871:_ddd:daemon:DelphinusDNSd Account:/var/delphinusdnsd:/sbin/nologin
+@bin sbin/delphinusdnsd
+@bin bin/dddctl
+@man man/man8/delphinusdnsd.8
+@man man/man5/delphinusdns.conf.5
+@man man/man8/dddctl.8
+@rcscript ${RCDIR}/delphinusdnsd
+@mode 770
+@sample /var/delphinusdnsd/
+@sample /var/delphinusdnsd/etc/
+@owner _ddd
+@group _ddd
+@sample /var/delphinusdnsd/replicant/
+share/examples/delphinusdnsd/master1.conf
+share/examples/delphinusdnsd/master2.conf

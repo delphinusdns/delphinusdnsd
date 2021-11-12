@@ -1,0 +1,24 @@
+#!/bin/ksh
+
+daemon="/usr/local/sbin/delphinusdnsd"
+daemon_flags="-f /var/delphinusdnsd/etc/delphinusdns.conf"
+
+. /etc/rc.d/rc.subr
+
+pexp="${daemon##*/}: primary .*"
+rc_reload=NO
+
+rc_pre() {
+        # can be left behind in case of a crash
+        rm -f /var/run/delphinusdnsd.sock
+}
+
+rc_start() {
+        ${rcexec} "dddctl start ${daemon_flags}"
+}
+
+rc_stop() {
+        ${rcexec} "dddctl stop"
+}
+
+rc_cmd $1
