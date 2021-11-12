@@ -47,6 +47,7 @@
 #include <sys/tree.h>
 #ifdef __FreeBSD__
 #include <sys/endian.h>
+#include "endian.h"
 #endif /* __FreeBSD__ */
 #endif /* __linux__ */
 
