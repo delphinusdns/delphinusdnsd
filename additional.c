@@ -42,6 +42,7 @@
 #define __unused
 #include <bsd/sys/tree.h>
 #include <bsd/sys/endian.h>
+#include "endian.h"
 #else /* not linux */
 #include <sys/queue.h>
 #include <sys/tree.h>
