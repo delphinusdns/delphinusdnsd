@@ -3392,9 +3392,10 @@ fill_loc(ddDB *db, char *name, char *type, int myttl, uint8_t deglat, uint8_t mi
 	struct loc *loc;
 	struct rbtree *rbt;
 	int converted_namelen;
-	char *converted_name;
+	char *converted_name, *p = NULL;
 	int i, secs, remsecs;
 	int exponent, mantissa;
+	char human[16];
 
 	unsigned int poweroften[10] = {1, 10, 100, 1000, 10000, 100000,
 					1000000,10000000,100000000,1000000000};
@@ -3427,7 +3428,10 @@ fill_loc(ddDB *db, char *name, char *type, int myttl, uint8_t deglat, uint8_t mi
 	loc->size = (mantissa << 4) | exponent;
 
 	secs = (int)seclat;
-	remsecs = (int)((seclat - (float)secs) * 1000);	/* 0.999 -> 999 */
+	snprintf(human, sizeof(human), "%2.3f", seclat);
+	p = strchr(human, '.');
+	p++;
+	remsecs = atoi(p);
 
 	switch (*ns) {
 	case 'N':
@@ -3444,7 +3448,10 @@ fill_loc(ddDB *db, char *name, char *type, int myttl, uint8_t deglat, uint8_t mi
 	}
 
 	secs = (int)seclong;
-	remsecs = (int)((seclong - (float)secs) * 1000);
+	snprintf(human, sizeof(human), "%2.3f", seclong);
+	p = strchr(human, '.');
+	p++;
+	remsecs = atoi(p);
 
 	switch (*ew) {
 	case 'E':
