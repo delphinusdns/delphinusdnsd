@@ -1,0 +1,130 @@
+<html>
+<head>
+<title>Delphinusdnsd</title>
+<link href="style.css" rel="stylesheet" type="text/css" />
+</head>
+<body bgcolor="lightblue">
+<div id="entire">
+        <div id="topbox"><br><br><br><h2>DELPHINUSDNSD&nbsp;&nbsp;&nbsp;&nbsp;</h2></div>
+        <div id="leftside">
+        <ul>
+        <li><a href="index.html">Index</a></li>
+        <li><a href="about.html">About</a></li>
+	<li><a href="git.html">Source</a></li>
+	<li><a href="news.html">News</a></li>
+	<li><a href="credits.html">Credits</a></li>
+	<li><a href="handbook.html">Handbook</a></li>
+	<li><a href="implementation.html">Implementation</a></li>
+        </ul>
+        </div>
+        <div id="main">
+<p>
+<a href="index.html">Index</a> | 
+<a href="about.html">About</a> |
+<a href="git.html">Source</a> |
+<a href="news.html">News</a> |
+<a href="credits.html">Credits</a> |
+<a href="handbook.html">Handbook</a> |
+<a href="implementation.html">Implementation</a>
+</p>
+<p>
+<ul>
+<li><b>Delphinusdnsd-1.5.2</b> has been released on February 25th, 2021.  This
+is a bug-fixes only release, addressing memory leakage in the new forwarding 
+engine.  It doesn't fix them all but with weekly restarts this could be 
+manageable.  A mishap with the 1.5.1 version, caused a compile fix and was
+tested thoroughly.
+</ul>
+<ul>
+<li><b>Delphinusdnsd-1.5.0</b> has been released on November 24th, 2020.  New
+features include:
+<ul>
+<li>RP, HINFO, CAA RR support</li>
+<li>added a cortex process for IPC between processes.</li>
+<li>added a forwarding mode with cache (TSIG protected is recommended).</li>
+<li>... and some more found in the file CHANGES in the downloaded source.</li>
+</ul>
+</ul>
+<ul>
+<li><b>Delphinusdnsd-1.4.3</b> has been released on July 30th, 2020.  It
+features a bunch of backpatches from -current.
+<ul>
+<li> AXFR poison prevention patch (security)</li>
+<li> Hangup AXFR corruption prevention patch (reliability)</li>
+<li> a better description of an error when /etc/delphinusdnsd/replicant is not
+owned by _ddd or other configured user (DEFAULT_PRIVILEGE)</li>
+<li> correct use of mkstemp() following it with fdopen() instead of fopen()</li>
+<li> an uninitialized variable used in accept() which prevented dddctl to
+restart/stop delphinusdnsd (found on Linux, possibly fixed other OS's too).</li>
+</ul>
+This is hopefully the last release in the 1.4 branch, with 1.5.0 release happening in two to three months (november at the latest).
+</li>
+<li>After several years of having a CVSweb online repo browser, cvsweb has been retired.  What remains is a <a href="https://gotweb.centroid.eu/cgi-bin/gotweb/gotweb?path=delphinusdnsd.git&action=tree">Gotweb repo</a> in its place.  I will eventually switch entirely from CVS to Git (or Got) by the end of this year, marking an end of 15 years of development with CVS.  I should be CVS-free by the 1.5.0 release.</li>
+<li>Snapshot configfiles after July 15, 2020 will have to have a <b>version of 1
+</b> instead of 9, I've rolled back.  Also note that online manpages will have a
+version 1, where delphinusdnsd 1.4.X require a version 9.  More in the blog.</li>
+<li><b>Delphinusdnsd-1.4.2</b> has been released on July 9th, 2020.  It
+features a small backport fixing REFUSED answers.</li>
+<li>Delphinusdnsd is found on GITHUB, synced every hour from the master CVS
+repo.  <a href="https://github.com/delphinusdns/delphinusdnsd">Here is the
+github site</a>.</li>
+<li>Development is ongoing.  You should know that a delphinusdnsd before the 
+month of April (that includes 1.4.1) cannot do a double-signature key rollover,
+even if the master is PowerDNS or similar, due to a bug with RRSIG's that
+was fixed on April 1st.  If you don't plan on doing a key rollover until 
+next year then go ahead with 1.4.1 otherwise use a snapshot.</li>
+<li><b>Delphinusdnsd-1.4.1</b> has been released on February 4, 2020.
+It fixes mostly the Linux port, no new features since 1.4.0 a reliability fix.
+One possible off-by-one was fixed affecting all platforms.</li>
+<hr>
+<li><b>Delphinusdnsd-1.4.0</b> has been released on January 2nd, 2020.  Enjoy!  
+Changes include TSIG additions , AXFR replicant mode, TXT changes, new internal 
+database, a query tool and a new algorithm support (alg 13).  See a more complet
+e list in CHANGES file in the source.</li>
+<li>I now have a blog.  Follow the blog hyperlink for news and updates
+regarding DNS and delphinusdnsd</li>
+<li>Good news.  The ECDSAP256SHA256 Algorithm (13) is now supported with
+dddctl on July 6th, 2019, but it's not default yet (as recommended by RFC 8624).
+  Grab tomorrow's snapshot and also benefit of a signing bugfix that also 
+covers RSA signing.</li>
+<li>A change in snapshot's gets rid of notify keywords after June 26, 2019.  Please see <a href="https://gotweb.centroid.eu/cgi-bin/gotweb/gotweb?path=delphinusdnsd.git&action=diff&commit=e141bddad128f3188bdfe7bb7fab178aab398e3e">commit revision 1.67 (e141bddad128f3188bdfe7bb7fab178aab398e3e)</a></li>
+<li>When using DNSSEC signed and non-signed zones on the same server, there
+was a bug with non-signed answers when the DO bit was set on the query, as 
+of April 7th, 2019 this was fixed.</li>
+<li>TSIG queries, notifies and axfr's are supported after March 1st, 2019.
+However treat the snapshots aka -current with great care as it's not
+released yet.</li>
+<li>Three bugs in snapshots from February 15th until February 24th (2019) were 
+found, 
+it affected non-DNSSEC'ed MX and DNSSEC'ed NSEC3PARAM answers.  Another one
+was found, (a server crash) when someone looked up the root zone.  As of
+today this is fixed, I'm sorry for this.</li>
+<li>A new query tool is part of dddctl now, check it out, it will eventually
+help delphinusdnsd become a replicant (slave) zoned server. It's like dig.</li>
+<li>Snapshots are made again at midnight after February 10th, 2019, after 
+having stopped when I moved the web server on January 24th, 2019.  
+Sorry for inconvenience.</li>
+<li>Delphinusdnsd now uses a control socket to start, restart and stop the daemon, signals handling is retained.  After January 29th, 2019 use only a -HUP to the master process to restart the running daemon and use dddctl from then on.</li>
+<li>A KSK rollover has been performed on January 11th, 2019 with dddctl, it will take a little more testing then rollover with same algorithms are ready.  Please see the handbook on how to roll a KSK key.</li>
+<li>Since last saturday Nov. 17, 2018, this site is TLS encrypted.  Make sure you see the 
+lock when you visit and do downloads.  For backwards compatibility unencrypted
+access still works.</li>
+<li>OpenBSD 6.4+ users rejoice, the delphinusdnsd-current is now unveil(2)'ed
+grab a snapshot after midnight CEST on the 20th of October, 2018 and it'll have the
+unveil bits in the source.</li>
+<hr>
+<li>After half a release cycle <b>DelphinusDNS 1.3.0</b> has been released on July 17, 2018.</li>
+<li>DelphinusDNSD 1.2.1 has been released on January 1, 2018.</li>
+<li>On January 1, 2018 the zone delphinusdns.org was signed with a 4096 bit RSA-512 key.</li>
+<li>DelphinusDNSD 1.2.0 has been released on December 27, 2017.</li>
+<li>On June 27, 2017 the domain <b>delphinusdns.org</b> was registered for this project.</li>
+<li>DelphinusDNSD 1.1.0 has been released on January 28, 2017.</li>
+<li>DelphinusDNSD 1.0.2 has been released on May 26, 2016.</li>
+<li>DelphinusDNSD 1.0.1 has been released on January 29, 2016.</li>
+<li>DelphinusDNSD 1.0.0 has been released on January 1, 2016.</li>
+</ul>
+</p>
+        </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,53 @@
+#entire {
+        width: 800px;   
+        height: 1000px;
+        border: solid red 0px;
+
+}
+
+#topbox {
+        text-align: right; 
+        color: white;
+        background: black;
+        background-image: url(delphinus201601021813.jpg);
+        background-position: left;
+        background-repeat: no-repeat;
+        height: 200px;
+	border: solid white 3px;
+}
+
+#main {
+        width: 75%;
+        float: right;
+}
+#leftside {
+        width: 20%;
+        float: left;
+
+}
+
+#leftside ul {
+        list-style-type: none;
+        padding: 10px;
+}
+
+#leftside ul li a:link,
+#leftside ul li a:visited
+{
+        display: block;
+        color: black;
+        background: lightblue;
+        padding: 5px;
+}
+#leftside ul li a:hover
+{
+        color: white;
+        background: blue;
+}
+
+#leftside ul li a:active
+{
+        color: white;
+        background: blue
+}
+

@@ -1,0 +1,522 @@
+<html>
+<head>
+<title>Delphinusdnsd</title>
+<link href="style.css" rel="stylesheet" type="text/css" />
+</head>
+<body bgcolor="lightblue">
+<div id="entire">
+        <div id="topbox"><br><br><br><h2>DELPHINUSDNSD&nbsp;&nbsp;&nbsp;&nbsp;</h2></div>
+        <div id="leftside">
+        <ul>
+        <li><a href="index.html">Index</a></li>
+        <li><a href="about.html">About</a></li>
+	<li><a href="git.html">Source</a></li>
+	<li><a href="news.html">News</a></li>
+	<li><a href="credits.html">Credits</a></li>
+	<li><a href="handbook.html">Handbook</a></li>
+	<li><a href="implementation.html">Implementation</a></li>
+        </ul>
+        </div>
+        <div id="main">
+<p>
+<a href="index.html">Index</a> | 
+<a href="about.html">About</a> |
+<a href="git.html">Source</a> |
+<a href="news.html">News</a> |
+<a href="credits.html">Credits</a> |
+<a href="handbook.html">Handbook</a> |
+<a href="implementation.html">Implementation</a>
+</p>
+<!-- <pre> -->
+<h1>Design and Implementation of DelphinusDNSD</h1>
+
+<ol>
+<li><a href="#whatis">What is DNS?</a></li>
+  <ul>
+  <li><a href="#terminology">Terminology</a></li>
+  </ul>
+<li><a href="#recursive">Recursive and Authoritative Nameservers</a></li>
+	<ul>
+	<li><a href="#turnkey">Turnkey vs. General Purpose DNS Server</a></li>
+	</ul>
+<li><a href="#delphinusdnsd">Delphinusdnsd</a></li>
+<li><a href="#timeline">DelphinusDNSd timeline</a></li>
+	<ul>
+	<li><a href="#first15">First 15 years</a></li>
+	<li><a href="#past2020">Past year 2020</a></li>
+	</ul>
+<li><a href="#obstacles">Design obstacles</a></li>
+<li><a href="#dnssec">Design obstacles with DNSSEC</a></li>
+	<ul>
+	<li><a href="#errors">DNSSEC errors</a></li>
+	<li><a href="#supported">Supported DNSSEC Algorithms in Delphinusdnsd</a></li>
+	</ul>
+<li><a href="#database">Internal Database holding RR's</a></li>
+	<ul>
+	<li><a href="#dbdesign">New Design</a></li>
+	<li><a href="#reason">Reason</a></li>
+	</ul>
+</ol>
+
+<h2><a name="whatis">What is DNS?</a></h2>
+<p>
+DNS is an acronym for Domain Name System.  In laymans terms it means, it does
+the looking up of domain names on the Internet.  In professional circles,
+looking up is called resolving.  So a domain name resolves if a DNS server
+exists and is configured on the Internet, serving it.
+</p><p>
+What is a domain name?  delphinusdns.org, centroid.eu are domain
+names.  Just "delphinusdns" and "centroid" are called dns labels, same with
+org and eu.  A domain name with the name of "www.centroid.eu." has three 
+labels then where the .eu label is also called the Top Level Domain or TLD.
+Centroid inside "www.centroid.eu." is called 2nd level domain and www is also 
+called 3rd level domain.
+</p><p>
+Really a domain name has a trailing dot, like "www.centroid.eu." this 
+indicates that there is a root.  The root looks sort of like this...
+<pre>
+
+                                .  root     
+                               / \
+                              /   \
+                             /     \
+                          org       eu
+                         /   \     /  \
+                        /              \
+                    delphinusdns      centroid
+
+             [1] The (partial) DNS tree showing the root at top.
+
+</pre>
+When a domain name lookup is made for "centroid.eu." first the root is consulted
+for the .eu nameservers, then the .eu nameservers are consulted for the
+centroid.eu. domain name.  It is a distributed database in other words, because
+the nameservers along the way can belong to different organizations and 
+networks.  Please see <a href="https://iana.org">iana.org</a> for different
+TLD's.
+</p>
+<h3><a name="terminology">Terminology</a></h3>
+
+<ul>
+<li>DNS - Domain Name System</li>
+<li>DNS Label - the LABEL in LABEL.centroid.eu or the WWW in WWW.delphinusdns.org</li>
+<li>domain name - www.delphinusdns.org is a domain name, centroid.eu is a domain name</li>
+<li>RR - Resource Record, a type of record served by a dns server</li>
+<li>DNS server - the program that answers to a DNS query</li>
+<li>A Record - a RR of type A</li>
+<li>AAAA record - quad-A Record a RR that serves IPv6 answers</li>
+<li>BIND - Berkeley Internet Name Daemon (a nameserver)</li>
+<li>UDP - User Datagram Protocol</li>
+<li>TCP - Transmission Control Protocol (<a href="http://rfc-editor.org/rfc/rfc793.txt">RFC 793</a>)</li>
+<li>TTL - Time to Live, in DNS a time to live is usually associated with an RR,
+      in IP (Internet Protocol) the TTL is the hop count of a packet</li>
+<li>TLV - Type, Length and Value</li>
+<li>LV - Length and Value</li>
+</ul>
+
+<h2><a name="recursive">Recursive and Authoritative Nameservers</a></h2>
+<p>
+A nameserver that looks up entire domain names from the root, is said to be
+a recursive nameserver.  A nameserver that only answers the domain that it
+is authoritative for is an authoritative nameserver.  Both types have a 
+place on the Internet with recursive nameservers being BIND, Unbound, 
+djbdns, etc.  All these can serve as authoritative nameservers as well.
+</p>
+<h3><a name="turnkey">Turnkey vs. General Purpose DNS Server</a></h3>
+<p>
+<a href="http://rfc-editor.org/rfc/rfc5936.txt">RFC 5936</a> mentions two specific types of Implementations on page 4.
+<pre>
+   "General-purpose DNS implementation" refers to DNS software developed
+   for widespread use.  This includes resolvers and servers freely
+   accessible as libraries and standalone processes.  This also includes
+   proprietary implementations used only in support of DNS service
+   offerings.
+
+   "Turnkey DNS implementation" refers to custom-made, single-use
+   implementations of DNS.  Such implementations consist of software
+   that employs the DNS protocol message format yet does not conform to
+   the entire range of DNS functionality.
+</pre>
+So then BIND is a General-purpose DNS implementation.  Delphinusdnsd is 
+half way between Turnkey and General-purpose.
+</p>
+
+<h2><a name="delphinusdnsd">Delphinusdnsd</a></h2>
+<p>
+Delphinusdnsd was conceived in 2005 and laid down on November 29th, 2005.
+It was designed to give false answers inside a firewalled intranet.  Why
+this was done, was so that DNS could be isolated but still give rudamentary
+answers.  A program called <b>authpf</b> would switch between delphinusdnsd and
+BIND to give lookups to a firewalled and then authenticated Wifi user.  At 
+first delphinusdnsd was programmed on OpenBSD and on April 10th, 2008 it 
+was ported to Linux.  At that time it ran on NetBSD, FreeBSD, DragonflyBSD, 
+OpenBSD and Redhat Linux.  
+</p><p>
+The concept of a firewalled DNS doesn't fly very well with caching name
+resolvers that are found on Windows and Solaris, so I just kept hacking
+away with the goal of a General Purpose Nameserver in mind.
+</p><p>
+Delphinusdnsd tries not to reuse too much code, especially in the DNS 
+operations.  Importing DNS code from other projects is a nono.  I want to
+build something on my own because I want to show a robustness stemming
+from an independent source.  This means if there is a bug in BIND it won't
+be copied over in Delphinusdnsd.
+</p><p>
+Delphinusdnsd is now an authoritative nameserver.  It serves both IPv4 and IPv6
+since its inception.  It can be configured to serve a number of Resource 
+Records (RR's).   With the -l option set on delphinusdnsd all queries made 
+to it are logged.  What's logged is the time of day, remote IP/IP6 of the 
+recursive resolver, the RR in question and the domain name being looked up.  
+</p>
+
+<h2><a name="timeline">DelphinusDNSD timeline</a></h2>
+
+<h3><a name="first15">First 15 years</a></h3>
+<pre><b>
+2005 2006 2007 2008 2009 2010 2011 2012 2013 2014 2015 2016 2017 2018 2019 
++----+----+----+----+----+----+----+----+----+----+----+----+----+----+---->
+[1]            [2]  [3,4][5,6,7][8] [9]    [A] [B,C] [D]   [E,F,G] [H][I,J]
+</b>
+[1] November 29th, 2005  - original implementation / check-in
+[2] April 10th, 2008     - Linux Port
+[3] April 12th, 2009     - rewrite of compression routines
+[4] November 3rd, 2009   - Round Robin DNS
+[5] March 12th, 2010     - TCP
+[6] March 27th, 2010     - split-horizon DNS
+[7] December 27th, 2010  - ANY RR type
+[8] September 19th, 2011 - AXFR
+[9] April 30th, 2012	 - SRV 
+[A] October 18th, 2013	 - Raspberry Pi support
+[B] April 2014	 	 - YACC parser, SSHFP RR, SPF RR
+[C] May 2014		 - EDNS0, NAPTR RR, Notify
+[D] December 31st, 2015	 - 1.0.0 Release (10 year anniversary release)
+[E] January 28th, 2017	 - 1.1.0 Release (dd-convert.c)
+[F] March 14th, 2017 	 - removal of SPF RR
+[G] June 27th, 2017	 - removal of BerkeleyDB for tree(3) and the
+			   registration of delphinusdns.org
+[H] July 17th, 2018	 - 1.3.0 Release (dddctl.c)
+[I] January 10th, 2019	 - KSK rollover support
+[J] February 2019	 - New Database and TSIG support
+</pre>
+
+<h4>Observances:</h4>
+<ul>
+<li>large gap between 2006 and 2008 for no development.</li>
+<li>lots of development around 2010.</li>
+<li>odd release in 2018 not around new years.  This was due to funding (grant)
+	which I did not secure.</li>
+</ul>
+<h3><a name="past2020">Past year 2020</a></h3>
+<pre>
+<b>
+2020 2021 2022 2023 2024 2025 2026 2027 2028 2029 2030 2031 2032 2033 2034
++----+----+----+----+----+----+----+----+----+----+----+----+----+----+---->
+[1][2]
+</b>
+
+[1] January 2nd, 2020	- Delphinusdnsd 1.4.0 release
+[2] November 24th, 2020 - Delphinusdnsd 1.5.0 release
+</pre>
+<h4>Observances:</h4>
+<ul>
+<li>This lies in the future and can't be foretold.</li>
+</ul>
+<h2><a name="obstacles">Design obstacles</a></h2>
+
+<ul>
+<li><b>Compression</b><br>
+<p>
+A label in a domain name is the FOO in FOO.centroid.eu.  It is a LV (length,
+value) concept where every label is prepended with the length of the actual
+label.  So FOO.centroid.eu would look like 3FOO 8centroid 2eu 0.  The domain
+name is terminated with a length of 0.  When there is a DNS packet with 
+several domain names then compression can be used.  Since there is up to
+63 characters in a label, the label length itself occupies the low 6 bits
+of the 8 bit ASCII character.  The 2 high bits (0xC0) when set indicate a
+compression pointer otherwise they must be set to zero.
+<pre>
+
+  8    7    6    5    4    3    2    1          bit 
++----+----+----+----+----+----+----+----+
+|0x80|0x40|0x20|0x10|0x8 |0x4 |0x2 |0x1 |       value
++----+----+----+----+----+----+----+----+
+|   0xC0  |        0-63 (0x3F)          |       combined
++---------+-----------------------------+
+</pre>
+
+So when there is a domain name that matches fully or partially to a domain
+name that is being added to a DNS packet you can compress it.  A compression
+pointer is by property 16 bits long and thus can hold 14 bits of offset from
+the beginning of the packet so 16384 bytes.  This means a domain name can
+be compressed to a previous domain name that resides in the beginning 16384
+bytes of a DNS packet this is somewhat a limitation on 65535 maximum length
+TCP DNS packets.
+</p><p>
+In Delphinusdnsd the compression was rewritten on April 12th, 2009 when 
+W was in BETA_5 version.  Previous versions of compression was less 
+efficient but packed more.  They were also buggy so that they prompted 
+rewrite.  This is hard code and can break heads.
+</p><p>
+The way Delphinusdnsd adds compression is to append a name to the end of
+a dns packet (buffer) and then parses the first 100 resource records and 
+their respective names:
+<pre>
+       for (i = 1; i < 100; i++) {
+</pre>
+in an array it records the offset of the label.  Then when it runs a second
+time in a loop it does a memcasecmp() which is a memory compare that knows a 
+bit about ASCII characters and their respective cases.
+<pre>
+	if (memcasecmp(e, p, checklen) == 0) {
+</pre>
+What happens then the offset is stored at the end of the buffer where the
+dns name first resided and a 0xC0 is added.  The buffer offset is then
+trimmed to only show the size of the compression pointer.
+</p></li>
+<li><b>AXFR</b><br>
+<p>
+AXFR is a DNS Zone Transfer.  There is 2 types.  AXFR and IXFR.  AXFR is a 
+full zone transfer and IXFR is an incremental transfer.  Although both types
+are supported in Delphinusdnsd, a zone is always transferred as a whole and
+never increment.  AXFR was added September 19th, 2011.  IXFR followed a few
+days later as it was simple to do with full dumps.  In 2019 TSIG was added
+to protect AXFR's (See TSIG).  A TSIG will be inserted every 89th envelope
+in an AXFR.  Also have a look at Replicant support below.
+</p></li>
+<li><b>ANY RR answers</b><br>
+<p>
+The ANY RR lists all RR's found for a certain domain name.  If at the root
+of a "zone" this may contain an SOA, NS, A and AAAA records, but any type will
+do really.  Delphinusdnsd attained ANY query support through a special request
+by Alexander Dzuba, on December 27th, 2010.  Seasons Greetings!  The functions
+that were written for the ANY requests were usable at a later time for the
+AXFR code where basically the BTREE is walked and the fitting domain names
+are written to a packet with the ANY method.  It's possible that a DNS reply
+gets the truncation flag and gets truncated when spouting ANY RR's.
+</p></li>
+<li><b>Recursion</b><br>
+<p>
+I tried recursion a few years ago.  It's really hard to implement so I
+decided to stay with an authoritative nameserver for the time being.
+</p></li>
+<li><b>Round-Robin DNS</b><br>
+<p>
+Appeared in Delphinusdnsd on November 3rd, 2009.  It is a simple integer in
+the zone that gets updated with every lookup.  With a MOD determination the
+A, AAAA, and NS records are rotated.  This was prodded by Evgeniy Bogdanov
+who gave incredible input back.  In 2019 the way round robin works changed.
+The TAILQ_LAST() is removed and added on the head, (TAILQ_INSERT_HEAD()).
+This shuffles the records in a manner as seen before.
+</p></li>
+<li><b>Split-Horizon DNS</b><br>
+<p>
+Was implemented for A RR records (IPv4) on March 27th, 2010.  It's for IPv4
+functionality but lookups through IPv6 can also be weighed.  This feature
+requires a homogenous delphinusdnsd dns setup and is pretty useless if you
+want to slave with BIND.  This feature has been turned off in delphinusdnsd
+version 1.0.0 due to complications with DNSSEC.
+</p></li>
+<li><b>Wildcarding</b><br>
+<p>
+Delphinusdnsd has disabled wildcarding in version 1.0.0.  It took 10 years.
+In 2019 FreeLogic considered a fork, with my blessings, time will tell if
+wildcarddnsd gets revived.
+</p></li>
+<li><b>Truncation</b><br>
+<p>
+Has been fixed in delphinusdnsd-1.0.0, before it would truncate at the wrong
+spot.  The fix also honors different sizes as negotiated with EDNS.  This was
+revisited in 2017 with delphinusdnsd-1.2.0 and truncated answers now give an
+"empty answer" back.  This prevents complications with wrong record counts.
+</p></li>
+<li><b>TCP</b><br>
+<p>
+TCP support came to Delphinusdnsd on March 12th, 2010, so relatively late.
+TCP support is a needed function in DNS and MUST be supported according to
+many DNS related RFC's.  Unfortunately when a dns packet gets truncated in
+UDP it will also get truncated in TCP even though TCP supports a packet
+length of up to 65535 characters.  This still needs work.  The AXFR function
+which is solely TCP is seperated from the main dns code so that there is
+no possibility for a denial of service while a zone transfer takes place.
+</p></li>
+<li><b>IPv6</b><br>
+<p>
+IPv6 support has been in delphinusdnsd from day one.
+</p></li>
+<li><b>SRV RR</b><br>
+<p>
+SRV support came in April 2012.  It is based heavily on the MX RR and has not
+been tested as much as the author would like.  Feedback is always welcome.
+</p></li>
+<li><b>TSIG support</b><br>
+<p>
+TSIG support came finally in early 2019.  RFC 2845 was a hard read, and the
+2845bis draft seems to be promising for future implementors.
+</p></li>
+<li><b>Replicant support</b><br>
+<p>
+Before 2020, delphinusdnsd could not AXFR as a replicant.  It can do it now
+where it does an AXFR from a master zone, including checking for TSIG and
+writes it to /etc/delphinusdns/replicant/ directory.  This directory must
+be created before or this won't work.
+</p>
+<p>
+The download creates a temporary file.  If there is any errors the temporary
+file will be abandoned for inspection.  It's a good idea to keep an eye on
+the replicant directory becuase of this or the filesystem may fill up.
+Depending how the retry values of the SOA are one can clean these out per
+crontab.  Once a successful download is made the temporary file is linked to
+the right zone file and delphinusdnsd is restarted to take on the new changes.
+</p></li>
+<li><b>Forwarding support</b>
+<p>
+Forwarding came in 2020 with 1.5.0.  The cache is toggleable on and off.  When
+it's on, there is certain requests it will not cache for, ANY for example.  As
+there is a slight bug with inserting RR's into the cache I suspect.  With ANY
+RR's it caused duplicate entries.  With cache toggle off it will just pass
+thru all requests, but this can get costly over the Internet.  The handbook
+has some writings on how I use the forwarders, and this seems to work.  The
+forwarding was directly inspired by BIND which can also forward with TSIG, so
+in essence I have replaced the need to run BIND at home.
+</p></li>
+<li><b>IPC</b>
+<p>
+IPC stands for Inter Process Communication, and delphinusdnsd uses a lot of
+it due to its design having chosen fork() instead of threads.  To use fork()
+allows delphinusdnsd to pledge() and unveil() on each component.  But recent
+(1.6.0) IPC methods may offset some of the security because we're increasingly
+using shared memory instead of socketpair (part of imsg framework) in order
+to be faster by sending less through the sockets.  In fact in many cases we
+write to the shared memory and then message the other process with an imsg
+packet that there is data waiting.  The shared memory is divided up in slots
+and all we send is the slot number.  There is a simple basic locking mechanism
+that should be good enough to detect races on this shared memory.  The locking
+may serialize all operations around the lock.
+</p></li>
+</ul>
+<h2><a name="dnssec">Design obstacles with DNSSEC</a></h2>
+<p>
+DNSSEC was added in 2015, where I basically coded every single time I had off.
+To do DNSSEC effectively, EDNS has to work right.  In version 1.0.0 
+delphinusdnsd
+will reply a BADVERS packet to any version other than 0.  We're actually 
+EDNS compliant, (see here: <a href="https://ednscomp.isc.org/ednscomp/5a70566c18">https://ednscomp.isc.org/ednscomp/5a70566c18</a>).
+Also all 7 extra RR's (DNSKEY, RRSIG, NSEC, NSEC3, NSEC3PARAM, DS, TLSA) 
+have been added to do DNSSEC and DANE.  The code had to be modified in 
+reply_* to add an RRSIG record when dnssec is enabled.  (NSEC is shaky since
+we went straight with RFC 5155 NSEC3 for signing and use).
+</p><p>
+Also reply_nxdomain had to be modified to give NSEC3 answers.  The way
+these DNSSEC RR's make it into the server is to run the zone file through
+a tool which does conversions to DNSSEC.   In version 1.0.0 I created a ruby 
+tool called dd-convert.rb, which called the BIND tools, dnssec-keygen and 
+dnssec-signzone, and then converts that back to delphinusdnsd
+zonefile format.  I also had sponsored Luke Antins who added DNSSEC support 
+to his ruby gem dns-zone which I use to parse the BIND zonefile.  A second 
+sponsorship
+to get TLSA support into dns-zone, to have DANE support, never materialized.
+</p><p>
+So then in version 1.1.0 I redid the ruby tool into a C tool that doesn't rely
+on BIND tools, and does TLSA signing for DANE.  Ruby is not being used anymore
+but it was perhaps a good prototyping program. The NSEC RR support has not 
+ever been tested and could be buggy, in fact you cannot dd-convert to anything 
+other than NSEC3 support by default, changing this means changing the code.
+</p>
+<h3><a name="errors">DNSSEC errors</a></h3>
+<p>
+In 2016 some DNSSEC errors were detected in the Implementation:
+<ul>
+<li>RRSIG's should be multiple RRSIG's per RR which it is currently not.  This
+   is needed for key rollover which the current version of delphinusdnsd does
+   not do.</li>
+<li>Key rollover is not supported as hinted on in a), it is a little like the
+   root zone DNSKEY which seldomly gets rotated in our case, never.  Subsequent
+   versions (perhaps 1.1.0) will support key rollover.
+</li>
+</ul>
+In 2019 key rollovers were programmed, however:
+<ul>
+<li>Algorithm rollover (including key bit changes) are not yet supported.</li>
+<li>Multiple RRSIG's are only allowed in DNSKEY's so far, this limits the
+methods available for use with rollovers.</li>
+</ul>
+</p>
+<h3><a name="supported">Supported DNSSEC Algorithms in Delphinusdnsd</a></h3>
+<p>
+RFC 8624 has a chart like this in section 3.1:
+<pre>
+   +--------+--------------------+-----------------+-------------------+
+   | Number | Mnemonics          | DNSSEC Signing  | DNSSEC Validation |
+   +--------+--------------------+-----------------+-------------------+
+   | 1      | RSAMD5             | MUST NOT        | MUST NOT          |
+   | 3      | DSA                | MUST NOT        | MUST NOT          |
+   | 5      | RSASHA1            | NOT RECOMMENDED | MUST              |
+   | 6      | DSA-NSEC3-SHA1     | MUST NOT        | MUST NOT          |
+   | 7      | RSASHA1-NSEC3-SHA1 | NOT RECOMMENDED | MUST              |
+   | 8      | RSASHA256          | MUST            | MUST              |
+   | 10     | RSASHA512          | NOT RECOMMENDED | MUST              |
+   | 12     | ECC-GOST           | MUST NOT        | MAY               |
+   | 13     | ECDSAP256SHA256    | MUST            | MUST              |
+   | 14     | ECDSAP384SHA384    | MAY             | RECOMMENDED       |
+   | 15     | ED25519            | RECOMMENDED     | RECOMMENDED       |
+   | 16     | ED448              | MAY             | RECOMMENDED       |
+   +--------+--------------------+-----------------+-------------------+
+</pre>
+Currently Delphinusdnsd (in snapshots) can only do algorithms 7, 8, 10 and 13.
+Alg 13 support will be released with 1.4 release.
+</p>
+<h2><a name="database">Internal Database holding RR's</a></h2>
+<h3><a name="dbdesign">New Design</a></h3>
+<p>
+This is somewhat what the new internal database looks like:
+<pre>
++-------------+
+|struct rbtree|
++-------------+
+        |
+        | centroid.eu
+        |	+------------+	  		  +------------+
+        +-------|struct rrset|--------------------|struct rrset|---> NULL
+        |	+------------+	                  +------------+
+        |	     |		       		       |
+        |	     |		       		       |
+        |	+----------+			  +----------+
+        |	| struct rr|->struct soa 	  | struct rr|->struct ns
+        |	+----------+			  +----------+
+        |	     |		       		       |
+        |	     v		       		       |
+	|	    NULL	     		  +----------+
+        |	      		       		  | struct rr|->struct ns
+	|	   				  +----------+
+	|					       |
+	|					       v
+	|					      NULL
+        | name.centroid.eu
+        |	+------------+	
+        +-------|struct rrset|---> NULL
+        |	+------------+	
+        |	      |		    
+        |	      |		   
+        |	+----------+
+        |	| struct rr|->struct a
+        |	+----------+	
+        |	      |		   
+        |	      v		   
+        |	    NULL 
+        |	     
+	v
+</pre>
+There is a struct rbtree which is a node in the RB TREE, it has a pointer to 
+a TAILQ of type struct rrset, which in turn has a pointer to a TAILQ of type
+struct rr.  From there a void * pointer points to the type of struct it is
+which is also indicated in struct rrset.
+</p>
+<h3><a name="reason">Reason</a></h3>
+<p>
+The reason this was done was to save memory, and compared to an NSD slave it
+does brilliantly.
+</p>
+        </div>
+</div>
+</body>
+</html>

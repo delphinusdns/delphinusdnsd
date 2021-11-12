@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<!-- This is an automatically generated file.  Do not edit.
+   Copyright (c) 2005-2021 Peter J. Philipp
+   All rights reserved.
+  
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions
+   are met:
+   1. Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+   3. The name of the author may not be used to endorse or promote products
+      derived from this software without specific prior written permission
+  
+   THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+   IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+   OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+   IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+   INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+   NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+   THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+   -->
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    table.head, table.foot { width: 100%; }
+    td.head-rtitle, td.foot-os { text-align: right; }
+    td.head-vol { text-align: center; }
+    .Nd, .Bf, .Op { display: inline; }
+    .Pa, .Ad { font-style: italic; }
+    .Ms { font-weight: bold; }
+    .Bl-diag > dt { font-weight: bold; }
+    code.Nm, .Fl, .Cm, .Ic, code.In, .Fd, .Fn, .Cd { font-weight: bold;
+      font-family: inherit; }
+  </style>
+  <title>DELPHINUSDNSD(8)</title>
+</head>
+<body>
+<table class="head">
+  <tr>
+    <td class="head-ltitle">DELPHINUSDNSD(8)</td>
+    <td class="head-vol">System Manager's Manual</td>
+    <td class="head-rtitle">DELPHINUSDNSD(8)</td>
+  </tr>
+</table>
+<div class="manual-text">
+<section class="Sh">
+<h1 class="Sh" id="NAME"><a class="permalink" href="#NAME">NAME</a></h1>
+<p class="Pp"><code class="Nm">delphinusdnsd</code> &#x2014;
+    <span class="Nd">the Delphinus DNS daemon</span></p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="SYNOPSIS"><a class="permalink" href="#SYNOPSIS">SYNOPSIS</a></h1>
+<table class="Nm">
+  <tr>
+    <td><code class="Nm">delphinusdnsd</code></td>
+    <td>[<code class="Fl">-dlv</code>] [<code class="Fl">-b</code>
+      <var class="Ar">address</var>] [<code class="Fl">-f</code>
+      <var class="Ar">file</var>] [<code class="Fl">-I</code>
+      <var class="Ar">identstring</var>] [<code class="Fl">-i</code>
+      <var class="Ar">interface</var>] [<code class="Fl">-n</code>
+      <var class="Ar">instances</var>] [<code class="Fl">-p</code>
+      <var class="Ar">port</var>] [<code class="Fl">-s</code>
+      <var class="Ar">path</var>]</td>
+  </tr>
+</table>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="DESCRIPTION"><a class="permalink" href="#DESCRIPTION">DESCRIPTION</a></h1>
+<p class="Pp"><code class="Nm">delphinusdnsd</code> is the daemon that runs
+    Delphinus DNS.</p>
+<p class="Pp">The options are as follows:</p>
+<dl class="Bl-tag">
+  <dt id="b"><a class="permalink" href="#b"><code class="Fl">-b</code></a></dt>
+  <dd><var class="Ar">address</var> Adds an <var class="Ar">address</var> that
+      <code class="Nm">delphinusdnsd</code> should <a class="Xr">bind(2)</a> to.
+      This option can be repeated multiple times to add more. May not be used in
+      conjunction with <code class="Fl">-i</code>.</dd>
+  <dt id="d"><a class="permalink" href="#d"><code class="Fl">-d</code></a></dt>
+  <dd>Turn on debug mode. <code class="Nm">delphinusdnsd</code> does not fork
+      into the background with this. Messages are printed in the
+    foreground.</dd>
+  <dt id="f"><a class="permalink" href="#f"><code class="Fl">-f</code></a></dt>
+  <dd><var class="Ar">file</var> The configuration file to be used is found at
+      <var class="Ar">file</var>.</dd>
+  <dt id="I"><a class="permalink" href="#I"><code class="Fl">-I</code></a></dt>
+  <dd><var class="Ar">identstring</var> Allows the operator to specify an
+      identification string to reflect in the process listing and subsequent
+      <a class="Xr">dddctl(8)</a> start/stop/restart commands. This helps
+      identifying the processes when many <code class="Nm">delphinusdnsd</code>
+      run in a system. May not be used in conjunction with
+      <code class="Fl">-s</code>.</dd>
+  <dt id="i"><a class="permalink" href="#i"><code class="Fl">-i</code></a></dt>
+  <dd><var class="Ar">interface</var> The particular
+      <var class="Ar">interface</var> that <code class="Nm">delphinusdnsd</code>
+      should listen on. This option can be specified multiple times. May not be
+      used in conjunction with <code class="Fl">-b</code>.</dd>
+  <dt id="l"><a class="permalink" href="#l"><code class="Fl">-l</code></a></dt>
+  <dd>Turn logging of queries on.</dd>
+  <dt id="n"><a class="permalink" href="#n"><code class="Fl">-n</code></a></dt>
+  <dd><var class="Ar">instances</var> is the number of instances plus one that
+      should be forked for <code class="Nm">delphinusdnsd</code>. This may be
+      good for multi-cpu/core boxes.</dd>
+  <dt id="p"><a class="permalink" href="#p"><code class="Fl">-p</code></a></dt>
+  <dd><var class="Ar">port</var> Specifies the <var class="Ar">port</var> that
+      <code class="Nm">delphinusdnsd</code> should listen on.</dd>
+  <dt id="s"><a class="permalink" href="#s"><code class="Fl">-s</code></a></dt>
+  <dd><var class="Ar">path</var> Specifies the socket path to use with
+      <a class="Xr">dddctl(8)</a>. May not be used in conjunction with
+      <code class="Fl">-I</code>.</dd>
+  <dt id="v"><a class="permalink" href="#v"><code class="Fl">-v</code></a></dt>
+  <dd>Be more verbose in debug mode. This shows configfile parsing logic.</dd>
+</dl>
+<p class="Pp"><code class="Nm">delphinusdnsd</code> is an authoritative and
+    forwarding DNS server. It can run as master or replicant. When new
+    configfiles are written it must be restarted. For replicants that receive
+    notifies or timeout on the refresh or retry SOA values the daemon is
+    restarted automatically.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="FILES"><a class="permalink" href="#FILES">FILES</a></h1>
+<dl class="Bl-tag Bl-compact">
+  <dt><span class="Pa">/var/delphinusdnsd/etc/delphinusdns.conf</span></dt>
+  <dd>default <code class="Nm">delphinusdnsd</code> config file</dd>
+  <dt><span class="Pa">/var/delphinusdnsd/replicant/</span></dt>
+  <dd>default replicant directory for AXFR zones</dd>
+  <dt><span class="Pa">/var/run/delphinusdnsd.sock</span></dt>
+  <dd>default <code class="Nm">delphinusdnsd</code> control socket</dd>
+</dl>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="SEE_ALSO"><a class="permalink" href="#SEE_ALSO">SEE
+  ALSO</a></h1>
+<p class="Pp"><a class="Xr">delphinusdns.conf(5)</a>,
+    <a class="Xr">dddctl(8)</a></p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h1>
+<p class="Pp">This software was written by <span class="An">Peter J.
+    Philipp</span> &#x27E8;petphi@delphinusdns.org&#x27E9;</p>
+<p class="Pp"></p>
+</section>
+</div>
+<table class="foot">
+  <tr>
+    <td class="foot-date">January 6, 2021</td>
+    <td class="foot-os">OpenBSD 6.8</td>
+  </tr>
+</table>
+</body>
+</html>

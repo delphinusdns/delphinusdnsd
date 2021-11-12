@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<!-- This is an automatically generated file.  Do not edit.
+   Copyright (c) 2014-2021 Peter J. Philipp
+   All rights reserved.
+  
+   Redistribution and use in source and binary forms, with or without
+   modification, are permitted provided that the following conditions
+   are met:
+   1. Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+   3. The name of the author may not be used to endorse or promote products
+      derived from this software without specific prior written permission
+  
+   THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+   IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+   OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+   IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+   INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+   NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+   THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+   -->
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    table.head, table.foot { width: 100%; }
+    td.head-rtitle, td.foot-os { text-align: right; }
+    td.head-vol { text-align: center; }
+    .Nd, .Bf, .Op { display: inline; }
+    .Pa, .Ad { font-style: italic; }
+    .Ms { font-weight: bold; }
+    .Bl-diag > dt { font-weight: bold; }
+    code.Nm, .Fl, .Cm, .Ic, code.In, .Fd, .Fn, .Cd { font-weight: bold;
+      font-family: inherit; }
+  </style>
+  <title>DELPHINUSDNS.CONF(5)</title>
+</head>
+<body>
+<table class="head">
+  <tr>
+    <td class="head-ltitle">DELPHINUSDNS.CONF(5)</td>
+    <td class="head-vol">File Formats Manual</td>
+    <td class="head-rtitle">DELPHINUSDNS.CONF(5)</td>
+  </tr>
+</table>
+<div class="manual-text">
+<section class="Sh">
+<h1 class="Sh" id="NAME"><a class="permalink" href="#NAME">NAME</a></h1>
+<p class="Pp"><code class="Nm">delphinusdns.conf</code> &#x2014;
+    <span class="Nd">the delphinus DNS daemon configuration file</span></p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="DESCRIPTION"><a class="permalink" href="#DESCRIPTION">DESCRIPTION</a></h1>
+<p class="Pp">The <a class="Xr">delphinusdnsd(8)</a> has a default configfile it
+    is called <code class="Nm">delphinusdns.conf</code> and it is found in
+    /var/delphinusdnsd/etc. You may wonder why there is a missing d, so I ask
+    you to look up <a class="Xr">syslogd(8)</a> and
+    <a class="Xr">syslog.conf(5)</a> which also drop the d in the config file.
+    This follows that name convention.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="EXAMPLES"><a class="permalink" href="#EXAMPLES">EXAMPLES</a></h1>
+<p class="Pp">Here is a sample <code class="Nm">delphinusdns.conf</code>
+  file:</p>
+<div class="Bd Pp">
+<pre>
+version &quot;1&quot;;
+options &quot;cool stuff&quot; {
+	interface &quot;lo0&quot;;
+	interface &quot;em0&quot;;
+
+	;bind 127.0.0.1;
+	;bind 192.168.34.4;
+
+	ratelimit-pps 6;
+
+	port 53;
+
+	;fork 2;
+	log;
+	;dnssec;
+	;tcp-on-any-only;
+}
+
+axfrport &quot;10053&quot;;
+
+axfr-for &quot;these hosts&quot; {
+	127.0.0.1;
+	::1;
+	192.168.0.0/16;
+}
+
+mzone &quot;centroid.eu&quot; {
+	zonename &quot;centroid.eu&quot;;
+	notifydest 192.168.34.1 NOKEY;
+	notifydest ::1 port 8053 NOKEY;
+}
+
+zone &quot;centroid.eu&quot; {
+	centroid.eu,soa,3600,ns1.centroid.eu.,hostmaster.centroid.eu.,2019111901,3600,1800,7200,3600
+	centroid.eu,ns,3600,somenameserver.delphinusdns.org.
+	centroid.eu,ns,3600,anothernameserver.delphinusdns.org.
+	; all lines in zone start with domainname, RR Type, RR TTL, RDATA
+	centroid.eu,a,3600,127.0.0.1
+	centroid.eu,a,3600,10.0.0.10
+}
+</pre>
+</div>
+Here is a sample <code class="Nm">delphinusdns.conf</code> file suited for
+  DNSSEC:
+<div class="Bd Pp">
+<pre>
+version &quot;1&quot;;
+options &quot;some options&quot; {
+        ratelimit-pps 12;
+        bind 127.0.0.1;
+        bind ::1;
+        bind 10.110.99.87;
+        port 32253;
+        log;
+        dnssec;
+        versionstring &quot;delphinusdnsd 1.5.0&quot;;
+}
+axfr-for &quot;these hosts&quot; {
+        ::1/128;
+        127.0.0.1/32;
+        10.110.99.88/32;
+}
+
+axfrport &quot;10053&quot;;
+
+mzone &quot;centroid.eu&quot; {
+	zonename &quot;centroid.eu&quot;;
+	notifydest 10.1110.99.88 NOKEY;
+	notifydest ::1 port 8053 NOKEY;
+}
+
+
+zinclude &quot;/var/delphinusdnsd/master/centroid.eu.signed&quot;;
+
+</pre>
+</div>
+Then the included files are output of <a class="Xr">dddctl(8)</a>
+<p class="Pp">A forwarding-only config may look like this:</p>
+<div class="Bd Pp">
+<pre>
+version &quot;1&quot;;
+
+options &quot;this mess&quot; {
+        interface &quot;em0&quot;;
+        interface &quot;lo0&quot;;
+        port 8053;
+        versionstring &quot;&quot;;
+        dnssec;
+}
+
+tsig-auth secret &quot;9qD4Qi4ghqFR1xm0fIwGF9t0aLx+SZWVEPAqEvysZFg=&quot;;
+tsig &quot;these hosts&quot; {
+        0.0.0.0/0;
+}
+
+forward &quot;to these hosts&quot; {
+        incoming-tsig yes;
+        destination 127.0.0.1 port 5353 key NOKEY;
+}
+</pre>
+</div>
+<p class="Pp">Finally below is a sample replicant
+    <code class="Nm">delphinusdns.conf</code> as taken from a
+    <a class="Xr">delphinusdnsd</a> with only one zone:</p>
+<div class="Bd Pp">
+<pre>
+version &quot;1&quot;;
+
+options &quot;arrowhead&quot; {
+        ratelimit-pps 12;
+        interface &quot;lo0&quot;;
+        interface &quot;vio0&quot;;
+        port 53;
+        log;
+        dnssec;
+        versionstring &quot;delphinusdnsd-20191103&quot;;
+}
+
+include &quot;/var/delphinusdnsd/etc/delphinusdns.tsig&quot;;
+
+rzone &quot;ip6.centroid.eu.&quot; {
+	constraints 600, 600, 600;
+	bytelimit 65536;
+	; do make sure you have a tsig &quot;&quot; {} for this
+        tsigkey &quot;pass&quot;;
+        masterport 10053;
+        master 2a01:4f8:162:e700:881c:fe60:3582:f49c;
+        zonename &quot;ip6.centroid.eu.&quot;;
+        filename &quot;/var/delphinusdnsd/replicant/ip6.centroid.eu.repl&quot;;
+}
+
+</pre>
+</div>
+Notice the /var/delphinusdnsd/replicant/ directory, this is a hardcoded path.
+</section>
+<section class="Sh">
+<h1 class="Sh" id="GRAMMAR"><a class="permalink" href="#GRAMMAR">GRAMMAR</a></h1>
+<p class="Pp">Syntax for <code class="Nm">delphinusdns.conf</code> in BNF:</p>
+<div class="Bd Pp">
+<pre>
+line = ( 	version | axfrport | include | zinclude | zone | region |
+		axfr | mzone | passlist | filter | recurse | comment |
+		options | forward | rzone | tsig | tsig-auth |
+		tsigpassname )
+
+version = &quot;version&quot; (&quot;number&quot;) ;
+
+axfrport = &quot;axfrport&quot; (&quot;port number&quot;) ;
+
+include = &quot;include&quot; (&quot;filename&quot;) ;
+
+zinclude = &quot;zinclude&quot; (&quot;filename&quot;) ;
+
+hostname = string
+zone = &quot;zone&quot; (&quot;hostname&quot;) [ &quot;{&quot; zonedata &quot;}&quot; ]
+zonedata = { [hostname] [ &quot;,&quot; dnstype] [ &quot;,&quot; ttl ] [&quot;,&quot; variablednsdata] }
+dnstype = ( 	&quot;a&quot; | &quot;aaaa&quot; | &quot;caa&quot; | &quot;cname&quot; | &quot;dnskey&quot; | &quot;ds&quot; | &quot;hinfo&quot; |
+		&quot;hint&quot; | &quot;mx&quot; | &quot;naptr&quot; | &quot;ns&quot; | &quot;nsec3&quot; | &quot;nsec3param&quot; |
+		&quot;ptr&quot; | &quot;rp&quot; | &quot;rrsig&quot; | &quot;soa&quot; | &quot;srv&quot; | &quot;sshfp&quot; | &quot;tlsa&quot; |
+		&quot;txt&quot; )
+
+ttl = number
+
+region = &quot;region&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;}&quot;
+
+
+cidrlist = { [ cidr-address ] ; ... }
+
+axfr = &quot;axfr-for&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;}&quot; ]
+
+mzonelist = ( optzonename | optnotifydest | optnotifybind )
+optzonename = &quot;zonename&quot; (&quot;string&quot;) ;
+optnotifydest = &quot;notifydest&quot; cidr-address [&quot;port number&quot;] &quot;tsigkey&quot; ;
+optnotifybind = &quot;notifybind&quot; cidr-address ;
+
+mzone = &quot;mzone&quot; (&quot;string&quot;) [ &quot;{&quot; mzonelist &quot;}&quot; ]
+
+passlist = &quot;passlist&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;}&quot; ]
+
+filter = &quot;filter&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;}&quot; ]
+
+recurse = &quot;recurse-for&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;}&quot; ]
+
+base64-string = (string)
+tsig-auth = &quot;tsig-auth&quot; (string) (&quot;base64-string&quot;) ;
+tsig = &quot;tsig&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;}&quot; ]
+tsigpassname = &quot;tsigpassname&quot; (&quot;string&quot;) [ &quot;{&quot; (&quot;hostname&quot;) &quot;}&quot; ]
+
+rzone = &quot;rzone&quot; (&quot;string&quot;) [ &quot;{&quot; rzonelist &quot;}&quot; ]
+rzonelist = ( opttsig | optmaster | optmasterport | optrzonename |
+		optfilename | optconstraints | optbytelimit )
+
+opttsig = &quot;tsigkey&quot; (&quot;string&quot;) ;
+optmaster = &quot;master&quot; (&quot;cidr-address&quot;) ;
+optmasterport = &quot;masterport&quot;  (number) ;
+optrzonename = &quot;zonename&quot; (&quot;string&quot;) ;
+optfilename = &quot;filename&quot; (&quot;string&quot;) ;
+optconstraints = &quot;constraints&quot; (number), (number), (number) ;
+optbytelimit = &quot;bytelimit&quot; (number) ;
+
+
+forward = &quot;forward&quot; (&quot;string&quot;) [ &quot;{&quot; forwardlist &quot;}&quot; ]
+forwardlist = ( optdestination | optstrictx20 | optcache | optincomingtsig |
+			optfudge )
+
+optdestination = &quot;destination&quot; (&quot;cidr-address&quot;) &quot;port&quot; (&quot;integer&quot;) &quot;key&quot;
+			(string | &quot;NOKEY&quot;) ;
+optstrictx20 = &quot;strictx20&quot; (&quot;yes&quot; | &quot;no&quot;) ;
+optcache =  &quot;cache&quot; (&quot;yes&quot; | &quot;no&quot;) ;
+optincomingtsig = &quot;incoming-tsig&quot; (&quot;yes&quot; | &quot;no&quot;) ;
+optfudge = &quot;fudge&quot; (number) ;
+
+comment = ( ; | pound ) line
+
+options = &quot;options&quot; (&quot;string&quot;) [ &quot;{&quot; optionlist &quot;}&quot; ]
+optionlist = ( optrecurse | optinterface | optfork | optport |
+		optratelimit | optbind | optdnssec | opttcponanyonly |
+		optmaxudppayload)
+optrecurse = &quot;recurse&quot; ;
+optinterface = &quot;interface&quot; (&quot;string&quot;) ;
+optfork = &quot;fork&quot; number ;
+optratelimit = &quot;ratelimit-pps&quot; number ;
+optbind = &quot;bind&quot; cidr-address ;
+optdnssec = &quot;dnssec&quot; ;
+opttcponanyonly = &quot;tcp-on-any-only&quot; ;
+optmaxudppayload = &quot;max-udp-payload&quot; number ;
+
+</pre>
+</div>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="FILES"><a class="permalink" href="#FILES">FILES</a></h1>
+<p class="Pp"><span class="Pa">/var/delphinusdnsd/etc/delphinusdns.conf</span></p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="SEE_ALSO"><a class="permalink" href="#SEE_ALSO">SEE
+  ALSO</a></h1>
+<p class="Pp"><a class="Xr">dddctl(8)</a>,
+  <a class="Xr">delphinusdnsd(8)</a></p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h1>
+<p class="Pp">This software and manual was written by <span class="An">Peter J.
+    Philipp</span> &#x27E8;petphi@delphinusdns.org&#x27E9;</p>
+<p class="Pp"></p>
+</section>
+</div>
+<table class="foot">
+  <tr>
+    <td class="foot-date">January 7, 2021</td>
+    <td class="foot-os">OpenBSD 6.8</td>
+  </tr>
+</table>
+</body>
+</html>
