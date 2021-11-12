@@ -235,6 +235,7 @@ int 		fill_mx(ddDB *, char *, char *, int, int, char *);
 int 		fill_naptr(ddDB *, char *, char *, int, int, int, char *, char *, char *, char *);
 int 		fill_ns(ddDB *, char *, char *, int, char *);
 int 		fill_soa(ddDB *, char *, char *, int, char *, char *, int, int, int, int, int);
+int		fill_loc(ddDB *, char *, char *, int, uint8_t, uint8_t, float, char *, uint8_t, uint8_t, float, char *, uint32_t, uint32_t, uint32_t, uint32_t);
 int 		fill_sshfp(ddDB *, char *, char *, int, int, int, char *);
 int 		fill_srv(ddDB *, char *, char *, int, int, int, int, char *);
 int 		fill_tlsa(ddDB *, char *, char *,int, uint8_t, uint8_t, uint8_t, char *);
