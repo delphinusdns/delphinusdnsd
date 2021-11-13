@@ -207,9 +207,8 @@ Syntax for
 in BNF:
 .Bd -literal
 line = ( 	version | axfrport | include | zinclude | zone | region | 
-		axfr | mzone | passlist | filter | recurse | comment | 
-		options | forward | rzone | tsig | tsig-auth |
-		tsigpassname )
+		axfr | mzone | passlist | filter | comment | options | 
+		forward | rzone | tsig | tsig-auth | tsigpassname )
 
 version = "version" ("number") ;
 
@@ -247,8 +246,6 @@ passlist = "passlist" ("string") [ "{" cidrlist "}" ]
 
 filter = "filter" ("string") [ "{" cidrlist "}" ]
 
-recurse = "recurse-for" ("string") [ "{" cidrlist "}" ]
-
 base64-string = (string)
 tsig-auth = "tsig-auth" (string) ("base64-string") ;
 tsig = "tsig" ("string") [ "{" cidrlist "}" ]
@@ -269,7 +266,7 @@ optbytelimit = "bytelimit" (number) ;
 
 forward = "forward" ("string") [ "{" forwardlist "}" ]
 forwardlist = ( optdestination | optstrictx20 | optcache | optincomingtsig |
-			optfudge )
+			optfudge | optrdomain )
 
 optdestination = "destination" ("cidr-address") "port" ("integer") "key" 
 			(string | "NOKEY") ;
@@ -277,23 +274,25 @@ optstrictx20 = "strictx20" ("yes" | "no") ;
 optcache =  "cache" ("yes" | "no") ;
 optincomingtsig = "incoming-tsig" ("yes" | "no") ;
 optfudge = "fudge" (number) ;
+optrdomain = "rdomain" (number) ;
 
 comment = ( ; | pound ) line
 
 options = "options" ("string") [ "{" optionlist "}" ]
-optionlist = ( optrecurse | optinterface | optfork | optport | 
-		optratelimit | optbind | optdnssec | opttcponanyonly |
-		optmaxudppayload | optnocookies | optcookiesecret)
-optrecurse = "recurse" ;
+optionlist = (  optinterface | optfork | optport | optratelimit | 
+		optbind | optdnssec | opttcponanyonly |
+		optmaxudppayload | optnocookies | optcookiesecret |
+		optrdomain )
 optinterface = "interface" ("string") ;
-optfork = "fork" number ; 
-optratelimit = "ratelimit-pps" number ; 
+optfork = "fork" (number) ; 
+optratelimit = "ratelimit-pps" (number) ; 
 optbind = "bind" cidr-address ;
 optdnssec = "dnssec" ; 
 opttcponanyonly = "tcp-on-any-only" ;
-optmaxudppayload = "max-udp-payload" number ;
+optmaxudppayload = "max-udp-payload" (number) ;
 optnocookies = "nocookies" ;
 optcookiesecret = "cookie-secret" ("base64string") ;
+optrdomain = "rdomain" (number) ;
 
 .Ed
 .Sh FILES
