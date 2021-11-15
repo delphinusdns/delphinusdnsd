@@ -63,6 +63,7 @@
 #include <sys/queue.h>
 #include <sys/tree.h>
 #ifdef __FreeBSD__
+#include <sys/capsicum.h>
 #include "imsg.h"
 #else
 #include <imsg.h>
@@ -378,6 +379,11 @@ main(int argc, char *argv[], char *environ[])
 	struct tm *ltm;
 
 	char *shptr;
+
+#ifdef __FreeBSD__
+        cap_rights_t rights;
+#endif
+
 	
 	if (geteuid() != 0) {
 		fprintf(stderr, "must be started as root\n");
@@ -728,6 +734,20 @@ main(int argc, char *argv[], char *environ[])
 				ddd_shutdown();
 				exit(1);
 			} 
+#ifdef __FreeBSD__
+			if (cap_enter() < 0) {
+				dolog(LOG_ERR, "cap_enter: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			cap_rights_init(&rights, CAP_BIND, CAP_LISTEN, CAP_ACCEPT, CAP_READ, CAP_WRITE, CAP_EVENT, CAP_SETSOCKOPT, CAP_CONNECT, CAP_FCNTL, CAP_GETPEERNAME);
+			if (cap_rights_limit(tcp[i], &rights) < 0) {
+				dolog(LOG_ERR, "cap_rights_limit: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#endif
 			if (bind(tcp[i], res->ai_addr, res->ai_addrlen) < 0) {
 				dolog(LOG_INFO, "tcp bind: %s\n", strerror(errno));
 				ddd_shutdown();
@@ -756,6 +776,15 @@ main(int argc, char *argv[], char *environ[])
 					ddd_shutdown();
 					exit(1);
 				}
+#ifdef __FreeBSD__
+				cap_rights_init(&rights, CAP_BIND, CAP_LISTEN, CAP_ACCEPT, CAP_READ, CAP_WRITE, CAP_EVENT, CAP_SETSOCKOPT, CAP_CONNECT, CAP_FCNTL, CAP_GETPEERNAME);
+
+				if (cap_rights_limit(afd[i], &rights) < 0) {
+					dolog(LOG_ERR, "cap_rights_limit: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				}
+#endif
 				if (setsockopt(afd[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
 					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 					ddd_shutdown();
@@ -772,6 +801,15 @@ main(int argc, char *argv[], char *environ[])
 					ddd_shutdown();
 					exit(1);
 				}
+#ifdef __FreeBSD__
+				cap_rights_init(&rights, CAP_BIND, CAP_LISTEN, CAP_ACCEPT, CAP_READ, CAP_WRITE, CAP_EVENT, CAP_SETSOCKOPT, CAP_CONNECT, CAP_FCNTL, CAP_GETPEERNAME);
+
+				if (cap_rights_limit(uafd[i], &rights) < 0) {
+					dolog(LOG_ERR, "cap_rights_limit: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				}
+#endif
 				if (bind(uafd[i], res->ai_addr, res->ai_addrlen) < 0) {
 					dolog(LOG_INFO, "axfr udp socket bind: %s\n", strerror(errno));
 					ddd_shutdown();
@@ -868,6 +906,15 @@ main(int argc, char *argv[], char *environ[])
 				ddd_shutdown();
 				exit(1);
 			}
+#ifdef __FreeBSD__
+				cap_rights_init(&rights, CAP_BIND, CAP_LISTEN, CAP_ACCEPT, CAP_READ, CAP_WRITE, CAP_EVENT, CAP_SETSOCKOPT, CAP_CONNECT, CAP_FCNTL, CAP_GETPEERNAME);
+
+				if (cap_rights_limit(tcp[i], &rights) < 0) {
+					dolog(LOG_ERR, "cap_rights_limit: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				}
+#endif
        			if (setsockopt(tcp[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
 				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 				ddd_shutdown();
@@ -889,6 +936,15 @@ main(int argc, char *argv[], char *environ[])
 					ddd_shutdown();
 					exit(1);
 				}
+#ifdef __FreeBSD__
+				cap_rights_init(&rights, CAP_BIND, CAP_LISTEN, CAP_ACCEPT, CAP_READ, CAP_WRITE, CAP_EVENT, CAP_SETSOCKOPT, CAP_CONNECT, CAP_FCNTL, CAP_GETPEERNAME);
+
+				if (cap_rights_limit(afd[i], &rights) < 0) {
+					dolog(LOG_ERR, "cap_rights_limit: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				}
+#endif
 				if (setsockopt(afd[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
 					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 					ddd_shutdown();
@@ -932,6 +988,15 @@ main(int argc, char *argv[], char *environ[])
 		exit(1);
 	}
 	shutdown(cfg->raw[0], SHUT_RD);
+#ifdef __FreeBSD__
+	cap_rights_init(&rights, CAP_BIND, CAP_WRITE,  CAP_EVENT,  CAP_CONNECT);
+
+	if (cap_rights_limit(cfg->raw[0], &rights) < 0) {
+		dolog(LOG_ERR, "cap_rights_limit: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
 	if ((cfg->raw[1] = socket(AF_INET6, SOCK_RAW, IPPROTO_UDP)) < 0) {
 		dolog(LOG_INFO, "raw1 socket: %s\n", strerror(errno));
 		ddd_shutdown();
@@ -939,6 +1004,16 @@ main(int argc, char *argv[], char *environ[])
 	}
 	shutdown(cfg->raw[1], SHUT_RD);
 	cfg->port = port;
+
+#ifdef __FreeBSD__
+	cap_rights_init(&rights, CAP_BIND, CAP_WRITE, CAP_EVENT, CAP_CONNECT);
+
+	if (cap_rights_limit(cfg->raw[1], &rights) < 0) {
+		dolog(LOG_ERR, "cap_rights_limit: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
 
 #if __OpenBSD__
 	if (unveil(DELPHINUS_RZONE_PATH, "rwc")  < 0) {
@@ -961,6 +1036,7 @@ main(int argc, char *argv[], char *environ[])
 		}
 	}
 #endif
+
 
 	/*
 	 * add signals
@@ -2449,6 +2525,9 @@ setup_primary(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 
 	struct timeval tv;
 	struct imsg imsg;
+#ifdef __FreeBSD__
+        cap_rights_t rights;
+#endif
 
 #if __OpenBSD__
 	if (unveil(socketpath, "rwc")  < 0) {
@@ -2472,7 +2551,15 @@ setup_primary(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 		exit(1);
 	}
 #endif
-	
+#ifdef __FreeBSD__
+	cap_rights_init(&rights, CAP_WRITE, CAP_READ, CAP_EVENT);
+
+	if (cap_rights_limit(ibuf->fd, &rights) < 0) {
+		dolog(LOG_ERR, "cap_rights_limit: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
 #ifndef NO_SETPROCTITLE
 	setproctitle("primary [%s]", (identstring != NULL ? identstring : ""));
 #endif
@@ -2742,7 +2829,6 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		exit(1);
 	}
 #endif
-
 
 	replybuf = calloc(1, 65536);
 	if (replybuf == NULL) {
@@ -3588,10 +3674,22 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	int fd = mybuf->fd;
 	ssize_t n, datalen;
 	struct pq_imsg *pq0;
+#ifdef __FreeBSD__
+        cap_rights_t rights;
+#endif
 
 #if __OpenBSD__
 	if (pledge("stdio", NULL) < 0) {
 		perror("pledge");
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
+#ifdef __FreeBSD__
+	cap_rights_init(&rights, CAP_WRITE, CAP_READ , CAP_EVENT);
+
+	if (cap_rights_limit(fd, &rights) < 0) {
+		dolog(LOG_ERR, "cap_rights_limit: %s\n", strerror(errno));
 		ddd_shutdown();
 		exit(1);
 	}

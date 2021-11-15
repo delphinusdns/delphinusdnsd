@@ -56,6 +56,7 @@
 #include <sys/tree.h>
 #ifdef __FreeBSD__
 #include <sys/endian.h>
+#include <sys/capsicum.h>
 #include "imsg.h"
 #else
 #include <imsg.h>
@@ -320,7 +321,6 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	pid_t pid;
 
 	char *ptr;
-
 	
 	ptr = cfg->shptr;
 
@@ -2048,6 +2048,10 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 	ssize_t n, datalen;
 	int flags;
 
+#ifdef __FreeBSD__
+        cap_rights_t rights;
+#endif
+
 	flags = fcntl(bibuf->fd, F_GETFL);
 	if (flags < 0) {
 		dolog(LOG_INFO, "fcntl: %s\n", strerror(errno));
@@ -2061,6 +2065,15 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 #if __OpenBSD__
 	if (pledge("stdio sendfd recvfd", NULL) < 0) {
 		perror("pledge");
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
+#ifdef __FreeBSD__
+	cap_rights_init(&rights, CAP_WRITE, CAP_READ, CAP_EVENT);
+
+	if (cap_rights_limit(fd, &rights) < 0) {
+		dolog(LOG_ERR, "cap_rights_limit: %s\n", strerror(errno));
 		ddd_shutdown();
 		exit(1);
 	}
