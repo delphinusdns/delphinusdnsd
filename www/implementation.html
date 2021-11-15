@@ -45,6 +45,7 @@
 	<li><a href="#first15">First 15 years</a></li>
 	<li><a href="#past2020">Past year 2020</a></li>
 	</ul>
+<li><a href="#resourcerecords">Resource Records</a></li>
 <li><a href="#obstacles">Design obstacles</a></li>
 <li><a href="#dnssec">Design obstacles with DNSSEC</a></li>
 	<ul>
@@ -221,6 +222,45 @@ recursive resolver, the RR in question and the domain name being looked up.
 <ul>
 <li>This lies in the future and can't be foretold.</li>
 </ul>
+<h2><a name="resourcerecords">Resource Records</a></h>
+<p>
+With help of gotweb and cvs2git conversion programs I was able to reconstruct
+how delphinusdnsd grew over time.  Much respect to myself in November 2005 for
+writing the then named wildcarddnsd in a few weeks time (I'm guessing 3 to 5).
+Below shows the addition of RR's in some chronology.
+</p>
+<p>
+<ul>
+<li><b>A, AAAA, MX, NS, SOA, PTR, CNAME, TXT</b><br>
+In the original check-in at sourceforge in November 2005 under the name 
+"wildcarddnsd",
+delphinusdnsd had support for only eight RR's.  These were limited to 512 bytes
+reply length as per RFC 1035 and did not do EDNS0 (which came much later).  
+delphinusdnsd at that time did have NOTIMPL reply and NXDOMAIN as well.</li>
+<li><b>AXFR, IXFR, SRV, ANY</b><br>
+By May 2012, four more RR's made it into the tree. ANY is really a pseudo-RR
+that dumps an entire domainname's RRset.</li> 
+<li><b>NAPTR, OPT, SSHFP</b><br>
+By June 2014, three more RR's came.  NAPTR which was important for VOIP (and
+complements SRV), SSHFP which has fingerprint signatures for SSH and the
+pseudo-RR OPT which is needed for EDNS0.</li>
+<li><b>TLSA, NSEC3, NSEC3PARAM, RRSIG, DNSKEY, DS</b><br>
+By July 2016, the DNSSEC RR's came into the tree.  Though technically NSEC also
+came it's status today is undefined, I don't know what it'll do.  TLSA is needed
+for DANE, and really only makes sense with integrity of DNSSEC.  At this time
+delphinusdnsd just had the namechange to delphinusdnsd to indicate a new era.
+</li>
+<li><b>RP, HINFO, CAA</b><br>
+came into being by August 2020.  It needs to be said that as time progresses
+adding an RR becomes more complex, as by now we had a whole bunch of
+dependencies on different operations in delphinusdnsd.</li>
+<li><b>ZONEMD, CDS, CDNSKEY, LOC</b><br>
+support came by November 2021.  delphinusdnsd can now give out locations of
+hostnames and organisations.  The RR's other than LOC require some magic to be
+done with dddctl still.  It is worth noting that TXT and CNAME also saw some
+improvement over the years.
+</ul>
+</p>
 <h2><a name="obstacles">Design obstacles</a></h2>
 
 <ul>
