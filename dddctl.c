@@ -109,6 +109,7 @@ char *interface_list[255];
 int bflag = 0;
 int ratelimit_packets_per_second = 0;
 int ratelimit = 0;
+int ratelimit_cidr = 0, ratelimit_cidr6 = 0;
 extern u_int16_t port;
 int nflag = 0;
 int iflag = 0;

@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <syslog.h>
 #include <time.h>
+#include <bitstring.h>
 
 #ifdef __linux__
 #include <grp.h>
@@ -54,12 +55,15 @@ static u_int16_t 	hash_rrlimit(u_int16_t *, int);
 char 			*rrlimit_setup(int);
 
 struct rrlimit {
-	u_int8_t pointer;
+	uint8_t pointer;
 	time_t times[256];
 } __attribute__((packed));
 
 int ratelimit = 0;
 int ratelimit_packets_per_second = 6;
+
+int ratelimit_cidr = 0;
+int ratelimit_cidr6 = 0;
 
 char *
 rrlimit_setup(int size)
@@ -69,7 +73,7 @@ rrlimit_setup(int size)
 	if (size > 255)
 		return NULL;	
 
-	size = 65536 * ((size * sizeof(time_t)) + sizeof(u_int8_t));
+	size = 65536 * ((size * sizeof(time_t)) + sizeof(uint8_t));
 
 	ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED |\
 		MAP_ANON, -1, 0);
@@ -85,17 +89,63 @@ rrlimit_setup(int size)
 }
 
 int
-check_rrlimit(int size, u_int16_t *ip, int sizeip, char *rrlimit_ptr)
+check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
 {
 	struct rrlimit *rl;
-	u_int16_t hash;
+	struct in6_addr ia6;
+	in_addr_t ia, netmask;
+	uint16_t hash = 0;
 	int count = 0, i;
-	u_int8_t offset;
+	uint8_t offset;
 	time_t now;
 	char *tmp;
 
-	hash = hash_rrlimit(ip, sizeip);
+	if (sizeip == 4) {
+		ia = *(in_addr_t *)ip;
+		if (ratelimit_cidr) {
+			switch (ratelimit_cidr) {
+			case 8:
+				netmask = inet_addr("255.0.0.0");
+				ia = ia & netmask;
+				break;
+			case 16:
+				netmask = inet_addr("255.255.0.0");
+				ia = ia & netmask;
+				break;
+			case 24:
+				netmask = inet_addr("255.255.255.0");
+				ia = ia & netmask;
+				break;
+			}
+		}
+		hash = hash_rrlimit((uint16_t *)&ia, sizeip);
+	} else if (sizeip == 16) { 
+		memcpy((char *)&ia6, (char *)ip, sizeip);
+#if 0
+		for (i = 0; i < 4; i++)
+			NTOHL(ia6.__u6_addr.__u6_addr32[i]);
+#endif
+			
+		if (ratelimit_cidr6) {
+			switch (ratelimit_cidr6) {
+			case 32:
+				ia6.__u6_addr.__u6_addr32[1] = 0;
+				/* FALLTHROUGH */
+			case 64:
+				ia6.__u6_addr.__u6_addr32[2] = 0;
+				ia6.__u6_addr.__u6_addr32[3] = 0;
+				break;
+			}
+		}
 
+#if 0
+		for (i = 0; i < 4; i++)
+			HTONL(ia6.__u6_addr.__u6_addr32[i]);
+#endif
+
+		hash = hash_rrlimit((uint16_t *)&ia6, sizeip);
+	}
+		
 	tmp = rrlimit_ptr + (hash * ((size * sizeof(time_t)) + sizeof(u_int8_t)));
 	rl = (struct rrlimit *)tmp;
 	
@@ -121,12 +171,50 @@ void
 add_rrlimit(int size, u_int16_t *ip, int sizeip, char *rrlimit_ptr)
 {
 	struct rrlimit *rl;
-	u_int16_t hash;
+	struct in6_addr ia6;
+	in_addr_t ia = 0, netmask = 0;
+	uint16_t hash = 0;
 	int offset;
 	time_t now;
 	char *tmp;
 
-	hash = hash_rrlimit(ip, sizeip);
+	if (sizeip == 4) {
+		ia = *(in_addr_t *)ip;
+		if (ratelimit_cidr) {
+			switch (ratelimit_cidr) {
+			case 8:
+				netmask = inet_addr("255.0.0.0");
+				ia = ia & netmask;
+				break;
+			case 16:
+				netmask = inet_addr("255.255.0.0");
+				ia = ia & netmask;
+				break;
+			case 24:
+				netmask = inet_addr("255.255.255.0");
+				ia = ia & netmask;
+				break;
+			}
+		}
+
+		hash = hash_rrlimit((uint16_t *)&ia, sizeip);
+	} else if (sizeip == 16) { 
+		memcpy((char *)&ia6, (char *)ip, sizeip);
+			
+		if (ratelimit_cidr6) {
+			switch (ratelimit_cidr6) {
+			case 32:
+				ia6.__u6_addr.__u6_addr32[1] = 0;
+				/* FALLTHROUGH */
+			case 64:
+				ia6.__u6_addr.__u6_addr32[2] = 0;
+				ia6.__u6_addr.__u6_addr32[3] = 0;
+				break;
+			}
+		}
+
+		hash = hash_rrlimit((uint16_t *)&ia6, sizeip);
+	}
 
 	tmp = rrlimit_ptr + (hash * ((size * sizeof(time_t)) + sizeof(u_int8_t)));
 	rl = (struct rrlimit *)tmp;
@@ -147,14 +235,14 @@ add_rrlimit(int size, u_int16_t *ip, int sizeip, char *rrlimit_ptr)
 static u_int16_t
 hash_rrlimit(u_int16_t *ip, int size)
 {
-	u_int64_t total = 0;
+	uint64_t total = 0;
 	int i, j;
 
 	for (i = 0, j = 0; i < size; i += 2) {
-		total += (u_int64_t)ip[j++];	
+		total += (uint64_t)ip[j++];	
 	}
 
 	total %= 0xffff;
 
-	return ((u_int16_t)total);
+	return ((uint16_t)total);
 }	

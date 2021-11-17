@@ -132,6 +132,8 @@ extern int bcount;
 extern int icount;
 extern int ratelimit;
 extern int ratelimit_packets_per_second;
+extern int ratelimit_cidr;
+extern int ratelimit_cidr6;
 extern u_int16_t port;
 extern u_int32_t cachesize;
 extern char *bind_list[255];
@@ -1455,6 +1457,18 @@ optionsstatement:
 				ratelimit = 1;
 				ratelimit_packets_per_second = $2;
 				dolog(LOG_DEBUG, "ratelimiting to %d packets per second\n", ratelimit_packets_per_second);
+			} else if (strcasecmp($1, "ratelimit-cidr") == 0) {
+				if (($2 != 8) && ($2 != 16) && ($2 != 24)) {
+					dolog(LOG_ERR, "ratelimit-cidr must be 8, 16, or 24, or leave it off!\n");
+					return -1;
+				}
+				ratelimit_cidr = $2;
+			} else if (strcasecmp($1, "ratelimit-cidr6") == 0) {
+				if (($2 != 64) && ($2 != 32)) {
+					dolog(LOG_ERR, "ratelimit-cidr6 must be 32 or 64, or leave it off!\n");
+					return -1;
+				}
+				ratelimit_cidr6 = $2;
 			} else if (strcasecmp($1, "max-udp-payload") == 0) {
 				max_udp_payload = $2;
 

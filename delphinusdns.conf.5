@@ -280,12 +280,15 @@ comment = ( ; | pound ) line
 
 options = "options" ("string") [ "{" optionlist "}" ]
 optionlist = (  optinterface | optfork | optport | optratelimit | 
+		optratelimit-cidr | optratelimit-cidr6 |
 		optbind | optdnssec | opttcponanyonly |
 		optmaxudppayload | optnocookies | optcookiesecret |
 		optrdomain )
 optinterface = "interface" ("string") ;
 optfork = "fork" (number) ; 
 optratelimit = "ratelimit-pps" (number) ; 
+optratelimit-cidr = "ratelimit-cidr" (number) ;
+optratelimit-cidr6 = "ratelimit-cidr6" (number) ;
 optbind = "bind" cidr-address ;
 optdnssec = "dnssec" ; 
 opttcponanyonly = "tcp-on-any-only" ;
