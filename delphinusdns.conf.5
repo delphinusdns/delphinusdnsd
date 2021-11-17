@@ -43,9 +43,9 @@ which also drop the d in the config file.  This follows that name convention.
 .Pp
 Delphinusdnsd zonefiles can be packed into the configfile, but this is
 discouraged.  It is encouraged to use zinclude's to include each logical zone
-seperately.  This also makes sense from a DNSSEC signing perspective which
-requires seperate zonefiles.  The format of zonefiles deviates from RFC 1034 
-format (BIND format) and I have adopted a CSV (comma seperated values) scheme.
+separately.  This also makes sense from a DNSSEC signing perspective which
+requires separate zonefiles.  The format of zonefiles deviates from RFC 1034 
+format (BIND format) and I have adopted a CSV (comma separated values) scheme.
 This scheme requires that all domainnames be written out absolute relative
 to the DNS root.  There is no emphasis on a trailing dot and a trailing dot
 can be left out on domainnames.  It is also necessary to write out a TTL on

@@ -3518,7 +3518,7 @@ forwardtcp:
 					goto tcpout;
 				}
 
-				/* IXFR and AXFR are special types for TCP handle seperately */
+				/* IXFR and AXFR are special types for TCP handle separately */
 				switch (ntohs(question->hdr->qtype)) {
 				case DNS_TYPE_IXFR:
 					/* FALLTHROUGH */

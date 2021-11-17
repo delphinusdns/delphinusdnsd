@@ -130,7 +130,7 @@ insert_region(char *address, char *prefixlen, u_int8_t region)
  * FIND_REGION - walk the region list and find the correponding network with
  * 		 the highest prefix length, so that a /24 has more precedence 
  *			than
- *		 a /8 for example.  IPv6 and IPv4 addresses are kept seperate
+ *		 a /8 for example.  IPv6 and IPv4 addresses are kept separate
  */
 
 u_int8_t
