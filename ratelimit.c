@@ -121,10 +121,6 @@ check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
 		hash = hash_rrlimit((uint16_t *)&ia, sizeip);
 	} else if (sizeip == 16) { 
 		memcpy((char *)&ia6, (char *)ip, sizeip);
-#if 0
-		for (i = 0; i < 4; i++)
-			NTOHL(ia6.__u6_addr.__u6_addr32[i]);
-#endif
 			
 		if (ratelimit_cidr6) {
 			switch (ratelimit_cidr6) {
@@ -137,11 +133,6 @@ check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
 				break;
 			}
 		}
-
-#if 0
-		for (i = 0; i < 4; i++)
-			HTONL(ia6.__u6_addr.__u6_addr32[i]);
-#endif
 
 		hash = hash_rrlimit((uint16_t *)&ia6, sizeip);
 	}
