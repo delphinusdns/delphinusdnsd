@@ -108,6 +108,7 @@ install-delphinusdnsd:
 	test -f delphinusdnsd/delphinusdnsd && install -m 555 delphinusdnsd/delphinusdnsd /usr/local/sbin/
 	mkdir -p /usr/local/man/man8 && install -m 444 delphinusdnsd.8 /usr/local/man/man8
 	mkdir -p /usr/local/man/man5 && install -m 444 delphinusdns.conf.5 /usr/local/man/man5
+	install -m 444 delphinusdns.zone.5 /usr/local/man/man5
 
 
 clean:

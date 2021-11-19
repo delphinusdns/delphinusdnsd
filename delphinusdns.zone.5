@@ -1,0 +1,184 @@
+.\" Copyright (c) 2021 Peter J. Philipp
+.\" All rights reserved.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\" 3. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+.\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+.\" OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+.\" IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+.\" INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+.\" NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+.\" DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+.\" THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+.\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+.\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+.\"
+.Dd November 19, 2021
+.Dt DELPHINUSDNS.ZONE 5
+.Os 
+.Sh NAME
+.Nm delphinusdns.zone
+.Nd the delphinus DNS daemon zone file
+.Sh DESCRIPTION
+The 
+.Xr delphinusdns.conf 5
+usually has a zinclude for a zonefile.  Yet as functionality increases so
+does simple configs.  This manpage is supposed to address the format of
+Resource Records within a zone.
+.Pp
+Delphinusdnsd zonefiles can be packed into the configfile, but this is
+discouraged.  It is encouraged to use zinclude's to include each logical zone
+from
+.Xr delphinusdns.conf 5
+separately.
+.Bd -literal
+zone "delphinusdns.org" {
+        delphinusdns.org,soa,86400,pod.delphinusdns.org.,dns-admin.delphinusdns.org.,2021040404,3600,1200,1209600,86400
+        delphinusdns.org,ns,86400,pod.delphinusdns.org.
+        delphinusdns.org,ns,86400,job.delphinusdns.org.
+        delphinusdns.org,ns,86400,sky.delphinusdns.org.
+        delphinusdns.org,mx,86400,10,mail.delphinusdns.org
+	[...]
+}
+.Ed
+Do note that it is a requirement that an SOA and NS records exist in the apex
+(beginning) of a zone, otherwise delphinusdnsd behaviour is undefined.  You
+would use the dddctl tool to DNSSEC sign a zonefile.
+.Sh EXAMPLES
+The following Resource Records look like the following format:
+.Pp
+A Resource Record
+.Bd -literal
+	delphinusdns.org,a,86400,192.168.0.1
+.Ed
+.Pp
+AAAA Resource Record 
+.Bd -literal
+	delphinusdns.org,aaaa,86400,2001:db8::1
+.Ed
+.Pp
+CAA Resource Record
+.Bd -literal
+	delphinusdns.org,caa,86400,0,iodef,"mailto:hostmaster@delphinusdns.org"
+.Ed
+.Pp
+CDNSKEY Resource Record
+.Bd -literal
+	delphinusdns.org,cdnskey,86400,256,3,13,"W/hsos1Yzq7rhj1rmZu4BlcGxhU7eA7TrrbRjfQBZQOEpDQZvw0/vduTTWAwW0xdcxRFgsHlhbAThYujMvEsDg=="
+.Ed
+.Pp
+CDS Resource Record
+.Bd -literal
+	delphinusdns.org,cds,86400,59385,13,2,"07B5A3F59E461A075FDA284D431F780909595A9"
+.Ed
+.Pp
+CNAME Resource Record
+.Bd -literal
+	cname.delphinusdns.org,cname,86400,delphinusdns.org
+.Ed
+.Pp
+DNSKEY Resource Record (usually automatically created with dddctl sign)
+.Bd -literal
+	delphinusdns.org,dnskey,86400,256,3,13,"W/hsos1Yzq7rhj1rmZu4BlcGxhU7eA7TrrbRjfQBZQOEpDQZvw0/vduTTWAwW0xdcxRFgsHlhbAThYujMvEsDg=="
+.Ed
+.Pp
+DS Resource Record
+.Bd -literal
+	subdomain.delphinusdns.org,ds,86400,59385,13,2,"07B5A3F59E461A075FDA284D431F780909595A9"
+.Ed
+.Pp
+HINFO Resource Record
+.Bd -literal
+	delphinusdns.org,hinfo,86400,"arm64","OpenBSD"
+.Ed
+.Pp
+LOC Resource Record (units in centimeters)
+.Bd -literal
+	delphinusdns.org,loc,86400,50,04,3.600,N,10,15,4.600,E,10035000,100,0,0
+.Ed
+.Pp
+MX Resource Record
+.Bd -literal
+	delphinusdns.org,mx,86400,10,smtp.delphinusdns.org
+.Ed
+.Pp
+NAPTR Resource Record
+.Bd -literal
+	delphinusdns.org,naptr,86400,10,10,"u","E2U+sip","!^.*$!sip:1234@sip.example.com!",delphinusdns.org
+.Ed
+.Pp
+NS Resource Record
+.Bd -literal
+	delphinusdns.org,ns,86400,ns1.delphinusdns.org
+.Ed
+.Pp
+NSEC3 Resource Record (usually automatically created with dddctl sign)
+.Bd -literal
+	vdt2tmc4j0cvbb6h2e4c5c19efv0gr12.delphinusdns.org.,nsec3,86400,1,0,10,"-","06ha2dr07vfbp0skbmsavqlkqvsdubpc","AAAA RRSIG"
+.Ed
+.Pp
+NSEC3PARAM Resource Record (automatically created with dddctl sign)
+.Bd -literal
+	vdt2tmc4j0cvbb6h2e4c5c19efv0gr12.delphinusdns.org.,nsec3param,86400,1,0,10,"-"
+.Ed
+.Pp
+PTR Resource Record
+.Bd -literal
+	1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa.,ptr,86400,delphinusdns.org.
+.Ed
+.Pp
+RP Resource Record
+.Bd -literal
+	delphinusdns.org,rp,86400,dns-admin.delphinusdns.org.,ops.delphinusdns.org.
+.Ed
+.Pp
+RRSIG Resource Record (usually automatically created with dddctl sign)
+.Bd -literal
+	delphinusdns.org,rrsig,86400,SOA,13,2,86400,20220110075332,20211028075332,32639,delphinusdns.org.,"rei/84YmrRCzN8kVs0unUO1JRhzC9RSfo2Nakxnzui3wcs5jFh18DpRlTgrK34h8j7lAZjXXYj4OAQNLXbtFOg=="
+.Ed
+.Pp
+SOA Resource Record
+.Bd -literal
+	delphinusdns.org,soa,86400,arda.delphinusdns.org.,ici.delphinusdns.org.,2021111901,3600,1800,1209600,86400
+.Ed
+.Pp
+SRV Resource Record
+.Bd -literal
+	delphinusdns.org,srv,86400,0,0,0,www.delphinusdns.org.
+.Ed
+.Pp
+SSHFP Resource Record (usually created with dddctl sshfp)
+.Bd -literal
+	delphinusdns.org,sshfp,86400,4,2,"1005202de476ab11946c0c10e3faf1b32f08b004f49a7945ef4451e5af07acc5"
+.Ed
+.Pp
+TLSA Resource Record
+.Bd -literal
+	delphinusdns.org,tlsa,86400,3,1,1,"d147fc407c74e56fd379dfa39f4f595d5016985e4df4f3cecd0248c21a844bce"
+.Ed
+.Pp
+TXT Resource Record
+.Bd -literal
+	delphinusdns.org,txt,86400,"delphinusdnsd"
+.Ed
+.Pp
+.Sh FILES
+.Pa /var/delphinusdnsd/primary/	The unofficial master zonefiles directory
+.Pa /var/delphinusdnsd/replicant/ The default replicant zonefiles directory
+.Sh SEE ALSO
+.Xr delphinusdns.conf 5
+.Xr dddctl 8 , 
+.Xr delphinusdnsd 8
+.Sh AUTHORS
+This software and manual was written by
+.An Peter J. Philipp Aq petphi@delphinusdns.org

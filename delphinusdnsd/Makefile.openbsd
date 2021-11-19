@@ -17,5 +17,6 @@ MANDIR=/usr/local/man/man
 
 MAN= delphinusdnsd.8
 MAN+= delphinusdns.conf.5
+MAN+= delphinusdns.zone.5
 
 .include <bsd.prog.mk>
