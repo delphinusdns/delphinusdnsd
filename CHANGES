@@ -31,6 +31,8 @@ None yet.
   ... perhaps this standard will see more adoption in the future, and I can
   use it.
 - added LOC support (RFC 1876)
+- adjusted ratelimiting to take an optional (/24, /16, /8 in IPv4 and /64 and
+	/32 in IPv6) CIDR address range as reflection attacks have progressed
 
 [2020] Changes in RELEASE_1_5 from RELEASE_1_4
 
