@@ -14,7 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/param.h>	/* for MIN() */
+#include <sys/param.h>
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
@@ -5473,7 +5473,6 @@ sign_cds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 	int len, rlen, clen, i;
 	int keylen, siglen = sizeof(signature);
 	int labels;
-	int nzk = 0;
 	int csort = 0;
 
 	char timebuf[32];
@@ -5498,6 +5497,163 @@ sign_cds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		dolog(LOG_INFO, "out of memory\n");	
 		return -1;
 	}
+
+	/* CDNSKEY gets signed with the KSK key */
+
+		
+	/* get the KSK */
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if (knp->type == KEYTYPE_KSK) {
+			if ((zone = get_key(knp, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+				dolog(LOG_INFO, "get_key %s\n", knp->keyname);
+				return -1;
+			}
+
+			/* check the keytag supplied */
+			p = key;
+			pack16(p, htons(flags));
+			p += 2;
+			pack8(p, protocol);
+			p++;
+			pack8(p, algorithm);
+			p++;
+			keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+			pack(p, signature, keylen);
+			p += keylen;
+			keylen = (p - key);
+			if (keyid != keytag(key, keylen)) {
+				dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+				return -1;
+			}
+			
+			labels = label_count(rbt->zone);
+			if (labels < 0) {
+				dolog(LOG_INFO, "label_count");
+				return -1;
+			}
+
+			dnsname = dns_label(zonename, &labellen);
+			if (dnsname == NULL)
+				return -1;
+
+			if ((rrset = find_rr(rbt, DNS_TYPE_CDS)) != NULL) {
+				rrp = TAILQ_FIRST(&rrset->rr_head);
+				if (rrp == NULL) {
+					dolog(LOG_INFO, "no cdnskeys in apex!\n");
+					return -1;
+				}
+			} else {
+				dolog(LOG_INFO, "no cdnskeys\n");
+				return -1;
+			}
+			
+			p = key;
+
+			pack16(p, htons(DNS_TYPE_CDS));
+			p += 2;
+			pack8(p, algorithm);
+			p++;
+			pack8(p, labels);
+			p++;
+			pack32(p, htonl(rrset->ttl));
+			p += 4;
+				
+			snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+			expiredon2 = timegm(&tm);
+			snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+			signedon2 = timegm(&tm);
+
+			pack32(p, htonl(expiredon2));
+			p += 4;
+			pack32(p, htonl(signedon2));	
+			p += 4;
+			pack16(p, htons(keyid));
+			p += 2;
+			pack(p, dnsname, labellen);
+			p += labellen;
+
+			/* no signature here */	
+
+			canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+			if (canonsort == NULL) {
+				dolog(LOG_INFO, "canonsort out of memory\n");
+				return -1;
+			}
+
+			csort = 0;
+				
+			
+			TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+				q = tmpkey;
+				pack(q, dnsname, labellen);
+				q += labellen;
+				pack16(q, htons(DNS_TYPE_CDS));
+				q += 2;
+				pack16(q, htons(DNS_CLASS_IN));
+				q += 2;
+				pack32(q, htonl(rrset->ttl));
+				q += 4;
+				pack16(q, htons(2 + 1 + 1 + ((struct cds *)rrp2->rdata)->digestlen));
+				q += 2;
+				pack16(q, htons(((struct cds *)rrp2->rdata)->key_tag));
+				q += 2;
+				pack8(q, ((struct cds *)rrp2->rdata)->algorithm);
+				q++;
+				pack8(q, ((struct cds *)rrp2->rdata)->digest_type);
+				q++;
+				pack(q, ((struct cds *)rrp2->rdata)->digest, ((struct cds *)rrp2->rdata)->digestlen);
+				q += ((struct cds *)rrp2->rdata)->digestlen;
+
+				r = canonsort[csort] = calloc(1, 68000);
+				if (r == NULL) {
+					dolog(LOG_INFO, "out of memory\n");
+					return -1;
+				}
+
+				clen = (q - tmpkey);
+				pack16(r, clen);
+				r += 2;
+				pack(r, tmpkey, clen);
+
+				csort++;
+			}
+
+	
+			r = canonical_sort(canonsort, csort, &rlen);
+			if (r == NULL) {
+				dolog(LOG_INFO, "canonical_sort failed\n");
+				return -1;
+			}
+
+			memcpy(p, r, rlen);
+			p += rlen;
+
+			free(r);
+			for (i = 0; i < csort; i++) {
+				free(canonsort[i]);
+			}
+			free(canonsort);
+
+			keylen = (p - key);	
+
+			if (sign(algorithm, key, keylen, knp, (char *)&signature, &siglen) < 0) {
+				dolog(LOG_INFO, "signing failed\n");
+				return -1;
+			}
+
+			len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+			tmp[len] = '\0';
+
+			if (fill_rrsig(db, rbt->humanname, "RRSIG", ttl, "CDS", algorithm, labels, 		ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+				dolog(LOG_INFO, "fill_rrsig\n");
+				return -1;
+			}
+
+		} /* if KSK */
+	} /* SLIST_FOREACH */
+#if 0
 
 	nzk = 0;
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
@@ -5667,6 +5823,7 @@ sign_cds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		}
 		
 	} while ((*++zsk_key) != NULL);
+#endif
 
 	return 0;
 }
@@ -6800,7 +6957,6 @@ sign_cdnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollm
 	uint8_t protocol;
 	uint8_t algorithm;
 
-	int nzk = 0;
 	int csort = 0;
 	int labellen;
 	int keyid;
@@ -6833,8 +6989,7 @@ sign_cdnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollm
 		return -1;
 	}
 
-#if 0
-	/* skip the KSK stuff, CDNSKEY gets signed with the ZSK key */
+	/* CDNSKEY gets signed with the KSK key */
 
 		
 	/* get the KSK */
@@ -6989,8 +7144,8 @@ sign_cdnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollm
 
 		} /* if KSK */
 	} /* SLIST_FOREACH */
-#endif
 
+#if 0
 
 	nzk = 0;
 	SLIST_FOREACH(knp, &keyshead, keys_entry) {
@@ -7159,6 +7314,7 @@ sign_cdnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollm
 			return -1;
 		}
 	} while ((*++zsk_key) != NULL);
+#endif
 	
 	return 0;
 }
