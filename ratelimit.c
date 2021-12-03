@@ -28,7 +28,6 @@
 #include <errno.h>
 #include <syslog.h>
 #include <time.h>
-#include <bitstring.h>
 
 #ifdef __linux__
 #include <grp.h>
@@ -125,11 +124,20 @@ check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
 		if (ratelimit_cidr6) {
 			switch (ratelimit_cidr6) {
 			case 32:
+#ifdef __linux__
+				ia6.s6_addr32[1] = 0;
+#else
 				ia6.__u6_addr.__u6_addr32[1] = 0;
+#endif
 				/* FALLTHROUGH */
 			case 64:
+#ifdef __linux__
+				ia6.s6_addr32[2] = 0;
+				ia6.s6_addr32[3] = 0;
+#else
 				ia6.__u6_addr.__u6_addr32[2] = 0;
 				ia6.__u6_addr.__u6_addr32[3] = 0;
+#endif
 				break;
 			}
 		}
@@ -195,11 +203,20 @@ add_rrlimit(int size, u_int16_t *ip, int sizeip, char *rrlimit_ptr)
 		if (ratelimit_cidr6) {
 			switch (ratelimit_cidr6) {
 			case 32:
+#ifdef __linux__
+				ia6.s6_addr32[1] = 0;
+#else
 				ia6.__u6_addr.__u6_addr32[1] = 0;
+#endif
 				/* FALLTHROUGH */
 			case 64:
+#ifdef __linux__
+				ia6.s6_addr32[2] = 0;
+				ia6.s6_addr32[3] = 0;
+#else
 				ia6.__u6_addr.__u6_addr32[2] = 0;
 				ia6.__u6_addr.__u6_addr32[3] = 0;
+#endif
 				break;
 			}
 		}
