@@ -5517,12 +5517,12 @@ sign_cds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			p++;
 			pack8(p, algorithm);
 			p++;
-			keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+			keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 			pack(p, signature, keylen);
 			p += keylen;
 			keylen = (p - key);
-			if (keyid != keytag(key, keylen)) {
-				dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			if (keyid != keytag((u_char *)key, keylen)) {
+				dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 				return -1;
 			}
 			
@@ -5558,12 +5558,21 @@ sign_cds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			pack32(p, htonl(rrset->ttl));
 			p += 4;
 				
+#if __FreeBSD__
+			snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
+			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+			expiredon2 = timegm(&tm);
+			snprintf(timebuf, sizeof(timebuf), "%lu", signedon);
+			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+			signedon2 = timegm(&tm);
+#else
 			snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
 			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 			expiredon2 = timegm(&tm);
 			snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
 			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 			signedon2 = timegm(&tm);
+#endif
 
 			pack32(p, htonl(expiredon2));
 			p += 4;
@@ -5643,7 +5652,7 @@ sign_cds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 				return -1;
 			}
 
-			len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+			len = mybase64_encode((u_char *)signature, siglen, tmp, sizeof(tmp));
 			tmp[len] = '\0';
 
 			if (fill_rrsig(db, rbt->humanname, "RRSIG", ttl, "CDS", algorithm, labels, 		ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
@@ -6837,12 +6846,12 @@ sign_cdnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollm
 			p++;
 			pack8(p, algorithm);
 			p++;
-			keylen = mybase64_decode(tmp, (char *)&signature, sizeof(signature));
+			keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 			pack(p, signature, keylen);
 			p += keylen;
 			keylen = (p - key);
-			if (keyid != keytag(key, keylen)) {
-				dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag(key, keylen));
+			if (keyid != keytag((u_char *)key, keylen)) {
+				dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 				return -1;
 			}
 			
@@ -6878,12 +6887,21 @@ sign_cdnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollm
 			pack32(p, htonl(rrset->ttl));
 			p += 4;
 				
+#if __FreeBSD__
+			snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
+			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+			expiredon2 = timegm(&tm);
+			snprintf(timebuf, sizeof(timebuf), "%lu", signedon);
+			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+			signedon2 = timegm(&tm);
+#else
 			snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
 			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 			expiredon2 = timegm(&tm);
 			snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
 			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 			signedon2 = timegm(&tm);
+#endif
 
 			pack32(p, htonl(expiredon2));
 			p += 4;
@@ -6963,7 +6981,7 @@ sign_cdnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollm
 				return -1;
 			}
 
-			len = mybase64_encode(signature, siglen, tmp, sizeof(tmp));
+			len = mybase64_encode((u_char *)signature, siglen, tmp, sizeof(tmp));
 			tmp[len] = '\0';
 
 			if (fill_rrsig(db, rbt->humanname, "RRSIG", ttl, "CDNSKEY", algorithm, labels, 		ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
