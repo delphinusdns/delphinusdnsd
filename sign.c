@@ -79,6 +79,7 @@
 SLIST_HEAD(, keysentry) keyshead;
 
 static struct keysentry {
+	char *keypath;
         char *keyname;
 	uint32_t pid;
 	int sign;
@@ -117,7 +118,7 @@ int	add_dnskey(ddDB *);
 int	add_zonemd(ddDB *, char *, int);
 int	fixup_zonemd(ddDB *, char *, int, int);
 char * 	parse_keyfile(int, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
-char *  key2zone(char *, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
+char *  key2zone(struct keysentry *, char *, uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int *);
 char *  get_key(struct keysentry *,uint32_t *, uint16_t *, uint8_t *, uint8_t *, char *, int, int *);
 
 char *	create_key(char *, int, int, int, int, uint32_t *);
@@ -168,7 +169,7 @@ int 		print_rbt(FILE *, struct rbtree *);
 int 		print_rbt_bind(FILE *, struct rbtree *);
 int		signmain(int argc, char *argv[]);
 void 		init_keys(void);
-uint32_t 	getkeypid(char *);
+uint32_t 	getkeypid(struct keysentry *, char *);
 void		update_soa_serial(ddDB *, char *, time_t);
 void		debug_bindump(const char *, int);
 int 		dump_db(ddDB *, FILE *, char *);
@@ -437,6 +438,7 @@ signmain(int argc, char *argv[])
 	char *zonefile = NULL;
 	char *zonename = NULL;
 	char *ep;
+	char *p;
 	
 	int ksk_key = 0, zsk_key = 0;
 	int numkeys = 0, search = 0;
@@ -510,20 +512,44 @@ signmain(int argc, char *argv[])
 				perror("malloc");
 				exit(1);
 			}
-			kn->keyname = strdup(optarg);
-			if (kn->keyname == NULL) {
+			kn->keypath = strdup(optarg);
+			if (kn->keypath == NULL) {
 				perror("strdup");
 				exit(1);
 			}
+			p = strrchr(kn->keypath, '/');
+			if (p == NULL) {
+				free(kn->keypath);
+				kn->keypath = NULL;
+
+				kn->keyname = strdup(optarg);
+				if (kn->keyname == NULL) {
+					perror("strdup");
+					exit(1);
+				}
+			} else {
+				*p = '\0';
+				p++;
+				
+				if (*p != '\0') {
+					kn->keyname = strdup(p);
+					if (kn->keyname == NULL) {
+						perror("strdup");
+						exit(1);
+					}
+				}
+			}
+			
+
 			kn->type = KEYTYPE_KSK;
-			kn->pid = getkeypid(kn->keyname);
+			kn->pid = getkeypid(kn, kn->keyname);
 #if DEBUG
 			printf("opened %s with pid %u\n", kn->keyname, kn->pid);
 #endif
 			kn->sign = 0;
 			ksk_key = 1;
 
-			if ((key_zone = key2zone(kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
+			if ((key_zone = key2zone(kn, kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
 				perror("key2zone");
 				exit(1);
 			}
@@ -648,20 +674,43 @@ signmain(int argc, char *argv[])
 				perror("malloc");
 				exit(1);
 			}
-			kn->keyname = strdup(optarg);
-			if (kn->keyname == NULL) {
+			kn->keypath = strdup(optarg);
+			if (kn->keypath == NULL) {
 				perror("strdup");
 				exit(1);
 			}
+			p = strrchr(kn->keypath, '/');
+			if (p == NULL) {
+				free(kn->keypath);
+				kn->keypath = NULL;
+
+				kn->keyname = strdup(optarg);
+				if (kn->keyname == NULL) {
+					perror("strdup");
+					exit(1);
+				}
+			} else {
+				*p = '\0';
+				p++;
+				
+				if (*p != '\0') {
+					kn->keyname = strdup(p);
+					if (kn->keyname == NULL) {
+						perror("strdup");
+						exit(1);
+					}
+				}
+			}
+
 			kn->type = KEYTYPE_ZSK;
-			kn->pid = getkeypid(kn->keyname);
+			kn->pid = getkeypid(kn, kn->keyname);
 #if DEBUG
 			printf("opened %s with pid %u\n", kn->keyname, kn->pid);
 #endif
 			kn->sign = 0;
 			zsk_key = 1;
 
-			if ((key_zone = key2zone(kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
+			if ((key_zone = key2zone(kn, kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
 				perror("key2zone");
 				exit(1);
 			}
@@ -724,7 +773,7 @@ signmain(int argc, char *argv[])
 
 		dolog(LOG_INFO, "%d.\n", newpid);
 		
-		if ((key_zone = key2zone(kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
+		if ((key_zone = key2zone(kn, kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
 			perror("key2zone");
 			exit(1);
 		}
@@ -775,7 +824,7 @@ signmain(int argc, char *argv[])
 
 		dolog(LOG_INFO, "%d.\n", newpid);
 	
-		if ((key_zone = key2zone(kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
+		if ((key_zone = key2zone(kn, kn->keyname, &key_ttl, &key_flags, &key_protocol, &key_algorithm, (char *)&key_key, &key_keyid)) == NULL) {
 			perror("key2zone");
 			exit(1);
 		}
@@ -7587,9 +7636,17 @@ store_private_key(struct keysentry *kn, char *zonename, int keyid, int algorithm
 
 	int keylen;
 
-	snprintf(buf, sizeof(buf), "K%s%s+%03d+%d.private", zonename,
-		(zonename[strlen(zonename) - 1] == '.') ? "" : ".",
-		algorithm, keyid);
+	if (kn && kn->keypath != NULL) {
+		snprintf(buf, sizeof(buf), "%s/K%s%s+%03d+%d.private", 
+			kn->keypath, zonename,
+			(zonename[strlen(zonename) - 1] == '.') ? "" : ".",
+			algorithm, keyid);
+	} else {
+		snprintf(buf, sizeof(buf), "K%s%s+%03d+%d.private", 
+			zonename,
+			(zonename[strlen(zonename) - 1] == '.') ? "" : ".",
+			algorithm, keyid);
+	}
 
 	f = fopen(buf, "r");
 	if (f == NULL) {
@@ -8740,7 +8797,7 @@ init_keys(void)
 }
 
 uint32_t
-getkeypid(char *key)
+getkeypid(struct keysentry *kn, char *key)
 {
 	char tmp[4096];
 
@@ -8752,7 +8809,7 @@ getkeypid(char *key)
 	uint8_t algorithm;
 	int keyid;
 
-	if ((zone = key2zone(key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
+	if ((zone = key2zone(kn, key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, &keyid)) == NULL) {
 		dolog(LOG_INFO, "key2zone\n");
 		return -1;
 	}
@@ -8776,13 +8833,18 @@ get_key(struct keysentry *kn, uint32_t *ttl, uint16_t *flags, uint8_t *protocol,
 }
 
 char *
-key2zone(char *keyname, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t *algorithm, char *key, int *keyid)
+key2zone(struct keysentry *kn, char *keyname, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t *algorithm, char *key, int *keyid)
 {
 	int fd;
 	char *zone;
 	char buf[PATH_MAX];
 
-	snprintf(buf, sizeof(buf), "%s.key", keyname);
+	if (kn != NULL && kn->keypath != NULL) {
+		snprintf(buf, sizeof(buf), "%s/%s.key", kn->keypath, keyname);
+	} else {
+		snprintf(buf, sizeof(buf), "%s.key", keyname);
+	}
+
 	if ((fd = open(buf, O_RDONLY, 0)) < 0) {
 		dolog(LOG_INFO, "open %s: %s\n", buf, strerror(errno));
 		return NULL;
