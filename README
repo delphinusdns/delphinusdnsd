@@ -57,7 +57,7 @@ for these platforms.
 Use the tool "dig" that comes with bind9 to debug Delphinusdns.  If you like to 
 program, then you can fork DelphinusDNS and make your own creation, or you
 can send patches to the author who may implement them into the code.  The
-current contact mail address is petphi@delphinusdns.org.
+current contact mail address is pbug44@delphinusdns.org.
 
 * https://en.wikipedia.org/wiki/Attack_surface
 
