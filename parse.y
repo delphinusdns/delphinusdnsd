@@ -342,11 +342,13 @@ version:
 	VERSION quotednumber SEMICOLON CRLF
 	{
 		version = atoi($2);
+#if 0
 		if (version != DELPHINUSVERSION) {
 			dolog(LOG_ERR, "version of configfile is wrong,"
 					" must be \"%d\"!\n", DELPHINUSVERSION);
 			return (-1);
 		}
+#endif
 		free ($2);
 		
 		confstatus |= CONFIG_VERSION;
