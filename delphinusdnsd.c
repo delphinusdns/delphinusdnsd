@@ -1597,6 +1597,8 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		/* close udp decriptors */
 		for (i = 0; i < cfg->sockcount; i++)  {
 				close(cfg->udp[i]);
+				if (axfrport && axfrport != port)
+					close(cfg->axfr[i]);
 		}
 		close(ibuf->fd);
 		close(udp_ibuf->fd);
