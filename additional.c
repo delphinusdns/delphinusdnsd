@@ -1196,10 +1196,7 @@ additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *r
 	int tmplen;
 	u_int8_t *somelen;
 	int retcount;
-	time_t now;
 	int zonenumberx;
-
-	now = time(NULL);
 
 	char *name;
 	int namelen;
