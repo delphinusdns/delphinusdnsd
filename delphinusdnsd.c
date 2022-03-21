@@ -326,8 +326,8 @@ char *bind_list[255];
 char *interface_list[255];
 char *identstring = NULL;
 #ifndef DD_VERSION
-char *versionstring = "delphinusdnsd-1.6";
-uint8_t vslen = 17;
+char *versionstring = "delphinusdnsd-1.6.1";
+uint8_t vslen = 19;
 #else
 char *versionstring = DD_VERSION;
 uint8_t vslen = DD_VERSION_LEN;
@@ -1597,6 +1597,8 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		/* close udp decriptors */
 		for (i = 0; i < cfg->sockcount; i++)  {
 				close(cfg->udp[i]);
+				if (axfrport && axfrport != port)
+					close(cfg->axfr[i]);
 		}
 		close(ibuf->fd);
 		close(udp_ibuf->fd);

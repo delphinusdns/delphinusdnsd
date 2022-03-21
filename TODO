@@ -15,6 +15,7 @@ For 1.7.0 release
 - DNS Update (RFC 2136 and 3007) must be Secure with TSIG, and do DNSSEC signing
 - Shape up the NSEC code as it seems NSEC is having a renaissance, at least
   to have replicant compatibility for NSEC
+- EUI48 and EUI64 support (RFC 7043)
 - HTTPS/SVCB support (draft will enter standard soon)
 
 For 1.6.0 release

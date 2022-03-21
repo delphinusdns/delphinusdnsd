@@ -1759,6 +1759,9 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 
 			p = (estart + (ntohs(offset) & (~0xc000)));
 		} else {
+			if (*p > 63)
+				return NULL;
+
 			if (*elen + 1 >= max) {
 				return NULL;
 			}

@@ -358,6 +358,8 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		close(cortex->fd);
 		close(pi[1]);
 		close(bipi[1]);
+		close(cfg->raw[0]);
+		close(cfg->raw[1]);
 		imsg_init(&parse_ibuf, pi[0]);
 		imsg_init(&biparse_ibuf, bipi[0]);
 		
