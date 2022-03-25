@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2020-2022 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -90,6 +90,7 @@ struct forwardqueue {
 	char orig_dnsname[DNS_MAXNAME];		/* what we reply with */
 	char dnsname[DNS_MAXNAME];		/* the request name */
 	char dnsnamelen;			/* the len of dnsname */
+	uint32_t sessid;			/* session id per forward */
 	uint32_t longid;			/* a long identifier */
 	time_t time;				/* time created */
 	int tries;				/* how many times we rtrnsmt */
@@ -182,7 +183,7 @@ extern int	reply_generic(struct sreply *, int *, ddDB *);
 extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
 extern void flag_rr(struct rbtree *rbt, uint32_t);
 extern struct rbtree * find_rrset(ddDB *, char *, int);
-extern int	randomize_dnsname(char *buf, int len);
+extern int	randomize_dnsname(char *, int);
 extern int	lower_dnsname(char *buf, int len);
 extern void	sm_lock(char *, size_t);
 extern void	sm_unlock(char *, size_t);
@@ -314,7 +315,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	int pi[2];
 	int bipi[2];
 	int i, count;
-	u_int packetcount = 0;
+	uint32_t sessid;
 
 	ssize_t n, datalen;
 	fd_set rset;
@@ -391,12 +392,14 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	zonenumber = 0;		/* reset this to 0 */
 
 	for (;;) {
+#if 0
 		/*
 		 * due to our strategy (which kinda sucks) stir some
 		 * entropy into the active forwarder
 		 */
 		if (packetcount++ && packetcount % 1000 == 0)
 			stirforwarders();
+#endif
 
 		FD_ZERO(&rset);	
 		FD_SET(ibuf->fd, &rset);
@@ -466,19 +469,26 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 				}
 
 drop:
+				/* delete all instances with the same sessid */
+				sessid = fwq1->sessid;
+				SLIST_FOREACH_SAFE(fwqp, &fwqhead, entries, fwq2) {
 
-				SLIST_REMOVE(&fwqhead, fwq1, forwardqueue, entries);
-				close(fwq1->so);
-				fwq1->so = -1;
+					if (fwqp->sessid == sessid) {
 
-				if (fwq1->returnso != -1)
-					close(fwq1->returnso);
-				
-				if (fwq1->tsigkey)
-					free(fwq1->tsigkey);
+						SLIST_REMOVE(&fwqhead, fwqp, forwardqueue, entries);
+						close(fwqp->so);
+						fwqp->so = -1;
 
-				free(fwq1);
+						if (fwqp->returnso != -1)
+							close(fwqp->returnso);
+						
+						if (fwqp->tsigkey)
+							free(fwqp->tsigkey);
 
+						free(fwqp);
+
+					}
+				}
 			}
 		}
 
@@ -689,6 +699,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	char *p;
 	socklen_t namelen;
 	time_t highexpire;
+	uint32_t sessid;
 
 #if __OpenBSD__
 	highexpire = 67768036191673199;
@@ -708,6 +719,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	
 	now = time(NULL);
 
+	sessid = 0;
 	SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwq2) {
 		if (difftime(now, fwq1->time) > 5) {
 			odh = (struct dns_header *)&buf[fwq1->istcp ? 2 : 0];
@@ -755,6 +767,9 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 
 			if (fwq1->tsigkey)
 				free(fwq1->tsigkey);
+
+			sessid = fwq1->sessid;
+
 			free(fwq1);
 			continue;
 		}
@@ -967,132 +982,114 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 
 		/* create a new queue and send it */
 newqueue:
-		/*
-		 * we're out of cache territory, let's mutilate our
-		 * our dns question a little bit...
-		 */
-
+		/* loop over our forwarders and send a request */
+		sessid = arc4random();
 
 		TAILQ_FOREACH(fw2, &forwardhead, forward_entry) {
-			if (fw2->active == 1)
-				break;
-		}
+			char temporary_name[512];
 
-		if (fw2 == NULL) {
-			TAILQ_FOREACH(fwp, &forwardhead, forward_entry) {
-				if (fwp != fw2) {
-					fw2 = fwp;
-					fw2->active = 1;
-					break;
-				}
-			}
-
-			if (fw2 == NULL) {
-				dolog(LOG_INFO, "FORWARD: no suitable destinations found\n");
+			fwq1 = calloc(1, sizeof(struct forwardqueue));
+			if (fwq1 == NULL) {
+				dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 				return;
 			}
-				
-		}
-		
-		fwq1 = calloc(1, sizeof(struct forwardqueue));
-		if (fwq1 == NULL) {
-			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-			return;
-		}
-		memcpy(&fwq1->orig_dnsname, sforward->buf, sforward->buflen);
+			memcpy(&fwq1->orig_dnsname, sforward->buf, sforward->buflen);
+			memcpy(&temporary_name, sforward->buf, sforward->buflen);
 
-		if (randomize_dnsname(sforward->buf, sforward->buflen) == -1) {
-			dolog(LOG_INFO, "randomize_dnsname failed\n");
-			free (fwq1);
-			return;
-		}
+			if (randomize_dnsname((char *)&temporary_name, sforward->buflen) == -1) {
+				dolog(LOG_INFO, "randomize_dnsname failed\n");
+				free (fwq1);
+				return;
+			}
 
-		memcpy(&fwq1->dnsname, sforward->buf, sforward->buflen);
-		fwq1->dnsnamelen = sforward->buflen;
+			memcpy(&fwq1->dnsname, temporary_name, sforward->buflen);
+			fwq1->dnsnamelen = sforward->buflen;
 
-		fwq1->oldfamily = sforward->family;
-		fwq1->oldsel = sforward->oldsel;
+			fwq1->oldfamily = sforward->family;
+			fwq1->oldsel = sforward->oldsel;
 
-		switch (sforward->family) {
-		case AF_INET:
-			memcpy(&fwq1->oldhost4, &sforward->from4, sizeof(struct sockaddr_in));
-			break;
-		case AF_INET6:
-			memcpy(&fwq1->oldhost6, &sforward->from6, sizeof(struct sockaddr_in6));
-			break;
-		}
+			switch (sforward->family) {
+			case AF_INET:
+				memcpy(&fwq1->oldhost4, &sforward->from4, sizeof(struct sockaddr_in));
+				break;
+			case AF_INET6:
+				memcpy(&fwq1->oldhost6, &sforward->from6, sizeof(struct sockaddr_in6));
+				break;
+			}
 
-		fwq1->oldport = sforward->rport;
-		fwq1->oldid = sforward->header.id;
-		fwq1->type = sforward->type;
+			fwq1->oldport = sforward->rport;
+			fwq1->oldid = sforward->header.id;
+			fwq1->type = sforward->type;
 
-		fwq1->port = fw2->destport;
-		fwq1->cur_forwardentry = fw2;
-		fwq1->longid = arc4random();
-		fwq1->id = fwq1->longid % 0xffff;	
-		fwq1->time = now;
-		fwq1->tries = 1;
-		if (so == -1)
-			fwq1->istcp = 0;
-		else
-			fwq1->istcp = 1;	
+			fwq1->port = fw2->destport;
+			fwq1->cur_forwardentry = fw2;
+			fwq1->sessid = sessid;
+			fwq1->longid = arc4random();
+			fwq1->id = fwq1->longid % 0xffff;	
+			fwq1->time = now;
+			fwq1->tries = 1;
+			if (so == -1)
+				fwq1->istcp = 0;
+			else
+				fwq1->istcp = 1;	
 
 
-		memcpy((char *)&fwq1->host, (char *)&fw2->host, sizeof(struct sockaddr_storage));
+			memcpy((char *)&fwq1->host, (char *)&fw2->host, sizeof(struct sockaddr_storage));
 
-		fwq1->family = fw2->family;
-		if (fw2->tsigkey) {
-			fwq1->tsigkey = strdup(fw2->tsigkey);
-			if (fwq1->tsigkey == NULL) {
-				dolog(LOG_ERR, "FORWARD strdup: %s\n", strerror(errno));
+			fwq1->family = fw2->family;
+			if (fw2->tsigkey) {
+				fwq1->tsigkey = strdup(fw2->tsigkey);
+				if (fwq1->tsigkey == NULL) {
+					dolog(LOG_ERR, "FORWARD strdup: %s\n", strerror(errno));
+					free(fwq1);
+					return;
+				}
+			} else
+				fwq1->tsigkey = NULL;
+
+			/* connect the UDP sockets */
+
+			fwq1->so = socket(fw2->family, (fwq1->istcp != 1) ? SOCK_DGRAM : SOCK_STREAM, 0);
+			if (fwq1->so < 0) {
+				dolog(LOG_ERR, "FORWARD socket: %s\n", strerror(errno));
+				if (fwq1->tsigkey)
+					free(fwq1->tsigkey);
 				free(fwq1);
 				return;
 			}
-		} else
-			fwq1->tsigkey = NULL;
 
-		/* connect the UDP sockets */
+			namelen = (fw2->family == AF_INET) ? sizeof(struct sockaddr_in) \
+				: sizeof(struct sockaddr_in6);
 
-		fwq1->so = socket(fw2->family, (fwq1->istcp != 1) ? SOCK_DGRAM : SOCK_STREAM, 0);
-		if (fwq1->so < 0) {
-			dolog(LOG_ERR, "FORWARD socket: %s\n", strerror(errno));
-			if (fwq1->tsigkey)
-				free(fwq1->tsigkey);
-			free(fwq1);
-			return;
+			if (connect(fwq1->so, (struct sockaddr *)&fwq1->host, namelen) < 0) {
+				dolog(LOG_ERR, "FORWARD can't connect: %s\n", strerror(errno));
+
+				changeforwarder(fwq1);
+
+				if (fwq1->tsigkey)
+					free(fwq1->tsigkey);
+
+				free(fwq1);
+				return;
+			}
+
+			fwq1->returnso = so;
+
+			/* are we TSIG'ed?  save key and mac */
+			if (sforward->havemac) {
+				fwq1->haveoldmac = 1;
+				memcpy(&fwq1->oldkeyname, &sforward->tsigname, sizeof(fwq1->oldkeyname));
+				fwq1->oldkeynamelen = sforward->tsignamelen;
+				memcpy(&fwq1->oldmac, &sforward->mac, sizeof(fwq1->oldmac));
+				fwq1->tsigtimefudge = sforward->tsigtimefudge;
+			} else
+				fwq1->haveoldmac = 0;
+					
+			SLIST_INSERT_HEAD(&fwqhead, fwq1, entries);
+
+			if (sendit(fwq1, sforward) < 0)
+				continue;
 		}
-
-		namelen = (fw2->family == AF_INET) ? sizeof(struct sockaddr_in) \
-			: sizeof(struct sockaddr_in6);
-
-		if (connect(fwq1->so, (struct sockaddr *)&fwq1->host, namelen) < 0) {
-			dolog(LOG_ERR, "FORWARD can't connect: %s\n", strerror(errno));
-
-			changeforwarder(fwq1);
-
-			if (fwq1->tsigkey)
-				free(fwq1->tsigkey);
-
-			free(fwq1);
-			return;
-		}
-
-		fwq1->returnso = so;
-
-		/* are we TSIG'ed?  save key and mac */
-		if (sforward->havemac) {
-			fwq1->haveoldmac = 1;
-			memcpy(&fwq1->oldkeyname, &sforward->tsigname, sizeof(fwq1->oldkeyname));
-			fwq1->oldkeynamelen = sforward->tsignamelen;
-			memcpy(&fwq1->oldmac, &sforward->mac, sizeof(fwq1->oldmac));
-			fwq1->tsigtimefudge = sforward->tsigtimefudge;
-		} else
-			fwq1->haveoldmac = 0;
-				
-		SLIST_INSERT_HEAD(&fwqhead, fwq1, entries);
-
-		if (sendit(fwq1, sforward) < 0)
-			goto servfail;
 	} else {
 		/* resend this one */
 		
@@ -1102,6 +1099,7 @@ newqueue:
 				goto servfail;
 		}
 	}
+
 
 	return;	
 
@@ -1209,9 +1207,9 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	p += sizeof(struct dns_header);
 	len += sizeof(struct dns_header);
 
-	memcpy(p, sforward->buf, sforward->buflen);
-	p += sforward->buflen;
-	len += sforward->buflen;
+	memcpy(p, fwq->dnsname, fwq->dnsnamelen);
+	p += fwq->dnsnamelen;
+	len += fwq->dnsnamelen;
 	
 	pack16(p, sforward->type);
 	p += 2;
@@ -2292,6 +2290,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 void
 changeforwarder(struct forwardqueue *fwq)
 {
+#if 0
 	fw2 = fwq->cur_forwardentry;
 
 	if ((fwp = TAILQ_PREV(fw2, forwardentrys, forward_entry)) == NULL) {
@@ -2305,6 +2304,7 @@ changeforwarder(struct forwardqueue *fwq)
 		fw2->active = 0;
 		fwp->active = 1;
 	}
+#endif
 
 	return;
 }
@@ -2312,25 +2312,6 @@ changeforwarder(struct forwardqueue *fwq)
 void
 stirforwarders(void)
 {
-	int randomforwarder;
-	int count = 0;
-
-	TAILQ_FOREACH(fwp, &forwardhead, forward_entry) {
-		fwp->active = 0;
-		count++;
-	}
-
-	randomforwarder = arc4random() % count;	
-	
-	count = 0;
-	TAILQ_FOREACH(fwp, &forwardhead, forward_entry) {
-		if (randomforwarder == count) {
-			dolog(LOG_INFO, "stirforwarders: %s is now active\n", fwp->name);
-			fwp->active = 1;
-		}
-		
-		count++;
-	}
 }
 
 int
