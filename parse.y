@@ -121,6 +121,7 @@ extern int debug;
 extern int forward;
 extern int forwardtsig;
 extern int strictx20i;
+extern int forwardstrategy;
 extern int cache;
 extern int zonecount;
 extern int verbose;
@@ -286,6 +287,7 @@ int		dottedquad(char *);
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
 %token INCOMINGTSIG DESTINATION CACHE STRICTX20
 %token BYTELIMIT FUDGE TSIGPASSNAME RDOMAIN
+%token FORWARDSTRATEGY
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -1762,6 +1764,15 @@ forwardstatement	:	INCOMINGTSIG STRING SEMICOLON CRLF
 
 				forward_rdomain = $2;
 			}
+			| FORWARDSTRATEGY STRING SEMICOLON CRLF
+			{
+				if (strcmp($2, "single") == 0)
+					forwardstrategy = STRATEGY_SINGLE;	
+				else if (strcmp($2, "spray") == 0)
+					forwardstrategy = STRATEGY_SPRAY;
+
+				free($2);
+			}
 			| comment CRLF
 			;	
 
@@ -1950,6 +1961,7 @@ struct tab cmdtab[] = {
 	{ "destination", DESTINATION, 0 },
 	{ "filter", FILTER, STATE_IP },
 	{ "forward", FORWARD, 0 },
+	{ "forwardstrategy", FORWARDSTRATEGY, 0},
 	{ "fudge", FUDGE, 0 },
 	{ "include", INCLUDE, 0 },
 	{ "incoming-tsig", INCOMINGTSIG, 0 },

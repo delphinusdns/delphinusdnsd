@@ -232,6 +232,7 @@ extern int dnssec;
 extern int cache;
 extern int forward;
 extern int strictx20i;
+extern int forwardstrategy;
 extern char *identstring;
 extern uint32_t zonenumber;
 extern uint16_t fudge_forward;
@@ -316,6 +317,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	int bipi[2];
 	int i, count;
 	uint32_t sessid;
+	u_int packetcount = 0;
 
 	ssize_t n, datalen;
 	fd_set rset;
@@ -392,14 +394,13 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	zonenumber = 0;		/* reset this to 0 */
 
 	for (;;) {
-#if 0
 		/*
 		 * due to our strategy (which kinda sucks) stir some
 		 * entropy into the active forwarder
 		 */
-		if (packetcount++ && packetcount % 1000 == 0)
+		if (forwardstrategy == STRATEGY_SINGLE && packetcount++ 
+			&& packetcount % 1000 == 0)
 			stirforwarders();
-#endif
 
 		FD_ZERO(&rset);	
 		FD_SET(ibuf->fd, &rset);
@@ -988,6 +989,9 @@ newqueue:
 		TAILQ_FOREACH(fw2, &forwardhead, forward_entry) {
 			char temporary_name[512];
 
+			if ((forwardstrategy == STRATEGY_SINGLE) && (fw2->active == 0))
+				continue;
+
 			fwq1 = calloc(1, sizeof(struct forwardqueue));
 			if (fwq1 == NULL) {
 				dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
@@ -1087,8 +1091,12 @@ newqueue:
 					
 			SLIST_INSERT_HEAD(&fwqhead, fwq1, entries);
 
-			if (sendit(fwq1, sforward) < 0)
-				continue;
+			if (sendit(fwq1, sforward) < 0) {
+				if (forwardstrategy == STRATEGY_SPRAY)
+					continue;
+				else
+					goto servfail;
+			}
 		}
 	} else {
 		/* resend this one */
@@ -2290,7 +2298,9 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 void
 changeforwarder(struct forwardqueue *fwq)
 {
-#if 0
+	if (forwardstrategy == STRATEGY_SPRAY)
+		return;
+
 	fw2 = fwq->cur_forwardentry;
 
 	if ((fwp = TAILQ_PREV(fw2, forwardentrys, forward_entry)) == NULL) {
@@ -2304,7 +2314,6 @@ changeforwarder(struct forwardqueue *fwq)
 		fw2->active = 0;
 		fwp->active = 1;
 	}
-#endif
 
 	return;
 }
@@ -2312,6 +2321,28 @@ changeforwarder(struct forwardqueue *fwq)
 void
 stirforwarders(void)
 {
+	int randomforwarder;
+	int count = 0;
+
+	if (forwardstrategy == STRATEGY_SPRAY)
+		return;
+
+	TAILQ_FOREACH(fwp, &forwardhead, forward_entry) {
+		fwp->active = 0;
+		count++;
+	}
+
+	randomforwarder = arc4random() % count;	
+
+	count = 0;
+	TAILQ_FOREACH(fwp, &forwardhead, forward_entry) {
+		if (randomforwarder == count) {
+			dolog(LOG_INFO, "stirforwarders: %s is now active\n", fwp->name);
+			fwp->active = 1;
+		}
+
+		count++;
+	}
 }
 
 int

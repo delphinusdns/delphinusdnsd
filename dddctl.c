@@ -68,6 +68,7 @@ int verbose = 0;
 int forward = 0;
 int forwardtsig = 0;
 int strictx20i = 1;
+int forwardstrategy = STRATEGY_SPRAY;
 int zonecount = 0;
 int cache = 0;
 int tsigpassname = 0;

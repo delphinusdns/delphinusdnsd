@@ -350,6 +350,9 @@ struct sforward {
 	char mac[DNS_HMAC_SHA256_SIZE];	/* 906 */
 };
 
+#define STRATEGY_SPRAY			0	/* all forwarders */
+#define STRATEGY_SINGLE			1	/* one at a time */
+
 	
 
 #endif /* DNS_H */
