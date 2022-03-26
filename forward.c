@@ -477,9 +477,6 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					if (len <= 0) 
 						goto drop;
 					
-					if (skip)
-						goto drop;
-
 					returnit(db, cfg, fwq1, buf, len, pibuf);
 				} else {
 					len = recv(fwq1->so, buf, 0xffff, 0);
@@ -497,7 +494,6 @@ drop:
 				sessid = fwq1->sessid;
 				SLIST_REMOVE(&fwqhead, fwq1, forwardqueue, entries);
 				close(fwq1->so);
-				fwq1->so = -1;
 
 				if (fwq1->returnso != -1)
 					close(fwq1->returnso);
@@ -1116,11 +1112,18 @@ newqueue:
 			SLIST_INSERT_HEAD(&fwqhead, fwq1, entries);
 
 			if (sendit(fwq1, sforward) < 0) {
-				if (forwardstrategy == STRATEGY_SPRAY)
-					continue;
-				else
+				if (forwardstrategy == STRATEGY_SPRAY) {
+					if (fwq1->istcp == 1)
+						goto servfail;
+					else
+						continue;
+				} else {
 					goto servfail;
+				}
 			}
+
+			if (fwq1->istcp == 1)
+				break;
 		}
 	} else {
 		/* resend this one */
