@@ -450,13 +450,13 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 
 		
 		SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwq3) {
+			skip = 0;
 			SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
 				if (fwq1->sessid == cq2->sessid) {
 					skip = 1;
 					SLIST_REMOVE(&closehead, cq2, closequeue, entries);
 					free(cq2);
-				} else 
-					skip = 0;
+				}
 			}
 			if (FD_ISSET(fwq1->so, &rset)) {
 				if (fwq1->istcp) {
