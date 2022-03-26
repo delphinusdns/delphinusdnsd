@@ -47,10 +47,10 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-void 			add_rrlimit(int, u_int16_t *, int, char *);
-int 			check_rrlimit(int, u_int16_t *, int, char *);
+void 			add_rrlimit(int, uint16_t *, int, char *);
+int 			check_rrlimit(int, uint16_t *, int, char *);
 extern void 		dolog(int, char *, ...);
-static u_int16_t 	hash_rrlimit(u_int16_t *, int);
+static uint16_t 	hash_rrlimit(uint16_t *, int);
 char 			*rrlimit_setup(int);
 
 struct rrlimit {
@@ -145,7 +145,7 @@ check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
 		hash = hash_rrlimit((uint16_t *)&ia6, sizeip);
 	}
 		
-	tmp = rrlimit_ptr + (hash * ((size * sizeof(time_t)) + sizeof(u_int8_t)));
+	tmp = rrlimit_ptr + (hash * ((size * sizeof(time_t)) + sizeof(uint8_t)));
 	rl = (struct rrlimit *)tmp;
 	
 	offset = rl->pointer;
@@ -167,7 +167,7 @@ check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
 
 
 void
-add_rrlimit(int size, u_int16_t *ip, int sizeip, char *rrlimit_ptr)
+add_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
 {
 	struct rrlimit *rl;
 	struct in6_addr ia6;
@@ -224,7 +224,7 @@ add_rrlimit(int size, u_int16_t *ip, int sizeip, char *rrlimit_ptr)
 		hash = hash_rrlimit((uint16_t *)&ia6, sizeip);
 	}
 
-	tmp = rrlimit_ptr + (hash * ((size * sizeof(time_t)) + sizeof(u_int8_t)));
+	tmp = rrlimit_ptr + (hash * ((size * sizeof(time_t)) + sizeof(uint8_t)));
 	rl = (struct rrlimit *)tmp;
 	
 	offset = rl->pointer;
@@ -240,8 +240,8 @@ add_rrlimit(int size, u_int16_t *ip, int sizeip, char *rrlimit_ptr)
 	
 }
 
-static u_int16_t
-hash_rrlimit(u_int16_t *ip, int size)
+static uint16_t
+hash_rrlimit(uint16_t *ip, int size)
 {
 	uint64_t total = 0;
 	int i, j;

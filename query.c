@@ -62,15 +62,15 @@
 
 static struct timeval tv0;
 static time_t current_time;
-u_int16_t port = 53;
+uint16_t port = 53;
 
 
 /* prototypes */
 
 int	dig(int argc, char *argv[]);
 int	command_socket(char *);
-int 	connect_server(char *, int, u_int32_t);
-int 	lookup_name(FILE *, int, char *, u_int16_t, struct soa *, u_int32_t, char *, u_int16_t, int *, int*, uint16_t);
+int 	connect_server(char *, int, uint32_t);
+int 	lookup_name(FILE *, int, char *, uint16_t, struct soa *, uint32_t, char *, uint16_t, int *, int*, uint16_t);
 int	notglue(ddDB *, struct rbtree *, char *);
 
 
@@ -96,19 +96,19 @@ extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
 
 extern void 	pack(char *, char *, int);
-extern void 	pack32(char *, u_int32_t);
-extern void 	pack16(char *, u_int16_t);
-extern void 	pack8(char *, u_int8_t);
-extern int fill_dnskey(char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *);
-extern int fill_rrsig(char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
-extern int fill_nsec3param(char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
-extern int fill_nsec3(char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
+extern void 	pack32(char *, uint32_t);
+extern void 	pack16(char *, uint16_t);
+extern void 	pack8(char *, uint8_t);
+extern int fill_dnskey(char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, char *);
+extern int fill_rrsig(char *, char *, uint32_t, char *, uint8_t, uint8_t, uint32_t, uint64_t, uint64_t, uint16_t, char *, char *);
+extern int fill_nsec3param(char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *);
+extern int fill_nsec3(char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *, char *, char *);
 extern char * convert_name(char *name, int namelen);
 
 extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int      mybase64_decode(char const *, u_char *, size_t);
 extern struct rbtree *         Lookup_zone(ddDB *, char *, int, int, int);
-extern struct question         *build_fake_question(char *, int, u_int16_t, char *, int);
+extern struct question         *build_fake_question(char *, int, uint16_t, char *, int);
 extern char * dns_label(char *, int *);
 extern int label_count(char *);
 extern char *get_dns_type(int, int);
@@ -120,42 +120,42 @@ extern struct question          *build_question(char *, int, uint16_t, char *);
 struct rrtab    *rrlookup(char *);
 
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
-extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
-extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
+extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
+extern int add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata);
 extern char * 	bin2hex(char *, int);
-extern u_int64_t timethuman(time_t);
+extern uint64_t timethuman(time_t);
 extern char * 	bitmap2human(char *, int);
 
-extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_loc(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_zonemd(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
-extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *, struct soa_constraints *);
-extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int, int);
+extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_loc(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_zonemd(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern uint16_t raxfr_skip(FILE *, u_char *, u_char *);
+extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, uint32_t, uint16_t, HMAC_CTX *, struct soa_constraints *);
+extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, uint16_t *, uint32_t, HMAC_CTX *, char *, int, int);
 
 extern int                      memcasecmp(u_char *, u_char *, int);
 extern int 			tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
-extern int  lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t, int);
+extern int  lookup_axfr(FILE *, int, char *, struct soa *, uint32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t, int);
 extern int 			insert_tsig(char *, char *);
 extern int  			find_tsig_key(char *, int, char *, int);
 extern int  			insert_tsig_key(char *, int, char *);
@@ -208,8 +208,8 @@ dig(int argc, char *argv[])
 	char *domainname = NULL;
 	char *nameserver = "127.0.0.1";
 	char *yopt, *tsigpass = NULL, *tsigkey = NULL;
-	u_int32_t format = 0;
-	u_int16_t port = 53;
+	uint32_t format = 0;
+	uint16_t port = 53;
 	uint16_t class = DNS_CLASS_IN;
 	int ch, so, ms;
 	int type = DNS_TYPE_A;
@@ -396,7 +396,7 @@ dig(int argc, char *argv[])
 }
 
 int
-connect_server(char *nameserver, int port, u_int32_t format)
+connect_server(char *nameserver, int port, uint32_t format)
 {
 	struct sockaddr_in sin;
 	int so;
@@ -435,13 +435,13 @@ connect_server(char *nameserver, int port, u_int32_t format)
 }
 
 int
-lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mysoa, u_int32_t format, char *nameserver, u_int16_t port, int *answers, int *additionalcount, uint16_t qclass)
+lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *mysoa, uint32_t format, char *nameserver, uint16_t port, int *answers, int *additionalcount, uint16_t qclass)
 {
 	int len, i, tmp32;
 	int numansw, numaddi, numauth;
 	int printansw = 1, printauth = 1, printaddi = 1;
 	int rrtype, soacount = 0;
-	u_int16_t rdlen;
+	uint16_t rdlen;
 	char query[512];
 	char *reply;
 	struct raxfr_logic *sr;
@@ -457,9 +457,9 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	u_char *end, *estart;
 	int totallen, zonelen, rrlen;
 	int replysize = 0;
-	u_int16_t class = 0, type = 0, tcpsize;
-	u_int16_t plen;
-	u_int16_t tcplen;
+	uint16_t class = 0, type = 0, tcpsize;
+	uint16_t plen;
+	uint16_t tcplen;
 
 	if (format & TCP_FORMAT)
 		replysize = 0xffff;
@@ -507,11 +507,11 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 
 	type = htons(myrrtype);
 	pack16(&query[totallen], type);
-	totallen += sizeof(u_int16_t);
+	totallen += sizeof(uint16_t);
 	
 	class = htons(qclass);
 	pack16(&query[totallen], class);
-	totallen += sizeof(u_int16_t);
+	totallen += sizeof(uint16_t);
 
 	/* attach EDNS0 */
 
@@ -632,8 +632,8 @@ lookup_name(FILE *f, int so, char *zonename, u_int16_t myrrtype, struct soa *mys
 	p = (u_char *)&rwh[1];		
 	
 	p += q->hdr->namelen;
-	p += sizeof(u_int16_t);	 	/* type */
-	p += sizeof(u_int16_t);		/* class */
+	p += sizeof(uint16_t);	 	/* type */
+	p += sizeof(uint16_t);		/* class */
 
 	/* end of question */
 	

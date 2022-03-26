@@ -45,11 +45,11 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-u_int8_t 	find_region(struct sockaddr_storage *, int);
+uint8_t 	find_region(struct sockaddr_storage *, int);
 in_addr_t 	getmask(int);
 int 		getmask6(int, struct sockaddr_in6 *);
 void 		init_region(void);
-int 		insert_region(char *, char *, u_int8_t);
+int 		insert_region(char *, char *, uint8_t);
 
 SLIST_HEAD(listhead, regionentry) regionhead;
 
@@ -58,8 +58,8 @@ static struct regionentry {
 	int family;
 	struct sockaddr_storage hostmask;
 	struct sockaddr_storage netmask;
-	u_int8_t region; 
-	u_int8_t prefixlen;
+	uint8_t region; 
+	uint8_t prefixlen;
 	SLIST_ENTRY(regionentry) region_entry;
 } *n2, *np;
 
@@ -85,7 +85,7 @@ init_region(void)
  */
 
 int
-insert_region(char *address, char *prefixlen, u_int8_t region)
+insert_region(char *address, char *prefixlen, uint8_t region)
 {
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
@@ -133,20 +133,20 @@ insert_region(char *address, char *prefixlen, u_int8_t region)
  *		 a /8 for example.  IPv6 and IPv4 addresses are kept separate
  */
 
-u_int8_t
+uint8_t
 find_region(struct sockaddr_storage *sst, int family)
 {
 	struct sockaddr_in *sin, *sin0;
 	struct sockaddr_in6 *sin6, *sin60, *sin61;
-	u_int32_t hostmask, netmask;
-	u_int32_t a;
+	uint32_t hostmask, netmask;
+	uint32_t a;
 #ifdef __amd64
-	u_int64_t *hm[2], *nm[2], *a6[2];
+	uint64_t *hm[2], *nm[2], *a6[2];
 #else
-	u_int32_t *hm[4], *nm[4], *a6[4];
+	uint32_t *hm[4], *nm[4], *a6[4];
 #endif
-	u_int8_t region = 0xff;
-	u_int8_t prefixlen = 0;
+	uint8_t region = 0xff;
+	uint8_t prefixlen = 0;
 
 	SLIST_FOREACH(np, &regionhead, region_entry) {
 		if (np->family == AF_INET) {
@@ -176,22 +176,22 @@ find_region(struct sockaddr_storage *sst, int family)
 			 * by using 64 bit registers, this should make it
 			 * a tad faster...
 			 */
-			hm[0] = (u_int64_t *)&sin60->sin6_addr.s6_addr;
+			hm[0] = (uint64_t *)&sin60->sin6_addr.s6_addr;
 			hm[1] = (hm[0] + 1);
-			nm[0] = (u_int64_t *)&sin61->sin6_addr.s6_addr;
+			nm[0] = (uint64_t *)&sin61->sin6_addr.s6_addr;
 			nm[1] = (nm[0] + 1);
-			a6[0] = (u_int64_t *)&sin6->sin6_addr.s6_addr;
+			a6[0] = (uint64_t *)&sin6->sin6_addr.s6_addr;
 			a6[1] = (a6[0] + 1);
 			if (	((*hm[0] & *nm[0]) == (*a6[0] & *nm[0]))&&
 				((*hm[1] & *nm[1]) == (*a6[1] & *nm[1]))) {
 #else
-			hm[0] = (u_int32_t *)&sin60->sin6_addr.s6_addr;
+			hm[0] = (uint32_t *)&sin60->sin6_addr.s6_addr;
 			hm[1] = (hm[0] + 1); hm[2] = (hm[1] + 1);
 			hm[3] = (hm[2] + 1);
-			nm[0] = (u_int32_t *)&sin61->sin6_addr.s6_addr;
+			nm[0] = (uint32_t *)&sin61->sin6_addr.s6_addr;
 			nm[1] = (nm[0] + 1); nm[2] = (nm[1] + 1);
 			nm[3] = (nm[2] + 1);
-			a6[0] = (u_int32_t *)&sin6->sin6_addr.s6_addr;
+			a6[0] = (uint32_t *)&sin6->sin6_addr.s6_addr;
 			a6[1] = (a6[0] + 1); a6[2] = (a6[1] + 1);
 			a6[3] = (a6[2] + 1);
 			if (	((*hm[0] & *nm[0]) == (*a6[0] & *nm[0]))&&
@@ -244,13 +244,13 @@ int
 getmask6(int prefixlen, struct sockaddr_in6 *sin6)
 {
 	int i, j;
-	u_int32_t *nm[4];
+	uint32_t *nm[4];
 
 	if (prefixlen > 128 || prefixlen < 0)
 		return (-1);
 
 	memset(&sin6->sin6_addr.s6_addr, 0xff, sizeof(sin6->sin6_addr.s6_addr));
-	nm[0] = (u_int32_t *)sin6->sin6_addr.s6_addr;
+	nm[0] = (uint32_t *)sin6->sin6_addr.s6_addr;
 	nm[1] = (nm[0] + 1); nm[2] = (nm[1] + 1);
 	nm[3] = (nm[2] + 1);
 

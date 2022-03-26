@@ -64,7 +64,7 @@ static struct filterentry {
 	int family;
 	struct sockaddr_storage hostmask;
 	struct sockaddr_storage netmask;
-	u_int8_t prefixlen;
+	uint8_t prefixlen;
 	SLIST_ENTRY(filterentry) filter_entry;
 } *fn2, *fnp;
 
@@ -135,12 +135,12 @@ find_filter(struct sockaddr_storage *sst, int family)
 {
 	struct sockaddr_in *sin, *sin0;
 	struct sockaddr_in6 *sin6, *sin60, *sin61;
-	u_int32_t hostmask, netmask;
-	u_int32_t a;
+	uint32_t hostmask, netmask;
+	uint32_t a;
 #ifdef __amd64
-	u_int64_t *hm[2], *nm[2], *a6[2];
+	uint64_t *hm[2], *nm[2], *a6[2];
 #else
-	u_int32_t *hm[4], *nm[4], *a6[4];
+	uint32_t *hm[4], *nm[4], *a6[4];
 #endif
 
 	SLIST_FOREACH(fnp, &filterhead, filter_entry) {
@@ -168,22 +168,22 @@ find_filter(struct sockaddr_storage *sst, int family)
 			 * by using 64 bit registers, this should make it
 			 * a tad faster...
 			 */
-			hm[0] = (u_int64_t *)&sin60->sin6_addr.s6_addr;
+			hm[0] = (uint64_t *)&sin60->sin6_addr.s6_addr;
 			hm[1] = (hm[0] + 1);
-			nm[0] = (u_int64_t *)&sin61->sin6_addr.s6_addr;
+			nm[0] = (uint64_t *)&sin61->sin6_addr.s6_addr;
 			nm[1] = (nm[0] + 1);
-			a6[0] = (u_int64_t *)&sin6->sin6_addr.s6_addr;
+			a6[0] = (uint64_t *)&sin6->sin6_addr.s6_addr;
 			a6[1] = (a6[0] + 1);
 			if (	((*hm[0] & *nm[0]) == (*a6[0] & *nm[0]))&&
 				((*hm[1] & *nm[1]) == (*a6[1] & *nm[1]))) {
 #else
-			hm[0] = (u_int32_t *)&sin60->sin6_addr.s6_addr;
+			hm[0] = (uint32_t *)&sin60->sin6_addr.s6_addr;
 			hm[1] = (hm[0] + 1); hm[2] = (hm[1] + 1);
 			hm[3] = (hm[2] + 1);
-			nm[0] = (u_int32_t *)&sin61->sin6_addr.s6_addr;
+			nm[0] = (uint32_t *)&sin61->sin6_addr.s6_addr;
 			nm[1] = (nm[0] + 1); nm[2] = (nm[1] + 1);
 			nm[3] = (nm[2] + 1);
-			a6[0] = (u_int32_t *)&sin6->sin6_addr.s6_addr;
+			a6[0] = (uint32_t *)&sin6->sin6_addr.s6_addr;
 			a6[1] = (a6[0] + 1); a6[2] = (a6[1] + 1);
 			a6[3] = (a6[2] + 1);
 

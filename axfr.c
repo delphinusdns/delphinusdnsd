@@ -79,9 +79,9 @@ void    notifyddds(int *);
 void	reap(int);
 
 extern void 	pack(char *, char *, int);
-extern void 	pack32(char *, u_int32_t);
-extern void 	pack16(char *, u_int16_t);
-extern void 	pack8(char *, u_int8_t);
+extern void 	pack32(char *, uint32_t);
+extern void 	pack16(char *, uint16_t);
+extern void 	pack8(char *, uint8_t);
 extern uint32_t unpack32(char *);
 extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
@@ -93,15 +93,15 @@ extern void		reply_fmterror(struct sreply *, ddDB *);
 extern void		reply_nxdomain(struct sreply *, ddDB *);
 extern struct rbtree *	get_soa(ddDB *, struct question *);
 extern int		compress_label(u_char *, int, int);
-extern u_int16_t	create_anyreply(struct sreply *, char *, int, int, int, uint32_t, uint);
-extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
+extern uint16_t	create_anyreply(struct sreply *, char *, int, int, int, uint32_t, uint);
+extern struct question	*build_fake_question(char *, int, uint16_t, char *, int);
 extern struct question	*build_question(char *, int, uint16_t, char *);
 extern int		free_question(struct question *);
 extern void		dolog(int, char *, ...);
-extern void 		build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, char *);
+extern void 		build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, uint8_t, int, int, char *);
 
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
-extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
+extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern int rotate_rr(struct rrset *rrset);
 
@@ -129,7 +129,7 @@ static struct axfrentry {
 	int family;
 	struct sockaddr_storage hostmask;
 	struct sockaddr_storage netmask;
-	u_int8_t prefixlen;
+	uint8_t prefixlen;
 	SLIST_ENTRY(axfrentry) axfr_entry;
 } *an2, *anp;
 
@@ -138,8 +138,8 @@ SLIST_HEAD(notifylisthead, notifyentry) notifyhead;
 static struct notifyentry {
 	char domain[DNS_MAXNAME];
 	int domainlen;
-	u_int16_t *ids;
-	u_int16_t *attempts;
+	uint16_t *ids;
+	uint16_t *attempts;
 	int usetsig;
 	int numadd;
 	struct mzone *mzone;
@@ -217,12 +217,12 @@ find_axfr(struct sockaddr_storage *sst, int family)
 {
 	struct sockaddr_in *sin, *sin0;
 	struct sockaddr_in6 *sin6, *sin60, *sin61;
-	u_int32_t hostmask, netmask;
-	u_int32_t a;
+	uint32_t hostmask, netmask;
+	uint32_t a;
 #ifdef __amd64
-	u_int64_t *hm[2], *nm[2], *a6[2];
+	uint64_t *hm[2], *nm[2], *a6[2];
 #else
-	u_int32_t *hm[4], *nm[4], *a6[4];
+	uint32_t *hm[4], *nm[4], *a6[4];
 #endif
 
 	SLIST_FOREACH(anp, &axfrhead, axfr_entry) {
@@ -250,22 +250,22 @@ find_axfr(struct sockaddr_storage *sst, int family)
 			 * by using 64 bit registers, this should make it
 			 * a tad faster...
 			 */
-			hm[0] = (u_int64_t *)&sin60->sin6_addr.s6_addr;
+			hm[0] = (uint64_t *)&sin60->sin6_addr.s6_addr;
 			hm[1] = (hm[0] + 1);
-			nm[0] = (u_int64_t *)&sin61->sin6_addr.s6_addr;
+			nm[0] = (uint64_t *)&sin61->sin6_addr.s6_addr;
 			nm[1] = (nm[0] + 1);
-			a6[0] = (u_int64_t *)&sin6->sin6_addr.s6_addr;
+			a6[0] = (uint64_t *)&sin6->sin6_addr.s6_addr;
 			a6[1] = (a6[0] + 1);
 			if (	((*hm[0] & *nm[0]) == (*a6[0] & *nm[0]))&&
 				((*hm[1] & *nm[1]) == (*a6[1] & *nm[1]))) {
 #else
-			hm[0] = (u_int32_t *)&sin60->sin6_addr.s6_addr;
+			hm[0] = (uint32_t *)&sin60->sin6_addr.s6_addr;
 			hm[1] = (hm[0] + 1); hm[2] = (hm[1] + 1);
 			hm[3] = (hm[2] + 1);
-			nm[0] = (u_int32_t *)&sin61->sin6_addr.s6_addr;
+			nm[0] = (uint32_t *)&sin61->sin6_addr.s6_addr;
 			nm[1] = (nm[0] + 1); nm[2] = (nm[1] + 1);
 			nm[3] = (nm[2] + 1);
-			a6[0] = (u_int32_t *)&sin6->sin6_addr.s6_addr;
+			a6[0] = (uint32_t *)&sin6->sin6_addr.s6_addr;
 			a6[1] = (a6[0] + 1); a6[2] = (a6[1] + 1);
 			a6[3] = (a6[2] + 1);
 
@@ -1212,7 +1212,7 @@ int
 build_header(ddDB *db, char *reply, char *buf, struct question *q, int answercount, int questioncount)
 {
 	struct dns_header *odh;
-	u_int16_t outlen;
+	uint16_t outlen;
 
 	odh = (struct dns_header *)reply;
 	outlen = sizeof(struct dns_header);
@@ -1224,7 +1224,7 @@ build_header(ddDB *db, char *reply, char *buf, struct question *q, int answercou
 	}
 
 	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 
 	SET_DNS_REPLY(odh);
 	SET_DNS_AUTHORITATIVE(odh);
@@ -1260,10 +1260,10 @@ build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question
 	int tmplen;
 
         struct answer {
-                u_int16_t type;
-                u_int16_t class;
-                u_int32_t ttl;
-                u_int16_t rdlength;      /* 12 */
+                uint16_t type;
+                uint16_t class;
+                uint32_t ttl;
+                uint16_t rdlength;      /* 12 */
                 char rdata;             
         } __attribute__((packed));
 
@@ -1325,36 +1325,36 @@ build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question
 
 
 	/* XXX */
-	if ((offset + sizeof(u_int32_t)) >= 65535 ) {
+	if ((offset + sizeof(uint32_t)) >= 65535 ) {
 		/* XXX server error reply? */
 		return (offset);
 	}
 	pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->serial));
-	offset += sizeof(u_int32_t);
+	offset += sizeof(uint32_t);
 	
-	if ((offset + sizeof(u_int32_t)) >= 65535 ) {
+	if ((offset + sizeof(uint32_t)) >= 65535 ) {
 		return (offset);
 	}
 	pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->refresh));
-	offset += sizeof(u_int32_t);
+	offset += sizeof(uint32_t);
 
-	if ((offset + sizeof(u_int32_t)) >= 65535 ) {
+	if ((offset + sizeof(uint32_t)) >= 65535 ) {
 		return (offset);
 	}
 	pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->retry));
-	offset += sizeof(u_int32_t);
+	offset += sizeof(uint32_t);
 
-	if ((offset + sizeof(u_int32_t)) >= 65535 ) {
+	if ((offset + sizeof(uint32_t)) >= 65535 ) {
 		return (offset);
 	}
 	pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->expire));
-	offset += sizeof(u_int32_t);
+	offset += sizeof(uint32_t);
 
-	if ((offset + sizeof(u_int32_t)) > 65535 ) {
+	if ((offset + sizeof(uint32_t)) > 65535 ) {
 		return (offset);
 	}
 	pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->minttl));
-	offset += sizeof(u_int32_t);
+	offset += sizeof(uint32_t);
 
 	answer->rdlength = htons(&reply[offset] - &answer->rdata);
 	
@@ -1414,13 +1414,13 @@ gather_notifydomains(ddDB *db)
 				continue;
 			}
 
-			notn2->ids = calloc(notify, sizeof(u_int16_t));
+			notn2->ids = calloc(notify, sizeof(uint16_t));
 			if (notn2->ids == NULL) {
 				free(notn2);
 				continue;
 			}
 
-			notn2->attempts = calloc(notify, sizeof(u_int16_t));
+			notn2->attempts = calloc(notify, sizeof(uint16_t));
 			if (notn2->attempts == NULL) {
 				free(notn2);
 				continue;
@@ -1531,7 +1531,7 @@ notifypacket(int so, void *vnotnp, void *vmd, int packetcount)
 	struct sockaddr_storage savesin, newsin;
 	char packet[512];
 	char *questionname;
-	u_int16_t *classtype;
+	uint16_t *classtype;
 	struct dns_header *dnh;
 	struct question *fq = NULL;
 	int outlen = 0, slen, ret;
@@ -1586,11 +1586,11 @@ notifypacket(int so, void *vnotnp, void *vmd, int packetcount)
 	memcpy(questionname, notnp->domain, notnp->domainlen);
 	outlen += notnp->domainlen;
 	
-	classtype = (u_int16_t *)&packet[outlen];
+	classtype = (uint16_t *)&packet[outlen];
 	classtype[0] = htons(DNS_TYPE_SOA);
 	classtype[1] = htons(DNS_CLASS_IN);
 
-	outlen += (2 * sizeof(u_int16_t));
+	outlen += (2 * sizeof(uint16_t));
 
 	/* work out the tsig stuff */
 	if (md->tsigkey != NULL) {
@@ -1676,7 +1676,7 @@ check_notifyreply(struct dns_header *dh, struct question *question, struct socka
 	struct sockaddr_in6 *sin6, *sin62 = NULL;
 	struct sockaddr_in *sin, *sin2 = NULL;
 	char address[INET6_ADDRSTRLEN];
-	u_int16_t ntohsquery;
+	uint16_t ntohsquery;
 
 	switch (af) {
 	case AF_INET6:

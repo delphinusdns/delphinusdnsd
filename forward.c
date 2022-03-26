@@ -135,26 +135,26 @@ void 	stirforwarders(void);
 int rawsend(int, char *, uint16_t, struct sockaddr_in *, int, struct cfg *);
 int rawsend6(int, char *, uint16_t, struct sockaddr_in6 *, int, struct cfg *);
 
-extern uint16_t	udp_cksum(u_int16_t *, uint16_t, struct ip *, struct udphdr *);
-extern uint16_t	udp_cksum6(u_int16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
+extern uint16_t	udp_cksum(uint16_t *, uint16_t, struct ip *, struct udphdr *);
+extern uint16_t	udp_cksum6(uint16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
 extern void 	dolog(int, char *, ...);
 extern void      pack(char *, char *, int);
-extern void     pack16(char *, u_int16_t);
-extern void     pack32(char *, u_int32_t);
+extern void     pack16(char *, uint16_t);
+extern void     pack32(char *, uint32_t);
 extern uint16_t unpack16(char *);
 extern uint32_t unpack32(char *);
 extern void     ddd_shutdown(void);
 extern int      additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t);
 extern int      additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
-extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
+extern struct question	*build_fake_question(char *, int, uint16_t, char *, int);
 extern int	free_question(struct question *);
 extern char *	dns_label(char *, int *);
 extern int	find_tsig_key(char *, int, char *, int);
 extern int	memcasecmp(u_char *, u_char *, int);
 extern char *	expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
-extern int	expire_rr(ddDB *, char *, int, u_int16_t, time_t);
+extern int	expire_rr(ddDB *, char *, int, uint16_t, time_t);
 extern int 	expire_db(ddDB *, int);
-extern void 	build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, char *);
+extern void 	build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, uint8_t, int, int, char *);
 extern struct rbtree * Lookup_zone(ddDB *, char *, int, int, int);
 extern struct rbtree *  lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
 extern int	cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, struct cfg *);
@@ -1615,8 +1615,8 @@ check_tsig(char *buf, int len, char *mac)
 	char pseudo_packet[4096];		/* for tsig */
 	char expand[DNS_MAXNAME + 1];
 	u_int rollback, i, j;
-	u_int16_t type, rdlen;
-	u_int64_t timefudge;
+	uint16_t type, rdlen;
+	uint64_t timefudge;
 	int elen = 0;
 	int additional;
 
@@ -1654,7 +1654,7 @@ check_tsig(char *buf, int len, char *mac)
 		return NULL;
 	}
 
-	i += (2 * sizeof(u_int16_t));	/*  type,class */
+	i += (2 * sizeof(uint16_t));	/*  type,class */
 
 	/* skip any payloads other than additional */
 	
@@ -1741,9 +1741,9 @@ check_tsig(char *buf, int len, char *mac)
 	} while (0);
 	/* check for TSIG rr */
 	do {
-		u_int16_t val16, tsigerror, tsigotherlen;
-		u_int16_t fudge;
-		u_int32_t val32;
+		uint16_t val16, tsigerror, tsigotherlen;
+		uint16_t fudge;
+		uint32_t val32;
 		int elen, tsignamelen;
 		char tsigkey[512];
 		u_char sha256[DNS_HMAC_SHA256_SIZE];
@@ -1908,8 +1908,8 @@ check_tsig(char *buf, int len, char *mac)
 #else
 		timefudge = betoh64(tsigrr->timefudge);
 #endif
-		fudge = (u_int16_t)(timefudge & 0xffff);
-		tsigtime = (u_int64_t)(timefudge >> 16);
+		fudge = (uint16_t)(timefudge & 0xffff);
+		tsigtime = (uint64_t)(timefudge >> 16);
 
 		rtsig->tsig_timefudge = tsigrr->timefudge;
 		

@@ -70,35 +70,35 @@
 /* db stuff */
 
 struct dnskey {
-	u_int16_t flags;
+	uint16_t flags;
 #define DNSKEY_ZONE_KEY			(1 << 7)
 #define DNSKEY_SECURE_ENTRY		(1 << 15)
-	u_int8_t protocol;		/* must be 3 */
-	u_int8_t algorithm;		/* would be 5, RFC 3110 */
+	uint8_t protocol;		/* must be 3 */
+	uint8_t algorithm;		/* would be 5, RFC 3110 */
 	char public_key[4096];
-	u_int16_t publickey_len;
+	uint16_t publickey_len;
 };
 
 struct cdnskey {
-	u_int16_t flags;
-	u_int8_t protocol;
-	u_int8_t algorithm;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
 	char public_key[4096];
-	u_int16_t publickey_len;
+	uint16_t publickey_len;
 };
 
 struct rrsig {
-	u_int16_t type_covered;
-	u_int8_t algorithm;	/* usually 5, RFC3110 */
-	u_int8_t labels;
-	u_int32_t original_ttl;
-	u_int32_t signature_expiration;
-	u_int32_t signature_inception;
-	u_int16_t key_tag;
+	uint16_t type_covered;
+	uint8_t algorithm;	/* usually 5, RFC3110 */
+	uint8_t labels;
+	uint32_t original_ttl;
+	uint32_t signature_expiration;
+	uint32_t signature_inception;
+	uint16_t key_tag;
 	char signers_name[DNS_MAXNAME];
-	u_int8_t signame_len;
+	uint8_t signame_len;
 	char signature[4096];
-	u_int16_t signature_len;
+	uint16_t signature_len;
 	uint32_t ttl;		/* RFC 4034 section 3, the TTL value of ... */
 	int used;		/* if this RRSIG is used at all */
 	time_t created;		/* when this was added to the cache */
@@ -106,61 +106,61 @@ struct rrsig {
 
 struct nsec {
 	char next_domain_name[DNS_MAXNAME];
-	u_int8_t ndn_len;	/* next domain name length */
+	uint8_t ndn_len;	/* next domain name length */
 	char bitmap[8192];
-	u_int16_t bitmap_len;
+	uint16_t bitmap_len;
 };
 
 struct nsec3 {
-	u_int8_t algorithm;
-	u_int8_t flags;
-	u_int16_t iterations;
-	u_int8_t saltlen;
+	uint8_t algorithm;
+	uint8_t flags;
+	uint16_t iterations;
+	uint8_t saltlen;
 	char salt[256];
 	char next[DNS_MAXNAME];
-	u_int8_t nextlen;	/* next domain name length */
+	uint8_t nextlen;	/* next domain name length */
 	char bitmap[8192];
-	u_int16_t bitmap_len;
+	uint16_t bitmap_len;
 };
 
 struct nsec3param {
-	u_int8_t algorithm;
-	u_int8_t flags;
-	u_int16_t iterations;
-	u_int8_t saltlen;
+	uint8_t algorithm;
+	uint8_t flags;
+	uint16_t iterations;
+	uint8_t saltlen;
 	char salt[256];
 };
 
 struct ds {
-	u_int16_t key_tag;
-	u_int8_t algorithm;
-	u_int8_t digest_type;
+	uint16_t key_tag;
+	uint8_t algorithm;
+	uint8_t digest_type;
 	char digest[4096];
-	u_int16_t digestlen;
+	uint16_t digestlen;
 };
 
 struct cds {
-	u_int16_t key_tag;
-	u_int8_t algorithm;
-	u_int8_t digest_type;
+	uint16_t key_tag;
+	uint8_t algorithm;
+	uint8_t digest_type;
 	char digest[4096];
-	u_int16_t digestlen;
+	uint16_t digestlen;
 };
 
 struct soa {
 	char nsserver[DNS_MAXNAME];
-	u_int8_t nsserver_len;
+	uint8_t nsserver_len;
 	char responsible_person[DNS_MAXNAME];
-	u_int8_t rp_len;
-	u_int32_t serial;
-	u_int32_t refresh;
-	u_int32_t retry;
-	u_int32_t expire;
-	u_int32_t minttl;
+	uint8_t rp_len;
+	uint32_t serial;
+	uint32_t refresh;
+	uint32_t retry;
+	uint32_t expire;
+	uint32_t minttl;
 };
 
 struct smx {
-	u_int16_t preference;		/* MX preference */
+	uint16_t preference;		/* MX preference */
 	char exchange[DNS_MAXNAME];	/* name of exchange server */
 	int exchangelen;		/* length of exchange server name */
 };
@@ -175,31 +175,31 @@ struct ns {
 };
 
 struct srv {
-	u_int16_t priority;		/* SRV 16 bit priority */
-	u_int16_t weight;		/* 16 bit weight */
-	u_int16_t port;			/* 16 bit port */
+	uint16_t priority;		/* SRV 16 bit priority */
+	uint16_t weight;		/* 16 bit weight */
+	uint16_t port;			/* 16 bit port */
 	char target[DNS_MAXNAME];	/* SRV target name */
 	int targetlen;			/* SRV target name length */
 };
 
 struct sshfp {
-	u_int8_t algorithm;		/* SSHFP algorithm */
-	u_int8_t fptype;		/* SSHFP fingerprint type */
+	uint8_t algorithm;		/* SSHFP algorithm */
+	uint8_t fptype;		/* SSHFP fingerprint type */
 	char fingerprint[DNS_MAXNAME];  /* fingerprint */
 	int fplen;			/* fingerprint length */
 };
 
 struct tlsa {
-	u_int8_t usage;			/* TLSA usage */
-	u_int8_t selector;		/* TLSA selector */
-	u_int8_t matchtype;		/* TLSA matching type */
+	uint8_t usage;			/* TLSA usage */
+	uint8_t selector;		/* TLSA selector */
+	uint8_t matchtype;		/* TLSA matching type */
 	char data[DNS_MAXNAME];  	/* TLSA data */
 	int datalen;			/* data length */
 };
 
 struct naptr {
-	u_int16_t order;		/* NAPTR 16 bit order */
-	u_int16_t preference;		/* 16 bit preference */
+	uint16_t order;		/* NAPTR 16 bit order */
+	uint16_t preference;		/* 16 bit preference */
 	char flags[DNS_MAXNAME];	/* flags 255 bytes */
 	int flagslen;			/* flags length */
 	char services[DNS_MAXNAME];	/* services */
@@ -287,7 +287,7 @@ struct sreply {
 	int salen;		/* length of struct sockaddr */
 	struct rbtree *rbt1;	/* first resolved domain */
 	struct rbtree *rbt2;	/* CNAME to second resolved domain */
-	u_int8_t region;	/* region of question */
+	uint8_t region;	/* region of question */
 	int istcp;		/* when set it's tcp */
 	int wildcard;		/* wildcarding boolean */
 	char *replybuf;		/* reply buffer */
@@ -344,8 +344,8 @@ struct rr {
 };
 
 struct rrset {
-	u_int16_t rrtype;
-	u_int32_t ttl;
+	uint16_t rrtype;
+	uint32_t ttl;
 	time_t created;
 	TAILQ_ENTRY(rrset) entries;
 	TAILQ_HEAD(rrh, rr) rr_head;
@@ -369,8 +369,8 @@ struct rbtree {
 
 struct rrtab {
         char *name;
-        u_int16_t type;
-	u_int16_t internal_type;
+        uint16_t type;
+	uint16_t internal_type;
 };
 
 
@@ -437,7 +437,7 @@ struct mzone_dest {
 	int	notified;
 	char	requestmac[32];
 	char 	*tsigkey;
-	u_int16_t port;
+	uint16_t port;
 };
 	
 struct mzone {
@@ -467,7 +467,7 @@ struct rzone {
 	char 			*zonename;
 	char			*zone;
 	int			zonelen;
-	u_int16_t		primaryport;
+	uint16_t		primaryport;
 	char			*primary;
 	struct sockaddr_storage storage;
 	char			*tsigkey;
@@ -480,7 +480,7 @@ struct rzone {
 struct raxfr_logic {
 	int rrtype;
 	int dnssec;
-	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
+	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
 };
 
 struct scache {

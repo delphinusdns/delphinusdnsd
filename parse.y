@@ -76,9 +76,9 @@ void 		yyerror(const char *);
 int		yylex(void);
 
 extern void 	pack(char *, char *, int);
-extern void 	pack32(char *, u_int32_t);
-extern void 	pack16(char *, u_int16_t);
-extern void 	pack8(char *, u_int8_t);
+extern void 	pack32(char *, uint32_t);
+extern void 	pack16(char *, uint16_t);
+extern void 	pack8(char *, uint8_t);
 extern uint32_t unpack32(char *);
 extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
@@ -88,10 +88,10 @@ extern struct rrtab 	*rrlookup(char *);
 extern int	base32hex_decode(u_char *, u_char *);
 extern void 	dolog(int, char *, ...);
 extern char 	*dns_label(char *, int *);
-extern u_int8_t find_region(struct sockaddr_storage *, int);
+extern uint8_t find_region(struct sockaddr_storage *, int);
 extern int 	insert_apex(char *, char *, int);
 extern int 	insert_nsec3(char *, char *, char *, int);
-extern int 	insert_region(char *, char *, u_int8_t);
+extern int 	insert_region(char *, char *, uint8_t);
 extern int 	insert_axfr(char *, char *);
 extern int 	insert_notifyddd(char *, char *);
 extern int 	insert_filter(char *, char *);
@@ -106,7 +106,7 @@ extern int 	mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int 	mybase64_decode(char const *, u_char *, size_t);
 extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
-extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
+extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern void flag_rr(struct rbtree *, uint32_t);
 extern int pull_rzone(struct rzone *, time_t);
@@ -135,8 +135,8 @@ extern int ratelimit;
 extern int ratelimit_packets_per_second;
 extern int ratelimit_cidr;
 extern int ratelimit_cidr6;
-extern u_int16_t port;
-extern u_int32_t cachesize;
+extern uint16_t port;
+extern uint32_t cachesize;
 extern char *bind_list[255];
 extern char *interface_list[255];
 extern char *versionstring;
@@ -244,10 +244,10 @@ int 		fill_srv(ddDB *, char *, char *, int, int, int, int, char *);
 int 		fill_tlsa(ddDB *, char *, char *,int, uint8_t, uint8_t, uint8_t, char *);
 int 		fill_txt(ddDB *, char *, char *, int, char *);
 int		fill_dnskey(ddDB *, char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, char *, uint16_t);
-int		fill_rrsig(ddDB *, char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
-int 		fill_nsec(ddDB *, char *, char *, u_int32_t, char *, char *);
-int		fill_nsec3param(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
-int		fill_nsec3(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
+int		fill_rrsig(ddDB *, char *, char *, uint32_t, char *, uint8_t, uint8_t, uint32_t, uint64_t, uint64_t, uint16_t, char *, char *);
+int 		fill_nsec(ddDB *, char *, char *, uint32_t, char *, char *);
+int		fill_nsec3param(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *);
+int		fill_nsec3(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *, char *, char *);
 int		fill_ds(ddDB *, char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, char *, uint16_t);
 int		fill_rp(ddDB *, char *, char *, int, char *, char *);
 int		fill_hinfo(ddDB *, char *, char *, int, char *, char *);
@@ -2619,7 +2619,7 @@ fill_dnskey(ddDB *db, char *name, char *type, uint32_t myttl, uint16_t flags, ui
 }
 
 int
-fill_rrsig(ddDB *db, char *name, char *type, u_int32_t myttl, char *typecovered, u_int8_t algorithm, u_int8_t labels, u_int32_t original_ttl, u_int64_t sig_expiration, u_int64_t sig_inception, u_int16_t keytag, char *signers_name, char *signature)
+fill_rrsig(ddDB *db, char *name, char *type, uint32_t myttl, char *typecovered, uint8_t algorithm, uint8_t labels, uint32_t original_ttl, uint64_t sig_expiration, uint64_t sig_inception, uint16_t keytag, char *signers_name, char *signature)
 {
 	ddDBT key, data;
 	struct rbtree *rbt;
@@ -2788,7 +2788,7 @@ fill_ds(ddDB *db, char *name, char *type, uint32_t myttl, uint16_t keytag, uint8
 }
 
 int
-fill_nsec3(ddDB *db, char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt, char *nextname, char *bitmap)
+fill_nsec3(ddDB *db, char *name, char *type, uint32_t myttl, uint8_t algorithm, uint8_t flags, uint16_t iterations, char *salt, char *nextname, char *bitmap)
 {
 	struct nsec3 *nsec3;
 	struct rbtree *rbt;
@@ -2861,7 +2861,7 @@ fill_nsec3(ddDB *db, char *name, char *type, u_int32_t myttl, u_int8_t algorithm
 }
 
 int
-fill_nsec3param(ddDB *db, char *name, char *type, u_int32_t myttl, u_int8_t algorithm, u_int8_t flags, u_int16_t iterations, char *salt)
+fill_nsec3param(ddDB *db, char *name, char *type, uint32_t myttl, uint8_t algorithm, uint8_t flags, uint16_t iterations, char *salt)
 {
 	struct rbtree *rbt;
 	struct nsec3param *nsec3param;
@@ -2904,7 +2904,7 @@ fill_nsec3param(ddDB *db, char *name, char *type, u_int32_t myttl, u_int8_t algo
 }
 
 int
-fill_nsec(ddDB *db, char *name, char *type, u_int32_t myttl, char *domainname, char *bitmap)
+fill_nsec(ddDB *db, char *name, char *type, uint32_t myttl, char *domainname, char *bitmap)
 {
 	struct nsec *nsec;
 	struct rbtree *rbt;

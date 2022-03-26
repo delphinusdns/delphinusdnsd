@@ -50,12 +50,12 @@
 struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
 struct rbtree * find_rrset(ddDB *db, char *name, int len);
 struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
-struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
-int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
+struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
+int add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata);
 int display_rr(struct rrset *rrset);
 int rotate_rr(struct rrset *rrset);
 void flag_rr(struct rbtree *rbt, uint32_t flag);
-int expire_rr(ddDB *, char *, int, u_int16_t, time_t);
+int expire_rr(ddDB *, char *, int, uint16_t, time_t);
 int expire_db(ddDB *, int);
 void remove_rbt(struct rbtree *);
 uint32_t match_zoneglue(struct rbtree *rbt);
@@ -347,7 +347,7 @@ find_rrsetwild(ddDB *db, char *name, int len)
 
 
 int
-add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata)
+add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata)
 {
 	struct rrset *rp0, *rp;
 	struct rr *rt;
@@ -387,7 +387,7 @@ add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata)
 }
 
 int
-expire_rr(ddDB *db, char *name, int len, u_int16_t rrtype, time_t now)
+expire_rr(ddDB *db, char *name, int len, uint16_t rrtype, time_t now)
 {
 	struct rbtree *rbt = NULL;
 	struct rrset *rp;
@@ -520,7 +520,7 @@ expire_db(ddDB *db, int all)
 }
 
 struct rrset *
-find_rr(struct rbtree *rbt, u_int16_t rrtype)
+find_rr(struct rbtree *rbt, uint16_t rrtype)
 {
 	struct rrset *rp = NULL, *rp0 = NULL;
 

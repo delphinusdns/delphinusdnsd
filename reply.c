@@ -57,9 +57,9 @@
 /* prototypes */
 
 extern void 	pack(char *, char *, int);
-extern void 	pack32(char *, u_int32_t);
-extern void 	pack16(char *, u_int16_t);
-extern void 	pack8(char *, u_int8_t);
+extern void 	pack32(char *, uint32_t);
+extern void 	pack16(char *, uint16_t);
+extern void 	pack8(char *, uint8_t);
 extern uint32_t unpack32(char *);
 extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
@@ -76,7 +76,7 @@ extern int 		additional_opt(struct question *, char *, int, int, struct sockaddr
 extern int 		additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
 extern int 		additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 extern int 		additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int);
-extern struct question 	*build_fake_question(char *, int, u_int16_t, char *, int);
+extern struct question 	*build_fake_question(char *, int, uint16_t, char *, int);
 extern int 		compress_label(u_char *, int, int);
 extern void 		dolog(int, char *, ...);
 extern int 		free_question(struct question *);
@@ -86,7 +86,7 @@ extern char *		dns_label(char *, int *);
 extern char * hash_name(char *name, int len, struct nsec3param *n3p);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
-extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
+extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern int rotate_rr(struct rrset *rrset);
 extern char * find_next_closer_nsec3(char *zonename, int zonelen, char *hashname);
@@ -98,13 +98,13 @@ extern struct rbtree * find_nsec3_match_qname_wild(char *, int, struct rbtree *,
 extern struct rbtree * find_closest_encloser(ddDB *db, char *name, int namelen);
 extern struct rbtree *		get_soa(ddDB *, struct question *);
 extern struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
-extern struct rbtree *		Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
+extern struct rbtree *		Lookup_zone(ddDB *, char *, uint16_t, uint16_t, int);
 extern int 			dn_contains(char *, int, char *, int);
 extern struct zoneentry *	zone_findzone(struct rbtree *);
 extern struct rbtree * find_closest_encloser_nsec3(char *, int, struct rbtree *, ddDB *);
 
 
-u_int16_t 	create_anyreply(struct sreply *, char *, int, int, int, uint32_t, uint);
+uint16_t 	create_anyreply(struct sreply *, char *, int, int, int, uint32_t, uint);
 int		reply_zonemd(struct sreply *, int *, ddDB *);
 int		reply_caa(struct sreply *, int *, ddDB *);
 int		reply_hinfo(struct sreply *, int *, ddDB *);
@@ -169,15 +169,15 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int a_count;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 		in_addr_t rdata;		/* 16 */
 	} __attribute__((packed));
 
@@ -195,7 +195,7 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -223,7 +223,7 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
@@ -376,19 +376,19 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int a_count;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
-		u_int8_t algorithm;
-		u_int8_t flags;
-		u_int16_t iterations;
-		u_int8_t saltlen;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint8_t algorithm;
+		uint8_t flags;
+		uint16_t iterations;
+		uint8_t saltlen;
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -405,7 +405,7 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	int saltlen;
 	
 	time_t now;
@@ -431,7 +431,7 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
@@ -585,19 +585,19 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int a_count;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
-		u_int8_t algorithm;
-		u_int8_t flags;
-		u_int16_t iterations;
-		u_int8_t saltlen;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint8_t algorithm;
+		uint8_t flags;
+		uint16_t iterations;
+		uint8_t saltlen;
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -613,8 +613,8 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
-	u_int8_t *somelen;
+	uint16_t rollback;
+	uint8_t *somelen;
 	int bitmaplen, saltlen, nextlen;
 
 	time_t now;
@@ -646,7 +646,7 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
@@ -714,7 +714,7 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 		outlen += saltlen;
 	}
 
-	somelen = (u_int8_t *)&reply[outlen];
+	somelen = (uint8_t *)&reply[outlen];
 	*somelen = nextlen;
 
 	outlen += 1;
@@ -811,16 +811,16 @@ reply_zonemd(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int zonemd_count;
 	int zonemdlen, hashlen;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -836,7 +836,7 @@ reply_zonemd(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -866,7 +866,7 @@ reply_zonemd(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -1017,15 +1017,15 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int caa_count;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -1041,7 +1041,7 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	int valuelen, taglen;
 	time_t now;
 	uint32_t zonenumberx;
@@ -1072,7 +1072,7 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -1212,15 +1212,15 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int hinfo_count;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -1236,7 +1236,7 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -1266,7 +1266,7 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -1407,15 +1407,15 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int rp_count;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -1431,7 +1431,7 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -1461,7 +1461,7 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -1605,15 +1605,15 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int a_count;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -1629,7 +1629,7 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	int ndnlen, bitmaplen;
 	time_t now;
 
@@ -1658,7 +1658,7 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -1815,18 +1815,18 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int a_count;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
-		u_int16_t key_tag;
-		u_int8_t algorithm;
-		u_int8_t digest_type;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint16_t key_tag;
+		uint8_t algorithm;
+		uint8_t digest_type;
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -1842,7 +1842,7 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -1872,7 +1872,7 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -2038,18 +2038,18 @@ reply_generic_dnskey(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrt
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int dnskey_count;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
-		u_int16_t flags;
-		u_int8_t protocol;
-		u_int8_t algorithm;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint16_t flags;
+		uint8_t protocol;
+		uint8_t algorithm;
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -2066,7 +2066,7 @@ reply_generic_dnskey(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrt
 	int replysize = 512;
 	int retlen = -1;
 	int rrsig_count = 0;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -2096,7 +2096,7 @@ reply_generic_dnskey(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrt
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -2242,15 +2242,15 @@ reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int a_count;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 		in_addr_t rdata;		/* 16 */
 	} __attribute__((packed));
 
@@ -2263,7 +2263,7 @@ reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 	int replysize = 512;
 	int retlen = -1;
 	int tmplen = 0;
-	u_int16_t rollback;
+	uint16_t rollback;
 
 	if ((find_rr(rbt, DNS_TYPE_RRSIG)) == 0)
 		return -1;
@@ -2288,7 +2288,7 @@ reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -2342,15 +2342,15 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int aaaa_count;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 		char rdata;		/* 12 + 16 */
 	} __attribute__((packed));
 
@@ -2369,7 +2369,7 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -2400,7 +2400,7 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -2553,17 +2553,17 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct dns_header *odh;
 	int mx_count;
 	char *name;
-	u_int16_t outlen = 0;
-	u_int16_t namelen;
+	uint16_t outlen = 0;
+	uint16_t namelen;
 	int tmplen = 0;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
-		u_int16_t mx_priority;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint16_t mx_priority;
 		char exchange;
 	} __attribute__((packed));
 
@@ -2580,7 +2580,7 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 
 	int addiscount;
@@ -2625,7 +2625,7 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -2652,7 +2652,7 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 		else
 			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-		answer->rdlength = htons(sizeof(u_int16_t) + ((struct smx *)rrp->rdata)->exchangelen);
+		answer->rdlength = htons(sizeof(uint16_t) + ((struct smx *)rrp->rdata)->exchangelen);
 
 		answer->mx_priority = htons(((struct smx *)rrp->rdata)->preference);
 		memcpy((char *)&answer->exchange, (char *)((struct smx *)rrp->rdata)->exchange, ((struct smx *)rrp->rdata)->exchangelen);
@@ -2923,14 +2923,14 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 	int tmplen = 0;
 	int ns_count;
 	char *name;
-	u_int16_t outlen = 0;
-	u_int16_t namelen;
+	uint16_t outlen = 0;
+	uint16_t namelen;
 
 	struct answer {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 		char ns;
 	} __attribute__((packed));
 
@@ -2951,7 +2951,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	int delegation, addiscount;
 	int addcount = 0;
 	int retcount;
@@ -2998,7 +2998,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 	
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	/* no set_reply_flags here, it differs */
 
 	SET_DNS_REPLY(odh);
@@ -3364,17 +3364,17 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen;
+	uint16_t outlen;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 		char rdata;		
 	} __attribute__((packed));
 
@@ -3390,7 +3390,7 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 
 	now = time(NULL);
@@ -3420,7 +3420,7 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	rollback = outlen;
 
 	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -3554,17 +3554,17 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen;
+	uint16_t outlen;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 		char rdata;		
 	} __attribute__((packed));
 
@@ -3580,7 +3580,7 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 
 	now = time(NULL);
@@ -3613,7 +3613,7 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	rollback = outlen;
 
 	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -3743,17 +3743,17 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen;
+	uint16_t outlen;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 		char rdata;		
 	} __attribute__((packed));
 
@@ -3769,7 +3769,7 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 
 	now = time(NULL);
@@ -3800,7 +3800,7 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	rollback = outlen;
 
 	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -3875,35 +3875,35 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 
-	if (outlen + sizeof(u_int32_t) > replysize) {
+	if (outlen + sizeof(uint32_t) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->serial));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 	
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->refresh));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->retry));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->expire));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->minttl));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 
 	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
 
@@ -3995,15 +3995,15 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen;
+	uint16_t outlen;
 	char *p;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 		char rdata;		
 	} __attribute__((packed));
 
@@ -4019,7 +4019,7 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	int txt_count = 0;
 	time_t now;
 	uint32_t zonenumberx;
@@ -4054,7 +4054,7 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 	rollback = outlen;
 
 	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -4202,15 +4202,15 @@ reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen;
+	uint16_t outlen;
 	char *p;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 		char rdata;		
 	} __attribute__((packed));
 
@@ -4245,7 +4245,7 @@ reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 
 	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(NULL, odh, q);
 
 	odh->question = htons(1);
@@ -4296,7 +4296,7 @@ reply_loc(struct sreply *sreply, int *sretlen, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	int loc_count;
-	u_int16_t outlen;
+	uint16_t outlen;
 
 	struct answer {
 		char name[2];
@@ -4325,7 +4325,7 @@ reply_loc(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -4356,7 +4356,7 @@ reply_loc(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -4484,17 +4484,17 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	int tlsa_count;
-	u_int16_t outlen;
+	uint16_t outlen;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
-		u_int8_t usage; 
-		u_int8_t selector;
-		u_int8_t matchtype;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint8_t usage; 
+		uint8_t selector;
+		uint8_t matchtype;
 		char target;
 	} __attribute__((packed));
 
@@ -4511,7 +4511,7 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 	int typelen = 0;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -4542,7 +4542,7 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -4580,7 +4580,7 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 			return (retlen);
 		}
 
-		answer->rdlength = htons((3 * sizeof(u_int8_t)) + typelen); 
+		answer->rdlength = htons((3 * sizeof(uint8_t)) + typelen); 
 		answer->usage = ((struct tlsa *)rrp->rdata)->usage;
 		answer->selector = ((struct tlsa *)rrp->rdata)->selector;
 		answer->matchtype = ((struct tlsa *)rrp->rdata)->matchtype;
@@ -4681,16 +4681,16 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	int sshfp_count;
-	u_int16_t outlen;
+	uint16_t outlen;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
-		u_int8_t sshfp_alg;
-		u_int8_t sshfp_type;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint8_t sshfp_alg;
+		uint8_t sshfp_type;
 		char target;
 	} __attribute__((packed));
 
@@ -4707,7 +4707,7 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 	int typelen = 0;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -4738,7 +4738,7 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -4776,7 +4776,7 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 			return (retlen);
 		}
 
-		answer->rdlength = htons((2 * sizeof(u_int8_t)) + typelen); 
+		answer->rdlength = htons((2 * sizeof(uint8_t)) + typelen); 
 		answer->sshfp_alg = ((struct sshfp *)rrp->rdata)->algorithm;
 		answer->sshfp_type = ((struct sshfp *)rrp->rdata)->fptype;
 
@@ -4876,16 +4876,16 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	int naptr_count;
-	u_int16_t outlen;
+	uint16_t outlen;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
-		u_int16_t naptr_order;
-		u_int16_t naptr_preference;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint16_t naptr_order;
+		uint16_t naptr_preference;
 		char rest;
 	} __attribute__((packed));
 
@@ -4904,7 +4904,7 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	int namelen;
 	char *p;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -4934,7 +4934,7 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -5104,17 +5104,17 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
 	int srv_count;
-	u_int16_t outlen;
+	uint16_t outlen;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
-		u_int16_t srv_priority;
-		u_int16_t srv_weight;
-		u_int16_t srv_port;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint16_t srv_priority;
+		uint16_t srv_weight;
+		uint16_t srv_port;
 		char target;
 	} __attribute__((packed));
 
@@ -5131,7 +5131,7 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 	int replysize = 512;
 	int retlen = -1;
 	int tmplen;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -5161,7 +5161,7 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -5187,7 +5187,7 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 		else
 			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-		answer->rdlength = htons((3 * sizeof(u_int16_t)) + ((struct srv *)rrp->rdata)->targetlen);
+		answer->rdlength = htons((3 * sizeof(uint16_t)) + ((struct srv *)rrp->rdata)->targetlen);
 
 		answer->srv_priority = htons(((struct srv *)rrp->rdata)->priority);
 		answer->srv_weight = htons(((struct srv *)rrp->rdata)->weight);
@@ -5299,7 +5299,7 @@ reply_notimpl(struct sreply  *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen;
+	uint16_t outlen;
 
 	char *buf = sreply->buf;
 	int len = sreply->len;
@@ -5322,7 +5322,7 @@ reply_notimpl(struct sreply  *sreply, int *sretlen, ddDB *db)
 
 	memcpy(reply, buf, len);
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 
 	SET_DNS_REPLY(odh);
 	SET_DNS_RCODE_NOTIMPL(odh);
@@ -5342,17 +5342,17 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen;
+	uint16_t outlen;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
-	u_int16_t rollback;
+	uint16_t rollback;
 
 	struct answer {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 10 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 10 */
 		char rdata;		
 	} __attribute__((packed));
 
@@ -5402,7 +5402,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == 0) {
 
 		memcpy(reply, buf, len);
-		memset((char *)&odh->query, 0, sizeof(u_int16_t));
+		memset((char *)&odh->query, 0, sizeof(uint16_t));
 
 		SET_DNS_REPLY(odh);
 		SET_DNS_RCODE_NAMEERR(odh);
@@ -5454,7 +5454,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 	rollback = outlen;
 
 	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	SET_DNS_RCODE_NAMEERR(odh);
 	HTONS(odh->query);
 	set_reply_flags(rbt, odh, q);
@@ -5527,36 +5527,36 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 
 
 	/* XXX */
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		/* XXX server error reply? */
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->serial));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 	
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->refresh));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->retry));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->expire));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->minttl));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 
 	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
 
@@ -5733,7 +5733,7 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 
 	int len = sreply->len;
 	char *buf = sreply->buf;
@@ -5764,7 +5764,7 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
 		outlen += len;
 	}
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	SET_DNS_RCODE_REFUSED(odh);
 	HTONS(odh->query);
 
@@ -5799,8 +5799,8 @@ reply_notauth(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
-	u_int16_t tmplen;
+	uint16_t outlen = 0;
+	uint16_t tmplen;
 
 	int len = sreply->len;
 	char *buf = sreply->buf;
@@ -5823,7 +5823,7 @@ reply_notauth(struct sreply *sreply, int *sretlen, ddDB *db)
 		return (retlen);
 	}
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
 
 	outlen += (sizeof(struct dns_header) + q->hdr->namelen + 4); 
@@ -5856,8 +5856,8 @@ reply_notify(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
-	u_int16_t tmplen;
+	uint16_t outlen = 0;
+	uint16_t tmplen;
 
 	int len = sreply->len;
 	char *buf = sreply->buf;
@@ -5879,7 +5879,7 @@ reply_notify(struct sreply *sreply, int *sretlen, ddDB *db)
 		return (retlen);
 	}
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 
 	memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
 	outlen += (sizeof(struct dns_header) + q->hdr->namelen + 4); 
@@ -5916,7 +5916,7 @@ reply_fmterror(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen;
+	uint16_t outlen;
 
 	int len = sreply->len;
 	char *buf = sreply->buf;
@@ -5938,8 +5938,8 @@ reply_fmterror(struct sreply *sreply, int *sretlen, ddDB *db)
 		return (retlen);
 	}
 
-	memcpy((char *)&odh->id, buf, sizeof(u_int16_t));
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memcpy((char *)&odh->id, buf, sizeof(uint16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 
 	SET_DNS_REPLY(odh);
 	SET_DNS_RCODE_FORMATERR(odh);
@@ -5960,17 +5960,17 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen;
+	uint16_t outlen;
 	int i, tmplen;
 	int labellen;
 	char *label, *plabel;
-	u_int16_t rollback;
+	uint16_t rollback;
 
 	struct answer {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 		char rdata;		
 	} __attribute__((packed));
 
@@ -6020,7 +6020,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == 0) {
 		memcpy(reply, buf, len);
 
-		memset((char *)&odh->query, 0, sizeof(u_int16_t));
+		memset((char *)&odh->query, 0, sizeof(uint16_t));
 		set_reply_flags(rbt, odh, q);
 
 		if (istcp) {
@@ -6062,7 +6062,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 	rollback = outlen;
 
 	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);
@@ -6133,36 +6133,36 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	
 	/* XXX */
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		/* XXX server error reply? */
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->serial));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 	
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->refresh));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->retry));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->expire));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 
-	if ((outlen + sizeof(u_int32_t)) > replysize) {
+	if ((outlen + sizeof(uint32_t)) > replysize) {
 		return (retlen);
 	}
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->minttl));
-	outlen += sizeof(u_int32_t);
+	outlen += sizeof(uint32_t);
 
 	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
 	/* RRSIG reply_nxdomain */
@@ -6323,7 +6323,7 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen;
+	uint16_t outlen;
 
 	char *buf = sreply->buf;
 	int len = sreply->len;
@@ -6332,7 +6332,7 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	struct zoneentry *res = NULL;
 
 	if (istcp) {
@@ -6358,7 +6358,7 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 	rollback = outlen;
 
 	/* blank query */
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(NULL, odh, q);
 
 	odh->question = htons(1);
@@ -6451,7 +6451,7 @@ skip:
  * 
  */
 
-u_int16_t
+uint16_t
 create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int soa, uint32_t zonenumberx, uint compress)
 {
 	int a_count, aaaa_count, ns_count, mx_count, srv_count, sshfp_count;
@@ -6462,10 +6462,10 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	int caa_count, rp_count, hinfo_count;
 	int tmplen;
 	struct answer {
-		u_int16_t type;		/* 0 */
-                u_int16_t class;	/* 2 */
-                u_int32_t ttl;		/* 4 */
-                u_int16_t rdlength;      /* 8 */
+		uint16_t type;		/* 0 */
+                uint16_t class;	/* 2 */
+                uint32_t ttl;		/* 4 */
+                uint16_t rdlength;      /* 8 */
 		char rdata[0];		/* 10 */
 	} __packed;
 	struct answer *answer;
@@ -6477,15 +6477,15 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	struct dns_header *odh = (struct dns_header *)reply;
 	int labellen;
 	char *label, *plabel;
-	u_int16_t namelen = 0;
-	u_int16_t *dnskey_flags;
-	u_int16_t *ds_keytag;
-	u_int16_t *nsec3_iterations;
-	u_int8_t *sshfp_alg, *sshfp_fptype, *ds_alg, *ds_digesttype;
-	u_int8_t *dnskey_protocol, *dnskey_alg, *tlsa_usage, *tlsa_selector;
-	u_int8_t *tlsa_matchtype;
-	u_int8_t *nsec3param_alg, *nsec3param_flags, *nsec3param_saltlen;
-	u_int8_t *nsec3_alg, *nsec3_flags, *nsec3_saltlen, *nsec3_hashlen;
+	uint16_t namelen = 0;
+	uint16_t *dnskey_flags;
+	uint16_t *ds_keytag;
+	uint16_t *nsec3_iterations;
+	uint8_t *sshfp_alg, *sshfp_fptype, *ds_alg, *ds_digesttype;
+	uint8_t *dnskey_protocol, *dnskey_alg, *tlsa_usage, *tlsa_selector;
+	uint8_t *tlsa_matchtype;
+	uint8_t *nsec3param_alg, *nsec3param_flags, *nsec3param_saltlen;
+	uint8_t *nsec3_alg, *nsec3_flags, *nsec3_saltlen, *nsec3_hashlen;
 	char *name, *p;
 	int i;
 	time_t now;
@@ -6577,40 +6577,40 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			}
 		}
 
-		if ((offset + sizeof(u_int32_t)) > rlen) {
+		if ((offset + sizeof(uint32_t)) > rlen) {
 			goto truncate;
         	}
 
 		pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->serial));
-		offset += sizeof(u_int32_t);      
+		offset += sizeof(uint32_t);      
         
-        	if ((offset + sizeof(u_int32_t)) > rlen) {
+        	if ((offset + sizeof(uint32_t)) > rlen) {
 			goto truncate;
         	}
 	
 		pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->refresh));
-		offset += sizeof(u_int32_t);    
+		offset += sizeof(uint32_t);    
 
-		if ((offset + sizeof(u_int32_t)) > rlen) {
+		if ((offset + sizeof(uint32_t)) > rlen) {
 			goto truncate;
         	}
 
 		pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->retry));
-		offset += sizeof(u_int32_t);       
+		offset += sizeof(uint32_t);       
 
-		if ((offset + sizeof(u_int32_t)) > rlen) {
+		if ((offset + sizeof(uint32_t)) > rlen) {
 			goto truncate;
 		}
 
 		pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->expire));
-		offset += sizeof(u_int32_t);
+		offset += sizeof(uint32_t);
 
-		if ((offset + sizeof(u_int32_t)) > rlen) {
+		if ((offset + sizeof(uint32_t)) > rlen) {
 			goto truncate;
         	}
 
 		pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->minttl));
-		offset += sizeof(u_int32_t);
+		offset += sizeof(uint32_t);
 
 		answer->rdlength = htons(&reply[offset] - answer->rdata);
 
@@ -6665,14 +6665,14 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 				goto truncate;
 
 			pack16(&reply[offset], htons(((struct cdnskey *)rrp->rdata)->flags));
-			offset += sizeof(u_int16_t);
+			offset += sizeof(uint16_t);
 			
-			dnskey_protocol = (u_int8_t *)&reply[offset];
+			dnskey_protocol = (uint8_t *)&reply[offset];
 			*dnskey_protocol = ((struct cdnskey *)rrp->rdata)->protocol;
 	
 			offset++;
 
-			dnskey_alg = (u_int8_t *)&reply[offset];
+			dnskey_alg = (uint8_t *)&reply[offset];
 			*dnskey_alg = ((struct cdnskey *)rrp->rdata)->algorithm;
 
 			offset++;
@@ -6728,14 +6728,14 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 				goto truncate;
 
 			pack16(&reply[offset], htons(((struct dnskey *)rrp->rdata)->flags));
-			offset += sizeof(u_int16_t);
+			offset += sizeof(uint16_t);
 			
-			dnskey_protocol = (u_int8_t *)&reply[offset];
+			dnskey_protocol = (uint8_t *)&reply[offset];
 			*dnskey_protocol = ((struct dnskey *)rrp->rdata)->protocol;
 	
 			offset++;
 
-			dnskey_alg = (u_int8_t *)&reply[offset];
+			dnskey_alg = (uint8_t *)&reply[offset];
 			*dnskey_alg = ((struct dnskey *)rrp->rdata)->algorithm;
 
 			offset++;
@@ -7022,14 +7022,14 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 				goto truncate;
 
 			pack16(&reply[offset], htons(((struct cds *)rrp->rdata)->key_tag));
-			offset += sizeof(u_int16_t);
+			offset += sizeof(uint16_t);
 			
-			ds_alg = (u_int8_t *)&reply[offset];
+			ds_alg = (uint8_t *)&reply[offset];
 			*ds_alg = ((struct cds *)rrp->rdata)->algorithm;
 	
 			offset++;
 
-			ds_digesttype = (u_int8_t *)&reply[offset];
+			ds_digesttype = (uint8_t *)&reply[offset];
 			*ds_digesttype = ((struct cds *)rrp->rdata)->digest_type;
 
 			offset++;
@@ -7084,14 +7084,14 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 				goto truncate;
 
 			pack16(&reply[offset], htons(((struct ds *)rrp->rdata)->key_tag));
-			offset += sizeof(u_int16_t);
+			offset += sizeof(uint16_t);
 			
-			ds_alg = (u_int8_t *)&reply[offset];
+			ds_alg = (uint8_t *)&reply[offset];
 			*ds_alg = ((struct ds *)rrp->rdata)->algorithm;
 	
 			offset++;
 
-			ds_digesttype = (u_int8_t *)&reply[offset];
+			ds_digesttype = (uint8_t *)&reply[offset];
 			*ds_digesttype = ((struct ds *)rrp->rdata)->digest_type;
 
 			offset++;
@@ -7151,20 +7151,20 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			+ ((struct nsec3 *)rrp->rdata)->bitmap_len > rlen)
 			goto truncate;
 
-		nsec3_alg = (u_int8_t *)&reply[offset];
+		nsec3_alg = (uint8_t *)&reply[offset];
 		*nsec3_alg = ((struct nsec3 *)rrp->rdata)->algorithm;
 
 		offset++;
 
-		nsec3_flags = (u_int8_t *)&reply[offset];
+		nsec3_flags = (uint8_t *)&reply[offset];
 		*nsec3_flags = ((struct nsec3 *)rrp->rdata)->flags;
 
 		offset++;
 
 		pack16(&reply[offset], htons(((struct nsec3 *)rrp->rdata)->iterations));
-		offset += sizeof(u_int16_t);
+		offset += sizeof(uint16_t);
 
-		nsec3_saltlen = (u_int8_t *)&reply[offset];
+		nsec3_saltlen = (uint8_t *)&reply[offset];
 		*nsec3_saltlen = ((struct nsec3 *)rrp->rdata)->saltlen;
 		offset++;
 	
@@ -7173,7 +7173,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		
 		offset += ((struct nsec3 *)rrp->rdata)->saltlen;	
 
-		nsec3_hashlen = (u_int8_t *)&reply[offset];
+		nsec3_hashlen = (uint8_t *)&reply[offset];
 		*nsec3_hashlen = ((struct nsec3 *)rrp->rdata)->nextlen;
 		offset++;
 
@@ -7231,20 +7231,20 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			+ sizeof(((struct nsec3param *)rrp->rdata)->saltlen) > rlen)
 			goto truncate;
 
-		nsec3param_alg = (u_int8_t *)&reply[offset];
+		nsec3param_alg = (uint8_t *)&reply[offset];
 		*nsec3param_alg = ((struct nsec3param *)rrp->rdata)->algorithm;
 
 		offset++;
 
-		nsec3param_flags = (u_int8_t *)&reply[offset];
+		nsec3param_flags = (uint8_t *)&reply[offset];
 		*nsec3param_flags = ((struct nsec3param *)rrp->rdata)->flags;
 
 		offset++;
 
 		pack16(&reply[offset], htons(((struct nsec3param *)rrp->rdata)->iterations));
-		offset += sizeof(u_int16_t);
+		offset += sizeof(uint16_t);
 
-		nsec3param_saltlen = (u_int8_t *)&reply[offset];
+		nsec3param_saltlen = (uint8_t *)&reply[offset];
 		*nsec3param_saltlen = ((struct nsec3param *)rrp->rdata)->saltlen;
 
 		offset++;
@@ -7470,12 +7470,12 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			else
 				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-			answer->rdlength = htons(sizeof(u_int16_t) + ((struct smx *)rrp->rdata)->exchangelen);
+			answer->rdlength = htons(sizeof(uint16_t) + ((struct smx *)rrp->rdata)->exchangelen);
 
 			offset += 10;		/* up to rdata length */
 			
 			pack16(&reply[offset], htons(((struct smx *)rrp->rdata)->preference));
-			offset += sizeof(u_int16_t);
+			offset += sizeof(uint16_t);
 
 			if (offset + ((struct smx *)rrp->rdata)->exchangelen > rlen)
 				goto truncate;
@@ -7585,7 +7585,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
 			typelen = ((struct zonemd *)rrp->rdata)->hashlen;
-			answer->rdlength = htons((2 * sizeof(u_int8_t)) + sizeof(uint32_t) + typelen);
+			answer->rdlength = htons((2 * sizeof(uint8_t)) + sizeof(uint32_t) + typelen);
 
 			offset += 10;		/* up to rdata length */
 
@@ -7644,21 +7644,21 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
 			typelen = ((struct tlsa *)rrp->rdata)->matchtype == 1 ? DNS_TLSA_SIZE_SHA256 : DNS_TLSA_SIZE_SHA512;
-			answer->rdlength = htons((3 * sizeof(u_int8_t)) + typelen);
+			answer->rdlength = htons((3 * sizeof(uint8_t)) + typelen);
 
 			offset += 10;		/* up to rdata length */
 			
-			tlsa_usage = (u_int8_t *)&reply[offset];
+			tlsa_usage = (uint8_t *)&reply[offset];
 			*tlsa_usage = ((struct tlsa *)rrp->rdata)->usage;
 
 			offset++;
 
-			tlsa_selector = (u_int8_t *)&reply[offset];
+			tlsa_selector = (uint8_t *)&reply[offset];
 			*tlsa_selector = ((struct tlsa *)rrp->rdata)->selector;
 
 			offset++;
 
-			tlsa_matchtype = (u_int8_t *)&reply[offset];
+			tlsa_matchtype = (uint8_t *)&reply[offset];
 			*tlsa_matchtype = ((struct tlsa *)rrp->rdata)->matchtype;
 
 			offset++;
@@ -7711,16 +7711,16 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			else
 				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-			answer->rdlength = htons((2 * sizeof(u_int8_t)) + ((struct sshfp *)rrp->rdata)->fplen);
+			answer->rdlength = htons((2 * sizeof(uint8_t)) + ((struct sshfp *)rrp->rdata)->fplen);
 
 			offset += 10;		/* up to rdata length */
 			
-			sshfp_alg = (u_int8_t *)&reply[offset];
+			sshfp_alg = (uint8_t *)&reply[offset];
 			*sshfp_alg = ((struct sshfp *)rrp->rdata)->algorithm;
 
 			offset++;
 
-			sshfp_fptype = (u_int8_t *)&reply[offset];
+			sshfp_fptype = (uint8_t *)&reply[offset];
 			*sshfp_fptype = ((struct sshfp *)rrp->rdata)->fptype;
 
 			offset++;
@@ -7772,15 +7772,15 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			else
 				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-			answer->rdlength = htons((2 * sizeof(u_int16_t)) + ((struct naptr *)rrp->rdata)->flagslen + 1 + ((struct naptr *)rrp->rdata)->serviceslen + 1 + ((struct naptr *)rrp->rdata)->regexplen + 1 + ((struct naptr *)rrp->rdata)->replacementlen);
+			answer->rdlength = htons((2 * sizeof(uint16_t)) + ((struct naptr *)rrp->rdata)->flagslen + 1 + ((struct naptr *)rrp->rdata)->serviceslen + 1 + ((struct naptr *)rrp->rdata)->regexplen + 1 + ((struct naptr *)rrp->rdata)->replacementlen);
 
 			offset += 10;		/* up to rdata length */
 			
 			pack16(&reply[offset], htons(((struct naptr *)rrp->rdata)->order));
-			offset += sizeof(u_int16_t);
+			offset += sizeof(uint16_t);
 
 			pack16(&reply[offset], htons(((struct naptr *)rrp->rdata)->preference));
-			offset += sizeof(u_int16_t);
+			offset += sizeof(uint16_t);
 
 			/* flags */
 			if (offset + ((struct naptr *)rrp->rdata)->flagslen + 1> rlen)
@@ -7866,18 +7866,18 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			else
 				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-			answer->rdlength = htons((3 * sizeof(u_int16_t)) + ((struct srv *)rrp->rdata)->targetlen);
+			answer->rdlength = htons((3 * sizeof(uint16_t)) + ((struct srv *)rrp->rdata)->targetlen);
 
 			offset += 10;		/* up to rdata length */
 			
 			pack16(&reply[offset], htons(((struct srv *)rrp->rdata)->priority));
-			offset += sizeof(u_int16_t);
+			offset += sizeof(uint16_t);
 
 			pack16(&reply[offset], htons(((struct srv *)rrp->rdata)->weight));
-			offset += sizeof(u_int16_t);
+			offset += sizeof(uint16_t);
 
 			pack16(&reply[offset], htons(((struct srv *)rrp->rdata)->port));
-			offset += sizeof(u_int16_t);
+			offset += sizeof(uint16_t);
 
 			if (offset + ((struct srv *)rrp->rdata)->targetlen > rlen)
 				goto truncate;
@@ -8069,7 +8069,7 @@ reply_badvers(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen;
+	uint16_t outlen;
 
 	char *buf = sreply->buf;
 	int len = sreply->len;
@@ -8094,7 +8094,7 @@ reply_badvers(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 
 	outlen += (q->hdr->namelen + 4);
 
@@ -8140,15 +8140,15 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 {
 	char *reply = sreply->replybuf;
 	struct dns_header *odh;
-	u_int16_t outlen = 0;
+	uint16_t outlen = 0;
 	int gen_count;
 
 	struct answer {
 		char name[2];
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 		in_addr_t rdata;		/* 16 */
 	} __attribute__((packed));
 
@@ -8166,7 +8166,7 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
-	u_int16_t rollback;
+	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
 
@@ -8196,7 +8196,7 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 	outlen += (q->hdr->namelen + 4);
 	rollback = outlen;
 
-	memset((char *)&odh->query, 0, sizeof(u_int16_t));
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
 	set_reply_flags(rbt, odh, q);
 
 	odh->question = htons(1);

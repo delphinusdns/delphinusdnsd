@@ -68,8 +68,8 @@
 extern void     dolog(int, char *, ...);
 extern char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
 extern void      pack(char *, char *, int);
-extern void     pack16(char *, u_int16_t);
-extern void     pack32(char *, u_int32_t);
+extern void     pack16(char *, uint16_t);
+extern void     pack32(char *, uint32_t);
 extern void     unpack(char *, char *, int);
 extern uint16_t unpack16(char *);
 extern uint32_t unpack32(char *);
@@ -329,9 +329,9 @@ cache_rrsig(struct scache *scache)
 	u_char expand[256];
 	int max = sizeof(expand);
 	int elen = 0;
-	u_int16_t tmp;
+	uint16_t tmp;
 	uint16_t rdlen = scache->rdlen;
-	u_int32_t tmp4;
+	uint32_t tmp4;
 	u_char *p = q;
 
 	memset(&rs, 0, sizeof(struct rrsig));
@@ -389,7 +389,7 @@ int
 cache_ds(struct scache *scache)
 {
 	struct ds d;
-	u_int16_t tmpshort;
+	uint16_t tmpshort;
 	uint16_t rdlen = scache->rdlen;
 	u_char *p = scache->payload;
 	u_char *q = p;
@@ -453,7 +453,7 @@ int
 cache_dnskey(struct scache *scache)
 {
 	struct dnskey dk;
-	u_int16_t tmpshort;
+	uint16_t tmpshort;
 	uint16_t rdlen = scache->rdlen;
 	u_char *p = scache->payload;
 	u_char *q = p;
@@ -489,7 +489,7 @@ int
 cache_mx(struct scache *scache)
 {
 	struct smx mx;
-	u_int16_t mxpriority;
+	uint16_t mxpriority;
 	char *save;
 	u_char *p = scache->payload;
 	u_char *q = p;
@@ -539,7 +539,7 @@ cache_nsec3(struct scache *scache)
 	struct nsec3 n;
 	u_char *p = scache->payload;
 	uint16_t rdlen = scache->rdlen;
-	u_int16_t iter;
+	uint16_t iter;
 	u_char *brr = scache->payload;	/* begin of rd record :-) */
 
 	memset(&n, 0, sizeof(struct nsec3));
@@ -585,7 +585,7 @@ int
 cache_nsec3param(struct scache *scache)
 {
 	struct nsec3param np;
-	u_int16_t iter;
+	uint16_t iter;
 	u_char *p = scache->payload;
 	u_char *q = scache->payload;
 
@@ -751,7 +751,7 @@ cache_tlsa(struct scache *scache)
 int 
 cache_srv(struct scache *scache)
 {
-	u_int16_t tmp16;
+	uint16_t tmp16;
 	struct srv s;
 	char *save;
 	u_char *p = scache->payload;

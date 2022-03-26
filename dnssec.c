@@ -92,8 +92,8 @@ extern int 		memcasecmp(u_char *, u_char *, int);
 
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
-extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
-extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
+extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
+extern int add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata);
 
 extern int debug;
 
@@ -766,7 +766,7 @@ mysetbit(u_char *input, int pos)
 int
 base32hex_decode(u_char *input, u_char *output)
 {
-	u_int8_t tmp;
+	uint8_t tmp;
 	char *character = "0123456789abcdefghijklmnopqrstuv=";
 	char *start = character, *p = character;
 	int i, j;
@@ -807,7 +807,7 @@ char *
 base32hex_encode(u_char *input, int len)
 {
 	u_char *ui;
-	u_int64_t tb = 0;
+	uint64_t tb = 0;
 	int i;
 	u_char *p;
 	static char ret[64];

@@ -85,25 +85,25 @@
 
 extern char *convert_name(char *, int);
 extern void 	pack(char *, char *, int);
-extern void 	pack32(char *, u_int32_t);
-extern void 	pack16(char *, u_int16_t);
-extern void 	pack8(char *, u_int8_t);
+extern void 	pack32(char *, uint32_t);
+extern void 	pack16(char *, uint16_t);
+extern void 	pack8(char *, uint8_t);
 extern uint32_t unpack32(char *);
 extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
 
-extern void 	add_rrlimit(int, u_int16_t *, int, char *);
+extern void 	add_rrlimit(int, uint16_t *, int, char *);
 extern void 	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *);
 extern void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
 extern void	replicantloop(ddDB *, struct imsgbuf *);
-extern struct question	*build_fake_question(char *, int, u_int16_t, char *, int);
+extern struct question	*build_fake_question(char *, int, uint16_t, char *, int);
 extern int 	check_ent(char *, int);
-extern int 	check_rrlimit(int, u_int16_t *, int, char *);
+extern int 	check_rrlimit(int, uint16_t *, int, char *);
 extern void 	collects_init(void);
 extern void 	dolog(int, char *, ...);
 extern int     	find_axfr(struct sockaddr_storage *, int);
 extern int 	find_filter(struct sockaddr_storage *, int);
-extern u_int8_t find_region(struct sockaddr_storage *, int);
+extern uint8_t find_region(struct sockaddr_storage *, int);
 extern int 	find_passlist(struct sockaddr_storage *, int);
 extern int      find_tsig(struct sockaddr_storage *, int);
 extern char *	get_dns_type(int, int);
@@ -115,7 +115,7 @@ extern void 	init_passlist(void);
 extern void 	init_tsig(void);
 extern void 	init_notifyddd(void);
 extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
-extern struct rbtree *  Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
+extern struct rbtree *  Lookup_zone(ddDB *, char *, uint16_t, uint16_t, int);
 extern int 	memcasecmp(u_char *, u_char *, int);
 extern int 	reply_a(struct sreply *, int *, ddDB *);
 extern int 	reply_aaaa(struct sreply *, int *, ddDB *);
@@ -160,8 +160,8 @@ extern int 	get_record_size(ddDB *, char *, int);
 extern struct question		*build_question(char *, int, uint16_t, char *);
 extern int			free_question(struct question *);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
-extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
-extern int 	add_rr(struct rbtree *, char *, int, u_int16_t, void *);
+extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
+extern int 	add_rr(struct rbtree *, char *, int, uint16_t, void *);
 extern int 	display_rr(struct rrset *rrset);
 extern int 	notifysource(struct question *, struct sockaddr_storage *);
 extern int 	drop_privs(char *, struct passwd *);
@@ -172,7 +172,7 @@ extern int tsigpassname_contains(char *, int, int *);
 
 
 struct question		*convert_question(struct parsequestion *, int);
-void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, u_int8_t, int, int, char *);
+void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, uint8_t, int, int, char *);
 int			determine_glue(ddDB *db);
 void			mainloop(struct cfg *, struct imsgbuf *);
 void 			primary_reload(int);
@@ -321,8 +321,8 @@ int forwardstrategy = STRATEGY_SPRAY;
 int zonecount = 0;
 int tsigpassname = 0;
 int cache = 0;
-u_int16_t port = 53;
-u_int32_t cachesize = 0;
+uint16_t port = 53;
+uint32_t cachesize = 0;
 char *bind_list[255];
 char *interface_list[255];
 char *identstring = NULL;
@@ -1386,11 +1386,11 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	int addrlen;
 	pid_t idata;
 
-	u_int32_t received_ttl;
-	u_int32_t imsg_type;
+	uint32_t received_ttl;
+	uint32_t imsg_type;
 	u_char *ttlptr;
 
-	u_int8_t aregion;			/* region where the address comes from */
+	uint8_t aregion;			/* region where the address comes from */
 
 	char buf[4096];
 	char *replybuf = NULL;
@@ -1756,9 +1756,9 @@ axfrentry:
 					inet_ntop(AF_INET6, (void *)&sin6->sin6_addr, (char *)&address, sizeof(address));
 					addrlen = strlen(address);
 					if (ratelimit) {
-						add_rrlimit(ratelimit_backlog, (u_int16_t *)&sin6->sin6_addr, sizeof(sin6->sin6_addr), rptr);
+						add_rrlimit(ratelimit_backlog, (uint16_t *)&sin6->sin6_addr, sizeof(sin6->sin6_addr), rptr);
 
-						rcheck = check_rrlimit(ratelimit_backlog, (u_int16_t *)&sin6->sin6_addr, sizeof(sin6->sin6_addr), rptr);
+						rcheck = check_rrlimit(ratelimit_backlog, (uint16_t *)&sin6->sin6_addr, sizeof(sin6->sin6_addr), rptr);
 					}
 
 					aregion = find_region((struct sockaddr_storage *)sin6, AF_INET6);
@@ -1780,9 +1780,9 @@ axfrentry:
 					inet_ntop(AF_INET, (void *)&sin->sin_addr, (char *)&address, sizeof(address));
 					addrlen = strlen(address);
 					if (ratelimit) {
-						add_rrlimit(ratelimit_backlog, (u_int16_t *)&sin->sin_addr.s_addr, sizeof(sin->sin_addr.s_addr), rptr);
+						add_rrlimit(ratelimit_backlog, (uint16_t *)&sin->sin_addr.s_addr, sizeof(sin->sin_addr.s_addr), rptr);
 
-						rcheck = check_rrlimit(ratelimit_backlog, (u_int16_t *)&sin->sin_addr.s_addr, sizeof(sin->sin_addr.s_addr), rptr);
+						rcheck = check_rrlimit(ratelimit_backlog, (uint16_t *)&sin->sin_addr.s_addr, sizeof(sin->sin_addr.s_addr), rptr);
 					}
 
 					aregion = find_region((struct sockaddr_storage *)sin, AF_INET);
@@ -2492,7 +2492,7 @@ forwardudp:
  */
 
 void
-build_reply(struct sreply *reply, int so, char *buf, int len, struct question *q, struct sockaddr *sa, socklen_t slen, struct rbtree *rbt1, struct rbtree *rbt2, u_int8_t region, int istcp, int deprecated0, char *replybuf)
+build_reply(struct sreply *reply, int so, char *buf, int len, struct question *q, struct sockaddr *sa, socklen_t slen, struct rbtree *rbt1, struct rbtree *rbt2, uint8_t region, int istcp, int deprecated0, char *replybuf)
 {
 	reply->so = so;
 	reply->buf = buf;
@@ -2738,7 +2738,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	int tcpflags;
 	pid_t pid;
 
-	u_int8_t aregion;			/* region where the address comes from */
+	uint8_t aregion;			/* region where the address comes from */
 
 	char *pbuf;
 	char *replybuf = NULL;
@@ -2770,7 +2770,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	struct pq_imsg *pq0;
 
 	ssize_t n, datalen;
-	u_int32_t imsg_type;
+	uint32_t imsg_type;
 
 	struct sforward *sforward;
 	int ix;

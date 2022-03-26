@@ -21,22 +21,22 @@
 /* RFC 1035 - page 26 */
 
 struct dns_header {
-	u_int16_t	id;			/* ID of header */
-	u_int16_t query;
-	u_int16_t question;			/* # of question entries */
-	u_int16_t answer;			/* # of answer RR's */
-	u_int16_t nsrr;				/* # of NS RR's */
-	u_int16_t additional;			/* # additional RR's */
+	uint16_t	id;			/* ID of header */
+	uint16_t query;
+	uint16_t question;			/* # of question entries */
+	uint16_t answer;			/* # of answer RR's */
+	uint16_t nsrr;				/* # of NS RR's */
+	uint16_t additional;			/* # additional RR's */
 };
 
 struct dns_hints {
 	int proto;
-	u_int16_t id;
-	u_int16_t query;
-	u_int16_t question;
-	u_int16_t answer;
-	u_int16_t nsrr;
-	u_int16_t additional;
+	uint16_t id;
+	uint16_t query;
+	uint16_t question;
+	uint16_t answer;
+	uint16_t nsrr;
+	uint16_t additional;
 };
 
 /*
@@ -47,10 +47,10 @@ struct dns_hints {
 struct dns_rr {
 	char *name;				/* name of zone */
 	char *question;				/* pointer to question */
-	u_int16_t type;				/* type of RR */
-	u_int16_t class;			/* class of reply */
-	u_int32_t ttl;				/* ttl of record */
-	u_int16_t rdlen;			/* length of record */
+	uint16_t type;				/* type of RR */
+	uint16_t class;			/* class of reply */
+	uint32_t ttl;				/* ttl of record */
+	uint16_t rdlen;			/* length of record */
 	char *rdata;				/* data of record */
 };
 
@@ -61,10 +61,10 @@ struct dns_rr {
 
 struct dns_optrr {
 	char name[1];				/* always 0 */
-	u_int16_t type;				/* must be 41 */
-	u_int16_t class;			/* UDP payload size (4096) */
-	u_int32_t ttl;				/* extended RCODE */
-	u_int16_t rdlen;			/* length of all RDATA */
+	uint16_t type;				/* must be 41 */
+	uint16_t class;			/* UDP payload size (4096) */
+	uint32_t ttl;				/* extended RCODE */
+	uint16_t rdlen;			/* length of all RDATA */
 	char rdata[0];				/* attribute, value pairs */
 }__attribute__((packed));
 
@@ -78,8 +78,8 @@ struct dns_optrr {
 #define DNS_HMAC_SHA256_SIZE	32		/* hmac-sha256 256 bits */
 
 struct dns_tsigrr {
-	u_int64_t timefudge;			/* time (48 bits) and fudge */
-	u_int16_t macsize;			/* MAC size == 32 */
+	uint64_t timefudge;			/* time (48 bits) and fudge */
+	uint16_t macsize;			/* MAC size == 32 */
 	char mac[DNS_HMAC_SHA256_SIZE];		/* SHA-256 MAC */
 	/* empty unless error == badtime */
 } __attribute__((packed));
@@ -89,8 +89,8 @@ struct dns_question_hdr {
 	char *name;
 	char *original_name;
 	u_int namelen;
-	u_int16_t qtype;
-	u_int16_t qclass;
+	uint16_t qtype;
+	uint16_t qclass;
 };
 
 /* 
@@ -267,8 +267,8 @@ struct tsig {
 	int tsigkeylen;				/* 530 */
 	char tsigmac[DNS_HMAC_SHA256_SIZE];	/* 562 */
 	int tsigmaclen;				/* 566 */
-	u_int64_t tsig_timefudge;		/* 574 */
-	u_int16_t tsigorigid;			/* 576 */
+	uint64_t tsig_timefudge;		/* 574 */
+	uint16_t tsigorigid;			/* 576 */
 	int tsigoffset;				/* 580 */
 };
 
@@ -287,8 +287,8 @@ struct dns_cookie {
 struct question {
 	struct dns_question_hdr *hdr;
 	char *converted_name;
-	u_int16_t edns0len;
-	u_int8_t ednsversion;
+	uint16_t edns0len;
+	uint8_t ednsversion;
 	int rawsocket;
 	int aa;
 	int rd;
@@ -303,11 +303,11 @@ struct parsequestion {
 	char name[DNS_MAXNAME];
 	char original_name[DNS_MAXNAME];
 	u_int namelen;
-	u_int16_t qtype;
-	u_int16_t qclass;
+	uint16_t qtype;
+	uint16_t qclass;
 	char converted_name[DNS_MAXNAME + 1];
-	u_int16_t edns0len;
-	u_int8_t ednsversion;
+	uint16_t edns0len;
+	uint8_t ednsversion;
 	int rd;
 	int dnssecok;
 	int notify;

@@ -193,7 +193,7 @@ extern int lflag;
 extern int icount;
 extern int vslen;
 extern char *versionstring;
-extern u_int64_t expiredon, signedon;
+extern uint64_t expiredon, signedon;
 
 /* externs */
 
@@ -203,20 +203,20 @@ extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
 
 extern void 	pack(char *, char *, int);
-extern void 	pack32(char *, u_int32_t);
-extern void 	pack16(char *, u_int16_t);
-extern void 	pack8(char *, u_int8_t);
-extern int fill_dnskey(ddDB *,char *, char *, u_int32_t, u_int16_t, u_int8_t, u_int8_t, char *, uint16_t);
-extern int fill_rrsig(ddDB *,char *, char *, u_int32_t, char *, u_int8_t, u_int8_t, u_int32_t, u_int64_t, u_int64_t, u_int16_t, char *, char *);
-extern int fill_nsec3param(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *);
-extern int fill_nsec3(ddDB *, char *, char *, u_int32_t, u_int8_t, u_int8_t, u_int16_t, char *, char *, char *);
+extern void 	pack32(char *, uint32_t);
+extern void 	pack16(char *, uint16_t);
+extern void 	pack8(char *, uint8_t);
+extern int fill_dnskey(ddDB *,char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, char *, uint16_t);
+extern int fill_rrsig(ddDB *,char *, char *, uint32_t, char *, uint8_t, uint8_t, uint32_t, uint64_t, uint64_t, uint16_t, char *, char *);
+extern int fill_nsec3param(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *);
+extern int fill_nsec3(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *, char *, char *);
 extern int fill_zonemd(ddDB *, char *, char *, int, uint32_t, uint8_t, uint8_t, char *, int);
 extern char * convert_name(char *name, int namelen);
 
 extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int      mybase64_decode(char const *, u_char *, size_t);
 extern struct rbtree *         Lookup_zone(ddDB *, char *, int, int, int);
-extern struct question         *build_fake_question(char *, int, u_int16_t, char *, int);
+extern struct question         *build_fake_question(char *, int, uint16_t, char *, int);
 extern char * dns_label(char *, int *);
 extern int label_count(char *);
 extern char *get_dns_type(int, int);
@@ -227,10 +227,10 @@ extern int	check_ent(char *, int);
 struct rrtab    *rrlookup(char *);
 
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
-extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
-extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
+extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
+extern int add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata);
 extern char * 	bin2hex(char *, int);
-extern u_int64_t timethuman(time_t);
+extern uint64_t timethuman(time_t);
 extern char * 	bitmap2human(char *, int);
 extern int                      memcasecmp(u_char *, u_char *, int);
 
@@ -432,7 +432,7 @@ signmain(int argc, char *argv[])
 	int expiry = DEFAULT_EXPIRYTIME;
 	int iterations = 10;
 	int zonemd = 0;
-	u_int32_t mask = (MASK_PARSE_FILE | MASK_ADD_DNSKEY | MASK_CONSTRUCT_NSEC3 | MASK_CALCULATE_RRSIGS | MASK_CREATE_DS | MASK_DUMP_DB);
+	uint32_t mask = (MASK_PARSE_FILE | MASK_ADD_DNSKEY | MASK_CONSTRUCT_NSEC3 | MASK_CALCULATE_RRSIGS | MASK_CREATE_DS | MASK_DUMP_DB);
 
 	char *salt = "-";
 	char *zonefile = NULL;
@@ -2005,7 +2005,7 @@ sign_soa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -2131,15 +2131,15 @@ sign_soa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		pack(p, ((struct soa *)rrp->rdata)->responsible_person, ((struct soa *)rrp->rdata)->rp_len);
 		p += ((struct soa *)rrp->rdata)->rp_len;
 		pack32(p, htonl(((struct soa *)rrp->rdata)->serial));
-		p += sizeof(u_int32_t);
+		p += sizeof(uint32_t);
 		pack32(p, htonl(((struct soa *)rrp->rdata)->refresh));
-		p += sizeof(u_int32_t);
+		p += sizeof(uint32_t);
 		pack32(p, htonl(((struct soa *)rrp->rdata)->retry));
-		p += sizeof(u_int32_t);
+		p += sizeof(uint32_t);
 		pack32(p, htonl(((struct soa *)rrp->rdata)->expire));
-		p += sizeof(u_int32_t);
+		p += sizeof(uint32_t);
 		pack32(p, htonl(((struct soa *)rrp->rdata)->minttl));
-		p += sizeof(u_int32_t);
+		p += sizeof(uint32_t);
 
 		keylen = (p - key);	
 
@@ -2202,7 +2202,7 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -2289,7 +2289,7 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		pack8(p, labels);
 		p++;
 		pack32(p, htonl(rrset->ttl));
-		p += sizeof(u_int32_t);
+		p += sizeof(uint32_t);
 			
 #if __FreeBSD__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
@@ -2427,7 +2427,7 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -2655,7 +2655,7 @@ sign_nsec3(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -2856,7 +2856,7 @@ sign_nsec3param(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int ro
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -3045,7 +3045,7 @@ sign_cname(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -3224,7 +3224,7 @@ sign_ptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -3405,7 +3405,7 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -3655,7 +3655,7 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -3891,7 +3891,7 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -4124,7 +4124,7 @@ sign_loc(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -4368,7 +4368,7 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -4602,7 +4602,7 @@ sign_rp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -4830,7 +4830,7 @@ sign_zonemd(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -5061,7 +5061,7 @@ sign_hinfo(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -5296,7 +5296,7 @@ sign_caa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -5526,7 +5526,7 @@ sign_cds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -5753,7 +5753,7 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -5983,7 +5983,7 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -6212,7 +6212,7 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	memset(&shabuf, 0, sizeof(shabuf));
 
@@ -6444,7 +6444,7 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 
 	memset(&shabuf, 0, sizeof(shabuf));
@@ -6855,7 +6855,7 @@ sign_cdnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollm
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	zsk_key = calloc(3, sizeof(struct keysentry *));
 	if (zsk_key == NULL) {
@@ -7083,7 +7083,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 
 	char timebuf[32];
 	struct tm tm;
-	u_int32_t expiredon2, signedon2;
+	uint32_t expiredon2, signedon2;
 
 	zsk_key = calloc(3, sizeof(struct keysentry *));
 	if (zsk_key == NULL) {
@@ -8073,7 +8073,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 	char *p;
 
 	int labellen;
-	u_int32_t ttl = 0;
+	uint32_t ttl = 0;
 
 	int rs, len, rootlen;
 

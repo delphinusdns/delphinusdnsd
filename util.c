@@ -72,9 +72,9 @@
 /* prototypes */
 
 void 	pack(char *, char *, int);
-void 	pack32(char *, u_int32_t);
-void 	pack16(char *, u_int16_t);
-void 	pack8(char *, u_int8_t);
+void 	pack32(char *, uint32_t);
+void 	pack16(char *, uint16_t);
+void 	pack8(char *, uint8_t);
 uint32_t unpack32(char *);
 uint16_t unpack16(char *);
 void 	unpack(char *, char *, int);
@@ -88,13 +88,13 @@ int get_record_size(ddDB *, char *, int);
 struct rbtree * 	get_soa(ddDB *, struct question *);
 struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
 struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
-struct rbtree *		Lookup_zone(ddDB *, char *, u_int16_t, u_int16_t, int);
-u_int16_t check_qtype(struct rbtree *, u_int16_t, int, int *);
-struct question		*build_fake_question(char *, int, u_int16_t, char *, int);
+struct rbtree *		Lookup_zone(ddDB *, char *, uint16_t, uint16_t, int);
+uint16_t check_qtype(struct rbtree *, uint16_t, int, int *);
+struct question		*build_fake_question(char *, int, uint16_t, char *, int);
 
 char 			*get_dns_type(int, int);
 int 			memcasecmp(u_char *, u_char *, int);
-int 			compress_label(u_char *, u_int16_t, int);
+int 			compress_label(u_char *, uint16_t, int);
 struct question		*build_question(char *, int, uint16_t, char *);
 int			free_question(struct question *);
 struct rrtab 	*rrlookup(char *);
@@ -102,12 +102,12 @@ char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
 void log_diff(char *sha256, char *mac, int len);
 int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
 char * 	bin2hex(char *, int);
-u_int64_t timethuman(time_t);
+uint64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
-int lookup_axfr(FILE *, int, char *, struct soa *, u_int32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t, int);
+int lookup_axfr(FILE *, int, char *, struct soa *, uint32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t, int);
 int dn_contains(char *name, int len, char *anchorname, int alen);
-uint16_t udp_cksum(u_int16_t *, uint16_t, struct ip *, struct udphdr *);
-uint16_t udp_cksum6(u_int16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
+uint16_t udp_cksum(uint16_t *, uint16_t, struct ip *, struct udphdr *);
+uint16_t udp_cksum6(uint16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
 
 void zonemd_hash_a(SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_aaaa(SHA512_CTX *, struct rrset *, struct rbtree *);
@@ -151,40 +151,40 @@ extern void 	dolog(int, char *, ...);
 
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
-extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
-extern int add_rr(struct rbtree *rbt, char *name, int len, u_int16_t rrtype, void *rdata);
+extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
+extern int add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata);
 extern int display_rr(struct rrset *rrset);
 extern int 	check_ent(char *, int);
 extern int     find_tsig_key(char *, int, char *, int);
 extern int      mybase64_decode(char const *, u_char *, size_t);
 
-extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_zonemd(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern int raxfr_loc(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *);
-extern u_int16_t raxfr_skip(FILE *, u_char *, u_char *);
-extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, u_int32_t, u_int16_t, HMAC_CTX *, struct soa_constraints *);
-extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, u_int16_t *, u_int32_t, HMAC_CTX *, char *, int, int);
-extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, u_int16_t, HMAC_CTX *, char *, int);
+extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_zonemd(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_loc(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern uint16_t raxfr_skip(FILE *, u_char *, u_char *);
+extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, uint32_t, uint16_t, HMAC_CTX *, struct soa_constraints *);
+extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, uint16_t *, uint32_t, HMAC_CTX *, char *, int, int);
+extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *, char *, int);
 extern char *convert_name(char *, int);
 
 
@@ -622,7 +622,7 @@ get_ns(ddDB *db, struct rbtree *rbt, int *delegation)
  */
 
 struct rbtree *
-Lookup_zone(ddDB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcard)
+Lookup_zone(ddDB *db, char *name, uint16_t namelen, uint16_t type, int wildcard)
 {
 	struct rbtree *rbt;
 	struct rrset *rrset = NULL;
@@ -646,10 +646,10 @@ Lookup_zone(ddDB *db, char *name, u_int16_t namelen, u_int16_t type, int wildcar
  *		 code (-1 or -2)
  */
 
-u_int16_t
-check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
+uint16_t
+check_qtype(struct rbtree *rbt, uint16_t type, int nxdomain, int *error)
 {
-	u_int16_t returnval = -1;
+	uint16_t returnval = -1;
 
 	switch (type) {
 
@@ -964,7 +964,7 @@ check_qtype(struct rbtree *rbt, u_int16_t type, int nxdomain, int *error)
  */
 
 struct question *
-build_fake_question(char *name, int namelen, u_int16_t type, char *tsigkey, int tsigkeylen)
+build_fake_question(char *name, int namelen, uint16_t type, char *tsigkey, int tsigkeylen)
 {
 	struct question *q;
 
@@ -1119,9 +1119,9 @@ build_question(char *buf, int len, uint16_t additional, char *mac)
 {
 	char pseudo_packet[4096];		/* for tsig */
 	u_int rollback, i;
-	u_int16_t qtype, qclass;
-	u_int32_t ttl;
-	u_int64_t timefudge;
+	uint16_t qtype, qclass;
+	uint32_t ttl;
+	uint64_t timefudge;
 	int elen = 0;
 
 	char *end_name = NULL;
@@ -1152,7 +1152,7 @@ build_question(char *buf, int len, uint16_t additional, char *mac)
 
 	
 	/* check if there is space for qtype and qclass */
-	if (len < ((end_name - &buf[0]) + (2 * sizeof(u_int16_t)))) {
+	if (len < ((end_name - &buf[0]) + (2 * sizeof(uint16_t)))) {
 		dolog(LOG_INFO, "question rr is truncated\n");
 		return NULL;
 	}
@@ -1214,11 +1214,11 @@ build_question(char *buf, int len, uint16_t additional, char *mac)
 		return NULL;
 	}
 
-	i += (2 * sizeof(u_int16_t)); 	/* type,class*/
+	i += (2 * sizeof(uint16_t)); 	/* type,class*/
 
 	/* in IXFR an additional SOA entry is tacked on, we want to skip this */
 	do {
-		u_int16_t val16;
+		uint16_t val16;
 
 		rollback = i;
 
@@ -1378,9 +1378,9 @@ optskip:
 	} while (0);
 	/* check for TSIG rr */
 	do {
-		u_int16_t val16, tsigerror, tsigotherlen;
-		u_int16_t fudge;
-		u_int32_t val32;
+		uint16_t val16, tsigerror, tsigotherlen;
+		uint16_t fudge;
+		uint32_t val32;
 		int elen, tsignamelen;
 		char *pb;
 		char expand[DNS_MAXNAME + 1];
@@ -1537,8 +1537,8 @@ optskip:
 #else
 		timefudge = betoh64(tsigrr->timefudge);
 #endif
-		fudge = (u_int16_t)(timefudge & 0xffff);
-		tsigtime = (u_int64_t)(timefudge >> 16);
+		fudge = (uint16_t)(timefudge & 0xffff);
+		tsigtime = (uint64_t)(timefudge >> 16);
 
 		q->tsig.tsig_timefudge = tsigrr->timefudge;
 		
@@ -1670,8 +1670,8 @@ optskip:
 	o = (end_name + sizeof(uint16_t));
 	qclass = unpack16(o);
 
-	memcpy((char *)&q->hdr->qtype, (char *)&qtype, sizeof(u_int16_t));
-	memcpy((char *)&q->hdr->qclass, (char *)&qclass, sizeof(u_int16_t));
+	memcpy((char *)&q->hdr->qtype, (char *)&qtype, sizeof(uint16_t));
+	memcpy((char *)&q->hdr->qclass, (char *)&qclass, sizeof(uint16_t));
 
 	/* make note of whether recursion is desired */
 	q->rd = ((ntohs(hdr->query) & DNS_RECURSE) == DNS_RECURSE);
@@ -1737,7 +1737,7 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 {
 	u_short tlen;
 	u_char *save = NULL;
-	u_int16_t offset;
+	uint16_t offset;
 
 	/* expand name */
 	while ((u_char)*p && p <= end) {
@@ -1925,12 +1925,12 @@ bin2hex(char *bin, int len)
 	return ((char *)&hex);
 }
 
-u_int64_t
+uint64_t
 timethuman(time_t timet)
 {
 	char timebuf[512];
 	struct tm *tm;
-	u_int64_t retbuf;
+	uint64_t retbuf;
 
 	tm = gmtime((time_t *)&timet);
 	strftime(timebuf, sizeof(timebuf), "%Y%m%d%H%M%S", tm);
@@ -1945,7 +1945,7 @@ bitmap2human(char *bitmap, int len)
 {
 	static char human[4096];
 	char expanded_bitmap[32];
-	u_int16_t bit;
+	uint16_t bit;
 	int i, j, block, bitlen;
 	int x;
 	char *p;
@@ -2024,7 +2024,7 @@ bitmap2human(char *bitmap, int len)
 
 
 int
-lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format, char *tsigkey, char *tsigpass, int *segment, int *answers, int *additionalcount, struct soa_constraints *constraints, uint32_t bytelimit, int ob)
+lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format, char *tsigkey, char *tsigpass, int *segment, int *answers, int *additionalcount, struct soa_constraints *constraints, uint32_t bytelimit, int ob)
 {
 	char query[512];
 	char pseudo_packet[512];
@@ -2033,7 +2033,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	struct timeval tv, savetv;
 	struct question *q;
 	struct whole_header {
-		u_int16_t len;
+		uint16_t len;
 		struct dns_header dh;
 	} *wh, *rwh;
 	struct raxfr_logic *sr;
@@ -2046,8 +2046,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	int segmentcount = 0;
 	int count = 0;
 	int have_question = 1;
-	u_int16_t rdlen, *plen;
-	u_int16_t tcplen;
+	uint16_t rdlen, *plen;
+	uint16_t tcplen;
 	
 	HMAC_CTX *ctx;
 	time_t now = 0;
@@ -2089,12 +2089,12 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 	p += len;
 
 	pack16((char *)p, htons(DNS_TYPE_AXFR));
-	totallen += sizeof(u_int16_t);
-	p += sizeof(u_int16_t);
+	totallen += sizeof(uint16_t);
+	p += sizeof(uint16_t);
 	
 	pack16((char *)p, htons(DNS_CLASS_IN));
-	totallen += sizeof(u_int16_t);
-	p += sizeof(u_int16_t);
+	totallen += sizeof(uint16_t);
+	p += sizeof(uint16_t);
 
 	/* we have a key, attach a TSIG payload */
 	if (tsigkey) {
@@ -2261,7 +2261,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 		if (len <= 0)	
 			break;
 
-		plen = (u_int16_t *)reply;
+		plen = (uint16_t *)reply;
 		tcplen = ntohs(*plen) + 2;
 		
 		/* restore original timeout values */
@@ -2329,8 +2329,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, u_int32_t format
 
 		if (have_question) {
 			p += q->hdr->namelen;
-			p += sizeof(u_int16_t);	 	/* type */
-			p += sizeof(u_int16_t);		/* class */
+			p += sizeof(uint16_t);	 	/* type */
+			p += sizeof(uint16_t);		/* class */
 			/* end of question */
 
 			if (! ob)
@@ -2514,23 +2514,23 @@ dn_contains(char *name, int len, char *anchorname, int alen)
 /* pack functions */
 
 void
-pack32(char *buf, u_int32_t value)
+pack32(char *buf, uint32_t value)
 {
 	pack(buf, (char *)&value, sizeof(uint32_t));
 }	
 
 void
-pack16(char *buf, u_int16_t value)
+pack16(char *buf, uint16_t value)
 {
 	pack(buf, (char *)&value, sizeof(uint16_t));
 }
 
 void
-pack8(char *buf, u_int8_t value)
+pack8(char *buf, uint8_t value)
 {
-	u_int8_t *p;
+	uint8_t *p;
 
-	p = (u_int8_t *)buf;
+	p = (uint8_t *)buf;
 	*p = value;
 }
 
@@ -2653,26 +2653,26 @@ err:
  */
 
 int
-compress_label(u_char *buf, u_int16_t offset, int labellen)
+compress_label(u_char *buf, uint16_t offset, int labellen)
 {
 	u_char *label[10000];
 	u_char *end = &buf[offset];
 	struct question {
-		u_int16_t type;
-		u_int16_t class;
+		uint16_t type;
+		uint16_t class;
 	} __attribute__((packed));
 	struct answer {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 
 	} __attribute__((packed));
 	struct soa {
-         	u_int32_t serial;
-                u_int32_t refresh;
-                u_int32_t retry;
-                u_int32_t expire;
-                u_int32_t minttl;
+         	uint32_t serial;
+                uint32_t refresh;
+                uint32_t retry;
+                uint32_t expire;
+                uint32_t minttl;
         } __attribute__((packed));
 
 	struct answer *a;
@@ -2780,13 +2780,13 @@ compress_label(u_char *buf, u_int16_t offset, int labellen)
 
 			break;	
 		case DNS_TYPE_SRV:
-			p += (2 * sizeof(u_int16_t)); /* priority, weight */
+			p += (2 * sizeof(uint16_t)); /* priority, weight */
 			/* the port will be assumed in the fall through for
 			   mx_priority..
 			*/
 			/* FALLTHROUGH */
 		case DNS_TYPE_MX:
-			p += sizeof(u_int16_t);	 /* mx_priority */
+			p += sizeof(uint16_t);	 /* mx_priority */
 			/* FALLTHROUGH */
 		case DNS_TYPE_NS:	
 		case DNS_TYPE_PTR:
@@ -2883,7 +2883,7 @@ compress_label(u_char *buf, u_int16_t offset, int labellen)
 
 			break;
 		case DNS_TYPE_NAPTR:
-			p += (2 * sizeof(u_int16_t)); /* order and preference */
+			p += (2 * sizeof(uint16_t)); /* order and preference */
 			p += *p; /* flags */
 			p++;
 			p += *p; /* services */
@@ -2964,7 +2964,7 @@ out:
 	/* write compressed label */
 	pack16((char *)&buf[offset], htons((compressmark - &buf[0]) | 0xc000));
 
-	offset += sizeof(u_int16_t);	
+	offset += sizeof(uint16_t);	
 
 	return (offset);
 }
@@ -3013,24 +3013,24 @@ out:
  */
 
 uint16_t
-udp_cksum(u_int16_t *addr, uint16_t len, struct ip *ip, struct udphdr *uh) 
+udp_cksum(uint16_t *addr, uint16_t len, struct ip *ip, struct udphdr *uh) 
 {
 	union {
 		struct ph {
 			in_addr_t src;
 			in_addr_t dst;
-			u_int8_t pad;
-			u_int8_t proto;
-			u_int16_t len;
+			uint8_t pad;
+			uint8_t proto;
+			uint16_t len;
 		} s __attribute__((packed));
 
-		u_int16_t i[6];
+		uint16_t i[6];
 	} ph;
 
 	int nleft = len - sizeof(struct udphdr); /* we pass the udp header */
 	int sum = 0;
-	u_int16_t *w = &ph.i[0];
-	u_int16_t *u = (u_int16_t *)uh;
+	uint16_t *w = &ph.i[0];
+	uint16_t *u = (uint16_t *)uh;
 	uint16_t answer;
 
 	memset(&ph, 0, sizeof(ph));
@@ -3062,24 +3062,24 @@ udp_cksum(u_int16_t *addr, uint16_t len, struct ip *ip, struct udphdr *uh)
  */
 
 uint16_t
-udp_cksum6(u_int16_t *addr, uint16_t len, struct ip6_hdr *ip6, struct udphdr *uh) 
+udp_cksum6(uint16_t *addr, uint16_t len, struct ip6_hdr *ip6, struct udphdr *uh) 
 {
 	union {
 		struct ph {
 			struct in6_addr src;
 			struct in6_addr dst;
-			u_int32_t len;
-			u_int8_t pad[3];
-			u_int8_t nxt;
+			uint32_t len;
+			uint8_t pad[3];
+			uint8_t nxt;
 		} s __attribute__((packed));
 
-		u_int16_t i[20];
+		uint16_t i[20];
 	} ph;
 
 	int nleft = len - sizeof(struct udphdr); /* we pass the udp header */
 	int sum;
-	u_int16_t *w = &ph.i[0];
-	u_int16_t *u = (u_int16_t *)uh;
+	uint16_t *w = &ph.i[0];
+	uint16_t *u = (uint16_t *)uh;
 	uint16_t answer;
 
 	memset(&ph, 0, sizeof(ph));
@@ -3298,19 +3298,19 @@ zonemd_hash_soa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt, uint32
 	pack(p, ((struct soa *)rrp->rdata)->responsible_person, ((struct soa *)rrp->rdata)->rp_len);
 	p += ((struct soa *)rrp->rdata)->rp_len;
 	pack32(p, htonl(((struct soa *)rrp->rdata)->serial));
-	p += sizeof(u_int32_t);
+	p += sizeof(uint32_t);
 
 	*serial = ((struct soa *)rrp->rdata)->serial;
 
 	pack32(p, htonl(((struct soa *)rrp->rdata)->refresh));
-	p += sizeof(u_int32_t);
+	p += sizeof(uint32_t);
 	pack32(p, htonl(((struct soa *)rrp->rdata)->retry));
-	p += sizeof(u_int32_t);
+	p += sizeof(uint32_t);
 
 	pack32(p, htonl(((struct soa *)rrp->rdata)->expire));
-	p += sizeof(u_int32_t);
+	p += sizeof(uint32_t);
 	pack32(p, htonl(((struct soa *)rrp->rdata)->minttl));
-	p += sizeof(u_int32_t);
+	p += sizeof(uint32_t);
 
 	keylen = (p - tmpkey);
 

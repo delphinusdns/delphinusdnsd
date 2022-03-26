@@ -72,16 +72,16 @@ int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, u
 int additional_wildcard(char *, int, struct rbtree *, char *, int, int, int *, ddDB *);
 
 extern void 	pack(char *, char *, int);
-extern void 	pack32(char *, u_int32_t);
-extern void 	pack16(char *, u_int16_t);
-extern void 	pack8(char *, u_int8_t);
+extern void 	pack32(char *, uint32_t);
+extern void 	pack16(char *, uint16_t);
+extern void 	pack8(char *, uint8_t);
 extern uint32_t unpack32(char *);
 extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
 
 extern int 		compress_label(u_char *, int, int);
 extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
-extern struct rrset * find_rr(struct rbtree *rbt, u_int16_t rrtype);
+extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern int  find_tsig_key(char *, int, char *, int);
 extern void      dolog(int, char *, ...);
@@ -113,10 +113,10 @@ additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int reply
 	int rroffset = offset;
 
 	struct answer {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 		in_addr_t rdata;		/* 16 */
 	} __attribute__((packed));
 
@@ -181,10 +181,10 @@ additional_aaaa(char *name, int namelen, struct rbtree *rbt, char *reply, int re
 	int rroffset = offset;
 
 	struct answer {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 
 		struct in6_addr rdata;	
 	} __attribute__((packed));
 
@@ -250,11 +250,11 @@ additional_mx(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 	int rroffset = offset;
 
 	struct answer {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 
-		u_int16_t mx_priority;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 
+		uint16_t mx_priority;
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -307,10 +307,10 @@ additional_mx(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 		tmplen = compress_label((u_char*)reply, offset, ((struct smx *)rrp->rdata)->exchangelen);
 		
 		if (tmplen != 0) {
-			answer->rdlength = htons((((struct smx *)rrp->rdata)->exchangelen - (offset - tmplen)) + sizeof(u_int16_t));
+			answer->rdlength = htons((((struct smx *)rrp->rdata)->exchangelen - (offset - tmplen)) + sizeof(uint16_t));
 			offset = tmplen;
 		} else
-			answer->rdlength = htons(((struct smx *)rrp->rdata)->exchangelen + sizeof(u_int16_t));
+			answer->rdlength = htons(((struct smx *)rrp->rdata)->exchangelen + sizeof(uint16_t));
 
 
 		tmpcount++;
@@ -337,10 +337,10 @@ additional_ptr(char *name, int namelen, struct rbtree *rbt, char *reply, int rep
 	int rroffset = offset;
 
 	struct answer {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -537,9 +537,9 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	answer = (struct dns_tsigrr *)&reply[offset];
 	if (envelope > 1 || envelope < -1) {
 #ifdef __linux__
-		answer->timefudge = htobe64(((u_int64_t)tmp64 << 16) | (fudge & 0xffff));
+		answer->timefudge = htobe64(((uint64_t)tmp64 << 16) | (fudge & 0xffff));
 #else
-		answer->timefudge = htobe64(((u_int64_t)now << 16) | (fudge & 0xffff));
+		answer->timefudge = htobe64(((uint64_t)now << 16) | (fudge & 0xffff));
 #endif
 	} else {
 		if (request == 0 || envelope == 1) {
@@ -585,9 +585,9 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 		ppanswer->timefudge = question->tsig.tsig_timefudge;
 	else
 #ifdef __linux__
-		ppanswer->timefudge = htobe64(((u_int64_t)tmp64 << 16) | (fudge & 0xffff));
+		ppanswer->timefudge = htobe64(((uint64_t)tmp64 << 16) | (fudge & 0xffff));
 #else
-		ppanswer->timefudge = htobe64(((u_int64_t)now << 16) | (fudge & 0xffff));
+		ppanswer->timefudge = htobe64(((uint64_t)now << 16) | (fudge & 0xffff));
 #endif
 	ppoffset += 8;
 
@@ -616,7 +616,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 		if (envelope % 89 == 0 || envelope == -2)  {
 			ttlen = 0;
 			timers = (struct dns_tsigrr *)&tsig_timers[ttlen];
-			timers->timefudge = htobe64(((u_int64_t)now << 16) | (fudge & 0xffff));
+			timers->timefudge = htobe64(((uint64_t)now << 16) | (fudge & 0xffff));
 			ttlen += 8;
 			HMAC_Update(tsigctx, (const unsigned char *)tsig_timers, ttlen);
 		}
@@ -790,17 +790,17 @@ int
 additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count, int authoritative)
 {
 	struct answer {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
-		u_int16_t type_covered;
-		u_int8_t algorithm;
-		u_int8_t labels;
-		u_int32_t original_ttl;
-		u_int32_t sig_expiration;
-		u_int32_t sig_inception;
-		u_int16_t keytag;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint16_t type_covered;
+		uint8_t algorithm;
+		uint8_t labels;
+		uint32_t original_ttl;
+		uint32_t sig_expiration;
+		uint32_t sig_inception;
+		uint16_t keytag;
 	} __attribute__((packed));
 
 
@@ -890,10 +890,10 @@ int
 additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count, int authoritative)
 {
 	struct answer {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -975,14 +975,14 @@ int
 additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count, int authoritative)
 {
 	struct answer {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
-		u_int8_t algorithm;
-		u_int8_t flags;
-		u_int16_t iterations;
-		u_int8_t saltlen;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint8_t algorithm;
+		uint8_t flags;
+		uint16_t iterations;
+		uint8_t saltlen;
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -990,7 +990,7 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 	struct rr *rrp;
 
 	int tmplen;
-	u_int8_t *somelen;
+	uint8_t *somelen;
 	int retcount;
 	time_t now;
 
@@ -1045,7 +1045,7 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 		offset += ((struct nsec3 *)rrp->rdata)->saltlen;
 	}
 
-	somelen = (u_int8_t *)&reply[offset];
+	somelen = (uint8_t *)&reply[offset];
 	*somelen = ((struct nsec3 *)rrp->rdata)->nextlen;
 
 	offset += 1;
@@ -1087,13 +1087,13 @@ additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 	int rroffset = offset;
 
 	struct answer {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 
-		u_int16_t key_tag;
-		u_int8_t algorithm;
-		u_int8_t digest_type;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 
+		uint16_t key_tag;
+		uint8_t algorithm;
+		uint8_t digest_type;
 
 	} __attribute__((packed));
 
@@ -1148,7 +1148,7 @@ additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 
 		offset += ((struct ds *)rrp->rdata)->digestlen;
 
-		answer->rdlength = htons(((struct ds *)rrp->rdata)->digestlen + sizeof(u_int16_t) + sizeof(u_int8_t) + sizeof(u_int8_t));
+		answer->rdlength = htons(((struct ds *)rrp->rdata)->digestlen + sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t));
 
 
 		tmpcount++;
@@ -1169,22 +1169,22 @@ int
 additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *reply, int replylen, int offset, int *count, ddDB *db)
 {
         struct answer_ns {
-                u_int16_t type;
-                u_int16_t class;
-                u_int32_t ttl;
-                u_int16_t rdlength;      /* 12 */
+                uint16_t type;
+                uint16_t class;
+                uint32_t ttl;
+                uint16_t rdlength;      /* 12 */
                 char ns[0];
         } __attribute__((packed));
 
 	struct answer_nsec3 {
-		u_int16_t type;
-		u_int16_t class;
-		u_int32_t ttl;
-		u_int16_t rdlength;	 /* 12 */
-		u_int8_t algorithm;
-		u_int8_t flags;
-		u_int16_t iterations;
-		u_int8_t saltlen;
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint8_t algorithm;
+		uint8_t flags;
+		uint16_t iterations;
+		uint8_t saltlen;
 	} __attribute__((packed));
 
 	struct rbtree *rbt0;
@@ -1194,7 +1194,7 @@ additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *r
 	struct rr *rrp;
 
 	int tmplen;
-	u_int8_t *somelen;
+	uint8_t *somelen;
 	int retcount;
 	int zonenumberx;
 
@@ -1330,7 +1330,7 @@ additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *r
 		offset += ((struct nsec3 *)rrp->rdata)->saltlen;
 	}
 
-	somelen = (u_int8_t *)&reply[offset];
+	somelen = (uint8_t *)&reply[offset];
 	*somelen = ((struct nsec3 *)rrp->rdata)->nextlen;
 
 	offset += 1;
