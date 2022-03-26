@@ -165,6 +165,7 @@ tsig "these hosts" {
 forward "to these hosts" {
         incoming-tsig yes;
         destination 127.0.0.1 port 5353 key NOKEY;
+	forwardstrategy spray;
 }
 .Ed
 .Pp
@@ -266,7 +267,7 @@ optbytelimit = "bytelimit" (number) ;
 
 forward = "forward" ("string") [ "{" forwardlist "}" ]
 forwardlist = ( optdestination | optstrictx20 | optcache | optincomingtsig |
-			optfudge | optrdomain )
+			optfudge | optrdomain | optstrategy )
 
 optdestination = "destination" ("cidr-address") "port" ("integer") "key" 
 			(string | "NOKEY") ;
@@ -275,6 +276,7 @@ optcache =  "cache" ("yes" | "no") ;
 optincomingtsig = "incoming-tsig" ("yes" | "no") ;
 optfudge = "fudge" (number) ;
 optrdomain = "rdomain" (number) ;
+optstrategy = "forwardstrategy" ("single" | "spray") ;
 
 comment = ( ; | pound ) line
 

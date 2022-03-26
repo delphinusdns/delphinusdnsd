@@ -1,7 +1,7 @@
 Changes in RELEASE_1_7 from RELEASE_1_6
 
-None yet.
-
+- a selectable forwarding strategy between "single" and "spray" pertaining
+ to the entered forwarders.  (experimental).
 
 [2021] Changes in RELEASE_1_6 from RELEASE_1_5
 
