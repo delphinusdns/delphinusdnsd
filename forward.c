@@ -119,7 +119,15 @@ struct forwardqueue {
 	struct forwardentry *cur_forwardentry;	/* current forwardentry */
 	int dnssecok;				/* DNSSEC in anwers */
 	SLIST_ENTRY(forwardqueue) entries;	/* next entry */
-} *fwq1, *fwq2, *fwqp;
+} *fwq1, *fwq2, *fwq3, *fwqp;
+
+
+SLIST_HEAD(, closequeue) closehead;
+
+struct closequeue {
+	uint32_t sessid;
+	SLIST_ENTRY(closequeue) entries;	/* next entry */
+} *cq1, *cq2, *cqp;
 
 
 void	init_forward(void);
@@ -246,6 +254,7 @@ init_forward(void)
 {
 	TAILQ_INIT(&forwardhead);
 	SLIST_INIT(&fwqhead);
+	SLIST_INIT(&closehead);
 	return;
 }
 
@@ -315,7 +324,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	int len, need;
 	int pi[2];
 	int bipi[2];
-	int i, count;
+	int i, count, skip;
 	uint32_t sessid;
 	u_int packetcount = 0;
 
@@ -440,7 +449,15 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		}
 
 		
-		SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwqp) {
+		SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwq3) {
+			SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
+				if (fwq1->sessid == cq2->sessid) {
+					skip = 1;
+					SLIST_REMOVE(&closehead, cq2, closequeue, entries);
+					free(cq2);
+				} else 
+					skip = 0;
+			}
 			if (FD_ISSET(fwq1->so, &rset)) {
 				if (fwq1->istcp) {
 					tv.tv_sec = 2;
@@ -459,11 +476,17 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					len = recv(fwq1->so, buf, need, MSG_WAITALL | MSG_PEEK);
 					if (len <= 0) 
 						goto drop;
+					
+					if (skip)
+						goto drop;
 
 					returnit(db, cfg, fwq1, buf, len, pibuf);
 				} else {
 					len = recv(fwq1->so, buf, 0xffff, 0);
 					if (len < 0) 
+						goto drop;
+
+					if (skip)
 						goto drop;
 
 					returnit(db, cfg, fwq1, buf, len, pibuf);
@@ -472,24 +495,25 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 drop:
 				/* delete all instances with the same sessid */
 				sessid = fwq1->sessid;
-				SLIST_FOREACH_SAFE(fwqp, &fwqhead, entries, fwq2) {
+				SLIST_REMOVE(&fwqhead, fwq1, forwardqueue, entries);
+				close(fwq1->so);
+				fwq1->so = -1;
 
-					if (fwqp->sessid == sessid) {
+				if (fwq1->returnso != -1)
+					close(fwq1->returnso);
+							
+				if (fwq1->tsigkey)
+					free(fwq1->tsigkey);
 
-						SLIST_REMOVE(&fwqhead, fwqp, forwardqueue, entries);
-						close(fwqp->so);
-						fwqp->so = -1;
+				free(fwq1);
 
-						if (fwqp->returnso != -1)
-							close(fwqp->returnso);
-						
-						if (fwqp->tsigkey)
-							free(fwqp->tsigkey);
-
-						free(fwqp);
-
-					}
+				cq1 = calloc(1, sizeof(struct closequeue));
+				if (cq1 == NULL) {
+					dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+					continue;	
 				}
+				cq1->sessid = sessid;
+				SLIST_INSERT_HEAD(&closehead, cq1, entries);
 			}
 		}
 
