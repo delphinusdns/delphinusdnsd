@@ -125,6 +125,7 @@ struct forwardqueue {
 SLIST_HEAD(, closequeue) closehead;
 
 struct closequeue {
+	time_t timeout;
 	uint32_t sessid;
 	SLIST_ENTRY(closequeue) entries;	/* next entry */
 } *cq1, *cq2, *cqp;
@@ -420,6 +421,20 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 			max = bpibuf->fd;
 
 		SLIST_FOREACH(fwq1, &fwqhead, entries) {
+			SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
+				if (fwq1->sessid == cq2->sessid && fwq1->so == -1) {
+					SLIST_REMOVE(&closehead, cq2, closequeue, entries);
+					free(cq2);
+				} else if (difftime(time(NULL), cq2->sessid) >= 120) {
+					/* clean up the left-behinds */
+					SLIST_REMOVE(&closehead, cq2, closequeue, entries);
+					free(cq2);
+				}
+			}
+
+			if (fwq1->so == -1)
+				continue;
+
 			if (fwq1->so > max)
 				max = fwq1->so;
 	
@@ -476,6 +491,9 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					len = recv(fwq1->so, buf, need, MSG_WAITALL | MSG_PEEK);
 					if (len <= 0) 
 						goto drop;
+
+					if (skip)
+						goto drop;
 					
 					returnit(db, cfg, fwq1, buf, len, pibuf);
 				} else {
@@ -489,11 +507,13 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					returnit(db, cfg, fwq1, buf, len, pibuf);
 				}
 
+
 drop:
 				/* delete all instances with the same sessid */
 				sessid = fwq1->sessid;
 				SLIST_REMOVE(&fwqhead, fwq1, forwardqueue, entries);
 				close(fwq1->so);
+				fwq1->so = -1;
 
 				if (fwq1->returnso != -1)
 					close(fwq1->returnso);
@@ -509,7 +529,9 @@ drop:
 					continue;	
 				}
 				cq1->sessid = sessid;
+				cq1->timeout = time(NULL);
 				SLIST_INSERT_HEAD(&closehead, cq1, entries);
+
 			}
 		}
 
@@ -721,6 +743,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	socklen_t namelen;
 	time_t highexpire;
 	uint32_t sessid;
+	int firstrun = 0;
 
 #if __OpenBSD__
 	highexpire = 67768036191673199;
@@ -1097,7 +1120,18 @@ newqueue:
 				return;
 			}
 
-			fwq1->returnso = so;
+			if (! firstrun++)
+				fwq1->returnso = so;
+			else {
+				fwq1->returnso = dup(so);
+				if (fwq1->returnso == -1) {
+					if (fwq1->tsigkey)
+						free(fwq1->tsigkey);
+
+					free(fwq1);
+					return;
+				}
+			}
 
 			/* are we TSIG'ed?  save key and mac */
 			if (sforward->havemac) {
@@ -1122,8 +1156,10 @@ newqueue:
 				}
 			}
 
+#if 0
 			if (fwq1->istcp == 1)
 				break;
+#endif
 		}
 	} else {
 		/* resend this one */
