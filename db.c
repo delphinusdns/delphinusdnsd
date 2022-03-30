@@ -233,6 +233,12 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, ui
 	} else
 		rrset->created = time(NULL);
 
+	/* prevent the same data being re-added */
+	TAILQ_FOREACH(myrr, &rrset->rr_head, entries) {
+		if (memcmp(myrr->rdata, rdata, myrr->rdlen) == 0)
+			return (rbt);
+	}
+
 	/* this sets up the RR */
 
 	myrr = (struct rr *)calloc(1, sizeof(struct rr));
