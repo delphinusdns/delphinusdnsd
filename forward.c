@@ -1120,18 +1120,21 @@ newqueue:
 				return;
 			}
 
-			if (! firstrun++)
-				fwq1->returnso = so;
-			else {
-				fwq1->returnso = dup(so);
-				if (fwq1->returnso == -1) {
-					if (fwq1->tsigkey)
-						free(fwq1->tsigkey);
+			if (fwq1->istcp) {
+				if (! firstrun++)
+					fwq1->returnso = so;
+				else {
+					fwq1->returnso = dup(so);
+					if (fwq1->returnso == -1) {
+						if (fwq1->tsigkey)
+							free(fwq1->tsigkey);
 
-					free(fwq1);
-					return;
+							free(fwq1);
+							return;
+					}
 				}
-			}
+			} else
+				fwq1->returnso = so;
 
 			/* are we TSIG'ed?  save key and mac */
 			if (sforward->havemac) {
