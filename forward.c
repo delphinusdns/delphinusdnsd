@@ -465,15 +465,16 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 
 		
 		SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwq3) {
-			skip = 0;
-			SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
-				if (fwq1->sessid == cq2->sessid) {
-					skip = 1;
-					SLIST_REMOVE(&closehead, cq2, closequeue, entries);
-					free(cq2);
-				}
-			}
 			if (FD_ISSET(fwq1->so, &rset)) {
+				skip = 0;
+				SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
+					if (fwq1->sessid == cq2->sessid) {
+						skip = 1;
+						SLIST_REMOVE(&closehead, cq2, closequeue, entries);
+						free(cq2);
+					}
+				}
+
 				if (fwq1->istcp) {
 					tv.tv_sec = 2;
 					tv.tv_usec = 0;
@@ -1129,8 +1130,8 @@ newqueue:
 						if (fwq1->tsigkey)
 							free(fwq1->tsigkey);
 
-							free(fwq1);
-							return;
+						free(fwq1);
+						return;
 					}
 				}
 			} else
