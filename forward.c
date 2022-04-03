@@ -516,8 +516,10 @@ drop:
 				close(fwq1->so);
 				fwq1->so = -1;
 
-				if (fwq1->returnso != -1)
+				if (fwq1->returnso != -1) {
 					close(fwq1->returnso);
+					fwq1->returnso = -1;
+				}
 							
 				if (fwq1->tsigkey)
 					free(fwq1->tsigkey);
@@ -1202,6 +1204,8 @@ servfail:
 	if (fwq1->istcp) {
 		pack16(&buf[0], htons(p - &buf[2]));
 		send(fwq1->returnso, buf, p - &buf[0], 0);
+		close(fwq1->returnso);
+		fwq1->returnso = -1;
 	} else {
 		switch (fwq1->oldfamily) {
 		case AF_INET:
