@@ -1,43 +1,26 @@
-<html>
-<head>
-<title>Delphinusdnsd</title>
-<link href="style.css" rel="stylesheet" type="text/css" />
-</head>
-<body bgcolor="lightblue">
-<div id="entire">
-        <div id="topbox"><br><br><br><h2>DELPHINUSDNSD&nbsp;&nbsp;&nbsp;&nbsp;</h2></div>
-        <div id="leftside">
-        <ul>
-        <li><a href="index.html">Index</a></li>
-        <li><a href="about.html">About</a></li>
-	<li><a href="git.html">Source</a></li>
-	<li><a href="news.html">News</a></li>
-	<li><a href="credits.html">Credits</a></li>
-	<li><a href="handbook.html">Handbook</a></li>
-	<li><a href="implementation.html">Implementation</a></li>
-	<li><a href="https://blog.delphinusdns.org">Blog</a></li>
-	<li><a href="https://pirata.dev/delphinusdnsd/">Mirror #1</a>
-	<!-- <li><a href="https://delphinusdnsd.pedroramos.space/">Mirror #2</a> -->
-        </ul>
-        </div>
-        <div id="main">
-<p>
-<a href="index.html">Index</a> | 
-<a href="about.html">About</a> |
-<a href="git.html">Source</a> |
-<a href="news.html">News</a> |
-<a href="credits.html">Credits</a> |
-<a href="handbook.html">Handbook</a> |
-<a href="implementation.html">Implementation</a>
-</p>
-<hr>
-<p>
-<h1>The Delphinusdnsd Handbook</h1>
-Here I'm going to explain how to use delphinusdnsd.
-</p>
-<hr>
-<p>
-<h2>Index</h2>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1">
+<link rel="stylesheet" href="screen.css" media="screen,projection,tv">
+<link rel="shortcut icon" href="favicon.ico">
+
+<title>
+	Delphinusdns
+</title>
+</head><body>
+<div id="header">
+	<h1>
+		<a href="index.html">Delphinusdnsd</a>
+	</h1>
+</div>
+<div id="contentWrapper">
+	<div id="content">
+
+<h2>
+	The Delphinusdnsd Handbook
+</h2>
+<h3>
+	Index
+</h3>
 <ol>
 <li><a href="#Constructing">Constructing a structured config file</a></li>
 <li><a href="#tsig">Creating TSIG keys</a></li>
@@ -61,10 +44,9 @@ Here I'm going to explain how to use delphinusdnsd.
 <li><a href="#Forwarding">Delphinusdnsd as a Forwarder</a></li>
 <li><a href="#Reverting">Reverting back to BIND</a></li>
 </ol>
-</p>
-<hr>
-<p>
-<h2><a name="Constructing">Constructing a structured config file</a></h2>
+<h3>
+	<a name="Constructing">Constructing a structured config file</a>
+</h3>
 In the configuration, delphinusdnsd breaks the RFC 1034/1035 protocol by 
 syntax of the zone configuration file.  We use a CSV format for storing
 the config file.  So a minimum zone config may look like:
@@ -543,7 +525,33 @@ You now have a BIND config file.
 As a last word, we were built with our own goals in mind not others, hence 
 you may find something that you don't like perhaps, and now you can revert.
 </p>
-        </div>
+
+	</div>
 </div>
-</body>
-</html>
+<div id="sidebar">
+	<ul>
+		<li>
+			<a href="index.html">Index</a>
+		</li><li>
+			<a href="about.html">About</a>
+		</li><li>
+			<a href="git.html">Source</a>
+		</li><li>
+			<a href="news.html">News</a>
+		</li><li>
+			<a href="credits.html">Credits</a>
+		</li><li>
+			<a href="handbook.html" class="current">Handbook</a>
+		</li><li>
+			<a href="implementation.html">Implementation</a>
+		</li>
+	</ul>
+	<h2>
+		Links
+	</h2>
+	<ul>
+		<li><a href="https://blog.delphinusdns.org">Blog</a></li>
+		<li><a href="https://pirata.dev/delphinusdnsd/">Mirror #1</a>
+	</ul>
+</div>
+</body></html>

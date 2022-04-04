@@ -1,53 +1,59 @@
-<html>
-<head>
-<title>Delphinusdnsd</title>
-<link href="style.css" rel="stylesheet" type="text/css" />
-</head>
-<body bgcolor="lightblue">
-<div id="entire">
-        <div id="topbox"><br><br><br><h2>DELPHINUSDNSD&nbsp;&nbsp;&nbsp;&nbsp;</h2></div>
-        <div id="leftside">
-        <ul>
-        <li><a href="index.html">Index</a></li>
-        <li><a href="about.html">About</a></li>
-	<li><a href="git.html">Source</a></li>
-	<li><a href="news.html">News</a></li>
-	<li><a href="credits.html">Credits</a></li>
-	<li><a href="handbook.html">Handbook</a></li>
-	<li><a href="implementation.html">Implementation</a></li>
-	<li><a href="https://blog.delphinusdns.org">Blog</a></li>
-	<li><a href="https://pirata.dev/delphinusdnsd/">Mirror #1</a>
-	<!-- <li><a href="https://delphinusdnsd.pedroramos.space/">Mirror #2</a> -->
-        </ul>
-        </div>
-        <div id="main">
-<p>
-<a href="index.html">Index</a> | 
-<a href="about.html">About</a> |
-<a href="git.html">Source</a> |
-<a href="news.html">News</a> |
-<a href="credits.html">Credits</a> |
-<a href="handbook.html">Handbook</a> |
-<a href="implementation.html">Implementation</a>
-</p>
-<p>
-Delphinus DNS is a non-caching, non-recursing DNS server that serves 
-authoritative answers for A, AAAA, CAA, CDNSKEY, CDS, CNAME, DNSKEY, DS, 
-HINFO, LOC, MX, NAPTR, NS, NSEC3, NSEC3PARAM, PTR, RP, RRSIG, SOA, SRV, 
-SSHFP, TLSA, TXT, and ZONEMD resource records.  It serves both on IPv4 and 
-IPv6.
-</p> <p>
-Delphinusdnsd is able to restrict answers to a hash of an IP/IPv6 between 1 
-and 127 packets per second.  Unfortunately due to the algorithm of this the
-more pps you ratelimit the higher the memory footprint of delphinusdnsd.
-</p> <p>
-Delphinusdnsd from version 1.5.0 onwards can act as a forwarder, and can 
-utilize a secure channel granted with TSIG protection (shared keys).
-</p> <p>
-Delphinusdnsd is developed on the OpenBSD Operating System.  Ports to FreeBSD,
-NetBSD, and Linux exist.  It is written in the C programming language.  It was
-developed while the main programmer lived in Germany, European Union.
-</p>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1">
+<link rel="stylesheet" href="screen.css" media="screen,projection,tv">
+<link rel="shortcut icon" href="favicon.ico">
+
+<title>
+	Delphinusdns
+</title>
+</head><body>
+<div id="header">
+	<h1>
+		<a href="index.html">Delphinusdnsd</a>
+	</h1>
 </div>
-</body>
-</html>
+<div id="contentWrapper">
+	<div id="content">
+
+<h2>
+	About
+</h2>
+<p>
+Delphinus DNS is a non-caching, non-recursing DNS server that serves authoritative answers for A, AAAA, CAA, CDNSKEY, CDS, CNAME, DNSKEY, DS, HINFO, LOC, MX, NAPTR, NS, NSEC3, NSEC3PARAM, PTR, RP, RRSIG, SOA, SRV, SSHFP, TLSA, TXT, and ZONEMD resource records. It serves both on IPv4 and IPv6.
+</p><p>
+Delphinusdnsd is able to restrict answers to a hash of an IP/IPv6 between 1 and 127 packets per second. Unfortunately due to the algorithm of this the more pps you ratelimit the higher the memory footprint of delphinusdnsd.
+</p><p>
+Delphinusdnsd from version 1.5.0 onwards can act as a forwarder, and can utilize a secure channel granted with TSIG protection (shared keys).
+</p><p>
+Delphinusdnsd is developed on the OpenBSD Operating System. Ports to FreeBSD, NetBSD, and Linux exist. It is written in the C programming language. It was developed while the main programmer lived in Germany, European Union.
+</p>
+
+	</div>
+</div>
+<div id="sidebar">
+	<ul>
+		<li>
+			<a href="index.html">Index</a>
+		</li><li>
+			<a href="about.html" class="current">About</a>
+		</li><li>
+			<a href="git.html">Source</a>
+		</li><li>
+			<a href="news.html">News</a>
+		</li><li>
+			<a href="credits.html">Credits</a>
+		</li><li>
+			<a href="handbook.html">Handbook</a>
+		</li><li>
+			<a href="implementation.html">Implementation</a>
+		</li>
+	</ul>
+	<h2>
+		Links
+	</h2>
+	<ul>
+		<li><a href="https://blog.delphinusdns.org">Blog</a></li>
+		<li><a href="https://pirata.dev/delphinusdnsd/">Mirror #1</a>
+	</ul>
+</div>
+</body></html>
