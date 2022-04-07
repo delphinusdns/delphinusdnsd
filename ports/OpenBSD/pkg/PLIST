@@ -1,4 +1,3 @@
-@comment $OpenBSD: PLIST,v$
 @newuser _ddd:875:_ddd:daemon:DelphinusDNSd Account:/var/delphinusdnsd:/sbin/nologin
 @rcscript ${RCDIR}/delphinusdnsd
 @mode 755

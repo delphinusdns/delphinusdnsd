@@ -1,13 +1,13 @@
-COMMENT =	simple authorative DNS server
+COMMENT =	simple authoritative DNS server
 
-V =		1.6.0
+V =		1.6.1
 DISTNAME =	delphinusdnsd-${V}
 PKGNAME =	${DISTNAME}
 CATEGORIES =	net
 
 GH_ACCOUNT =	delphinusdns
 GH_PROJECT =	delphinusdnsd
-GH_COMMIT =	60a5e1a2bfc64b3192a98b00764cb875f5951853
+GH_COMMIT =	761b340560257dd34b22fbb5fa4a9f3fd0efc8e7
 
 HOMEPAGE =	https://delphinusdns.org/
 
