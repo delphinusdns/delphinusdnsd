@@ -22,6 +22,7 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <sys/un.h>
+#include <sys/resource.h>
 
 #include <net/if.h>
 
@@ -373,6 +374,7 @@ main(int argc, char *argv[], char *environ[])
 	struct cfg *cfg;
 	struct imsgbuf cortex_ibuf;
 	struct imsgbuf *ibuf;
+	struct rlimit rlimits;
 
 	static ddDB *db;
 	
@@ -1197,6 +1199,16 @@ main(int argc, char *argv[], char *environ[])
 			cfg->shptr3 = shptr;
 			cfg->shptr3size = sm_size(SHAREDMEMSIZE3, sizeof(struct pkt_imsg));
 
+
+			/* raise fd limits to hard limit */
+
+			if (getrlimit(RLIMIT_NOFILE, &rlimits) != -1) {
+
+				rlimits.rlim_cur = rlimits.rlim_max;
+				if (setrlimit(RLIMIT_NOFILE, &rlimits) == -1) {
+					dolog(LOG_INFO, "could not raise fd limit in forward process\n");
+				}
+			}
 #ifdef __OpenBSD__
 			/* set up rdomain if specified as a forwarding option */
 			if (setrtable(forward_rdomain) < 0) {
