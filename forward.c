@@ -1101,10 +1101,36 @@ newqueue:
 
 			fwq1->so = socket(fw2->family, (fwq1->istcp != 1) ? SOCK_DGRAM : SOCK_STREAM, 0);
 			if (fwq1->so < 0) {
+				int save_errno = errno;
+
 				dolog(LOG_ERR, "FORWARD socket: %s\n", strerror(errno));
 				if (fwq1->tsigkey)
 					free(fwq1->tsigkey);
 				free(fwq1);
+
+				if (save_errno == EMFILE || save_errno == ENFILE) {
+					/*
+					 * we've run out of descriptors, this likely causes a 
+					 * deadlock situation so expire all fwq's and closequeues
+					 */
+
+					SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwq3) {
+						SLIST_REMOVE(&fwqhead, fwq1, forwardqueue, entries);
+						if (fwq1->so != -1)
+							close(fwq1->so);
+						if (fwq1->returnso != -1)
+							close(fwq1->returnso);
+
+						if (fwq1->tsigkey)
+							free(fwq1->tsigkey);
+						free(fwq1);
+					}
+					SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
+						
+						SLIST_REMOVE(&closehead, cq2, closequeue, entries);
+						free(cq2);
+					}
+				}
 				return;
 			}
 
