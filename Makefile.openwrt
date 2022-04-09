@@ -1,0 +1,115 @@
+CC=gcc
+#CFLAGS=-DDEBUG
+CFLAGS=-D_XOPEN_SOURCE -D_DEFAULT_SOURCE -Wno-shift-count-overflow
+LDADD= -lresolv -lcrypto -lrt -lbsd 
+YACC=bison
+AR=ar
+
+
+all: delphinusdnsd dddctl
+
+delphinusdnsd: imsg-buffer.o imsg.o additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o
+	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o imsg-buffer.o imsg.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o $(LDADD)
+
+dddctl:  dddctl.o util.o dnssec.o parse.o base64.o ent.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o
+	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o $(LDADD)
+	
+
+sign.o: sign.c
+	$(CC) $(CFLAGS) -c sign.c
+
+query.o: query.c
+	$(CC) $(CFLAGS) -c query.c
+	
+imsg-buffer.o: imsg-buffer.c
+	$(CC) $(CFLAGS) -c imsg-buffer.c
+
+imsg.o: imsg.c
+	$(CC) $(CFLAGS) -c imsg.c
+
+db.o: db.c
+	$(CC) $(CFLAGS) -c db.c
+
+tsig.o: tsig.c
+	$(CC) $(CFLAGS) -c tsig.c
+
+dddctl.o: dddctl.c
+	$(CC) $(CFLAGS) -c dddctl.c
+
+parse.o: parse.y
+	$(YACC) $(BISONCFLAGS) -y -d parse.y
+	mv -f y.tab.c parse.c
+	$(CC) $(CFLAGS) -c parse.c
+	
+additional.o: additional.c
+	$(CC) $(CFLAGS) -c additional.c
+
+delphinusdnsd.o: delphinusdnsd.c
+	$(CC) $(CFLAGS) -c delphinusdnsd.c
+
+reply.o: reply.c
+	$(CC) $(CFLAGS) -c reply.c
+
+region.o: region.c
+	$(CC) $(CFLAGS) -c region.c
+
+log.o: log.c
+	$(CC) $(CFLAGS) -c log.c
+
+axfr.o:  axfr.c
+	$(CC) $(CFLAGS) -c axfr.c
+
+filter.o: filter.c
+	$(CC) $(CFLAGS) -c filter.c
+
+ratelimit.o: ratelimit.c
+	$(CC) $(CFLAGS) -c ratelimit.c
+
+passlist.o:  passlist.c
+	$(CC) $(CFLAGS) -c passlist.c
+
+passname.o:  passname.c
+	$(CC) $(CFLAGS) -c passname.c
+
+base64.o: base64.c
+	$(CC) $(CFLAGS) -c base64.c
+
+dnssec.o: dnssec.c
+	$(CC) $(CFLAGS) -c dnssec.c
+
+util.o:  util.c
+	$(CC) $(CFLAGS) -c util.c
+
+ent.o:  ent.c
+	$(CC) $(CFLAGS) -c ent.c
+
+raxfr.o:  raxfr.c
+	$(CC) $(CFLAGS) -c raxfr.c
+
+forward.o:  forward.c
+	$(CC) $(CFLAGS) -c forward.c
+
+cache.o: cache.c
+	$(CC) $(CFLAGS) -c cache.c
+
+zone.o: zone.c
+	$(CC) $(CFLAGS) -c zone.c
+
+siphash.o: siphash.c
+	$(CC) $(CFLAGS) -c siphash.c
+
+install: install-delphinusdnsd install-dddctl
+
+install-dddctl:
+	test -f dddctl/dddctl && install -m 555 dddctl/dddctl /usr/local/bin/
+	mkdir -p /usr/local/man/man8 && install -m 444 dddctl.8 /usr/local/man/man8
+
+install-delphinusdnsd:
+	test -f delphinusdnsd/delphinusdnsd && install -m 555 delphinusdnsd/delphinusdnsd /usr/local/sbin/
+	mkdir -p /usr/local/man/man8 && install -m 444 delphinusdnsd.8 /usr/local/man/man8
+	mkdir -p /usr/local/man/man5 && install -m 444 delphinusdns.conf.5 /usr/local/man/man5
+	install -m 444 delphinusdns.zone.5 /usr/local/man/man5
+
+
+clean:
+	rm -f *.o delphinusdnsd/delphinusdnsd dddctl/dddctl
