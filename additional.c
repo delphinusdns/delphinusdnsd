@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2005-2022 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -55,9 +55,8 @@
 
 #include "ddd-dns.h"
 #include "ddd-db.h"
+#include "ddd-crypto.h"
 
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
 
 int additional_a(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_aaaa(char *, int, struct rbtree *, char *, int, int, int *);

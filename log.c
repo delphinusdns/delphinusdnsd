@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2011-2022 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -43,11 +43,10 @@
 #include <sys/tree.h>
 #endif /* __linux__ */
 
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
 
 #include "ddd-dns.h"
 #include "ddd-db.h"
+#include "ddd-crypto.h"
 
 extern int debug;
 extern int verbose;

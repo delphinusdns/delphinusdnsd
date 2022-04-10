@@ -56,9 +56,6 @@
 #endif /* __FreeBSD__ */
 #endif /* __linux__ */
 
-#include <openssl/bn.h>
-#include <openssl/sha.h>
-
 #include "ddd-dns.h"
 #include "ddd-db.h"
 #include "ddd-crypto.h"

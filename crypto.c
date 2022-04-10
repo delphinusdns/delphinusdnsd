@@ -214,3 +214,65 @@ delphinusdns_HMAC_CTX_reset(DDD_HMAC_CTX *ctx)
 
 	return (ret);
 }
+
+
+DDD_BIGNUM *
+delphinusdns_BN_new(void)
+{
+	DDD_BIGNUM *bn;
+
+#ifdef USE_OPENSSL
+	bn = BN_new();
+#endif
+	return (bn);
+}
+
+void
+delphinusdns_BN_free(DDD_BIGNUM *bn)
+{
+#ifdef USE_OPENSSL
+	BN_free((BIGNUM *)bn);
+#endif
+}
+
+int
+delphinusdns_BN_bn2bin(const DDD_BIGNUM *a, unsigned char *to)
+{
+#ifdef USE_OPENSSL
+	return (BN_bn2bin((const BIGNUM *)a, to));
+#endif
+}
+
+DDD_BIGNUM *
+delphinusdns_BN_bin2bn(const unsigned char *s, int len, DDD_BIGNUM *ret)
+{
+	DDD_BIGNUM *ret0;
+#ifdef USE_OPENSSL
+	ret0 = BN_bin2bn(s, len, (BIGNUM *)ret);
+#endif
+
+	return (ret0);
+}
+
+DDD_BIGNUM *
+delphinusdns_BN_dup(const DDD_BIGNUM *from)
+{
+	DDD_BIGNUM *ret;
+#ifdef USE_OPENSSL
+	ret = BN_dup((const BIGNUM *)from);
+#endif
+
+	return (ret);
+}
+
+DDD_BN_GENCB *
+delphinusdns_BN_GENCB_new(void)
+{
+	DDD_BN_GENCB *ret;
+#ifdef USE_OPENSSL
+	ret = BN_GENCB_new();
+#endif
+
+	return (ret);
+}
+

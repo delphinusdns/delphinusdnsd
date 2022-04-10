@@ -18,12 +18,15 @@
 #define DDD_CRYPTO_H
 
 #if USE_OPENSSL
+#include <openssl/bn.h>
 #include <openssl/evp.h>
 #include <openssl/md5.h>
 #include <openssl/sha.h>
 #include <openssl/hmac.h>
 
 typedef SHA512_CTX DDD_SHA512_CTX;
+typedef BIGNUM DDD_BIGNUM;
+typedef BN_GENCB DDD_BN_GENCB;
 
 #endif
 
@@ -65,6 +68,15 @@ const DDD_EVP_MD * delphinusdns_EVP_get_digestbyname(const char *);
 int delphinusdns_SHA384_Update(DDD_SHA512_CTX *, const void *, size_t);
 void delphinusdns_HMAC_CTX_free(DDD_HMAC_CTX *);
 int delphinusdns_HMAC_CTX_reset(DDD_HMAC_CTX *);
+
+DDD_BIGNUM * delphinusdns_BN_new(void);
+void delphinusdns_BN_free(DDD_BIGNUM *);
+int delphinusdns_BN_bn2bin(const DDD_BIGNUM *, unsigned char *);
+DDD_BIGNUM * delphinusdns_BN_bin2bn(const unsigned char *, int, DDD_BIGNUM *);
+DDD_BIGNUM * delphinusdns_BN_dup(const DDD_BIGNUM *);
+DDD_BN_GENCB * delphinusdns_BN_GENCB_new(void);
+
+
 
 
 #endif /* DDD_CRYPTO_H */

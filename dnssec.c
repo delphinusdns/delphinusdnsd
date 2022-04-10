@@ -54,8 +54,8 @@
 
 #include "ddd-dns.h"
 #include "ddd-db.h"
+#include "ddd-crypto.h"
 
-#include <openssl/sha.h>
 
 /* prototypes */
 

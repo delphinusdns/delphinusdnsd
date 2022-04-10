@@ -60,20 +60,19 @@
 #include "endian.h"
 #endif
 
-#include <openssl/bn.h>
+#if USE_OPENSSL
+/* these need to be put into ddd-crypto.h still */
 #include <openssl/obj_mac.h>
 #include <openssl/rsa.h>
 #include <openssl/err.h>
-#include <openssl/sha.h>
 #include <openssl/ec.h>
 #include <openssl/ecdsa.h>
-
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
+#endif
 
 #include "ddd-dns.h"
 #include "ddd-db.h"
 #include "ddd-config.h"
+#include "ddd-crypto.h"
 
 
 SLIST_HEAD(, keysentry) keyshead;
@@ -1340,7 +1339,7 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 	fprintf(f, "Private-key-format: v1.3\n");
 	fprintf(f, "Algorithm: %d (%s)\n", algorithm, alg_to_name(algorithm));
 	/* PrivateKey */
-	binlen = BN_bn2bin(ecprivatekey, (u_char *)&bin);
+	binlen = delphinusdns_BN_bn2bin(ecprivatekey, (u_char *)&bin);
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
 	fprintf(f, "PrivateKey: %s\n", b64);
 
@@ -1470,10 +1469,10 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 {
 	FILE *f;
         RSA *rsa;
-        BIGNUM *e;
-	BIGNUM *rsan, *rsae, *rsad, *rsap, *rsaq;
-	BIGNUM *rsadmp1, *rsadmq1, *rsaiqmp;
-        BN_GENCB *cb;
+        DDD_BIGNUM *e;
+	DDD_BIGNUM *rsan, *rsae, *rsad, *rsap, *rsaq;
+	DDD_BIGNUM *rsadmp1, *rsadmq1, *rsaiqmp;
+        DDD_BN_GENCB *cb;
 	char buf[512];
 	char bin[4096];
 	char b64[4096];
@@ -1492,25 +1491,25 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 		return NULL;
 	}
 
-	if ((e = BN_new()) == NULL) {
-		dolog(LOG_INFO, "BN_new: %s\n", strerror(errno));
+	if ((e = delphinusdns_BN_new()) == NULL) {
+		dolog(LOG_INFO, "delphinusdns_BN_new: %s\n", strerror(errno));
 		RSA_free(rsa);
 		return NULL;
 	}
-	if ((rsan = BN_new()) == NULL ||
-		(rsae = BN_new()) == NULL ||
-		(rsad = BN_new()) == NULL ||
-		(rsap = BN_new()) == NULL ||
-		(rsaq = BN_new()) == NULL ||
-		(rsadmp1 = BN_new()) == NULL ||
-		(rsadmq1 = BN_new()) == NULL ||
-		(rsaiqmp = BN_new()) == NULL) {
-		dolog(LOG_INFO, "BN_new: %s\n", strerror(errno));
+	if ((rsan = delphinusdns_BN_new()) == NULL ||
+		(rsae = delphinusdns_BN_new()) == NULL ||
+		(rsad = delphinusdns_BN_new()) == NULL ||
+		(rsap = delphinusdns_BN_new()) == NULL ||
+		(rsaq = delphinusdns_BN_new()) == NULL ||
+		(rsadmp1 = delphinusdns_BN_new()) == NULL ||
+		(rsadmq1 = delphinusdns_BN_new()) == NULL ||
+		(rsaiqmp = delphinusdns_BN_new()) == NULL) {
+		dolog(LOG_INFO, "delphinusdns_BN_new: %s\n", strerror(errno));
 		RSA_free(rsa);
 		return NULL;
 	}
 	
-	if ((cb = BN_GENCB_new()) == NULL) {
+	if ((cb = delphinusdns_BN_GENCB_new()) == NULL) {
 		dolog(LOG_INFO, "BN_GENCB_new: %s\n", strerror(errno));
 		RSA_free(rsa);
 		return NULL;
@@ -1538,7 +1537,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 
 	if (RSA_generate_key_ex(rsa, bits, e, cb) == 0) {
 		dolog(LOG_INFO, "RSA_generate_key_ex: %s\n", strerror(errno));
-		BN_free(e);
+		delphinusdns_BN_free(e);
 		RSA_free(rsa);
 		BN_GENCB_free(cb);
 		return NULL;
@@ -1558,7 +1557,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	p++;
  	pack8(p, algorithm);
 	p++;
-	binlen = BN_bn2bin(rsae, (u_char *)tmp); 
+	binlen = delphinusdns_BN_bn2bin(rsae, (u_char *)tmp); 
 	/* RFC 3110 */
 	if (binlen < 256) {
 		*p = binlen;
@@ -1572,7 +1571,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	
 	pack(p, tmp, binlen);
 	p += binlen;
-	binlen = BN_bn2bin(rsan, (u_char *)tmp);
+	binlen = delphinusdns_BN_bn2bin(rsan, (u_char *)tmp);
 	pack(p, tmp, binlen);
 	p += binlen;
 	rlen = (p - &bin[0]);
@@ -1587,7 +1586,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	if (knp != NULL) {
 		dolog(LOG_INFO, "create_key: collision with existing pid %d\n", *pid);
 		RSA_free(rsa);
-		BN_free(e);
+		delphinusdns_BN_free(e);
 		return (create_key_rsa(zonename, ttl, flags, algorithm, bits, pid));
 	}
 	
@@ -1599,7 +1598,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	if (retval == NULL) {
 		dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
 		RSA_free(rsa);
-		BN_free(e);
+		delphinusdns_BN_free(e);
 		return NULL;
 	}
 		
@@ -1616,7 +1615,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
 		dolog(LOG_INFO, "%s is not a file!\n", buf);
 		RSA_free(rsa);
-		BN_free(e);
+		delphinusdns_BN_free(e);
 		return NULL;
 	}
 	
@@ -1624,46 +1623,46 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	if (f == NULL) {
 		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
 		RSA_free(rsa);
-		BN_free(e);
+		delphinusdns_BN_free(e);
 		return NULL;
 	}
 
 	fprintf(f, "Private-key-format: v1.3\n");
 	fprintf(f, "Algorithm: %d (%s)\n", algorithm, alg_to_name(algorithm));
 	/* modulus */
-	binlen = BN_bn2bin(rsan, (u_char *)&bin);
+	binlen = delphinusdns_BN_bn2bin(rsan, (u_char *)&bin);
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Modulus: %s\n", b64);
 	/* public exponent */
-	binlen = BN_bn2bin(rsae, (u_char *)&bin);
+	binlen = delphinusdns_BN_bn2bin(rsae, (u_char *)&bin);
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
 	fprintf(f, "PublicExponent: %s\n", b64);
 	/* private exponent */
-	binlen = BN_bn2bin(rsad, (u_char *)&bin);
+	binlen = delphinusdns_BN_bn2bin(rsad, (u_char *)&bin);
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
 	fprintf(f, "PrivateExponent: %s\n", b64);
 	/* get the RSA factors */
 	RSA_get0_factors(rsa, (const BIGNUM **)&rsap, (const BIGNUM **)&rsaq);
 	/* prime1 */
-	binlen = BN_bn2bin(rsap, (u_char *)&bin);
+	binlen = delphinusdns_BN_bn2bin(rsap, (u_char *)&bin);
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Prime1: %s\n", b64);
 	/* prime2 */
-	binlen = BN_bn2bin(rsaq, (u_char *)&bin);
+	binlen = delphinusdns_BN_bn2bin(rsaq, (u_char *)&bin);
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Prime2: %s\n", b64);
 	/* get the RSA crt params */
 	RSA_get0_crt_params(rsa, (const BIGNUM **)&rsadmp1, (const BIGNUM **)&rsadmq1, (const BIGNUM **)&rsaiqmp);
 	/* exponent1 */
-	binlen = BN_bn2bin(rsadmp1, (u_char *)&bin);
+	binlen = delphinusdns_BN_bn2bin(rsadmp1, (u_char *)&bin);
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Exponent1: %s\n", b64);
 	/* exponent2 */
-	binlen = BN_bn2bin(rsadmq1, (u_char *)&bin);
+	binlen = delphinusdns_BN_bn2bin(rsadmq1, (u_char *)&bin);
 	mybase64_encode((u_char*)bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Exponent2: %s\n", b64);
 	/* coefficient */
-	binlen = BN_bn2bin(rsaiqmp, (u_char *)&bin);
+	binlen = delphinusdns_BN_bn2bin(rsaiqmp, (u_char *)&bin);
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Coefficient: %s\n", b64);
 
@@ -1676,7 +1675,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	fprintf(f, "Activate: %s\n", buf);
 	
 	fclose(f);
-	BN_free(e);
+	delphinusdns_BN_free(e);
 
 	/* now for the .key */
 
@@ -1693,7 +1692,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
 		dolog(LOG_INFO, "%s is not a file!\n", buf);
 		RSA_free(rsa);
-		BN_free(e);
+		delphinusdns_BN_free(e);
 		return NULL;
 	}
 	f = fopen(buf, "w+");
@@ -1715,7 +1714,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 
 	/* RFC 3110, section 2 */
 	p = &bin[0];
-	binlen = BN_bn2bin(rsae, (u_char *)tmp);
+	binlen = delphinusdns_BN_bn2bin(rsae, (u_char *)tmp);
 	if (binlen < 256) {
 		*p = binlen;
 		p++;
@@ -1727,7 +1726,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	}
 	pack(p, tmp, binlen);
 	p += binlen;
-	binlen = BN_bn2bin(rsan, (u_char *)tmp);
+	binlen = delphinusdns_BN_bn2bin(rsan, (u_char *)tmp);
 	pack(p, tmp, binlen);
 	p += binlen; 
 	binlen = (p - &bin[0]);
@@ -7536,15 +7535,15 @@ get_private_key_rsa(struct keysentry *kn)
 		return NULL;
 	}
 
-	if ( 	(rsan = BN_dup(kn->rsan)) == NULL ||
-		(rsae = BN_dup(kn->rsae)) == NULL ||
-		(rsad = BN_dup(kn->rsad)) == NULL ||
-		(rsap = BN_dup(kn->rsap)) == NULL ||
-		(rsaq = BN_dup(kn->rsaq)) == NULL ||
-		(rsadmp1 = BN_dup(kn->rsadmp1)) == NULL ||
-		(rsadmq1 = BN_dup(kn->rsadmq1)) == NULL ||
-		(rsaiqmp = BN_dup(kn->rsaiqmp)) == NULL) {
-		dolog(LOG_INFO, "BN_dup\n");
+	if ( 	(rsan = delphinusdns_BN_dup(kn->rsan)) == NULL ||
+		(rsae = delphinusdns_BN_dup(kn->rsae)) == NULL ||
+		(rsad = delphinusdns_BN_dup(kn->rsad)) == NULL ||
+		(rsap = delphinusdns_BN_dup(kn->rsap)) == NULL ||
+		(rsaq = delphinusdns_BN_dup(kn->rsaq)) == NULL ||
+		(rsadmp1 = delphinusdns_BN_dup(kn->rsadmp1)) == NULL ||
+		(rsadmq1 = delphinusdns_BN_dup(kn->rsadmq1)) == NULL ||
+		(rsaiqmp = delphinusdns_BN_dup(kn->rsaiqmp)) == NULL) {
+		dolog(LOG_INFO, "delphinusdns_BN_dup\n");
 		return NULL;
 	}
 
@@ -7575,8 +7574,8 @@ get_private_key_ec(struct keysentry *kn)
 	}
 
 	
-	if ((ecprivate = BN_dup(kn->ecprivate)) == NULL) {
-		dolog(LOG_INFO, "BN_dup\n");
+	if ((ecprivate = delphinusdns_BN_dup(kn->ecprivate)) == NULL) {
+		dolog(LOG_INFO, "delphinusdns_BN_dup\n");
 		goto out;
 	}
 
@@ -7679,64 +7678,64 @@ store_private_key(struct keysentry *kn, char *zonename, int keyid, int algorithm
 			p += 9;
 	
 			keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
-			if ((kn->rsan = BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL)  {
-				dolog(LOG_INFO, "BN_bin2bn failed\n");
+			if ((kn->rsan = delphinusdns_BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL)  {
+				dolog(LOG_INFO, "delphinusdns_BN_bin2bn failed\n");
 				return -1;
 			}
 		} else if ((p = strstr(buf, "PublicExponent: ")) != NULL) {
 			p += 16;	
 
 			keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
-			if ((kn->rsae = BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
-				dolog(LOG_INFO, "BN_bin2bn failed\n");
+			if ((kn->rsae = delphinusdns_BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "delphinusdns_BN_bin2bn failed\n");
 				return -1;
 			}
 		} else if ((p = strstr(buf, "PrivateExponent: ")) != NULL) {
 			p += 17;
 
 			keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
-			if ((kn->rsad = BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
-				dolog(LOG_INFO, "BN_bin2bn failed\n");
+			if ((kn->rsad = delphinusdns_BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "delphinusdns_BN_bin2bn failed\n");
 				return -1;
 			}
 		} else if ((p = strstr(buf, "Prime1: ")) != NULL) {
 			p += 8;
 
 			keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
-			if ((kn->rsap = BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
-				dolog(LOG_INFO, "BN_bin2bn failed\n");
+			if ((kn->rsap = delphinusdns_BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "delphinusdns_BN_bin2bn failed\n");
 				return -1;
 			}
 		} else if ((p = strstr(buf, "Prime2: ")) != NULL) {
 			p += 8;
 
 			keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
-			if ((kn->rsaq = BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
-				dolog(LOG_INFO, "BN_bin2bn failed\n");
+			if ((kn->rsaq = delphinusdns_BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "delphinusdns_BN_bin2bn failed\n");
 				return -1;
 			}
 		} else if ((p = strstr(buf, "Exponent1: ")) != NULL) {
 			p += 11;
 
 			keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
-			if ((kn->rsadmp1 = BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
-				dolog(LOG_INFO, "BN_bin2bn failed\n");
+			if ((kn->rsadmp1 = delphinusdns_BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "delphinusdns_BN_bin2bn failed\n");
 				return -1;
 			}
 		} else if ((p = strstr(buf, "Exponent2: ")) != NULL) {
 			p += 11;
 
 			keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
-			if ((kn->rsadmq1 = BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
-				dolog(LOG_INFO, "BN_bin2bn failed\n");
+			if ((kn->rsadmq1 = delphinusdns_BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "delphinusdns_BN_bin2bn failed\n");
 				return -1;
 			}
 		} else if ((p = strstr(buf, "Coefficient: ")) != NULL) {
 			p += 13;
 
 			keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
-			if ((kn->rsaiqmp = BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
-				dolog(LOG_INFO, "BN_bin2bn failed\n");
+			if ((kn->rsaiqmp = delphinusdns_BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "delphinusdns_BN_bin2bn failed\n");
 				return -1;
 			}
 		} else if ((p = strstr(buf, "PrivateKey: ")) != NULL) {
@@ -7748,8 +7747,8 @@ store_private_key(struct keysentry *kn, char *zonename, int keyid, int algorithm
 			}
 
 			keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
-			if ((kn->ecprivate = BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
-				dolog(LOG_INFO, "BN_bin2bn failed\n");
+			if ((kn->ecprivate = delphinusdns_BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
+				dolog(LOG_INFO, "delphinusdns_BN_bin2bn failed\n");
 				return -1;
 			}
 		}
@@ -8992,10 +8991,10 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 
 		memset(signature, 0, *siglen);
 
-		buflen = BN_bn2bin(r, (u_char*)buf);
+		buflen = delphinusdns_BN_bn2bin(r, (u_char*)buf);
 		memcpy((char *)&signature[32 - buflen], buf, buflen);
 
-		buflen = BN_bn2bin(s, (u_char*)buf);
+		buflen = delphinusdns_BN_bn2bin(s, (u_char*)buf);
 		memcpy((char *)&signature[64 - buflen], buf, buflen);
 		*siglen = 64;
 
