@@ -2,11 +2,11 @@
 
 PROG=delphinusdnsd
 
-SRCS=delphinusdnsd.c parse.y reply.c additional.c region.c log.c axfr.c filter.c ratelimit.c passlist.c base64.c dnssec.c util.c ent.c db.c imsg-buffer.c imsg.c tsig.c raxfr.c forward.c cache.c zone.c passname.c siphash.c
+SRCS=delphinusdnsd.c parse.y reply.c additional.c region.c log.c axfr.c filter.c ratelimit.c passlist.c base64.c dnssec.c util.c ent.c db.c imsg-buffer.c imsg.c tsig.c raxfr.c forward.c cache.c zone.c passname.c siphash.c crypto.c
 
 CFLAGS= -g
-CFLAGS+= -I${.CURDIR}/..  -I/usr/pkg/libressl/include
-LDFLAGS= -g -L/usr/pkg/lib -L/usr/pkg/libressl/lib -R/usr/pkg/lib
+CFLAGS+= -I${.CURDIR}/..  -I/usr/pkg/libressl/include -DUSE_OPENSSL
+LDFLAGS= -g -L/usr/pkg/lib -L/usr/pkg/libressl/lib -R/usr/pkg/lib -DUSE_OPENSSL
 LDADD= -lcrypto -lssl 
 
 OBJDIR=.

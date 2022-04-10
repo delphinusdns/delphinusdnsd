@@ -2,9 +2,9 @@
 
 PROG=dddctl
 
-SRCS=dddctl.c parse.y base64.c dnssec.c util.c ent.c db.c raxfr.c tsig.c region.c query.c sign.c
+SRCS=dddctl.c parse.y base64.c dnssec.c util.c ent.c db.c raxfr.c tsig.c region.c query.c sign.c crypto.c
 
-CFLAGS= -Wall -g  -I${.CURDIR}/..
+CFLAGS= -Wall -g  -I${.CURDIR}/.. -DUSE_OPENSSL
 LDFLAGS= -Wall -g 
 LDADD= -lcrypto -lssl -lutil
 

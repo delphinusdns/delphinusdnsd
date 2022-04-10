@@ -61,12 +61,9 @@
 #include "endian.h"
 #endif
 
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
-
 #include "ddd-dns.h"
 #include "ddd-db.h" 
+#include "ddd-crypto.h"
 #include "ddd-config.h"
 
 /* prototypes */
@@ -100,7 +97,7 @@ int			free_question(struct question *);
 struct rrtab 	*rrlookup(char *);
 char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
 void log_diff(char *sha256, char *mac, int len);
-int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
+int tsig_pseudoheader(char *, uint16_t, time_t, DDD_HMAC_CTX *);
 char * 	bin2hex(char *, int);
 uint64_t timethuman(time_t);
 char * 	bitmap2human(char *, int);
@@ -109,29 +106,29 @@ int dn_contains(char *name, int len, char *anchorname, int alen);
 uint16_t udp_cksum(uint16_t *, uint16_t, struct ip *, struct udphdr *);
 uint16_t udp_cksum6(uint16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
 
-void zonemd_hash_a(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_aaaa(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_soa(SHA512_CTX *, struct rrset *, struct rbtree *, uint32_t *);
-void zonemd_hash_ns(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_cname(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_ptr(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_txt(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_rp(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_hinfo(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_srv(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_naptr(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_caa(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_mx(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_tlsa(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_loc(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_sshfp(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_ds(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_dnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_cds(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_cdnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_rrsig(SHA512_CTX *, struct rrset *, struct rbtree *, int);
-void zonemd_hash_nsec3(SHA512_CTX *, struct rrset *, struct rbtree *);
-void zonemd_hash_nsec3param(SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_a(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_aaaa(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_soa(DDD_SHA512_CTX *, struct rrset *, struct rbtree *, uint32_t *);
+void zonemd_hash_ns(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_cname(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_ptr(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_txt(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_rp(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_hinfo(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_srv(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_naptr(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_caa(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_mx(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_tlsa(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_loc(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_sshfp(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_ds(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_dnskey(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_cds(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_cdnskey(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_rrsig(DDD_SHA512_CTX *, struct rrset *, struct rbtree *, int);
+void zonemd_hash_nsec3(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_nsec3param(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
 
 char *canonical_sort(char **, int, int *);
@@ -158,33 +155,33 @@ extern int 	check_ent(char *, int);
 extern int     find_tsig_key(char *, int, char *, int);
 extern int      mybase64_decode(char const *, u_char *, size_t);
 
-extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_zonemd(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-extern int raxfr_loc(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_zonemd(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_loc(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern uint16_t raxfr_skip(FILE *, u_char *, u_char *);
-extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, uint32_t, uint16_t, HMAC_CTX *, struct soa_constraints *);
-extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, uint16_t *, uint32_t, HMAC_CTX *, char *, int, int);
-extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *, char *, int);
+extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, uint32_t, uint16_t, DDD_HMAC_CTX *, struct soa_constraints *);
+extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, uint16_t *, uint32_t, DDD_HMAC_CTX *, char *, int, int);
+extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *, char *, int);
 extern char *convert_name(char *, int);
 
 
@@ -1134,6 +1131,8 @@ build_question(char *buf, int len, uint16_t additional, char *mac)
 	struct question *q = NULL;
 	struct dns_header *hdr = (struct dns_header *)buf;
 
+	const DDD_EVP_MD *md;
+
 	/* find the end of name */
 	elen = 0;
 	memset(&expand, 0, sizeof(expand));
@@ -1620,7 +1619,14 @@ optskip:
 			break;
 		}
 
-		HMAC(EVP_sha256(), tsigkey, tsignamelen, (unsigned char *)pseudo_packet, 
+		
+		md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("sha256");
+		if (md == NULL) {
+			dolog(LOG_INFO, "HMAC could not initialize\n");
+			q->tsig.tsigerrorcode = DNS_BADSIG;
+			break;
+		}
+		delphinusdns_HMAC(md, tsigkey, tsignamelen, (unsigned char *)pseudo_packet, 
 			ppoffset, (unsigned char *)&sha256, &shasize);
 
 
@@ -1827,7 +1833,7 @@ log_diff(char *sha256, char *mac, int len)
  */
 
 int
-tsig_pseudoheader(char *tsigkeyname, uint16_t fudge, time_t now, HMAC_CTX *ctx)
+tsig_pseudoheader(char *tsigkeyname, uint16_t fudge, time_t now, DDD_HMAC_CTX *ctx)
 {
 	char pseudo_packet[512];
 	char *keyname = NULL;
@@ -1901,7 +1907,7 @@ tsig_pseudoheader(char *tsigkeyname, uint16_t fudge, time_t now, HMAC_CTX *ctx)
 	ppoffset += 2;
 	p += 2;
 
-	HMAC_Update(ctx, (u_char *)pseudo_packet, ppoffset);
+	delphinusdns_HMAC_Update(ctx, (u_char *)pseudo_packet, ppoffset);
 
 	return 0;
 }
@@ -2049,11 +2055,18 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	uint16_t rdlen, *plen;
 	uint16_t tcplen;
 	
-	HMAC_CTX *ctx;
+	DDD_HMAC_CTX *ctx;
+	const DDD_EVP_MD *md;
+
 	time_t now = 0;
 	socklen_t sizetv;
 	int sacount = 0;
 	
+	md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("sha256");
+	if (md == NULL) {
+		fprintf(stderr, "md failed!\n");
+		return -1;
+	}
 	if (!(format & TCP_FORMAT))
 		return -1;
 
@@ -2104,9 +2117,9 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 			return -1;
 		}
 		
-		ctx = HMAC_CTX_new();
-		HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
-		HMAC_Update(ctx, (u_char *)&query[2], totallen - 2);
+		ctx = delphinusdns_HMAC_CTX_new();
+		delphinusdns_HMAC_Init_ex(ctx, pseudo_packet, len, md, NULL);
+		delphinusdns_HMAC_Update(ctx, (u_char *)&query[2], totallen - 2);
 
 		now = time(NULL);
 		if (tsig_pseudoheader(tsigkey, DEFAULT_TSIG_FUDGE, now, ctx) < 0) {
@@ -2114,14 +2127,14 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 			return -1;
 		}
 
-		HMAC_Final(ctx, (u_char *)shabuf, (u_int *)&len);
+		delphinusdns_HMAC_Final(ctx, (u_char *)shabuf, (u_int *)&len);
 
 		if (len != DNS_HMAC_SHA256_SIZE) {
 			fprintf(stderr, "not expected len != 32\n");
 			return -1;
 		}
 
-		HMAC_CTX_free(ctx);
+		delphinusdns_HMAC_CTX_free(ctx);
 
 		keyname = (u_char *)dns_label(tsigkey, &len);
 		if (keyname == NULL) {
@@ -2230,11 +2243,11 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 			return -1;
 		}
 		
-		ctx = HMAC_CTX_new();
-		HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL);
+		ctx = delphinusdns_HMAC_CTX_new();
+		delphinusdns_HMAC_Init_ex(ctx, pseudo_packet, len, md, NULL);
 		maclen = htons(DNS_HMAC_SHA256_SIZE);
-		HMAC_Update(ctx, (u_char *)&maclen, sizeof(maclen));
-		HMAC_Update(ctx, (u_char *)shabuf, sizeof(shabuf));
+		delphinusdns_HMAC_Update(ctx, (u_char *)&maclen, sizeof(maclen));
+		delphinusdns_HMAC_Update(ctx, (u_char *)shabuf, sizeof(shabuf));
 	} else
 		ctx = NULL;
 
@@ -2347,7 +2360,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 			if (rwh->dh.additional)
 				rwh->dh.additional--;
 			HTONS(rwh->dh.additional);
-			HMAC_Update(ctx, estart, (p - estart));
+			delphinusdns_HMAC_Update(ctx, estart, (p - estart));
 			rwh->dh.additional = saveadd;
 		}
 
@@ -2377,17 +2390,19 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 					return -1;
 				}
 
-			 	if (HMAC_CTX_reset(ctx) != 1) {
+			 	if (delphinusdns_HMAC_CTX_reset(ctx) != 1) {
 					fprintf(stderr, "HMAC_CTX_reset failed!\n");
 					return -1;
 				}
-				if (HMAC_Init_ex(ctx, pseudo_packet, len, EVP_sha256(), NULL) != 1) {
+				
+					
+				if (delphinusdns_HMAC_Init_ex(ctx, pseudo_packet, len, md, NULL) != 1) {
 					fprintf(stderr, "HMAC_Init_ex failed!\n");
 					return -1;
 				}
 				maclen = htons(DNS_HMAC_SHA256_SIZE);
-				HMAC_Update(ctx, (u_char *)&maclen, sizeof(maclen));
-				HMAC_Update(ctx, (u_char *)mac, sizeof(mac));
+				delphinusdns_HMAC_Update(ctx, (u_char *)&maclen, sizeof(maclen));
+				delphinusdns_HMAC_Update(ctx, (u_char *)mac, sizeof(mac));
 
 				if (soacount > 1)
 					goto out;
@@ -2472,7 +2487,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 out:
 
 	if (tsigkey) {
-		HMAC_CTX_free(ctx);	
+		delphinusdns_HMAC_CTX_free(ctx);	
 	}
 
 #if 0
@@ -3111,7 +3126,7 @@ udp_cksum6(uint16_t *addr, uint16_t len, struct ip6_hdr *ip6, struct udphdr *uh)
 
 
 void
-zonemd_hash_a(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_a(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -3173,7 +3188,7 @@ zonemd_hash_a(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -3186,7 +3201,7 @@ zonemd_hash_a(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 }
 
 void
-zonemd_hash_aaaa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_aaaa(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -3249,7 +3264,7 @@ zonemd_hash_aaaa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -3261,7 +3276,7 @@ zonemd_hash_aaaa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 }
 
 void
-zonemd_hash_soa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt, uint32_t *serial)
+zonemd_hash_soa(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt, uint32_t *serial)
 {
 	char *tmpkey;
         char *p;
@@ -3314,12 +3329,12 @@ zonemd_hash_soa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt, uint32
 
 	keylen = (p - tmpkey);
 
-	SHA384_Update(ctx, tmpkey, keylen);
+	delphinusdns_SHA384_Update(ctx, tmpkey, keylen);
 
 	free(tmpkey);
 }
 void
-zonemd_hash_ns(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_ns(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -3381,7 +3396,7 @@ zonemd_hash_ns(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -3393,7 +3408,7 @@ zonemd_hash_ns(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 
 }
 void
-zonemd_hash_cname(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_cname(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *p;
@@ -3432,14 +3447,14 @@ zonemd_hash_cname(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 
 	keylen = (p - tmpkey);     
 
-	SHA384_Update(ctx, tmpkey, keylen);
+	delphinusdns_SHA384_Update(ctx, tmpkey, keylen);
 
 	free(tmpkey);
 }
 
 
 void
-zonemd_hash_ptr(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_ptr(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *p;
@@ -3478,13 +3493,13 @@ zonemd_hash_ptr(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 	
 	keylen = (p - tmpkey);     
 
-	SHA384_Update(ctx, tmpkey, keylen);
+	delphinusdns_SHA384_Update(ctx, tmpkey, keylen);
 
 	free(tmpkey);
 
 }
 void
-zonemd_hash_txt(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_txt(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -3546,7 +3561,7 @@ zonemd_hash_txt(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -3559,7 +3574,7 @@ zonemd_hash_txt(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 
 }
 void
-zonemd_hash_rp(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_rp(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -3626,7 +3641,7 @@ zonemd_hash_rp(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -3641,7 +3656,7 @@ zonemd_hash_rp(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 
 
 void
-zonemd_hash_hinfo(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_hinfo(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -3711,7 +3726,7 @@ zonemd_hash_hinfo(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -3725,7 +3740,7 @@ zonemd_hash_hinfo(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 
 }
 void
-zonemd_hash_srv(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_srv(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -3793,7 +3808,7 @@ zonemd_hash_srv(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -3808,7 +3823,7 @@ zonemd_hash_srv(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 
 
 void
-zonemd_hash_naptr(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_naptr(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -3890,7 +3905,7 @@ zonemd_hash_naptr(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -3903,7 +3918,7 @@ zonemd_hash_naptr(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 
 
 void
-zonemd_hash_caa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_caa(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -3972,7 +3987,7 @@ zonemd_hash_caa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -3984,7 +3999,7 @@ zonemd_hash_caa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 
 }
 void
-zonemd_hash_mx(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_mx(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -4048,7 +4063,7 @@ zonemd_hash_mx(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -4060,7 +4075,7 @@ zonemd_hash_mx(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 }
 
 void
-zonemd_hash_loc(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_loc(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -4133,7 +4148,7 @@ zonemd_hash_loc(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -4145,7 +4160,7 @@ zonemd_hash_loc(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 }
 
 void
-zonemd_hash_tlsa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_tlsa(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -4212,7 +4227,7 @@ zonemd_hash_tlsa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -4225,7 +4240,7 @@ zonemd_hash_tlsa(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 
 
 void
-zonemd_hash_sshfp(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_sshfp(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -4291,7 +4306,7 @@ zonemd_hash_sshfp(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -4435,7 +4450,7 @@ zonemd_hash_zonemd(struct rrset *rrset, struct rbtree *rbt)
 }
 
 void
-zonemd_hash_cds(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_cds(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -4503,7 +4518,7 @@ zonemd_hash_cds(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -4516,7 +4531,7 @@ zonemd_hash_cds(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 }
 
 void
-zonemd_hash_ds(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_ds(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -4584,7 +4599,7 @@ zonemd_hash_ds(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -4597,7 +4612,7 @@ zonemd_hash_ds(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 }
 
 void
-zonemd_hash_dnskey(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_dnskey(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -4665,7 +4680,7 @@ zonemd_hash_dnskey(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -4678,7 +4693,7 @@ zonemd_hash_dnskey(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 }
 
 void
-zonemd_hash_cdnskey(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_cdnskey(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -4746,7 +4761,7 @@ zonemd_hash_cdnskey(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -4759,7 +4774,7 @@ zonemd_hash_cdnskey(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 }
 
 void
-zonemd_hash_rrsig(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt, int skip_zonemd)
+zonemd_hash_rrsig(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt, int skip_zonemd)
 {
 	char *tmpkey;
         char *q, *r;
@@ -4842,7 +4857,7 @@ zonemd_hash_rrsig(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt, int 
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -4855,7 +4870,7 @@ zonemd_hash_rrsig(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt, int 
 }
 
 void
-zonemd_hash_nsec3(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_nsec3(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -4931,7 +4946,7 @@ zonemd_hash_nsec3(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {
@@ -4943,7 +4958,7 @@ zonemd_hash_nsec3(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 }
 
 void
-zonemd_hash_nsec3param(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+zonemd_hash_nsec3param(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
         char *q, *r;
@@ -5013,7 +5028,7 @@ zonemd_hash_nsec3param(SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		return;
 	}
 
-	SHA384_Update(ctx, r, rlen);
+	delphinusdns_SHA384_Update(ctx, r, rlen);
 
 	free (r);
 	for (i = 0; i < csort; i++) {

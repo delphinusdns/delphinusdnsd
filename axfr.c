@@ -59,9 +59,7 @@
 
 #include "ddd-dns.h"
 #include "ddd-db.h"
-
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
+#include "ddd-crypto.h"
 
 void	axfrloop(int *, int, char **, ddDB *, struct imsgbuf *ibuf);
 void	axfr_connection(int, char *, int, ddDB *, char *, int);
@@ -107,7 +105,7 @@ extern int rotate_rr(struct rrset *rrset);
 
 extern int domaincmp(struct node *e1, struct node *e2);
 extern char * dns_label(char *, int *);
-extern int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
+extern int additional_tsig(struct question *, char *, int, int, int, int, DDD_HMAC_CTX *, uint16_t);
 extern int find_tsig_key(char *keyname, int keynamelen, char *key, int keylen);
 extern int have_zone(char *zonename, int zonelen);
 
@@ -848,8 +846,16 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 	struct rrset *rrset = NULL;
 
 	ddDBT key, data;
-	HMAC_CTX *tsigctx = NULL;
+	DDD_HMAC_CTX *tsigctx = NULL;
+	DDD_EVP_MD *md = NULL;
 		
+
+	md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("sha256");
+	if (md == NULL) {
+		dolog(LOG_ERR, "md initialization error, drop\n");
+		close(so);
+		exit(1);
+	}
 
 #define DDD_AXFR_RECBUF	(0xffff + 3)
 
@@ -1043,8 +1049,13 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 			
 			}
 
-			tsigctx = HMAC_CTX_new();
-			if (HMAC_Init_ex(tsigctx, (const void *)&tsigkey, tsigkeylen, EVP_sha256(), NULL) == 0) {
+			tsigctx = delphinusdns_HMAC_CTX_new();
+			if (tsigctx == NULL) {
+				dolog(LOG_ERR, "delphinusdns_HMAC_CTX_new()\n");
+				goto drop;
+			}
+		
+			if (delphinusdns_HMAC_Init_ex(tsigctx, (const void *)&tsigkey, tsigkeylen, md, NULL) == 0) {
 				dolog(LOG_ERR, "AXFR tsig initialization error, drop\n");
 				goto drop;
 			}
@@ -1101,9 +1112,9 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 					if (tmplen != outlen) {
 						odh->additional = htons(1);
 
-						HMAC_CTX_reset(tsigctx);
-						if (HMAC_Init_ex(tsigctx, (const void *)&tsigkey, tsigkeylen, EVP_sha256(), NULL) == 0) {
-							dolog(LOG_ERR, "AXFR tsig initialization error, drop\n");
+						delphinusdns_HMAC_CTX_reset(tsigctx);
+						if (delphinusdns_HMAC_Init_ex(tsigctx, (const void *)&tsigkey, tsigkeylen, md, NULL) == 0) {
+							dolog(LOG_ERR, "AXFR tsig initialization error 2, drop\n");
 							goto drop;
 						}
 
@@ -1156,7 +1167,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 			pack16(reply, htons(outlen));
 
-			HMAC_CTX_free(tsigctx);
+			delphinusdns_HMAC_CTX_free(tsigctx);
 		}
 
 		len = send(so, reply, outlen + 2, 0);

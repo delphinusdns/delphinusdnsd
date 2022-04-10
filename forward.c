@@ -67,10 +67,9 @@
 #include "endian.h"
 #endif
 
-#include <openssl/hmac.h>
-
 #include "ddd-dns.h"
 #include "ddd-db.h"
+#include "ddd-crypto.h"
 
 TAILQ_HEAD(forwardentrys, forwardentry) forwardhead;
 
@@ -1724,7 +1723,14 @@ check_tsig(char *buf, int len, char *mac)
 	struct dns_header *hdr; 
 	struct tsig *rtsig;
 
+	const DDD_EVP_MD *md;
 	
+	md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("sha256");
+	if (md == NULL) {
+		dolog(LOG_INFO, "could not initialize md\n");
+		return NULL;
+	}
+		
 	hdr = (struct dns_header *)&buf[0];
 	
 	rtsig = (void *)calloc(1, sizeof(struct tsig));
@@ -2099,7 +2105,8 @@ check_tsig(char *buf, int len, char *mac)
 			rtsig->tsigerrorcode = 0;
 
 			memcpy(macoffset, &mac[DNS_HMAC_SHA256_SIZE * mcheck], DNS_HMAC_SHA256_SIZE);
-			HMAC(EVP_sha256(), tsigkey, tsignamelen, 
+			
+			delphinusdns_HMAC(md, tsigkey, tsignamelen, 
 					(unsigned char *)pseudo_packet, ppoffset, 
 							(unsigned char *)&sha256, &shasize);
 

@@ -56,13 +56,12 @@
 #endif /* __FreeBSD__ */
 #endif /* __linux__ */
 
-#include <openssl/evp.h>
 #include <openssl/bn.h>
-#include <openssl/hmac.h>
 #include <openssl/sha.h>
 
 #include "ddd-dns.h"
 #include "ddd-db.h"
+#include "ddd-crypto.h"
 
 
 #define MY_SOCK_TIMEOUT		-10
@@ -84,34 +83,34 @@ struct myschedule {
 extern struct rzone *rz0, *rz;
 extern int replicant_axfr_old_behaviour;
 
-int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_zonemd(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_loc(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
-int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, uint32_t, uint16_t, HMAC_CTX *, struct soa_constraints *);
+int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_caa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_zonemd(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_loc(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_sshfp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, uint32_t, uint16_t, DDD_HMAC_CTX *, struct soa_constraints *);
 
 uint16_t raxfr_skip(FILE *, u_char *, u_char *);
-int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, uint16_t *, uint32_t, HMAC_CTX *, char *, int, int);
-int raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx, char *, int);
+int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, uint16_t *, uint32_t, DDD_HMAC_CTX *, char *, int, int);
+int raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx, char *, int);
 
 
 void			replicantloop(ddDB *, struct imsgbuf *);
@@ -159,7 +158,7 @@ extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern struct question         *build_question(char *, int, uint16_t, char *);
 extern int                      lookup_axfr(FILE *, int, char *, struct soa *, uint32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t, int);
 extern int     find_tsig_key(char *, int, char *, int);
-extern int tsig_pseudoheader(char *, uint16_t, time_t, HMAC_CTX *);
+extern int tsig_pseudoheader(char *, uint16_t, time_t, DDD_HMAC_CTX *);
 
 extern void 	pack(char *, char *, int);
 extern void 	pack32(char *, uint32_t);
@@ -211,7 +210,7 @@ static struct raxfr_logic supported[] = {
 
 
 int
-raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soacount, uint16_t *rdlen, uint32_t format, HMAC_CTX *ctx, char *zonename, int zonelen, int axfr)
+raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soacount, uint16_t *rdlen, uint32_t format, DDD_HMAC_CTX *ctx, char *zonename, int zonelen, int axfr)
 {
 	int rrlen;
 	char *save;
@@ -267,7 +266,7 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 
 	if (ctx != NULL) {
 		if (*rrtype != DNS_TYPE_TSIG) {
-			HMAC_Update(ctx, p, q - p);
+			delphinusdns_HMAC_Update(ctx, p, q - p);
 		}
 	}
 
@@ -341,7 +340,7 @@ raxfr_skip(FILE *f, u_char *p, u_char *estart)
 }
 
 int
-raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, int soacount, uint32_t format, uint16_t rdlen, HMAC_CTX *ctx, struct soa_constraints *constraints)
+raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, int soacount, uint32_t format, uint16_t rdlen, DDD_HMAC_CTX *ctx, struct soa_constraints *constraints)
 {
 	uint32_t rvalue;
 	char *save, *humanname;
@@ -456,13 +455,13 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	}
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, p, q - p);
+		delphinusdns_HMAC_Update(ctx, p, q - p);
 	
 	return (q - estart);
 }
 
 int 
-raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct rrsig rs;
 	char *save, *humanname;
@@ -556,13 +555,13 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	free(b);
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, p, q - p);
+		delphinusdns_HMAC_Update(ctx, p, q - p);
 
 	return (q - estart);
 }
 
 int 
-raxfr_zonemd(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_zonemd(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct zonemd zonemd;
 	u_char *q = p;
@@ -600,7 +599,7 @@ raxfr_zonemd(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 	}
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
 }
@@ -608,7 +607,7 @@ raxfr_zonemd(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 
 
 int 
-raxfr_caa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_caa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct caa caa;
 	u_char *q = p;
@@ -641,14 +640,14 @@ raxfr_caa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 	}
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
 }
 
 
 int 
-raxfr_hinfo(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_hinfo(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct hinfo hinfo;
 	u_char *q = p;
@@ -680,13 +679,13 @@ raxfr_hinfo(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	}
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
 }
 
 int 
-raxfr_cds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_cds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct cds d;
 	uint16_t tmpshort;
@@ -716,13 +715,13 @@ raxfr_cds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 	}
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
 }
 
 int 
-raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct ds d;
 	uint16_t tmpshort;
@@ -752,13 +751,13 @@ raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 	}
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
 }
 
 int 
-raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct sshfp s;
 	char *hex;
@@ -786,13 +785,13 @@ raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	}
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
 }
 
 int 
-raxfr_cdnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_cdnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct cdnskey dk;
 	uint16_t tmpshort;
@@ -839,13 +838,13 @@ raxfr_cdnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa
 	free(b);
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
 }
 
 int 
-raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct dnskey dk;
 	uint16_t tmpshort;
@@ -892,14 +891,14 @@ raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 	free(b);
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
 }
 
 
 int 
-raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	uint16_t mxpriority;
 	char *save, *humanname;
@@ -940,19 +939,19 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 	free(humanname);
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, p, q - p);
+		delphinusdns_HMAC_Update(ctx, p, q - p);
 
 	return (q - estart);
 }
 
 int 
-raxfr_ptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_ptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	return (raxfr_ns(f, p, estart, end, mysoa, rdlen, ctx));
 }
 
 int
-raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct nsec3 n;
 	uint16_t iter;
@@ -1002,13 +1001,13 @@ raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	}
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, brr, p - brr);
+		delphinusdns_HMAC_Update(ctx, brr, p - brr);
 
 	return (p - estart);
 }
 
 int
-raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct nsec3param np;
 	uint16_t iter;
@@ -1037,14 +1036,14 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 	}
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
 }
 
 
 int
-raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	int i, j;
 	u_char *q = p;
@@ -1071,13 +1070,13 @@ raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 	p += i;
 	
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 	
 	return (p - estart);
 }
 
 int
-raxfr_rp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_rp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	char *save, *humanname;
 	u_char *q = p;
@@ -1131,14 +1130,14 @@ raxfr_rp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 
 
 	if (ctx != NULL) {
-		HMAC_Update(ctx, p, q - p);
+		delphinusdns_HMAC_Update(ctx, p, q - p);
 	}
 
 	return (q - estart);
 }
 
 int
-raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	char *save, *humanname;
 	u_char *q = p;
@@ -1170,21 +1169,21 @@ raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 	free(humanname);
 
 	if (ctx != NULL) {
-		HMAC_Update(ctx, p, q - p);
+		delphinusdns_HMAC_Update(ctx, p, q - p);
 	}
 
 	return (q - estart);
 }
 
 int 
-raxfr_cname(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_cname(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	return (raxfr_ns(f, p, estart, end, mysoa, rdlen, ctx));
 }
 
 
 int
-raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	char buf[INET6_ADDRSTRLEN];
 	struct in6_addr ia;
@@ -1200,13 +1199,13 @@ raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	p += sizeof(ia);
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
 }
 
 int 
-raxfr_loc(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_loc(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct loc l;
 	uint32_t tmp32;
@@ -1301,13 +1300,13 @@ raxfr_loc(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 	}
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, p, q - p);
+		delphinusdns_HMAC_Update(ctx, p, q - p);
 
 	return (q - estart);
 }
 
 int
-raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	char buf[INET_ADDRSTRLEN];
 	struct in_addr ia;
@@ -1324,13 +1323,13 @@ raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint
 	p += sizeof(ia);
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
 }
 
 int 
-raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	struct tlsa t;
 	u_char *q = p;
@@ -1359,13 +1358,13 @@ raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	}
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, q, p - q);
 
 	return (p - estart);
 }
 
 int 
-raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	uint16_t tmp16;
 	struct srv s;
@@ -1413,13 +1412,13 @@ raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 	free(humanname);
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, p, q - p);
+		delphinusdns_HMAC_Update(ctx, p, q - p);
 
 	return (q - estart);
 }
 
 int 
-raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx)
+raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
 	uint16_t tmp16;
 	struct naptr n;
@@ -1508,13 +1507,13 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	free(humanname);
 
 	if (ctx != NULL)
-		HMAC_Update(ctx, p, q - p);
+		delphinusdns_HMAC_Update(ctx, p, q - p);
 
 	return (q - estart);
 }
 
 int 
-raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, HMAC_CTX *ctx, char *mac, int standardanswer)
+raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx, char *mac, int standardanswer)
 {
 	struct dns_tsigrr *sdt;
 	char *save;
@@ -1645,21 +1644,21 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 
 	if (standardanswer) {
 		/* dns message */
-		HMAC_Update(ctx, (const u_char *)rawkeyname, rawkeynamelen);
-		HMAC_Update(ctx, (const u_char *)&rclass, 2);
-		HMAC_Update(ctx, (const u_char *)&rttl, 4);
-		HMAC_Update(ctx, (const u_char *)rawalgname, rawalgnamelen);
-		HMAC_Update(ctx, (const u_char *)&sdt->timefudge, 8);
-		HMAC_Update(ctx, (const u_char *)&tsigerror, 2);
-		HMAC_Update(ctx, (const u_char *)&otherlen, 2);
+		delphinusdns_HMAC_Update(ctx, (const u_char *)rawkeyname, rawkeynamelen);
+		delphinusdns_HMAC_Update(ctx, (const u_char *)&rclass, 2);
+		delphinusdns_HMAC_Update(ctx, (const u_char *)&rttl, 4);
+		delphinusdns_HMAC_Update(ctx, (const u_char *)rawalgname, rawalgnamelen);
+		delphinusdns_HMAC_Update(ctx, (const u_char *)&sdt->timefudge, 8);
+		delphinusdns_HMAC_Update(ctx, (const u_char *)&tsigerror, 2);
+		delphinusdns_HMAC_Update(ctx, (const u_char *)&otherlen, 2);
 		if (ntohs(otherlen))
-			HMAC_Update(ctx, (const u_char *)otherdata, ntohs(otherlen));
+			delphinusdns_HMAC_Update(ctx, (const u_char *)otherdata, ntohs(otherlen));
 
 	} else {
-		HMAC_Update(ctx, (const u_char *)&sdt->timefudge, 8);
+		delphinusdns_HMAC_Update(ctx, (const u_char *)&sdt->timefudge, 8);
 	}
 
-	if (HMAC_Final(ctx, (u_char *)mac, (u_int *)&macsize) != 1) {
+	if (delphinusdns_HMAC_Final(ctx, (u_char *)mac, (u_int *)&macsize) != 1) {
 		goto out;
 	}
 
@@ -2115,7 +2114,8 @@ get_remote_soa(struct rzone *rzone)
 	char shabuf[32];
 	char *algname = NULL;
 
-	HMAC_CTX *ctx;
+	DDD_HMAC_CTX *ctx;
+	const DDD_EVP_MD *md;
 	uint16_t hmaclen;
 	int sacount = 0;
 	
@@ -2214,9 +2214,14 @@ get_remote_soa(struct rzone *rzone)
 
 	/* we have a key, attach a TSIG payload */
 	if (dotsig) {
-		ctx = HMAC_CTX_new();
-		HMAC_Init_ex(ctx, tsigpass, tsigpasslen, EVP_sha256(), NULL);
-		HMAC_Update(ctx, (const u_char *)&query[2], totallen - 2);
+		ctx = delphinusdns_HMAC_CTX_new();
+		md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("sha256");
+		if (md == NULL) {
+			fprintf(stderr, "md failed\n");
+			return (MY_SOCK_TIMEOUT);
+		}
+		delphinusdns_HMAC_Init_ex(ctx, tsigpass, tsigpasslen, md, NULL);
+		delphinusdns_HMAC_Update(ctx, (const u_char *)&query[2], totallen - 2);
 
 		now = time(NULL);
 		if (tsig_pseudoheader(rzone->tsigkey, DEFAULT_TSIG_FUDGE, now, ctx) < 0) {
@@ -2224,14 +2229,14 @@ get_remote_soa(struct rzone *rzone)
 			return(MY_SOCK_TIMEOUT);
 		}
 
-		HMAC_Final(ctx, (u_char *)shabuf, (u_int *) &len);
+		delphinusdns_HMAC_Final(ctx, (u_char *)shabuf, (u_int *) &len);
 
 		if (len != 32) {
 			fprintf(stderr, "not expected len != 32\n");
 			return(MY_SOCK_TIMEOUT);
 		}
 
-		HMAC_CTX_free(ctx);
+		delphinusdns_HMAC_CTX_free(ctx);
 
 		memcpy(&query[totallen], keyname, keynamelen);
 		totallen += keynamelen;
@@ -2403,17 +2408,24 @@ get_remote_soa(struct rzone *rzone)
 	estart = (u_char *)&rwh->dh;
 
 	if (dotsig) {
-		ctx = HMAC_CTX_new();
-		HMAC_Init_ex(ctx, tsigpass, tsigpasslen, EVP_sha256(), NULL);
+		ctx = delphinusdns_HMAC_CTX_new();
+		md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("sha256");
+		if (md == NULL) {
+			dolog(LOG_INFO, "md failed\n");
+			close(so);
+			free(reply);  free(dupreply);
+			return(MY_SOCK_TIMEOUT);
+		}
+		delphinusdns_HMAC_Init_ex(ctx, tsigpass, tsigpasslen, md, NULL);
 		hmaclen = htons(32);
-		HMAC_Update(ctx, (u_char *)&hmaclen, sizeof(hmaclen));
-		HMAC_Update(ctx, (u_char *)shabuf, sizeof(shabuf));
+		delphinusdns_HMAC_Update(ctx, (u_char *)&hmaclen, sizeof(hmaclen));
+		delphinusdns_HMAC_Update(ctx, (u_char *)shabuf, sizeof(shabuf));
 		hmaclen = rwh->dh.additional;		/* save additional */
 		NTOHS(rwh->dh.additional);
 		if (rwh->dh.additional)
 			rwh->dh.additional--;
 		HTONS(rwh->dh.additional);
-		HMAC_Update(ctx, estart, (p - estart));
+		delphinusdns_HMAC_Update(ctx, estart, (p - estart));
 		rwh->dh.additional = hmaclen;		/* restore additional */
 	}
 
@@ -2480,7 +2492,7 @@ get_remote_soa(struct rzone *rzone)
 	close(so);
 
 	if (dotsig) {
-		HMAC_CTX_free(ctx);
+		delphinusdns_HMAC_CTX_free(ctx);
 	}
 
 	return ((int64_t)ntohl(mysoa.serial));

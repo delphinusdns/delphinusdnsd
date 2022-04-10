@@ -21,8 +21,7 @@
 #include <sys/types.h>
 #include <limits.h>
 
-#include <openssl/hmac.h>
-#include <openssl/md5.h>
+#include "ddd-crypto.h"
 #include "ddd-config.h"
 
 #ifndef DEFAULT_CONFFILE
@@ -480,7 +479,7 @@ struct rzone {
 struct raxfr_logic {
 	int rrtype;
 	int dnssec;
-	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, HMAC_CTX *);
+	int (*raxfr)(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 };
 
 struct scache {

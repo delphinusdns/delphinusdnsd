@@ -75,11 +75,9 @@
 #include "endian.h"
 #endif
 
-#include <openssl/evp.h>
-#include <openssl/md5.h>
-
 #include "ddd-dns.h"
 #include "ddd-db.h" 
+#include "ddd-crypto.h"
 #include "ddd-config.h"
 
 /* prototypes */
@@ -1453,8 +1451,8 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	int pq_offset;
 	u_int md_len;
 
-	EVP_MD_CTX *rctx;
-	EVP_MD *md;
+	DDD_EVP_MD_CTX *rctx;
+	DDD_EVP_MD *md;
 	u_char rdigest[MD5_DIGEST_LENGTH];
 	time_t refusedtime = 0;
 	uint16_t crc;
@@ -1518,16 +1516,16 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		exit(1);
 	}
 
-	md = (EVP_MD *)EVP_get_digestbyname("md5");
+	md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("md5");
 	if (md == NULL) {
 		dolog(LOG_ERR, "unknown message digest 'md5'\n");
 		ddd_shutdown();
 		exit(1);
 	}
 
-	rctx = EVP_MD_CTX_new();
+	rctx = delphinusdns_EVP_MD_CTX_new();
 	if (rctx == NULL) {
-		dolog(LOG_ERR, "EVP_MD_CTX_new failed\n");
+		dolog(LOG_ERR, "DDD_EVP_MD_CTX_new failed\n");
 		ddd_shutdown();
 		exit(1);
 	}
@@ -1830,10 +1828,10 @@ axfrentry:
 				if (filter && require_tsig == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					EVP_DigestInit_ex(rctx, md, NULL);
-					EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
-					EVP_DigestUpdate(rctx, address, addrlen);
-					EVP_DigestFinal_ex(rctx, rdigest, &md_len);
+					delphinusdns_EVP_DigestInit_ex(rctx, md, NULL);
+					delphinusdns_EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+					delphinusdns_EVP_DigestUpdate(rctx, address, addrlen);
+					delphinusdns_EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 					refusedtime = time(NULL);
 
 					slen = reply_refused(&sreply, &sretlen, NULL, 0);
@@ -1845,10 +1843,10 @@ axfrentry:
 				if (passlist && blocklist == 0) {
 
 					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-					EVP_DigestInit_ex(rctx, md, NULL);
-					EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
-					EVP_DigestUpdate(rctx, address, addrlen);
-					EVP_DigestFinal_ex(rctx, rdigest, &md_len);
+					delphinusdns_EVP_DigestInit_ex(rctx, md, NULL);
+					delphinusdns_EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+					delphinusdns_EVP_DigestUpdate(rctx, address, addrlen);
+					delphinusdns_EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 					refusedtime = time(NULL);
 					slen = reply_refused(&sreply, &sretlen, NULL, 0);
 
@@ -1977,10 +1975,10 @@ axfrentry:
 									case PARSE_RETURN_NOTAUTH:
 										if (filter && pq.tsig.have_tsig == 0) {
 											build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-											EVP_DigestInit_ex(rctx, md, NULL);
-											EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
-											EVP_DigestUpdate(rctx, address, addrlen);
-											EVP_DigestFinal_ex(rctx, rdigest, &md_len);
+											delphinusdns_EVP_DigestInit_ex(rctx, md, NULL);
+											delphinusdns_EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+											delphinusdns_EVP_DigestUpdate(rctx, address, addrlen);
+											delphinusdns_EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 	refusedtime = time(NULL);
 											slen = reply_refused(&sreply, &sretlen, NULL, 0);
 											dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, received_ttl, aregion);
@@ -2057,10 +2055,10 @@ axfrentry:
 						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of PRIMARY servers replying REFUSED\n", so, cfg->ident[i], address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-						EVP_DigestInit_ex(rctx, md, NULL);
-						EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
-						EVP_DigestUpdate(rctx, address, addrlen);
-						EVP_DigestFinal_ex(rctx, rdigest, &md_len);
+						delphinusdns_EVP_DigestInit_ex(rctx, md, NULL);
+						delphinusdns_EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+						delphinusdns_EVP_DigestUpdate(rctx, address, addrlen);
+						delphinusdns_EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 						refusedtime = time(NULL);
 
 						slen = reply_refused(&sreply, &sretlen, NULL, 1);
@@ -2126,10 +2124,10 @@ axfrentry:
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 
 						build_reply(&sreply, so, buf, len, question, from, fromlen, rbt0, NULL, aregion, istcp, 0, replybuf);
-						EVP_DigestInit_ex(rctx, md, NULL);
-						EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
-						EVP_DigestUpdate(rctx, address, addrlen);
-						EVP_DigestFinal_ex(rctx, rdigest, &md_len);
+						delphinusdns_EVP_DigestInit_ex(rctx, md, NULL);
+						delphinusdns_EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+						delphinusdns_EVP_DigestUpdate(rctx, address, addrlen);
+						delphinusdns_EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 						refusedtime = time(NULL);
 						slen = reply_refused(&sreply, &sretlen, NULL, 1);
 
@@ -2173,10 +2171,10 @@ axfrentry:
 							if (forward)
 								goto forwardudp;
 							build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
-							EVP_DigestInit_ex(rctx, md, NULL);
-							EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
-							EVP_DigestUpdate(rctx, address, addrlen);
-							EVP_DigestFinal_ex(rctx, rdigest, &md_len);
+							delphinusdns_EVP_DigestInit_ex(rctx, md, NULL);
+							delphinusdns_EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+							delphinusdns_EVP_DigestUpdate(rctx, address, addrlen);
+							delphinusdns_EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 							refusedtime = time(NULL);
 
 
@@ -2205,10 +2203,10 @@ forwardudp:
 											snprintf(replystring, DNS_MAXNAME, "REFUSED");
 											build_reply(&sreply, so, buf, len, question, from, fromlen, rbt1, rbt0, aregion, istcp, 0, replybuf);
 
-											EVP_DigestInit_ex(rctx, md, NULL);
-											EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
-											EVP_DigestUpdate(rctx, address, addrlen);
-											EVP_DigestFinal_ex(rctx, rdigest, &md_len);
+											delphinusdns_EVP_DigestInit_ex(rctx, md, NULL);
+											delphinusdns_EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+											delphinusdns_EVP_DigestUpdate(rctx, address, addrlen);
+											delphinusdns_EVP_DigestFinal_ex(rctx, rdigest, &md_len);
 											refusedtime = time(NULL);
 
 											slen = reply_refused(&sreply, &sretlen, cfg->db, 1);
