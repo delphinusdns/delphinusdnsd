@@ -1,6 +1,6 @@
 CC=gcc
 #CFLAGS=-DDEBUG
-CFLAGS=-D_XOPEN_SOURCE -D_DEFAULT_SOURCE -Wno-shift-count-overflow
+CFLAGS=-D_XOPEN_SOURCE -D_DEFAULT_SOURCE -Wno-shift-count-overflow -DUSE_OPENSSL
 LDADD= -lresolv -lcrypto -lrt -lbsd 
 YACC=bison
 AR=ar
@@ -8,12 +8,15 @@ AR=ar
 
 all: delphinusdnsd dddctl
 
-delphinusdnsd: imsg-buffer.o imsg.o additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o
-	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o imsg-buffer.o imsg.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o $(LDADD)
+delphinusdnsd: imsg-buffer.o imsg.o additional.o parse.o delphinusdnsd.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o crypto.o
+	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o imsg-buffer.o imsg.o delphinusdnsd.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o crypto.o $(LDADD)
 
-dddctl:  dddctl.o util.o dnssec.o parse.o base64.o ent.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o
-	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o $(LDADD)
+dddctl:  dddctl.o util.o dnssec.o parse.o base64.o ent.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o crypto.o
+	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o crypto.o $(LDADD)
 	
+
+crypto.o: crypto.o
+	$(CC) $(CFLAGS) -c crypto.c
 
 sign.o: sign.c
 	$(CC) $(CFLAGS) -c sign.c
