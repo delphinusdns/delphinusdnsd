@@ -235,6 +235,14 @@ delphinusdns_BN_free(DDD_BIGNUM *bn)
 #endif
 }
 
+void
+delphinusdns_BN_clear_free(DDD_BIGNUM *a)
+{
+#ifdef USE_OPENSSL
+	BN_clear_free((BIGNUM *)a);
+#endif
+}
+
 int
 delphinusdns_BN_bn2bin(const DDD_BIGNUM *a, unsigned char *to)
 {
@@ -276,3 +284,142 @@ delphinusdns_BN_GENCB_new(void)
 	return (ret);
 }
 
+int
+delphinusdns_BN_set_bit(DDD_BIGNUM *a, int n)
+{
+	int ret;
+
+#ifdef USE_OPENSSL
+	ret = BN_set_bit((BIGNUM *)a, n);	
+#endif
+
+	return (ret);
+}
+
+void
+delphinusdns_BN_GENCB_free(DDD_BN_GENCB *cb)
+{
+#ifdef USE_OPENSSL
+	BN_GENCB_free((BN_GENCB *)cb);
+#endif
+}
+
+
+DDD_RSA *
+delphinusdns_RSA_new(void)
+{
+	DDD_RSA *rsa;
+#ifdef USE_OPENSSL
+	rsa = RSA_new();
+#endif
+
+	return (rsa);
+}
+
+void
+delphinusdns_RSA_free(DDD_RSA *rsa)
+{
+#ifdef USE_OPENSSL
+	RSA_free(rsa);
+#endif
+}
+
+int
+delphinusdns_RSA_sign(int type, const unsigned char *m, unsigned int m_len,
+         unsigned char *sigret, unsigned int *siglen, DDD_RSA *rsa)
+{
+	int ret;
+#ifdef USE_OPENSSL
+	ret = RSA_sign(type, m, m_len, sigret, siglen, (RSA *)rsa);
+#endif
+
+	return (ret);
+}
+
+int
+delphinusdns_RSA_verify(int type, const unsigned char *m, unsigned int m_len,
+         unsigned char *sigbuf, unsigned int siglen, DDD_RSA *rsa)
+{
+	int ret;
+#ifdef USE_OPENSSL
+	ret = RSA_verify(type, m, m_len, sigbuf, siglen, (RSA *)rsa);
+#endif
+	return (ret);
+}
+
+void
+delphinusdns_RSA_get0_key(const DDD_RSA *r, const DDD_BIGNUM **n, 
+	const DDD_BIGNUM **e, const DDD_BIGNUM **d)
+{
+#ifdef USE_OPENSSL
+	RSA_get0_key((const RSA *)r, (const BIGNUM **)n, (const BIGNUM **)e,
+		(const BIGNUM **)d);
+#endif
+}
+
+void
+delphinusdns_RSA_get0_factors(const DDD_RSA *r, const DDD_BIGNUM **p, 
+		const DDD_BIGNUM **q)
+{
+#ifdef USE_OPENSSL
+	RSA_get0_factors((const RSA *)r, (const BIGNUM **)p, (const BIGNUM **)q);
+#endif
+}
+
+void
+delphinusdns_RSA_get0_crt_params(const DDD_RSA *r, const DDD_BIGNUM **dmp1,
+	const DDD_BIGNUM **dmq1, const DDD_BIGNUM **iqmp)
+{
+#ifdef USE_OPENSSL
+	RSA_get0_crt_params((const RSA *)r, (const BIGNUM **)dmp1, (const BIGNUM **)dmq1, (const BIGNUM **)iqmp);
+#endif
+
+}
+
+int
+delphinusdns_RSA_generate_key_ex(DDD_RSA *rsa, int bits, DDD_BIGNUM *e,
+	DDD_BN_GENCB *cb)
+{
+	int ret;
+
+#ifdef USE_OPENSSL
+	ret = RSA_generate_key_ex((RSA *)rsa, bits, (BIGNUM *)e, (BN_GENCB *)cb);
+#endif
+
+	return (ret);
+}
+
+int
+delphinusdns_RSA_set0_key(DDD_RSA *r, DDD_BIGNUM *n, DDD_BIGNUM *e, DDD_BIGNUM *d)
+{
+	int ret;
+#ifdef USE_OPENSSL
+	ret = RSA_set0_key((RSA *)r, (BIGNUM *)n, (BIGNUM *)e, (BIGNUM *)d);
+#endif
+
+	return (ret);
+}
+
+int
+delphinusdns_RSA_set0_factors(DDD_RSA *r, DDD_BIGNUM *p, DDD_BIGNUM *q)
+{
+	int ret;
+#ifdef USE_OPENSSL
+	ret = RSA_set0_factors((RSA *)r, (BIGNUM *)p, (BIGNUM *)q);
+#endif
+
+	return (ret);
+}
+
+int
+delphinusdns_RSA_set0_crt_params(DDD_RSA *r, DDD_BIGNUM *dmp1, 
+	DDD_BIGNUM *dmq1, DDD_BIGNUM *iqmp)
+{
+	int ret;
+#ifdef USE_OPENSSL
+	ret = RSA_set0_crt_params((RSA *)r, (BIGNUM *)dmp1, (BIGNUM *)dmq1,
+		(BIGNUM *)iqmp);
+#endif
+
+	return (ret);
+}

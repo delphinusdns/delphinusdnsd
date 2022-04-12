@@ -63,7 +63,6 @@
 #if USE_OPENSSL
 /* these need to be put into ddd-crypto.h still */
 #include <openssl/obj_mac.h>
-#include <openssl/rsa.h>
 #include <openssl/err.h>
 #include <openssl/ec.h>
 #include <openssl/ecdsa.h>
@@ -94,14 +93,14 @@ static struct keysentry {
         int keyid;
 
 	/* private key RSA */
-	BIGNUM *rsan;
-	BIGNUM *rsae;
-	BIGNUM *rsad;
-	BIGNUM *rsap;
-	BIGNUM *rsaq;
-	BIGNUM *rsadmp1;
-	BIGNUM *rsadmq1;
-	BIGNUM *rsaiqmp;
+	DDD_BIGNUM *rsan;
+	DDD_BIGNUM *rsae;
+	DDD_BIGNUM *rsad;
+	DDD_BIGNUM *rsap;
+	DDD_BIGNUM *rsaq;
+	DDD_BIGNUM *rsadmp1;
+	DDD_BIGNUM *rsadmq1;
+	DDD_BIGNUM *rsaiqmp;
 
 	/* private key Elliptic Curve */
 
@@ -161,7 +160,7 @@ int 		create_ds(ddDB *, char *, struct keysentry *);
 u_int 		keytag(u_char *key, u_int keysize);
 u_int 		dnskey_keytag(struct dnskey *dnskey);
 void		free_private_key(struct keysentry *);
-RSA * 		get_private_key_rsa(struct keysentry *);
+DDD_RSA * 	get_private_key_rsa(struct keysentry *);
 EC_KEY *	get_private_key_ec(struct keysentry *);
 int		store_private_key(struct keysentry *, char *, int, int);
 int 		print_rbt(FILE *, struct rbtree *);
@@ -286,7 +285,7 @@ extern int tsig;
 #define ALGORITHM_RSASHA512		10	/* rfc 5702 */
 #define ALGORITHM_ECDSAP256SHA256	13	/* rfc 6605 */
 
-#define RSA_F5			0x100000001
+#define DDD_RSA_F5			0x100000001
 
 #define PROVIDED_SIGNTIME			0
 #define	SIGNEDON				20161230073133
@@ -1468,7 +1467,7 @@ char *
 create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t *pid)
 {
 	FILE *f;
-        RSA *rsa;
+        DDD_RSA *rsa;
         DDD_BIGNUM *e;
 	DDD_BIGNUM *rsan, *rsae, *rsad, *rsap, *rsaq;
 	DDD_BIGNUM *rsadmp1, *rsadmq1, *rsaiqmp;
@@ -1486,14 +1485,14 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	mode_t savemask;
 	int rlen;
 
-	if ((rsa = RSA_new()) == NULL) {
-		dolog(LOG_INFO, "RSA_new: %s\n", strerror(errno));
+	if ((rsa = delphinusdns_RSA_new()) == NULL) {
+		dolog(LOG_INFO, "delphinusdns_RSA_new: %s\n", strerror(errno));
 		return NULL;
 	}
 
 	if ((e = delphinusdns_BN_new()) == NULL) {
 		dolog(LOG_INFO, "delphinusdns_BN_new: %s\n", strerror(errno));
-		RSA_free(rsa);
+		delphinusdns_RSA_free(rsa);
 		return NULL;
 	}
 	if ((rsan = delphinusdns_BN_new()) == NULL ||
@@ -1505,19 +1504,19 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 		(rsadmq1 = delphinusdns_BN_new()) == NULL ||
 		(rsaiqmp = delphinusdns_BN_new()) == NULL) {
 		dolog(LOG_INFO, "delphinusdns_BN_new: %s\n", strerror(errno));
-		RSA_free(rsa);
+		delphinusdns_RSA_free(rsa);
 		return NULL;
 	}
 	
 	if ((cb = delphinusdns_BN_GENCB_new()) == NULL) {
 		dolog(LOG_INFO, "BN_GENCB_new: %s\n", strerror(errno));
-		RSA_free(rsa);
+		delphinusdns_RSA_free(rsa);
 		return NULL;
 	}
 
 	for (i = 0; i < 32; i++) {
-		if (RSA_F4 & (1 << i)) {
-			BN_set_bit(e, i);
+		if (DDD_RSA_F4 & (1 << i)) {
+			delphinusdns_BN_set_bit(e, i);
 		}
 	}
 
@@ -1535,19 +1534,19 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 		return NULL;
 	}
 
-	if (RSA_generate_key_ex(rsa, bits, e, cb) == 0) {
+	if (delphinusdns_RSA_generate_key_ex(rsa, bits, e, cb) == 0) {
 		dolog(LOG_INFO, "RSA_generate_key_ex: %s\n", strerror(errno));
 		delphinusdns_BN_free(e);
-		RSA_free(rsa);
-		BN_GENCB_free(cb);
+		delphinusdns_RSA_free(rsa);
+		delphinusdns_BN_GENCB_free(cb);
 		return NULL;
 	}
 
 	/* cb is not used again */
-	BN_GENCB_free(cb);
+	delphinusdns_BN_GENCB_free(cb);
 
 	/* get the bignums for now hidden struct */
-	RSA_get0_key(rsa, (const BIGNUM **)&rsan, (const BIGNUM **)&rsae, (const BIGNUM **)&rsad);
+	delphinusdns_RSA_get0_key(rsa, (const DDD_BIGNUM **)&rsan, (const DDD_BIGNUM **)&rsae, (const DDD_BIGNUM **)&rsad);
 
 	/* get the keytag, this is a bit of a hard process */
 	p = (char *)&bin[0];
@@ -1585,7 +1584,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	
 	if (knp != NULL) {
 		dolog(LOG_INFO, "create_key: collision with existing pid %d\n", *pid);
-		RSA_free(rsa);
+		delphinusdns_RSA_free(rsa);
 		delphinusdns_BN_free(e);
 		return (create_key_rsa(zonename, ttl, flags, algorithm, bits, pid));
 	}
@@ -1597,7 +1596,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	retval = strdup(buf);
 	if (retval == NULL) {
 		dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
-		RSA_free(rsa);
+		delphinusdns_RSA_free(rsa);
 		delphinusdns_BN_free(e);
 		return NULL;
 	}
@@ -1614,7 +1613,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	
 	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
 		dolog(LOG_INFO, "%s is not a file!\n", buf);
-		RSA_free(rsa);
+		delphinusdns_RSA_free(rsa);
 		delphinusdns_BN_free(e);
 		return NULL;
 	}
@@ -1622,7 +1621,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	f = fopen(buf, "w+");
 	if (f == NULL) {
 		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
-		RSA_free(rsa);
+		delphinusdns_RSA_free(rsa);
 		delphinusdns_BN_free(e);
 		return NULL;
 	}
@@ -1642,7 +1641,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
 	fprintf(f, "PrivateExponent: %s\n", b64);
 	/* get the RSA factors */
-	RSA_get0_factors(rsa, (const BIGNUM **)&rsap, (const BIGNUM **)&rsaq);
+	delphinusdns_RSA_get0_factors(rsa, (const DDD_BIGNUM **)&rsap, (const DDD_BIGNUM **)&rsaq);
 	/* prime1 */
 	binlen = delphinusdns_BN_bn2bin(rsap, (u_char *)&bin);
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
@@ -1652,7 +1651,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
 	fprintf(f, "Prime2: %s\n", b64);
 	/* get the RSA crt params */
-	RSA_get0_crt_params(rsa, (const BIGNUM **)&rsadmp1, (const BIGNUM **)&rsadmq1, (const BIGNUM **)&rsaiqmp);
+	delphinusdns_RSA_get0_crt_params(rsa, (const DDD_BIGNUM **)&rsadmp1, (const DDD_BIGNUM **)&rsadmq1, (const DDD_BIGNUM **)&rsaiqmp);
 	/* exponent1 */
 	binlen = delphinusdns_BN_bn2bin(rsadmp1, (u_char *)&bin);
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
@@ -1691,7 +1690,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	
 	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
 		dolog(LOG_INFO, "%s is not a file!\n", buf);
-		RSA_free(rsa);
+		delphinusdns_RSA_free(rsa);
 		delphinusdns_BN_free(e);
 		return NULL;
 	}
@@ -1700,7 +1699,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
 		snprintf(buf, sizeof(buf), "%s.private", retval);
 		unlink(buf);
-		RSA_free(rsa);
+		delphinusdns_RSA_free(rsa);
 		return NULL;
 	}
 	
@@ -1734,7 +1733,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	fprintf(f, "%s%s %d IN DNSKEY %d 3 %d %s\n", zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".", ttl, flags, algorithm, b64);
 
 	fclose(f);
-	RSA_free(rsa);
+	delphinusdns_RSA_free(rsa);
 	
 	return (retval);
 }
@@ -7499,17 +7498,17 @@ free_private_key(struct keysentry *kn)
 {
 	if (kn->algorithm < 13) {
 		/* RSA */
-		BN_clear_free(kn->rsan);
-		BN_clear_free(kn->rsae);
-		BN_clear_free(kn->rsad);
-		BN_clear_free(kn->rsap);
-		BN_clear_free(kn->rsaq);
-		BN_clear_free(kn->rsadmp1);
-		BN_clear_free(kn->rsadmq1);
-		BN_clear_free(kn->rsaiqmp);
+		delphinusdns_BN_clear_free(kn->rsan);
+		delphinusdns_BN_clear_free(kn->rsae);
+		delphinusdns_BN_clear_free(kn->rsad);
+		delphinusdns_BN_clear_free(kn->rsap);
+		delphinusdns_BN_clear_free(kn->rsaq);
+		delphinusdns_BN_clear_free(kn->rsadmp1);
+		delphinusdns_BN_clear_free(kn->rsadmq1);
+		delphinusdns_BN_clear_free(kn->rsaiqmp);
 	} else {
 		/* EC */
-		BN_clear_free(kn->ecprivate);
+		delphinusdns_BN_clear_free(kn->ecprivate);
 	}
 
 	return;
@@ -7518,18 +7517,18 @@ free_private_key(struct keysentry *kn)
 RSA *
 get_private_key_rsa(struct keysentry *kn)
 {
-	RSA *rsa;
+	DDD_RSA *rsa;
 
-	BIGNUM *rsan;
-	BIGNUM *rsae;
-	BIGNUM *rsad;
-	BIGNUM *rsap;
-	BIGNUM *rsaq;
-	BIGNUM *rsadmp1;
-	BIGNUM *rsadmq1;
-	BIGNUM *rsaiqmp;
+	DDD_BIGNUM *rsan;
+	DDD_BIGNUM *rsae;
+	DDD_BIGNUM *rsad;
+	DDD_BIGNUM *rsap;
+	DDD_BIGNUM *rsaq;
+	DDD_BIGNUM *rsadmp1;
+	DDD_BIGNUM *rsadmq1;
+	DDD_BIGNUM *rsaiqmp;
 
-	rsa = RSA_new();
+	rsa = delphinusdns_RSA_new();
 	if (rsa == NULL) {
 		dolog(LOG_INFO, "RSA creation\n");
 		return NULL;
@@ -7547,9 +7546,9 @@ get_private_key_rsa(struct keysentry *kn)
 		return NULL;
 	}
 
-	if (RSA_set0_key(rsa, rsan, rsae, rsad) == 0 ||
-		RSA_set0_factors(rsa, rsap, rsaq) == 0 ||
-		RSA_set0_crt_params(rsa, rsadmp1, rsadmq1, rsaiqmp) == 0) {
+	if (delphinusdns_RSA_set0_key(rsa, rsan, rsae, rsad) == 0 ||
+		delphinusdns_RSA_set0_factors(rsa, rsap, rsaq) == 0 ||
+		delphinusdns_RSA_set0_crt_params(rsa, rsadmp1, rsadmq1, rsaiqmp) == 0) {
 		dolog(LOG_INFO, "RSA_set0_* failed\n");
 		return NULL;
 	}
@@ -8943,21 +8942,21 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 		rsatype = alg_to_rsa(algorithm);
 		if (rsatype == -1) {
 			dolog(LOG_INFO, "algorithm mismatch\n");
-			RSA_free(rsa);
+			delphinusdns_RSA_free(rsa);
 			return -1;
 		}
 
-		if (RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, (u_int*)siglen, rsa) != 1) {
+		if (delphinusdns_RSA_sign(rsatype, (u_char *)shabuf, bufsize, (u_char *)signature, (u_int*)siglen, rsa) != 1) {
 			dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
 			return -1;
 		}
 
-		if (RSA_verify(rsatype, (u_char*)shabuf, bufsize, (u_char*)signature, *siglen, rsa) != 1) {
+		if (delphinusdns_RSA_verify(rsatype, (u_char*)shabuf, bufsize, (u_char*)signature, *siglen, rsa) != 1) {
 			dolog(LOG_INFO, "unable to verify with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
 			return -1;
 		}
 			
-		RSA_free(rsa);
+		delphinusdns_RSA_free(rsa);
 		break;
 
 	case ALGORITHM_ECDSAP256SHA256:
