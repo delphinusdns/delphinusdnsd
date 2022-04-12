@@ -423,3 +423,225 @@ delphinusdns_RSA_set0_crt_params(DDD_RSA *r, DDD_BIGNUM *dmp1,
 
 	return (ret);
 }
+
+
+DDD_EC_KEY *
+delphinusdns_EC_KEY_new(void)
+{
+	static DDD_EC_KEY *key;
+
+#ifdef USE_OPENSSL
+	key = EC_KEY_new();
+#endif
+
+	return (key);
+
+}
+
+void
+delphinusdns_EC_KEY_free(DDD_EC_KEY *key)
+{
+#ifdef USE_OPENSSL
+	EC_KEY_free((EC_KEY *)key);
+#endif
+}
+
+DDD_ECDSA_SIG *
+delphinusdns_ECDSA_SIG_new(void)
+{
+	DDD_ECDSA_SIG *sig;
+
+#ifdef USE_OPENSSL
+	sig = ECDSA_SIG_new();
+#endif
+
+	return (sig);
+}
+
+void
+delphinusdns_ECDSA_SIG_free(DDD_ECDSA_SIG *sig)
+{
+#ifdef USE_OPENSSL
+	ECDSA_SIG_free((ECDSA_SIG *)sig);
+#endif
+}
+
+void
+delphinusdns_ECDSA_SIG_get0(const DDD_ECDSA_SIG *sig, const DDD_BIGNUM **r, const DDD_BIGNUM **s)
+{
+#ifdef USE_OPENSSL
+	ECDSA_SIG_get0((const ECDSA_SIG *)sig, (const BIGNUM **)r, (const BIGNUM **)s);
+#endif
+
+}
+
+int
+delphinusdns_ECDSA_do_verify(const unsigned char *dgst, int dgst_len,
+         const DDD_ECDSA_SIG *sig, DDD_EC_KEY *eckey)
+{
+	int ret;
+
+#ifdef USE_OPENSSL
+	ret = ECDSA_do_verify(dgst, dgst_len, (const ECDSA_SIG *)sig, (EC_KEY *)eckey);
+#endif
+
+	return (ret);
+}
+
+DDD_ECDSA_SIG *
+delphinusdns_ECDSA_do_sign(const unsigned char *dgst, int dgst_len, 
+	DDD_EC_KEY *eckey)
+{
+	DDD_ECDSA_SIG *sig;
+#ifdef USE_OPENSSL
+	sig = ECDSA_do_sign(dgst, dgst_len, (EC_KEY *)eckey);
+#endif
+
+	return (sig);
+}
+
+void
+delphinusdns_EC_GROUP_free(DDD_EC_GROUP *group)
+{
+#ifdef USE_OPENSSL
+	EC_GROUP_free((EC_GROUP *)group);
+#endif
+}
+
+int
+delphinusdns_EC_KEY_set_public_key(DDD_EC_KEY *key, const DDD_EC_POINT *pub)
+{
+	static int ret;
+#ifdef USE_OPENSSL
+	ret = EC_KEY_set_public_key((EC_KEY *)key, (const EC_POINT *)pub);
+#endif
+
+	return (ret);
+}
+
+int
+delphinusdns_EC_POINT_mul(const DDD_EC_GROUP *group, DDD_EC_POINT *r, 
+	const DDD_BIGNUM *n, const DDD_EC_POINT *q, const DDD_BIGNUM *m, 
+	DDD_BN_CTX *ctx)
+{
+	static int ret;
+
+#ifdef USE_OPENSSL
+	ret = EC_POINT_mul((const EC_GROUP *)group, (EC_POINT *)r, (const BIGNUM *)n, (const EC_POINT *)q, (const BIGNUM *)m, (BN_CTX *) ctx);
+#endif
+
+	return (ret);
+}
+
+DDD_EC_POINT *
+delphinusdns_EC_POINT_new(const DDD_EC_GROUP *group)
+{
+	DDD_EC_POINT *ret;
+#ifdef USE_OPENSSL
+	ret = EC_POINT_new((const EC_GROUP *)group);
+#endif
+
+	return (ret);
+}
+
+int
+delphinusdns_EC_KEY_set_private_key(DDD_EC_KEY *key, const DDD_BIGNUM *prv)
+{
+	static int ret;
+
+#ifdef USE_OPENSSL
+	ret = EC_KEY_set_private_key((EC_KEY *)key, (const BIGNUM *)prv);
+
+#endif
+
+	return (ret);
+}
+
+int
+delphinusdns_EC_KEY_set_group(DDD_EC_KEY *key, const DDD_EC_GROUP *group)
+{
+	static int ret;
+
+#ifdef USE_OPENSSL
+	ret = EC_KEY_set_group((EC_KEY *)key, (const EC_GROUP *)group);
+#endif
+
+	return (ret);
+}
+
+DDD_EC_KEY *
+delphinusdns_EC_KEY_new_by_curve_name(int nid)
+{
+	DDD_EC_KEY *key;
+
+#ifdef USE_OPENSSL
+	key = EC_KEY_new_by_curve_name(nid);
+#endif
+
+	return (key);
+}
+
+DDD_EC_GROUP *
+delphinusdns_EC_GROUP_new_by_curve_name(int nid)
+{
+	DDD_EC_GROUP *group;
+
+#ifdef USE_OPENSSL
+	group = EC_GROUP_new_by_curve_name(nid);
+#endif
+
+	return (group);
+}
+
+size_t
+delphinusdns_EC_POINT_point2oct(const DDD_EC_GROUP *group, 
+	const DDD_EC_POINT *p, point_conversion_form_t form, 
+	unsigned char *buf, size_t len, DDD_BN_CTX *ctx)
+{
+	static size_t ret;
+
+#ifdef USE_OPENSSL
+	ret = EC_POINT_point2oct((const EC_GROUP *)group, (const EC_POINT *)p,
+		form, buf, len, (BN_CTX *)ctx);
+
+#endif
+
+	return (ret);
+}
+
+const DDD_EC_POINT *
+delphinusdns_EC_KEY_get0_public_key(const DDD_EC_KEY *key)
+{
+	static const DDD_EC_POINT *ret;
+
+#ifdef USE_OPENSSL
+	ret = EC_KEY_get0_public_key((const EC_KEY *)key);
+#endif
+
+	return (ret);
+}
+
+const DDD_BIGNUM *
+delphinusdns_EC_KEY_get0_private_key(const DDD_EC_KEY *key)
+{
+	static const DDD_BIGNUM *bn;
+
+#ifdef USE_OPENSSL
+	bn = EC_KEY_get0_private_key((const EC_KEY *)key);
+#endif
+
+	return (bn);
+}
+
+int
+delphinusdns_EC_KEY_generate_key(DDD_EC_KEY *key)
+{
+	static int ret;
+
+#ifdef USE_OPENSSL
+	ret = EC_KEY_generate_key((EC_KEY *)key);
+#endif
+
+	return (ret);
+
+}

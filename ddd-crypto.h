@@ -18,7 +18,12 @@
 #define DDD_CRYPTO_H
 
 #if USE_OPENSSL
+#include <openssl/obj_mac.h>
+#include <openssl/err.h>
+#include <openssl/ec.h>
+#include <openssl/ecdsa.h>
 #include <openssl/bn.h>
+
 #include <openssl/evp.h>
 #include <openssl/md5.h>
 #include <openssl/sha.h>
@@ -26,11 +31,23 @@
 #include <openssl/rsa.h>
 
 typedef SHA512_CTX 	DDD_SHA512_CTX;
+typedef SHA256_CTX	DDD_SHA256_CTX;
+typedef SHA_CTX		DDD_SHA_CTX;
+
 typedef BIGNUM 		DDD_BIGNUM;
+typedef BN_CTX		DDD_BN_CTX;
 typedef BN_GENCB 	DDD_BN_GENCB;
 typedef RSA		DDD_RSA;
 
 #define DDD_RSA_F4	RSA_F4
+
+typedef EC_KEY		DDD_EC_KEY;
+typedef EC_GROUP	DDD_EC_GROUP;
+typedef EC_POINT	DDD_EC_POINT;
+
+typedef ECDSA_SIG	DDD_ECDSA_SIG;
+
+
 #endif
 
 typedef struct {
@@ -97,7 +114,38 @@ int delphinusdns_RSA_set0_key(DDD_RSA *, DDD_BIGNUM *, DDD_BIGNUM *, DDD_BIGNUM 
 int delphinusdns_RSA_set0_factors(DDD_RSA *, DDD_BIGNUM *, DDD_BIGNUM *);
 int delphinusdns_RSA_set0_crt_params(DDD_RSA *, DDD_BIGNUM *,  DDD_BIGNUM *, DDD_BIGNUM *);
  
+DDD_EC_KEY * delphinusdns_EC_KEY_new(void);
+void delphinusdns_EC_KEY_free(DDD_EC_KEY *);
+DDD_ECDSA_SIG * delphinusdns_ECDSA_SIG_new(void);
+void delphinusdns_ECDSA_SIG_free(DDD_ECDSA_SIG *);
 
+void delphinusdns_ECDSA_SIG_get0(const DDD_ECDSA_SIG *, const DDD_BIGNUM **, const DDD_BIGNUM **);
+
+int delphinusdns_ECDSA_do_verify(const unsigned char *, int, const DDD_ECDSA_SIG *, DDD_EC_KEY *);
+
+DDD_ECDSA_SIG * delphinusdns_ECDSA_do_sign(const unsigned char *, int, DDD_EC_KEY *);
+
+void delphinusdns_EC_GROUP_free(DDD_EC_GROUP *);
+
+int delphinusdns_EC_KEY_set_public_key(DDD_EC_KEY *, const DDD_EC_POINT *);
+
+int delphinusdns_EC_POINT_mul(const DDD_EC_GROUP *, DDD_EC_POINT *, const DDD_BIGNUM *, const DDD_EC_POINT *, const DDD_BIGNUM *, DDD_BN_CTX *);
+
+DDD_EC_POINT * delphinusdns_EC_POINT_new(const DDD_EC_GROUP *);
+int delphinusdns_EC_KEY_set_private_key(DDD_EC_KEY *, const DDD_BIGNUM *);
+
+int delphinusdns_EC_KEY_set_group(DDD_EC_KEY *, const DDD_EC_GROUP *);
+
+DDD_EC_KEY * delphinusdns_EC_KEY_new_by_curve_name(int);
+DDD_EC_GROUP * delphinusdns_EC_GROUP_new_by_curve_name(int);
+
+size_t delphinusdns_EC_POINT_point2oct(const DDD_EC_GROUP *, const DDD_EC_POINT *, point_conversion_form_t, unsigned char *, size_t, DDD_BN_CTX *);
+
+const DDD_EC_POINT * delphinusdns_EC_KEY_get0_public_key(const DDD_EC_KEY *);
+
+const DDD_BIGNUM * delphinusdns_EC_KEY_get0_private_key(const DDD_EC_KEY *);
+
+int delphinusdns_EC_KEY_generate_key(DDD_EC_KEY *);
 
 
 #endif /* DDD_CRYPTO_H */

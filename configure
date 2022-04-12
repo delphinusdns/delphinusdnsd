@@ -19,6 +19,9 @@ do
 			echo "#define DEFAULT_RZONE_DIR \"${location}/replicant\"" >> ddd-config.h
 
 			;;
+		--nosign)
+			echo "#define DDD_NOSIGN 1 /* signing disabled */" >> ddd-config.h
+			;;	
 		--openwrt)
 			OPENWRT=1
 			;;

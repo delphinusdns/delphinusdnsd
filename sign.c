@@ -60,13 +60,6 @@
 #include "endian.h"
 #endif
 
-#if USE_OPENSSL
-/* these need to be put into ddd-crypto.h still */
-#include <openssl/obj_mac.h>
-#include <openssl/err.h>
-#include <openssl/ec.h>
-#include <openssl/ecdsa.h>
-#endif
 
 #include "ddd-dns.h"
 #include "ddd-db.h"
@@ -109,7 +102,6 @@ static struct keysentry {
         SLIST_ENTRY(keysentry) keys_entry;
 } *kn, *knp;
 
-
 /* prototypes */
 
 int	add_dnskey(ddDB *);
@@ -122,7 +114,7 @@ char *  get_key(struct keysentry *,uint32_t *, uint16_t *, uint8_t *, uint8_t *,
 char *	create_key(char *, int, int, int, int, uint32_t *);
 char *	create_key_rsa(char *, int, int, int, int, uint32_t *);
 char *	create_key_ec(char *, int, int, int, int, uint32_t *);
-int	create_key_ec_getpid(EC_KEY *, EC_GROUP *, EC_POINT *, int, int);
+int	create_key_ec_getpid(DDD_EC_KEY *, DDD_EC_GROUP *, DDD_EC_POINT *, int, int);
 
 char * 	alg_to_name(int);
 int 	alg_to_rsa(int);
@@ -161,7 +153,7 @@ u_int 		keytag(u_char *key, u_int keysize);
 u_int 		dnskey_keytag(struct dnskey *dnskey);
 void		free_private_key(struct keysentry *);
 DDD_RSA * 	get_private_key_rsa(struct keysentry *);
-EC_KEY *	get_private_key_ec(struct keysentry *);
+DDD_EC_KEY *	get_private_key_ec(struct keysentry *);
 int		store_private_key(struct keysentry *, char *, int, int);
 int 		print_rbt(FILE *, struct rbtree *);
 int 		print_rbt_bind(FILE *, struct rbtree *);
@@ -414,6 +406,17 @@ zonemd(int argc, char *argv[])
  * SIGNMAIN - the heart of dddctl sign ...
  */
 
+#ifdef DDD_NOSIGN
+int
+signmain(int argc, char *argv[])
+{
+	kn = NULL;
+	knp = NULL; 	/* squelch warnings */
+
+	fprintf(stderr, "signing has been disabled in dddctl\n");
+	exit(1);
+}
+#else
 int
 signmain(int argc, char *argv[])
 {
@@ -999,7 +1002,7 @@ signmain(int argc, char *argv[])
 
 	exit(0);
 }
-
+#endif /* NOSIGN */
 
 
 
@@ -1225,10 +1228,10 @@ char *
 create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t *pid)
 {
 	FILE *f;
-	EC_KEY *eckey;
-	EC_GROUP *ecgroup;
-	const BIGNUM *ecprivatekey;
-	const EC_POINT *ecpublickey;
+	DDD_EC_KEY *eckey;
+	DDD_EC_GROUP *ecgroup;
+	const DDD_BIGNUM *ecprivatekey;
+	const DDD_EC_POINT *ecpublickey;
 
 	struct stat sb;
 
@@ -1249,43 +1252,43 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 		return NULL;	
 	}
 
-	eckey = EC_KEY_new();
+	eckey = delphinusdns_EC_KEY_new();
 	if (eckey == NULL) {
 		dolog(LOG_ERR, "EC_KEY_new(): %s\n", strerror(errno));
 		return NULL;
 	}
 
-	ecgroup = EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+	ecgroup = delphinusdns_EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
 	if (ecgroup == NULL) {
 		dolog(LOG_ERR, "EC_GROUP_new_by_curve_name(): %s\n", strerror(errno));
-		EC_KEY_free(eckey);
+		delphinusdns_EC_KEY_free(eckey);
 		return NULL;
 	}
 
-	if (EC_KEY_set_group(eckey, ecgroup) != 1) {
+	if (delphinusdns_EC_KEY_set_group(eckey, ecgroup) != 1) {
 		dolog(LOG_ERR, "EC_KEY_set_group(): %s\n", strerror(errno));	
 		goto out;
 	}
 
 	/* XXX create EC key here */
-	if (EC_KEY_generate_key(eckey) == 0) {
+	if (delphinusdns_EC_KEY_generate_key(eckey) == 0) {
 		dolog(LOG_ERR, "EC_KEY_generate_key(): %s\n", strerror(errno));	
 		goto out;
 	}
 
-	ecprivatekey = EC_KEY_get0_private_key(eckey);
+	ecprivatekey = delphinusdns_EC_KEY_get0_private_key(eckey);
 	if (ecprivatekey == NULL) {
 		dolog(LOG_INFO, "EC_KEY_get0_private_key(): %s\n", strerror(errno));
 		goto out;
 	}
 
-	ecpublickey = EC_KEY_get0_public_key(eckey);
+	ecpublickey = delphinusdns_EC_KEY_get0_public_key(eckey);
 	if (ecpublickey == NULL) {
 		dolog(LOG_ERR, "EC_KEY_get0_public_key(): %s\n", strerror(errno));
 		goto out;
 	}
 		
-	*pid = create_key_ec_getpid(eckey, ecgroup, (EC_POINT *)ecpublickey, algorithm, flags);
+	*pid = create_key_ec_getpid(eckey, ecgroup, (DDD_EC_POINT *)ecpublickey, algorithm, flags);
 	if (*pid == -1) {
 		dolog(LOG_ERR, "create_key_ec_getpid(): %s\n", strerror(errno));
 		goto out;
@@ -1299,8 +1302,8 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 	
 	if (knp != NULL) {
 		dolog(LOG_INFO, "create_key: collision with existing pid %d\n", *pid);
-		EC_GROUP_free(ecgroup);
-		EC_KEY_free(eckey);
+		delphinusdns_EC_GROUP_free(ecgroup);
+		delphinusdns_EC_KEY_free(eckey);
 		return (create_key_ec(zonename, ttl, flags, algorithm, bits, pid));
 	}
 
@@ -1383,7 +1386,7 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 	fprintf(f, "; Publish: %s (%s)\n", buf, bin);
 	fprintf(f, "; Activate: %s (%s)\n", buf, bin);
 
-	if ((binlen = EC_POINT_point2oct(ecgroup, ecpublickey, POINT_CONVERSION_UNCOMPRESSED, (u_char *)tmp, sizeof(tmp), NULL)) == 0) {
+	if ((binlen = delphinusdns_EC_POINT_point2oct(ecgroup, ecpublickey, POINT_CONVERSION_UNCOMPRESSED, (u_char *)tmp, sizeof(tmp), NULL)) == 0) {
 		dolog(LOG_ERR, "EC_POINT_point2oct(): %s\n", strerror(errno));
 		fclose(f);
 		snprintf(buf, sizeof(buf), "%s.private", retval);
@@ -1405,20 +1408,20 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 
 	fclose(f);
 
-	EC_GROUP_free(ecgroup);
-	EC_KEY_free(eckey);
+	delphinusdns_EC_GROUP_free(ecgroup);
+	delphinusdns_EC_KEY_free(eckey);
 	
 	return (retval);
 
 out:
-	EC_GROUP_free(ecgroup);
-	EC_KEY_free(eckey);
+	delphinusdns_EC_GROUP_free(ecgroup);
+	delphinusdns_EC_KEY_free(eckey);
 	
 	return NULL;
 }
 
 int
-create_key_ec_getpid(EC_KEY *eckey, EC_GROUP *ecgroup, EC_POINT *ecpublickey, int algorithm, int flags)
+create_key_ec_getpid(DDD_EC_KEY *eckey, DDD_EC_GROUP *ecgroup, DDD_EC_POINT *ecpublickey, int algorithm, int flags)
 {
 	int binlen;
 	char *tmp, *p, *q;
@@ -1432,7 +1435,7 @@ create_key_ec_getpid(EC_KEY *eckey, EC_GROUP *ecgroup, EC_POINT *ecpublickey, in
  	pack8(p, algorithm);
 	p++;
 
-	binlen = EC_POINT_point2oct(ecgroup, ecpublickey, POINT_CONVERSION_UNCOMPRESSED, NULL, 0, NULL);
+	binlen = delphinusdns_EC_POINT_point2oct(ecgroup, ecpublickey, POINT_CONVERSION_UNCOMPRESSED, NULL, 0, NULL);
 
 	if (binlen == 0) {
 		dolog(LOG_ERR, "EC_POINT_point2oct(): %s\n", strerror(errno));
@@ -1445,7 +1448,7 @@ create_key_ec_getpid(EC_KEY *eckey, EC_GROUP *ecgroup, EC_POINT *ecpublickey, in
 		return (-1);
 	}
 
-	if (EC_POINT_point2oct(ecgroup, ecpublickey, POINT_CONVERSION_UNCOMPRESSED, (u_char *)tmp, binlen, NULL) == 0) {
+	if (delphinusdns_EC_POINT_point2oct(ecgroup, ecpublickey, POINT_CONVERSION_UNCOMPRESSED, (u_char *)tmp, binlen, NULL) == 0) {
 		dolog(LOG_ERR, "EC_POINT_point2oct(): %s\n", strerror(errno));
 		return -1; 
 	}
@@ -1764,6 +1767,8 @@ int
 alg_to_rsa(int algorithm)
 {
 	
+#if USE_OPENSSL
+
 	switch (algorithm) {
 	case ALGORITHM_RSASHA1_NSEC3_SHA1:
 		return (NID_sha1);
@@ -1775,6 +1780,7 @@ alg_to_rsa(int algorithm)
 		return (NID_sha512);
 		break;
 	}
+#endif
 
 	return (-1);
 }
@@ -7556,17 +7562,17 @@ get_private_key_rsa(struct keysentry *kn)
 	return (rsa);
 }
 
-EC_KEY *
+DDD_EC_KEY *
 get_private_key_ec(struct keysentry *kn)
 {
-	EC_KEY *eckey;
-	EC_GROUP *ecgroup;
+	DDD_EC_KEY *eckey;
+	DDD_EC_GROUP *ecgroup;
 
-	const EC_POINT *ecpoint = NULL;
-	const BIGNUM *ecprivate;
-	BN_CTX *bn_ctx = NULL;
+	const DDD_EC_POINT *ecpoint = NULL;
+	const DDD_BIGNUM *ecprivate;
+	DDD_BN_CTX *bn_ctx = NULL;
 
-	eckey = EC_KEY_new();
+	eckey = delphinusdns_EC_KEY_new();
 	if (eckey == NULL) {
 		dolog(LOG_INFO, "EC creation\n");
 		return NULL;
@@ -7579,47 +7585,47 @@ get_private_key_ec(struct keysentry *kn)
 	}
 
 
-	ecgroup = EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+	ecgroup = delphinusdns_EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
 	if (ecgroup == NULL) {
 		dolog(LOG_ERR, "EC_GROUP_new_by_curve_name(): %s\n", strerror(errno));
 		goto out;
 	}
 
-	if (EC_KEY_set_group(eckey, ecgroup) != 1) {
+	if (delphinusdns_EC_KEY_set_group(eckey, ecgroup) != 1) {
 		dolog(LOG_ERR, "EC_KEY_set_group(): %s\n", strerror(errno));	
-		EC_GROUP_free(ecgroup);
+		delphinusdns_EC_GROUP_free(ecgroup);
 		goto out;
 	}
 
-	if (EC_KEY_set_private_key(eckey, ecprivate) != 1) {
+	if (delphinusdns_EC_KEY_set_private_key(eckey, ecprivate) != 1) {
 		dolog(LOG_INFO, "EC_KEY_set_private_key failed\n");
-		EC_GROUP_free(ecgroup);
+		delphinusdns_EC_GROUP_free(ecgroup);
 		goto out;
 	}
 
-	ecpoint = EC_POINT_new(ecgroup);
+	ecpoint = delphinusdns_EC_POINT_new(ecgroup);
 	if (ecpoint == NULL) {
 		dolog(LOG_ERR, "EC_POINT_new(): %s\n", ERR_error_string(ERR_get_error(), NULL));
-		EC_GROUP_free(ecgroup);
+		delphinusdns_EC_GROUP_free(ecgroup);
 		goto out;
 	}
 
-	if (EC_POINT_mul(ecgroup, (EC_POINT *)ecpoint, ecprivate, NULL, NULL, bn_ctx) != 1) {
+	if (delphinusdns_EC_POINT_mul(ecgroup, (DDD_EC_POINT *)ecpoint, ecprivate, NULL, NULL, bn_ctx) != 1) {
 		dolog(LOG_ERR, "EC_POINT_mul(): %s\n", ERR_error_string(ERR_get_error(), NULL));
-		EC_GROUP_free(ecgroup);
+		delphinusdns_EC_GROUP_free(ecgroup);
 		goto out;
 	}
 
-	if (EC_KEY_set_public_key(eckey, ecpoint) != 1) { 
+	if (delphinusdns_EC_KEY_set_public_key(eckey, ecpoint) != 1) { 
 		dolog(LOG_ERR, "EC_KEY_set_public_key(): %s\n", ERR_error_string(ERR_get_error(), NULL));
-		EC_GROUP_free(ecgroup);
+		delphinusdns_EC_GROUP_free(ecgroup);
 		goto out;
 	}
 
 	return (eckey);	
 
 out:
-	EC_KEY_free(eckey);
+	delphinusdns_EC_KEY_free(eckey);
 	return NULL;
 }
 
@@ -8884,19 +8890,19 @@ debug_bindump(const char *key, int keylen)
 int
 sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *signature, int *siglen)
 {
-	RSA *rsa;
-	EC_KEY *eckey;
+	DDD_RSA *rsa;
+	DDD_EC_KEY *eckey;
 
-	SHA_CTX sha1;
-	SHA256_CTX sha256;
-	SHA512_CTX sha512;
+	DDD_SHA_CTX sha1;
+	DDD_SHA256_CTX sha256;
+	DDD_SHA512_CTX sha512;
 
 	char shabuf[64];
 	int bufsize;
 	int rsatype;
 
-	ECDSA_SIG *tmpsig;
-	const BIGNUM *r = NULL, *s = NULL;
+	DDD_ECDSA_SIG *tmpsig;
+	const DDD_BIGNUM *r = NULL, *s = NULL;
 
 	char buf[512];
 	int buflen;
@@ -8967,20 +8973,20 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 		}
 
 			
-		if ((tmpsig = ECDSA_do_sign((u_char*)shabuf, bufsize, eckey)) == NULL) {
+		if ((tmpsig = delphinusdns_ECDSA_do_sign((u_char*)shabuf, bufsize, eckey)) == NULL) {
 			dolog(LOG_INFO, "unable to sign with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-			EC_KEY_free(eckey);
+			delphinusdns_EC_KEY_free(eckey);
 			return -1;
 		}
 
-		if (ECDSA_do_verify((u_char*)shabuf, bufsize, (const ECDSA_SIG *)tmpsig, eckey) != 1) {
+		if (delphinusdns_ECDSA_do_verify((u_char*)shabuf, bufsize, (const DDD_ECDSA_SIG *)tmpsig, eckey) != 1) {
 			dolog(LOG_INFO, "unable to verify signature with algorithm %d: %s\n", algorithm, ERR_error_string(ERR_get_error(), NULL));
-			EC_KEY_free(eckey);
-			ECDSA_SIG_free(tmpsig);
+			delphinusdns_EC_KEY_free(eckey);
+			delphinusdns_ECDSA_SIG_free(tmpsig);
 			return -1;
 		}
 
-		ECDSA_SIG_get0(tmpsig, &r, &s);
+		delphinusdns_ECDSA_SIG_get0(tmpsig, &r, &s);
 
 		/*
 		 * taken from PowerDNS's opensslsigners.cc, apparently a
@@ -8997,8 +9003,8 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 		memcpy((char *)&signature[64 - buflen], buf, buflen);
 		*siglen = 64;
 
-		ECDSA_SIG_free(tmpsig);
-		EC_KEY_free(eckey);
+		delphinusdns_ECDSA_SIG_free(tmpsig);
+		delphinusdns_EC_KEY_free(eckey);
 		break;
 
 	default:
