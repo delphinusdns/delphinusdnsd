@@ -1767,8 +1767,6 @@ int
 alg_to_rsa(int algorithm)
 {
 	
-#if USE_OPENSSL
-
 	switch (algorithm) {
 	case ALGORITHM_RSASHA1_NSEC3_SHA1:
 		return (NID_sha1);
@@ -1780,7 +1778,6 @@ alg_to_rsa(int algorithm)
 		return (NID_sha512);
 		break;
 	}
-#endif
 
 	return (-1);
 }

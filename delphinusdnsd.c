@@ -608,6 +608,9 @@ main(int argc, char *argv[], char *environ[])
 
 
 	/* end of setup_primary code */
+#if USE_WOLFSSL
+	wolfCrypt_Init();
+#endif
 		
 	init_region();
 	init_filter();
@@ -4714,26 +4717,26 @@ sm_unlock(char *shm, size_t end)
 int
 same_refused(u_char *old_digest, void *buf, int len, void *address, int addrlen)
 {
-	EVP_MD_CTX *ctx;
-	const EVP_MD *md;
+	DDD_EVP_MD_CTX *ctx;
+	const DDD_EVP_MD *md;
 	u_char rdigest[MD5_DIGEST_LENGTH];	
 	u_int md_len;
 
-	md = (EVP_MD *)EVP_md5();
+	md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("md5");
 	if (md == NULL) {
 		return 0;
 	}
 
-	ctx = EVP_MD_CTX_new();
+	ctx = delphinusdns_EVP_MD_CTX_new();
 	if (ctx == NULL) {
 		return 0;
 	}
 
-	EVP_DigestInit_ex(ctx, md, NULL);
-	EVP_DigestUpdate(ctx, buf, len);
-	EVP_DigestUpdate(ctx, address, addrlen);
-	EVP_DigestFinal_ex(ctx, rdigest, &md_len);
-	EVP_MD_CTX_free(ctx);
+	delphinusdns_EVP_DigestInit_ex(ctx, md, NULL);
+	delphinusdns_EVP_DigestUpdate(ctx, buf, len);
+	delphinusdns_EVP_DigestUpdate(ctx, address, addrlen);
+	delphinusdns_EVP_DigestFinal_ex(ctx, rdigest, &md_len);
+	delphinusdns_EVP_MD_CTX_free(ctx);
 
 	if (md_len != MD5_DIGEST_LENGTH)
 		return (0);
@@ -4752,8 +4755,8 @@ same_refused(u_char *old_digest, void *buf, int len, void *address, int addrlen)
 int
 add_cache(struct querycache *qc, char *buf, int len, struct question *q,  char *reply, int replylen, uint16_t crc)
 {
-	EVP_MD_CTX *ctx;
-	const EVP_MD *md;
+	DDD_EVP_MD_CTX *ctx;
+	const DDD_EVP_MD *md;
 	u_char rdigest[MD5_DIGEST_LENGTH];	
 	u_int md_len;
 	struct csnode *n, *res, find;
@@ -4792,17 +4795,17 @@ next:
 	np->cs->replylen = replylen;
 
 	if (len > QC_REQUESTSIZE) {
-		ctx = EVP_MD_CTX_new();
+		ctx = delphinusdns_EVP_MD_CTX_new();
 		if (ctx == NULL)
 			return -1;
-		md = (EVP_MD *)EVP_md5();
+		md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("md5");
 		if (md == NULL) {
 			return -1;
 		}
-		EVP_DigestInit_ex(ctx, md, NULL);
-		EVP_DigestUpdate(ctx, buf, len);
-		EVP_DigestFinal_ex(ctx, rdigest, &md_len);
-		EVP_MD_CTX_free(ctx);
+		delphinusdns_EVP_DigestInit_ex(ctx, md, NULL);
+		delphinusdns_EVP_DigestUpdate(ctx, buf, len);
+		delphinusdns_EVP_DigestFinal_ex(ctx, rdigest, &md_len);
+		delphinusdns_EVP_MD_CTX_free(ctx);
 	} else {
 		memcpy(np->cs->request, buf, len);
 	}
@@ -4846,14 +4849,14 @@ reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char 
 	int needhash = 1;
 	struct csnode find, *res;
 	struct csentry *np;
-	EVP_MD_CTX *ctx = NULL;
-	EVP_MD *md;
+	DDD_EVP_MD_CTX *ctx = NULL;
+	DDD_EVP_MD *md;
 
-	ctx = EVP_MD_CTX_new();
+	ctx = delphinusdns_EVP_MD_CTX_new();
 	if (ctx == NULL)
 		return -1;
 
-	md = (EVP_MD *)EVP_md5();
+	md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("md5");
 	if (md == NULL)
 		return -1;
 
@@ -4868,9 +4871,9 @@ reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char 
 				}
 			} else {
 				if (needhash) {
-					EVP_DigestInit_ex(ctx, md, NULL);
-					EVP_DigestUpdate(ctx, &buf[2], len - 2);
-					EVP_DigestFinal_ex(ctx, rdigest, &md_len);
+					delphinusdns_EVP_DigestInit_ex(ctx, md, NULL);
+					delphinusdns_EVP_DigestUpdate(ctx, &buf[2], len - 2);
+					delphinusdns_EVP_DigestFinal_ex(ctx, rdigest, &md_len);
 					needhash = 0;
 				}
 
@@ -4881,12 +4884,12 @@ reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char 
 		}
 	}
 
-	EVP_MD_CTX_free(ctx);
+	delphinusdns_EVP_MD_CTX_free(ctx);
 	return (0);
 
 sendit:
 	
-	EVP_MD_CTX_free(ctx);
+	delphinusdns_EVP_MD_CTX_free(ctx);
 	strlcpy(dn, np->cs->domainname, DNS_MAXNAME + 1);
 	*class = np->cs->class;
 	*type = np->cs->type;

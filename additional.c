@@ -67,7 +67,7 @@ int additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 int additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 int additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *, int);
-int additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
+int additional_tsig(struct question *, char *, int, int, int, int, DDD_HMAC_CTX *, uint16_t);
 int additional_wildcard(char *, int, struct rbtree *, char *, int, int, int *, ddDB *);
 
 extern void 	pack(char *, char *, int);
@@ -409,7 +409,7 @@ out:
  */
 
 int 
-additional_tsig(struct question *question, char *reply, int replylen, int offset, int request, int envelope, HMAC_CTX *tsigctx, uint16_t fudge) 
+additional_tsig(struct question *question, char *reply, int replylen, int offset, int request, int envelope, DDD_HMAC_CTX *tsigctx, uint16_t fudge) 
 {
 	struct dns_tsigrr *answer, *ppanswer, *timers;
 	u_int macsize = DNS_HMAC_SHA256_SIZE;
@@ -446,7 +446,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 			memcpy(&tsig_timers[ttlen], question->tsig.tsigmac, question->tsig.tsigmaclen);
 			ttlen += question->tsig.tsigmaclen;
 
-			HMAC_Update(tsigctx, (u_char *)tsig_timers, ttlen);
+			delphinusdns_HMAC_Update(tsigctx, (u_char *)tsig_timers, ttlen);
 
 			priordigest = 0;
 		}
@@ -475,7 +475,7 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 	ppoffset += offset;
 
 	if (envelope > 1 || envelope < -1) {
-		HMAC_Update(tsigctx, (u_char *)reply, offset);
+		delphinusdns_HMAC_Update(tsigctx, (u_char *)reply, offset);
 	}
 
 	if ((tsignamelen = find_tsig_key(question->tsig.tsigkey, 
@@ -617,29 +617,31 @@ additional_tsig(struct question *question, char *reply, int replylen, int offset
 			timers = (struct dns_tsigrr *)&tsig_timers[ttlen];
 			timers->timefudge = htobe64(((uint64_t)now << 16) | (fudge & 0xffff));
 			ttlen += 8;
-			HMAC_Update(tsigctx, (const unsigned char *)tsig_timers, ttlen);
+			delphinusdns_HMAC_Update(tsigctx, (const unsigned char *)tsig_timers, ttlen);
 		}
 		
 
 		/* we need it for the else */
 		if (envelope % 89 == 0 || envelope == -2) {
 			macsize = DNS_HMAC_SHA256_SIZE;
-			HMAC_Final(tsigctx, (unsigned char *)&answer->mac[0], (u_int *)&macsize);
+			delphinusdns_HMAC_Final(tsigctx, (unsigned char *)&answer->mac[0], (u_int *)&macsize);
 			memcpy(question->tsig.tsigmac, &answer->mac[0], macsize);
 			priordigest = 1;
 		} else
 			offset = rollback;
 
 	} else {
+		const DDD_EVP_MD *md;
 
+		md = delphinusdns_EVP_get_digestbyname("sha256");
 		if (question->tsig.tsigerrorcode == DNS_BADTIME) {
-			HMAC(EVP_sha256(), tsigkey, tsignamelen, 
+			delphinusdns_HMAC(md, tsigkey, tsignamelen, 
 				(unsigned char *)pseudo_packet, ppoffset, 
 				(unsigned char *)&answer->mac[0], (u_int *)&macsize);
 		} else if (question->tsig.tsigerrorcode) {
 			memset(&answer->mac[0], 0, question->tsig.tsigmaclen);
 		} else {
-			HMAC(EVP_sha256(), tsigkey, tsignamelen, 
+			delphinusdns_HMAC(md, tsigkey, tsignamelen, 
 				(unsigned char *)pseudo_packet, ppoffset, 
 				(unsigned char *)&answer->mac[0], (u_int *)&macsize);
 

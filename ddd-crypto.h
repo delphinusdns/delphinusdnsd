@@ -50,15 +50,64 @@ typedef ECDSA_SIG	DDD_ECDSA_SIG;
 
 #endif
 
+#ifdef USE_WOLFSSL
+
+#include <wolfssl/ssl.h>
+#include <wolfssl/openssl/evp.h>
+#include <wolfssl/openssl/md5.h>
+#include <wolfssl/openssl/sha.h>
+#include <wolfssl/openssl/hmac.h>
+#include <wolfssl/openssl/rsa.h>
+
+#include <wolfssl/openssl/ec.h>
+#include <wolfssl/openssl/ecdsa.h>
+#include <wolfssl/openssl/bn.h>
+
+#include <wolfssl/wolfcrypt/md5.h>
+#include <wolfssl/wolfcrypt/sha.h>
+#include <wolfssl/wolfcrypt/hmac.h>
+
+typedef void  	DDD_SHA512_CTX;
+typedef SHA256_CTX	DDD_SHA256_CTX;
+typedef SHA_CTX		DDD_SHA_CTX;
+
+typedef BIGNUM 		DDD_BIGNUM;
+typedef BN_CTX		DDD_BN_CTX;
+//typedef BN_GENCB 	DDD_BN_GENCB;
+typedef RSA		DDD_RSA;
+
+#define DDD_RSA_F4	RSA_F4
+
+typedef EC_KEY		DDD_EC_KEY;
+typedef EC_GROUP	DDD_EC_GROUP;
+typedef EC_POINT	DDD_EC_POINT;
+
+typedef ECDSA_SIG	DDD_ECDSA_SIG;
+
+typedef void		DDD_BN_GENCB;
+typedef uint32_t	point_conversion_form_t;
+
+#ifndef SHA384_DIGEST_LENGTH
+#define SHA384_DIGEST_LENGTH	48
+#endif
+
+#endif
+
 typedef struct {
 #if USE_OPENSSL
 	EVP_MD_CTX *ctx;
 #endif	
+#if USE_WOLFSSL
+	EVP_MD_CTX *ctx;
+#endif
 } DDD_EVP_MD_CTX;
 
 typedef struct {
 #if USE_OPENSSL
 	HMAC_CTX *ctx;
+#endif
+#if USE_WOLFSSL
+	Hmac *ctx;
 #endif
 } DDD_HMAC_CTX;
 
@@ -66,10 +115,16 @@ typedef struct {
 #if USE_OPENSSL
 	const EVP_MD *md;
 #endif
+#if USE_WOLFSSL
+	const EVP_MD *md;
+#endif
 } DDD_EVP_MD;
 
 typedef struct {
 #if USE_OPENSSL
+	ENGINE *e;
+#endif
+#if USE_WOLFSSL
 	ENGINE *e;
 #endif
 } DDD_ENGINE;

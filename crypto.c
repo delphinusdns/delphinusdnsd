@@ -19,6 +19,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #include "ddd-crypto.h"
 
@@ -39,6 +40,15 @@ delphinusdns_EVP_MD_CTX_new(void)
 	}
 
 #endif
+#ifdef USE_WOLFSSL
+	if ((ctx = calloc(1, sizeof(DDD_EVP_MD_CTX))) == NULL)
+		return NULL;
+
+	if ((ctx->ctx = EVP_MD_CTX_new()) == NULL) {
+		free(ctx);
+		return NULL;
+	}
+#endif
 	
 	return (ctx);
 }
@@ -50,6 +60,10 @@ delphinusdns_EVP_MD_CTX_free(DDD_EVP_MD_CTX *ctx)
 #ifdef USE_OPENSSL
 	EVP_MD_CTX_free(ctx->ctx);
 #endif
+#ifdef USE_WOLFSSL
+	EVP_MD_CTX_free(ctx->ctx);
+#endif
+
 	free(ctx);
 }
 
@@ -59,6 +73,8 @@ delphinusdns_HMAC_CTX_free(DDD_HMAC_CTX *ctx)
 {
 #ifdef USE_OPENSSL
 	HMAC_CTX_free(ctx->ctx);
+#endif
+#ifdef USE_WOLFSSL
 #endif
 	free(ctx);
 }
@@ -73,6 +89,9 @@ delphinusdns_EVP_DigestInit_ex(DDD_EVP_MD_CTX *ctx, const DDD_EVP_MD *type,
 #ifdef USE_OPENSSL
 	ret = EVP_DigestInit_ex(ctx->ctx, (const EVP_MD *)type->md, (impl == NULL) ? NULL : (ENGINE *)impl->e);
 #endif
+#ifdef USE_WOLFSSL
+	ret = EVP_DigestInit_ex(ctx->ctx, (const EVP_MD *)type->md, (ENGINE *)NULL);
+#endif
 	return (ret);
 }
 
@@ -82,6 +101,9 @@ delphinusdns_EVP_DigestUpdate(DDD_EVP_MD_CTX *ctx, const void *d, size_t cnt)
 	static int ret;
 
 #ifdef USE_OPENSSL
+	ret = EVP_DigestUpdate(ctx->ctx, d, cnt);
+#endif
+#ifdef USE_WOLFSSL
 	ret = EVP_DigestUpdate(ctx->ctx, d, cnt);
 #endif
 
@@ -94,6 +116,9 @@ delphinusdns_EVP_DigestFinal_ex(DDD_EVP_MD_CTX *ctx, u_char *md, u_int *s)
 	static int ret;
 
 #ifdef USE_OPENSSL
+	ret = EVP_DigestFinal_ex(ctx->ctx, md, s);
+#endif
+#ifdef USE_WOLFSSL
 	ret = EVP_DigestFinal_ex(ctx->ctx, md, s);
 #endif
 	return (ret);
@@ -116,6 +141,15 @@ delphinusdns_HMAC_CTX_new(void)
 		return NULL;
 	}
 #endif
+#ifdef USE_WOLFSSL
+	if ((ctx = calloc(1, sizeof(DDD_HMAC_CTX))) == NULL)
+		return NULL;
+
+	if ((ctx->ctx = calloc(1, sizeof(Hmac))) == NULL) {
+		free(ctx);
+		return NULL;
+	}
+#endif
 	return (ctx);
 }
 
@@ -127,6 +161,19 @@ delphinusdns_HMAC_Init_ex(DDD_HMAC_CTX *ctx, const void *key, int key_len,
 
 #ifdef USE_OPENSSL
 	ret = HMAC_Init_ex(ctx->ctx, key, key_len, md->md, (impl == NULL) ? NULL : (ENGINE *)impl->e);
+#endif
+#ifdef USE_WOLFSSL
+	ret = wc_HmacSetKey(ctx->ctx, SHA256, key, key_len);
+
+	/* this is reversed */
+	switch (ret) {
+	case 0:
+		ret = 1;
+		break;
+	default:
+		ret = 0;
+		break;
+	}
 #endif
 
 	return (ret);
@@ -141,6 +188,19 @@ delphinusdns_HMAC_Update(DDD_HMAC_CTX *ctx, const unsigned char *data,
 #ifdef USE_OPENSSL
 	ret = HMAC_Update(ctx->ctx, (const unsigned char *)data, len);
 #endif
+#ifdef USE_WOLFSSL
+	ret = wc_HmacUpdate(ctx->ctx, (const unsigned char *)data, len);
+
+	/* this is reversed */
+	switch (ret) {
+	case 0:
+		ret = 1;
+		break;
+	default:
+		ret = 0;
+		break;
+	}
+#endif
 
 	return (ret);
 }
@@ -152,6 +212,18 @@ delphinusdns_HMAC_Final(DDD_HMAC_CTX *ctx, unsigned char *md, unsigned int *len)
 
 #ifdef USE_OPENSSL
 	ret = HMAC_Final(ctx->ctx, (unsigned char *)md, (unsigned int *)len);
+#endif
+#ifdef USE_WOLFSSL
+	ret = wc_HmacFinal(ctx->ctx, md);
+	/* this is reversed */
+	switch (ret) {
+	case 0:
+		ret = 1;
+		break;
+	default:
+		ret = 0;
+		break;
+	}
 #endif
 
 	return (ret);
@@ -167,6 +239,15 @@ delphinusdns_HMAC(const DDD_EVP_MD *evp_md, const void *key, int key_len,
 #ifdef USE_OPENSSL
 	ret = HMAC(evp_md->md, (const void *)key, key_len, (const unsigned char *)d, n, (unsigned char *)md, (unsigned int *)md_len);
 #endif
+#ifdef USE_WOLFSSL
+#if 0
+	ret = HMAC(evp_md->md, (const void *)key, key_len, (const unsigned char *)d, n, (unsigned char *)md, (unsigned int *)md_len);
+
+	ret = wc_HKDF(SHA256, key, key_len, NULL, 0, NULL, 0, what!!?
+#endif
+#endif
+
+
 
 	return (ret);
 }
@@ -187,6 +268,25 @@ delphinusdns_EVP_get_digestbyname(const char *name)
 		return NULL;
 	}
 #endif
+#ifdef USE_WOLFSSL
+	char uppercase[64];
+	const char *p;
+	int i;
+	
+	if ((ret = calloc(1, sizeof(DDD_EVP_MD))) == NULL) {
+		return NULL;
+	}
+
+	for (p = &name[0], i = 0; i < strlen(name); i++) {
+		uppercase[i] = toupper(*p++);
+	}
+	
+	ret->md = wolfSSL_EVP_get_digestbyname(uppercase);
+	if (ret->md == NULL) {
+		free(ret);
+		return NULL;
+	}
+#endif
 
 	return (ret);
 }
@@ -199,6 +299,9 @@ delphinusdns_SHA384_Update(DDD_SHA512_CTX *c, const void *data, size_t len)
 #ifdef USE_OPENSSL
 	ret = SHA384_Update((SHA512_CTX *)c, (const void *)data, len);
 #endif
+#ifdef USE_WOLFSSL
+	ret = SHA384_Update((SHA512_CTX *)c, (const void *)data, len);
+#endif
 
 	return (ret);
 }
@@ -209,6 +312,9 @@ delphinusdns_HMAC_CTX_reset(DDD_HMAC_CTX *ctx)
 	static int ret;
 
 #ifdef USE_OPENSSL
+	ret = HMAC_CTX_reset(ctx->ctx);	
+#endif
+#ifdef USE_WOLFSSL
 	ret = HMAC_CTX_reset(ctx->ctx);	
 #endif
 
@@ -224,6 +330,10 @@ delphinusdns_BN_new(void)
 #ifdef USE_OPENSSL
 	bn = BN_new();
 #endif
+#ifdef USE_WOLFSSL
+	bn = BN_new();
+#endif
+
 	return (bn);
 }
 
@@ -231,6 +341,9 @@ void
 delphinusdns_BN_free(DDD_BIGNUM *bn)
 {
 #ifdef USE_OPENSSL
+	BN_free((BIGNUM *)bn);
+#endif
+#ifdef USE_WOLFSSL
 	BN_free((BIGNUM *)bn);
 #endif
 }
@@ -241,12 +354,18 @@ delphinusdns_BN_clear_free(DDD_BIGNUM *a)
 #ifdef USE_OPENSSL
 	BN_clear_free((BIGNUM *)a);
 #endif
+#ifdef USE_WOLFSSL
+	BN_clear_free((BIGNUM *)a);
+#endif
 }
 
 int
 delphinusdns_BN_bn2bin(const DDD_BIGNUM *a, unsigned char *to)
 {
 #ifdef USE_OPENSSL
+	return (BN_bn2bin((const BIGNUM *)a, to));
+#endif
+#ifdef USE_WOLFSSL
 	return (BN_bn2bin((const BIGNUM *)a, to));
 #endif
 }
@@ -256,6 +375,9 @@ delphinusdns_BN_bin2bn(const unsigned char *s, int len, DDD_BIGNUM *ret)
 {
 	DDD_BIGNUM *ret0;
 #ifdef USE_OPENSSL
+	ret0 = BN_bin2bn(s, len, (BIGNUM *)ret);
+#endif
+#ifdef USE_WOLFSSL
 	ret0 = BN_bin2bn(s, len, (BIGNUM *)ret);
 #endif
 
@@ -269,7 +391,9 @@ delphinusdns_BN_dup(const DDD_BIGNUM *from)
 #ifdef USE_OPENSSL
 	ret = BN_dup((const BIGNUM *)from);
 #endif
-
+#ifdef USE_WOLFSSL
+	ret = BN_dup((const BIGNUM *)from);
+#endif
 	return (ret);
 }
 
@@ -279,6 +403,8 @@ delphinusdns_BN_GENCB_new(void)
 	DDD_BN_GENCB *ret;
 #ifdef USE_OPENSSL
 	ret = BN_GENCB_new();
+#endif
+#ifdef USE_WOLFSSL
 #endif
 
 	return (ret);
@@ -292,6 +418,9 @@ delphinusdns_BN_set_bit(DDD_BIGNUM *a, int n)
 #ifdef USE_OPENSSL
 	ret = BN_set_bit((BIGNUM *)a, n);	
 #endif
+#ifdef USE_WOLFSSL
+	ret = BN_set_bit((BIGNUM *)a, n);	
+#endif
 
 	return (ret);
 }
@@ -301,6 +430,8 @@ delphinusdns_BN_GENCB_free(DDD_BN_GENCB *cb)
 {
 #ifdef USE_OPENSSL
 	BN_GENCB_free((BN_GENCB *)cb);
+#endif
+#ifdef USE_WOLFSSL
 #endif
 }
 
