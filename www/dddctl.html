@@ -22,6 +22,7 @@
    -->
 <head>
   <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
     table.head, table.foot { width: 100%; }
     td.head-rtitle, td.foot-os { text-align: right; }
@@ -118,7 +119,7 @@
     </dl>
   </dd>
   <dt id="sign"><a class="permalink" href="#sign"><code class="Cm">sign</code></a>
-    [<code class="Fl">-KXZ</code>] [<code class="Fl">-a</code>
+    [<code class="Fl">-KMXZ</code>] [<code class="Fl">-a</code>
     <var class="Ar">algorithm</var>] [<code class="Fl">-B</code>
     <var class="Ar">bits</var>] [<code class="Fl">-e</code>
     <var class="Ar">seconds</var>] [<code class="Fl">-I</code>
@@ -138,6 +139,11 @@
     <dl class="Bl-tag">
       <dt id="K"><a class="permalink" href="#K"><code class="Fl">-K</code></a></dt>
       <dd>create a new KSK key.</dd>
+      <dt id="M"><a class="permalink" href="#M"><code class="Fl">-M</code></a></dt>
+      <dd>add a ZONEMD RR to the zone (Will not work with already present
+          ZONEMD's). Please see the zonemd command, for what algorithms are
+          used. A DNSSEC signed zone can be integrity checked with the zonemd
+          command.</dd>
       <dt id="X"><a class="permalink" href="#X"><code class="Fl">-X</code></a></dt>
       <dd>update serial to YYYYMMDD01.</dd>
       <dt id="Z~2"><a class="permalink" href="#Z~2"><code class="Fl">-Z</code></a></dt>
@@ -206,6 +212,17 @@
   <dt id="restart"><a class="permalink" href="#restart"><code class="Cm">restart</code></a>
     <var class="Ar">[-I identstring] [-s path]</var></dt>
   <dd>restarts delphinusdnsd with optional control socket path.</dd>
+  <dt id="zonemd"><a class="permalink" href="#zonemd"><code class="Cm">zonemd</code></a>
+    <var class="Ar">[-c] [-n zonename] [-o outfile] file</var></dt>
+  <dd>message digests (SIMPLE scheme, algorithm SHA386) a non-DNSSEC zonefile.
+    <dl class="Bl-tag">
+      <dt id="c"><a class="permalink" href="#c"><code class="Fl">-c</code></a></dt>
+      <dd>checks a zonefile wether an embedded ZONEMD matches.</dd>
+      <dt id="o~2"><a class="permalink" href="#o~2"><code class="Fl">-o</code></a>
+        <var class="Ar">outfile</var></dt>
+      <dd>specifies an optional output file, otherwise stdout.</dd>
+    </dl>
+  </dd>
 </dl>
 </section>
 <section class="Sh">
@@ -215,8 +232,7 @@
 <p class="Pp">To sign a delphinusdns zone the first time one may do:</p>
 <p class="Pp">dddctl sign -Z -K -a 13 -B 2048 -n delphinusdns.org -i
     delphinusdns.org.zone -o delphinusdns.org.zone.signed</p>
-<p class="Pp">Please see the https://delphinusdns.org website for more
-  examples.</p>
+<p class="Pp">Please see the delphinusdns.org website for more examples.</p>
 </section>
 <section class="Sh">
 <h1 class="Sh" id="SEE_ALSO"><a class="permalink" href="#SEE_ALSO">SEE
@@ -247,13 +263,13 @@
 <section class="Sh">
 <h1 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h1>
 <p class="Pp"><span class="An">Peter J. Philipp</span>
-    &lt;<a class="Mt" href="mailto:petphi@delphinusdns.org">petphi@delphinusdns.org</a>&gt;</p>
+    &lt;<a class="Mt" href="mailto:pbug44@delphinusdns.org">pbug44@delphinusdns.org</a>&gt;</p>
 </section>
 </div>
 <table class="foot">
   <tr>
-    <td class="foot-date">January 6, 2021</td>
-    <td class="foot-os">OpenBSD 6.8</td>
+    <td class="foot-date">April 27, 2021</td>
+    <td class="foot-os">OpenBSD 7.1</td>
   </tr>
 </table>
 </body>

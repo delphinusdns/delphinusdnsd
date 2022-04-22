@@ -28,6 +28,7 @@
    -->
 <head>
   <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
     table.head, table.foot { width: 100%; }
     td.head-rtitle, td.foot-os { text-align: right; }
@@ -63,14 +64,36 @@
     you to look up <a class="Xr">syslogd(8)</a> and
     <a class="Xr">syslog.conf(5)</a> which also drop the d in the config file.
     This follows that name convention.</p>
+<p class="Pp">Delphinusdnsd zonefiles can be packed into the configfile, but
+    this is discouraged. It is encouraged to use zinclude's to include each
+    logical zone separately. This also makes sense from a DNSSEC signing
+    perspective which requires separate zonefiles. The format of zonefiles
+    deviates from RFC 1034 format (BIND format) and I have adopted a CSV (comma
+    separated values) scheme. This scheme requires that all domainnames be
+    written out absolute relative to the DNS root. There is no emphasis on a
+    trailing dot and a trailing dot can be left out on domainnames. It is also
+    necessary to write out a TTL on every RR. Here is an example of the
+    beginning of a zonefile:</p>
+<div class="Bd Pp Li">
+<pre>zone &quot;delphinusdns.org&quot; {
+        delphinusdns.org,soa,86400,pod.delphinusdns.org.,dns-admin.delphinusdns.org.,2021040404,3600,1200,1209600,86400
+        delphinusdns.org,ns,86400,pod.delphinusdns.org.
+        delphinusdns.org,ns,86400,job.delphinusdns.org.
+        delphinusdns.org,ns,86400,sky.delphinusdns.org.
+        delphinusdns.org,mx,86400,10,mail.delphinusdns.org
+	[...]
+}</pre>
+</div>
+Do note that it is a requirement that an SOA and NS records exist in the apex
+  (beginning) of a zone, otherwise delphinusdnsd behaviour is undefined. You
+  would use the dddctl tool to DNSSEC sign a zonefile.
 </section>
 <section class="Sh">
 <h1 class="Sh" id="EXAMPLES"><a class="permalink" href="#EXAMPLES">EXAMPLES</a></h1>
 <p class="Pp">Here is a sample <code class="Nm">delphinusdns.conf</code>
   file:</p>
-<div class="Bd Pp">
-<pre>
-version &quot;1&quot;;
+<div class="Bd Pp Li">
+<pre>version &quot;1&quot;;
 options &quot;cool stuff&quot; {
 	interface &quot;lo0&quot;;
 	interface &quot;em0&quot;;
@@ -103,20 +126,18 @@ mzone &quot;centroid.eu&quot; {
 }
 
 zone &quot;centroid.eu&quot; {
-	centroid.eu,soa,3600,ns1.centroid.eu.,hostmaster.centroid.eu.,2019111901,3600,1800,7200,3600
+	centroid.eu,soa,3600,ns1.centroid.eu.,hostcontact.centroid.eu.,2019111901,3600,1800,7200,3600
 	centroid.eu,ns,3600,somenameserver.delphinusdns.org.
 	centroid.eu,ns,3600,anothernameserver.delphinusdns.org.
 	; all lines in zone start with domainname, RR Type, RR TTL, RDATA
 	centroid.eu,a,3600,127.0.0.1
 	centroid.eu,a,3600,10.0.0.10
-}
-</pre>
+}</pre>
 </div>
 Here is a sample <code class="Nm">delphinusdns.conf</code> file suited for
   DNSSEC:
-<div class="Bd Pp">
-<pre>
-version &quot;1&quot;;
+<div class="Bd Pp Li">
+<pre>version &quot;1&quot;;
 options &quot;some options&quot; {
         ratelimit-pps 12;
         bind 127.0.0.1;
@@ -142,15 +163,14 @@ mzone &quot;centroid.eu&quot; {
 }
 
 
-zinclude &quot;/var/delphinusdnsd/master/centroid.eu.signed&quot;;
+zinclude &quot;/var/delphinusdnsd/primary/centroid.eu.signed&quot;;
 
 </pre>
 </div>
 Then the included files are output of <a class="Xr">dddctl(8)</a>
 <p class="Pp">A forwarding-only config may look like this:</p>
-<div class="Bd Pp">
-<pre>
-version &quot;1&quot;;
+<div class="Bd Pp Li">
+<pre>version &quot;1&quot;;
 
 options &quot;this mess&quot; {
         interface &quot;em0&quot;;
@@ -168,15 +188,14 @@ tsig &quot;these hosts&quot; {
 forward &quot;to these hosts&quot; {
         incoming-tsig yes;
         destination 127.0.0.1 port 5353 key NOKEY;
-}
-</pre>
+	forwardstrategy spray;
+}</pre>
 </div>
 <p class="Pp">Finally below is a sample replicant
     <code class="Nm">delphinusdns.conf</code> as taken from a
     <a class="Xr">delphinusdnsd</a> with only one zone:</p>
-<div class="Bd Pp">
-<pre>
-version &quot;1&quot;;
+<div class="Bd Pp Li">
+<pre>version &quot;1&quot;;
 
 options &quot;arrowhead&quot; {
         ratelimit-pps 12;
@@ -195,8 +214,8 @@ rzone &quot;ip6.centroid.eu.&quot; {
 	bytelimit 65536;
 	; do make sure you have a tsig &quot;&quot; {} for this
         tsigkey &quot;pass&quot;;
-        masterport 10053;
-        master 2a01:4f8:162:e700:881c:fe60:3582:f49c;
+        primaryport 10053;
+        primary 2a01:4f8:162:e700:881c:fe60:3582:f49c;
         zonename &quot;ip6.centroid.eu.&quot;;
         filename &quot;/var/delphinusdnsd/replicant/ip6.centroid.eu.repl&quot;;
 }
@@ -208,12 +227,10 @@ Notice the /var/delphinusdnsd/replicant/ directory, this is a hardcoded path.
 <section class="Sh">
 <h1 class="Sh" id="GRAMMAR"><a class="permalink" href="#GRAMMAR">GRAMMAR</a></h1>
 <p class="Pp">Syntax for <code class="Nm">delphinusdns.conf</code> in BNF:</p>
-<div class="Bd Pp">
-<pre>
-line = ( 	version | axfrport | include | zinclude | zone | region |
-		axfr | mzone | passlist | filter | recurse | comment |
-		options | forward | rzone | tsig | tsig-auth |
-		tsigpassname )
+<div class="Bd Pp Li">
+<pre>line = ( 	version | axfrport | include | zinclude | zone | region |
+		axfr | mzone | passlist | filter | comment | options |
+		forward | rzone | tsig | tsig-auth | tsigpassname )
 
 version = &quot;version&quot; (&quot;number&quot;) ;
 
@@ -251,20 +268,18 @@ passlist = &quot;passlist&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &q
 
 filter = &quot;filter&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;}&quot; ]
 
-recurse = &quot;recurse-for&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;}&quot; ]
-
 base64-string = (string)
 tsig-auth = &quot;tsig-auth&quot; (string) (&quot;base64-string&quot;) ;
 tsig = &quot;tsig&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;}&quot; ]
 tsigpassname = &quot;tsigpassname&quot; (&quot;string&quot;) [ &quot;{&quot; (&quot;hostname&quot;) &quot;}&quot; ]
 
 rzone = &quot;rzone&quot; (&quot;string&quot;) [ &quot;{&quot; rzonelist &quot;}&quot; ]
-rzonelist = ( opttsig | optmaster | optmasterport | optrzonename |
+rzonelist = ( opttsig | optprimary | optprimaryport | optrzonename |
 		optfilename | optconstraints | optbytelimit )
 
 opttsig = &quot;tsigkey&quot; (&quot;string&quot;) ;
-optmaster = &quot;master&quot; (&quot;cidr-address&quot;) ;
-optmasterport = &quot;masterport&quot;  (number) ;
+optprimary = &quot;primary&quot; (&quot;cidr-address&quot;) ;
+optprimaryport = &quot;primaryport&quot;  (number) ;
 optrzonename = &quot;zonename&quot; (&quot;string&quot;) ;
 optfilename = &quot;filename&quot; (&quot;string&quot;) ;
 optconstraints = &quot;constraints&quot; (number), (number), (number) ;
@@ -273,7 +288,7 @@ optbytelimit = &quot;bytelimit&quot; (number) ;
 
 forward = &quot;forward&quot; (&quot;string&quot;) [ &quot;{&quot; forwardlist &quot;}&quot; ]
 forwardlist = ( optdestination | optstrictx20 | optcache | optincomingtsig |
-			optfudge )
+			optfudge | optrdomain | optstrategy )
 
 optdestination = &quot;destination&quot; (&quot;cidr-address&quot;) &quot;port&quot; (&quot;integer&quot;) &quot;key&quot;
 			(string | &quot;NOKEY&quot;) ;
@@ -281,21 +296,29 @@ optstrictx20 = &quot;strictx20&quot; (&quot;yes&quot; | &quot;no&quot;) ;
 optcache =  &quot;cache&quot; (&quot;yes&quot; | &quot;no&quot;) ;
 optincomingtsig = &quot;incoming-tsig&quot; (&quot;yes&quot; | &quot;no&quot;) ;
 optfudge = &quot;fudge&quot; (number) ;
+optrdomain = &quot;rdomain&quot; (number) ;
+optstrategy = &quot;forwardstrategy&quot; (&quot;single&quot; | &quot;spray&quot;) ;
 
 comment = ( ; | pound ) line
 
 options = &quot;options&quot; (&quot;string&quot;) [ &quot;{&quot; optionlist &quot;}&quot; ]
-optionlist = ( optrecurse | optinterface | optfork | optport |
-		optratelimit | optbind | optdnssec | opttcponanyonly |
-		optmaxudppayload)
-optrecurse = &quot;recurse&quot; ;
+optionlist = (  optinterface | optfork | optport | optratelimit |
+		optratelimit-cidr | optratelimit-cidr6 |
+		optbind | optdnssec | opttcponanyonly |
+		optmaxudppayload | optnocookies | optcookiesecret |
+		optrdomain )
 optinterface = &quot;interface&quot; (&quot;string&quot;) ;
-optfork = &quot;fork&quot; number ;
-optratelimit = &quot;ratelimit-pps&quot; number ;
+optfork = &quot;fork&quot; (number) ;
+optratelimit = &quot;ratelimit-pps&quot; (number) ;
+optratelimit-cidr = &quot;ratelimit-cidr&quot; (number) ;
+optratelimit-cidr6 = &quot;ratelimit-cidr6&quot; (number) ;
 optbind = &quot;bind&quot; cidr-address ;
 optdnssec = &quot;dnssec&quot; ;
 opttcponanyonly = &quot;tcp-on-any-only&quot; ;
-optmaxudppayload = &quot;max-udp-payload&quot; number ;
+optmaxudppayload = &quot;max-udp-payload&quot; (number) ;
+optnocookies = &quot;nocookies&quot; ;
+optcookiesecret = &quot;cookie-secret&quot; (&quot;base64string&quot;) ;
+optrdomain = &quot;rdomain&quot; (number) ;
 
 </pre>
 </div>
@@ -307,20 +330,20 @@ optmaxudppayload = &quot;max-udp-payload&quot; number ;
 <section class="Sh">
 <h1 class="Sh" id="SEE_ALSO"><a class="permalink" href="#SEE_ALSO">SEE
   ALSO</a></h1>
-<p class="Pp"><a class="Xr">dddctl(8)</a>,
-  <a class="Xr">delphinusdnsd(8)</a></p>
+<p class="Pp"><a class="Xr">delphinusdns.zone(5)</a>,
+    <a class="Xr">dddctl(8)</a>, <a class="Xr">delphinusdnsd(8)</a></p>
 </section>
 <section class="Sh">
 <h1 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h1>
 <p class="Pp">This software and manual was written by <span class="An">Peter J.
-    Philipp</span> &#x27E8;petphi@delphinusdns.org&#x27E9;</p>
+    Philipp</span> &#x27E8;pbug44@delphinusdns.org&#x27E9;</p>
 <p class="Pp"></p>
 </section>
 </div>
 <table class="foot">
   <tr>
-    <td class="foot-date">January 7, 2021</td>
-    <td class="foot-os">OpenBSD 6.8</td>
+    <td class="foot-date">November 19, 2021</td>
+    <td class="foot-os">OpenBSD 7.1</td>
   </tr>
 </table>
 </body>

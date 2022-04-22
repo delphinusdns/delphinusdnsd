@@ -28,6 +28,7 @@
    -->
 <head>
   <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
     table.head, table.foot { width: 100%; }
     td.head-rtitle, td.foot-os { text-align: right; }
@@ -117,11 +118,13 @@
   <dt id="v"><a class="permalink" href="#v"><code class="Fl">-v</code></a></dt>
   <dd>Be more verbose in debug mode. This shows configfile parsing logic.</dd>
 </dl>
-<p class="Pp"><code class="Nm">delphinusdnsd</code> is an authoritative and
-    forwarding DNS server. It can run as master or replicant. When new
-    configfiles are written it must be restarted. For replicants that receive
-    notifies or timeout on the refresh or retry SOA values the daemon is
-    restarted automatically.</p>
+<p class="Pp"><code class="Nm">delphinusdnsd</code> is an authoritative DNS
+    server. It can run as primary or replicant. When new configfiles are written
+    it must be restarted. For replicants that receive notifies or timeout on the
+    refresh or retry SOA values the daemon is restarted automatically.</p>
+<p class="Pp">It should be noted that <code class="Nm">delphinusdnsd</code> has
+    a forwarding mode since version 1.5. This mode should be treated as
+    experimental.</p>
 </section>
 <section class="Sh">
 <h1 class="Sh" id="FILES"><a class="permalink" href="#FILES">FILES</a></h1>
@@ -141,16 +144,66 @@
     <a class="Xr">dddctl(8)</a></p>
 </section>
 <section class="Sh">
+<h1 class="Sh" id="STANDARDS"><a class="permalink" href="#STANDARDS">STANDARDS</a></h1>
+<p class="Pp"><cite class="Rs"><span class="RsA">P. Mockapetris</span>,
+    <span class="RsT">DOMAIN NAMES - IMPLEMENTATION AND SPECIFICATION</span>,
+    <span class="RsR">RFC 1035</span>, <span class="RsD">November
+    1987</span>.</cite></p>
+<p class="Pp"><cite class="Rs"><span class="RsA">P. Vixie</span>,
+    <span class="RsT">A Mechanism for Prompt Notification of Zone Changes (DNS
+    NOTIFY)</span>, <span class="RsR">RFC 1996</span>, <span class="RsD">August
+    1996</span>.</cite></p>
+<p class="Pp"><cite class="Rs"><span class="RsA">S. Thomson</span>,
+    <span class="RsA">C. Huitema</span>, <span class="RsA">V. Ksinant</span>,
+    and <span class="RsA">M. Souissi</span>, <span class="RsT">DNS Extensions to
+    Support IP Version 6</span>, <span class="RsR">RFC 3596</span>,
+    <span class="RsD">October 2003</span>.</cite></p>
+<p class="Pp"><cite class="Rs"><span class="RsA">R. Arends</span>,
+    <span class="RsA">R. Austein</span>, <span class="RsA">M. Larson</span>,
+    <span class="RsA">D. Massey</span>, and <span class="RsA">S. Rose</span>,
+    <span class="RsT">Resource Records for the DNS Security Extensions</span>,
+    <span class="RsR">RFC 4034</span>, <span class="RsD">March
+    2005</span>.</cite></p>
+<p class="Pp"><cite class="Rs"><span class="RsA">B. Laurie</span>,
+    <span class="RsA">G. Sisson</span>, <span class="RsA">R. Arends</span>, and
+    <span class="RsA">D. Blacka</span>, <span class="RsT">DNS Security (DNSSEC)
+    Hashed Authenticated Denial of Existence</span>, <span class="RsR">RFC
+    5155</span>, <span class="RsD">March 2008</span>.</cite></p>
+<p class="Pp"><cite class="Rs"><span class="RsA">J. Damas</span>,
+    <span class="RsA">M. Graff</span>, and <span class="RsA">P. Vixie</span>,
+    <span class="RsT">Extension Mechanisms for DNS (EDNS(0))</span>,
+    <span class="RsR">RFC 6891</span>, <span class="RsD">April
+    2013</span>.</cite></p>
+<p class="Pp"><cite class="Rs"><span class="RsA">J. Dickinson</span>,
+    <span class="RsA">S. Dickinson</span>, <span class="RsA">R. Bellis</span>,
+    <span class="RsA">A. Mankin</span>, and <span class="RsA">D. Wessels</span>,
+    <span class="RsT">DNS Transport over TCP - Implementation
+    Requirements</span>, <span class="RsR">RFC 7766</span>,
+    <span class="RsD">March 2016</span>.</cite></p>
+<p class="Pp"><cite class="Rs"><span class="RsA">F. Dupont</span>,
+    <span class="RsA">S. Morris</span>, <span class="RsA">P. Vixie</span>,
+    <span class="RsA">D. Eastlake 3rd</span>, <span class="RsA">O.
+    Gudmundsson</span>, and <span class="RsA">B. Wellington</span>,
+    <span class="RsT">Secret Key Transaction Authentication for DNS
+    (TSIG)</span>, <span class="RsR">RFC 8945</span>, <span class="RsD">November
+    2020</span>.</cite></p>
+<p class="Pp"><cite class="Rs"><span class="RsA">O. Sury</span>,
+    <span class="RsA">W. Toorop</span>, <span class="RsA">D. Eastlake
+    3rd</span>, and <span class="RsA">M. Andrews</span>,
+    <span class="RsT">Interoperable Domain Name System (DNS) Server
+    Cookies</span>, <span class="RsR">RFC 9018</span>, <span class="RsD">April
+    2021</span>.</cite></p>
+</section>
+<section class="Sh">
 <h1 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h1>
 <p class="Pp">This software was written by <span class="An">Peter J.
-    Philipp</span> &#x27E8;petphi@delphinusdns.org&#x27E9;</p>
-<p class="Pp"></p>
+    Philipp</span> &#x27E8;pbug44@delphinusdns.org&#x27E9;</p>
 </section>
 </div>
 <table class="foot">
   <tr>
-    <td class="foot-date">January 6, 2021</td>
-    <td class="foot-os">OpenBSD 6.8</td>
+    <td class="foot-date">June 2, 2021</td>
+    <td class="foot-os">OpenBSD 7.1</td>
   </tr>
 </table>
 </body>
