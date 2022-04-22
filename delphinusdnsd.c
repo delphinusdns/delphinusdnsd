@@ -304,6 +304,7 @@ static int mshutdown = 0;
 static int msig;
 static char *rptr;
 static int ratelimit_backlog;
+static DDD_EVP_MD *md5_md;
 
 int debug = 0;
 int verbose = 0;
@@ -611,6 +612,13 @@ main(int argc, char *argv[], char *environ[])
 #if USE_WOLFSSL
 	wolfCrypt_Init();
 #endif
+
+	md5_md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("md5");
+	if (md5_md == NULL) {
+		dolog(LOG_ERR, "unknown message digest 'md5'\n");
+		ddd_shutdown();
+		exit(1);
+	}
 		
 	init_region();
 	init_filter();
@@ -1519,12 +1527,8 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		exit(1);
 	}
 
-	md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("md5");
-	if (md == NULL) {
-		dolog(LOG_ERR, "unknown message digest 'md5'\n");
-		ddd_shutdown();
-		exit(1);
-	}
+	/* we need to initialize our md with md5_md */
+	md = md5_md;
 
 	rctx = delphinusdns_EVP_MD_CTX_new();
 	if (rctx == NULL) {
@@ -4718,11 +4722,10 @@ int
 same_refused(u_char *old_digest, void *buf, int len, void *address, int addrlen)
 {
 	DDD_EVP_MD_CTX *ctx;
-	const DDD_EVP_MD *md;
+	const DDD_EVP_MD *md = md5_md;
 	u_char rdigest[MD5_DIGEST_LENGTH];	
 	u_int md_len;
 
-	md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("md5");
 	if (md == NULL) {
 		return 0;
 	}
@@ -4756,7 +4759,7 @@ int
 add_cache(struct querycache *qc, char *buf, int len, struct question *q,  char *reply, int replylen, uint16_t crc)
 {
 	DDD_EVP_MD_CTX *ctx;
-	const DDD_EVP_MD *md;
+	const DDD_EVP_MD *md = md5_md;
 	u_char rdigest[MD5_DIGEST_LENGTH];	
 	u_int md_len;
 	struct csnode *n, *res, find;
@@ -4798,7 +4801,6 @@ next:
 		ctx = delphinusdns_EVP_MD_CTX_new();
 		if (ctx == NULL)
 			return -1;
-		md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("md5");
 		if (md == NULL) {
 			return -1;
 		}
@@ -4850,13 +4852,12 @@ reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char 
 	struct csnode find, *res;
 	struct csentry *np;
 	DDD_EVP_MD_CTX *ctx = NULL;
-	DDD_EVP_MD *md;
+	DDD_EVP_MD *md = md5_md;
 
 	ctx = delphinusdns_EVP_MD_CTX_new();
 	if (ctx == NULL)
 		return -1;
 
-	md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("md5");
 	if (md == NULL)
 		return -1;
 
