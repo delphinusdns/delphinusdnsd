@@ -142,6 +142,7 @@ void	changeforwarder(struct forwardqueue *);
 void 	stirforwarders(void);
 int rawsend(int, char *, uint16_t, struct sockaddr_in *, int, struct cfg *);
 int rawsend6(int, char *, uint16_t, struct sockaddr_in6 *, int, struct cfg *);
+void dump_cache(ddDB *, struct imsgbuf *);
 
 extern uint16_t	udp_cksum(uint16_t *, uint16_t, struct ip *, struct udphdr *);
 extern uint16_t	udp_cksum6(uint16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
@@ -337,7 +338,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	ptr = cfg->shptr;
 
 	forward = 0; 		/* in this process we don't need forward on */
-	dolog(LOG_INFO, "FORWARD: expired %d records from non-forwarding DB\n",  expire_db(db, 1));
+	dolog(LOG_INFO, "FORWARD: expired %d records from non-forwarding DB\n",  expire_db(db, TTL_EXPIRE_ALL));
 
 	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &pi[0]) < 0) {
 		dolog(LOG_INFO, "socketpair() failed\n");
@@ -421,10 +422,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 
 		SLIST_FOREACH(fwq1, &fwqhead, entries) {
 			SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
-				if (fwq1->sessid == cq2->sessid && fwq1->so == -1) {
-					SLIST_REMOVE(&closehead, cq2, closequeue, entries);
-					free(cq2);
-				} else if (difftime(time(NULL), cq2->sessid) >= 120) {
+				if (difftime(time(NULL), cq2->timeout) >= 120) {
 					/* clean up the left-behinds */
 					SLIST_REMOVE(&closehead, cq2, closequeue, entries);
 					free(cq2);
@@ -455,7 +453,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		}
 		if (sel == 0) {
 			if (cache) {
-				count = expire_db(db, 0);
+				count = expire_db(db, TTL_EXPIRE_RR);
 				if (count)
 					dolog(LOG_INFO, "Forward CACHE expire_db: expired %d RR's\n", count);
 			}
@@ -471,6 +469,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 						skip = 1;
 						SLIST_REMOVE(&closehead, cq2, closequeue, entries);
 						free(cq2);
+						break;
 					}
 				}
 
@@ -492,7 +491,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					if (len <= 0) 
 						goto drop;
 
-					if (skip)
+					if (fwq1->answered == 1 || skip)
 						goto drop;
 					
 					returnit(db, cfg, fwq1, buf, len, pibuf);
@@ -501,7 +500,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					if (len < 0) 
 						goto drop;
 
-					if (skip)
+					if (fwq1->answered == 1 || skip)
 						goto drop;
 
 					returnit(db, cfg, fwq1, buf, len, pibuf);
@@ -566,6 +565,9 @@ drop:
 					}
 
 					switch(imsg.hdr.type) {
+					case IMSG_DUMP_CACHE:
+						dump_cache(db, ibuf);
+						break;
 					case IMSG_FORWARD_UDP:
 #if DEBUG
 						dolog(LOG_INFO, "received UDP message from mainloop\n");
@@ -712,7 +714,6 @@ drop:
 				} /* if */
 			} /* for (;;) */
 		} /* FD_ISSET...bpibuf */
-
 	} /* for (;;) */
 
 	/* NOTREACHED */
@@ -739,6 +740,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	int istcp = (so == -1 ? 0 : 1);
 	int sretlen;
 
+	int on = 1;
 	int found = 0;
 	time_t now;
 	char *p;
@@ -768,6 +770,19 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	sessid = 0;
 	SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwq2) {
 		if (difftime(now, fwq1->time) > 5) {
+			int skip;
+
+			skip = 0;
+			SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
+				if (fwq1->sessid == cq2->sessid) {
+					skip = 1;
+					SLIST_REMOVE(&closehead, cq2, closequeue, entries);
+					fwq1->answered = 1;
+					free(cq2);
+					return;
+				}
+			}
+
 			odh = (struct dns_header *)&buf[fwq1->istcp ? 2 : 0];
 			/* send a servfail and remove from list */
 			odh->id = fwq1->oldid;
@@ -815,8 +830,17 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 				free(fwq1->tsigkey);
 
 			sessid = fwq1->sessid;
-
 			free(fwq1);
+
+			cq1 = calloc(1, sizeof(struct closequeue));
+			if (cq1 == NULL) {
+				dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+				continue;	
+			}
+			cq1->sessid = sessid;
+			cq1->timeout = time(NULL);
+			SLIST_INSERT_HEAD(&closehead, cq1, entries);
+
 			continue;
 		}
 
@@ -1131,6 +1155,10 @@ newqueue:
 					}
 				}
 				return;
+			}
+			if (setsockopt(fwq1->so, SOL_SOCKET, SO_REUSEPORT, on, sizeof(on)) < 0){
+				dolog(LOG_INFO, "setsockopt failed: %s\n", strerror(errno));
+				/* not really fatal */
 			}
 
 			namelen = (fw2->family == AF_INET) ? sizeof(struct sockaddr_in) \
@@ -2519,4 +2547,27 @@ rawsend6(int so, char *buf, uint16_t len, struct sockaddr_in6 *sin6, int oldsel,
 	msg.msg_iovlen = 2;
 	
 	return (sendmsg(so, &msg, 0));
+}
+
+void
+dump_cache(ddDB *db, struct imsgbuf *ibuf)
+{
+	int datalen;
+	char buf[512];
+	struct node *walk, *walk0;
+	struct rbtree *rbt = NULL;
+	
+	dolog(LOG_INFO, "dumping cache\n");
+
+	RB_FOREACH_SAFE(walk, domaintree, &db->head, walk0) {
+		rbt = (struct rbtree *)walk->data;
+		if (rbt == NULL)
+			continue;
+
+		imsg_compose(ibuf, IMSG_DUMP_CACHEREPLY, 0, 0, -1, rbt->humanname, strlen(rbt->humanname) + 1);
+		msgbuf_write(&ibuf->w);
+	}
+
+	imsg_compose(ibuf, IMSG_DUMP_CACHEREPLYEOF, 0, 0, -1, "*", 1);
+	msgbuf_write(&ibuf->w);
 }

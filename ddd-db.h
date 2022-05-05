@@ -50,6 +50,9 @@
 #define IMSG_FORWARD_TCP	13	/* forward a TCP packet (with fd) */
 #define IMSG_RR_ATTACHED	14	/* an RR is sent through imsg */
 #define IMSG_PARSEERROR_MESSAGE 15	/* return error message from pledge parser */
+#define IMSG_DUMP_CACHE		16	/* dump the forward cache */
+#define IMSG_DUMP_CACHEREPLY	17	/* reply the dump of forward cache */
+#define IMSG_DUMP_CACHEREPLYEOF	18	/* end of messages */
 
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2
@@ -349,6 +352,9 @@ struct rrset {
 	TAILQ_ENTRY(rrset) entries;
 	TAILQ_HEAD(rrh, rr) rr_head;
 };
+
+#define TTL_EXPIRE_RR	0
+#define TTL_EXPIRE_ALL	1
 
 
 struct rbtree {

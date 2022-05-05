@@ -3462,11 +3462,13 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	outlen = i;
 	
+#if 0
 	/* compress the label if possible */
 	if ((tmplen = compress_label((u_char*)reply, outlen, labellen)) > 0) {
 		/* XXX */
 		outlen = tmplen;
 	}
+#endif
 
 	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
 

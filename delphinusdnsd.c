@@ -4024,16 +4024,23 @@ convert_question(struct parsequestion *pq, int authoritative)
 void
 setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 {
+
+	ssize_t n;
+
+	int datalen;
 	int so, nso;
-	int sel;
+	int sel, max;
 	socklen_t slen = sizeof(struct sockaddr_un);
 	int len;
 	char buf[512];
+	char rbuf[512];
+	struct imsg imsg;
 	struct sockaddr_un sun, *psun;
 	struct timeval tv;
 	struct dddcomm *dc;
 	struct passwd *pw;
 	fd_set rset;
+	pid_t idata;
 #if __OpenBSD__
 	gid_t gid;
 	uid_t uid;
@@ -4102,17 +4109,24 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	}
 #endif
 
+	max = 0;
 
 	for (;;) {
 		FD_ZERO(&rset);
 		FD_SET(so, &rset);
+		if (so > max)
+			max = so;
+#if 0
+		FD_SET(ibuf->fd, &rset);
+		if (ibuf->fd > max)
+			max = ibuf->fd;
+#endif
 
-		sel = select(so + 1, &rset, NULL, NULL, NULL);
+		sel = select(max + 1, &rset, NULL, NULL, NULL);
 		if (sel < 0) {
 			continue;
 		}	
-					
-		
+
 		if (FD_ISSET(so, &rset)) {
 			slen = sizeof(struct sockaddr_un);
 			if ((nso = accept(so, (struct sockaddr*)&psun, &slen)) < 0)
@@ -4131,26 +4145,82 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 				continue;
 			}
 
-			len = recv(nso, buf, sizeof(buf), 0);
+			len = recv(nso, rbuf, sizeof(rbuf), 0);
 			if (len < 0 || len < sizeof(struct dddcomm)) {
 				close(nso);
 				continue;
 			}
 
-			dc = (struct dddcomm *)&buf[0];		
+			dc = (struct dddcomm *)&rbuf[0];		
 			if (dc->command == IMSG_RELOAD_MESSAGE || 
 				dc->command == IMSG_SHUTDOWN_MESSAGE) {
-				pid_t idata;
 				
 				idata = getpid();
 				imsg_compose(ibuf, dc->command, 
 					0, 0, -1, &idata, sizeof(idata));
 				msgbuf_write(&ibuf->w);
 				/* exit here before but it caused sigpipes */
-			}
-			send(nso, buf, len, 0);
+			} else if (dc->command == IMSG_DUMP_CACHE) {
+				idata = getpid();
+				imsg_compose(ibuf, dc->command, 
+					0, 0, -1, &idata, sizeof(idata));
+				msgbuf_write(&ibuf->w);
+
+				for (;;) {
+					tv.tv_sec = 2;
+					tv.tv_usec = 0;
+
+					FD_ZERO(&rset);
+					FD_SET(ibuf->fd, &rset);
+
+					sel = select(ibuf->fd + 1, &rset, NULL, NULL, &tv);
+					if (sel <= 0)
+						break;
+
+					if ((n = imsg_read(ibuf)) < 0) {
+						dolog(LOG_ERR, "imsg read failure %s\n", strerror(errno));
+						break;
+					}
+					if (n == 0) {
+						break;
+					}
+
+					for (;;) {
+						if ((n = imsg_get(ibuf, &imsg)) < 0) {
+							dolog(LOG_ERR, "imsg read error: %s\n", strerror(errno));
+							break;
+						} else {
+							if (n == 0)
+								break;
+
+							datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+
+							switch(imsg.hdr.type) {
+							case IMSG_DUMP_CACHEREPLYEOF:
+								imsg_free(&imsg);
+								goto out;
+								break;
+							case IMSG_DUMP_CACHEREPLY:
+								if (datalen < 1)
+									break;
+
+								memcpy(buf, imsg.data, datalen);
+								buf[datalen - 1] = '\n';
+
+								send(nso, buf, datalen, 0);
+								break;
+							}	
+							imsg_free(&imsg);
+						} /* else */
+					} /* for (;;) */
+				} /* for ;; */
+
+			} /* else if */
+out:
+			send(nso, rbuf, len, 0);
 			close(nso);
 		} /* FD_ISSET */
+		continue;
 	} /* for (;;) */
 	
 	/* NOTREACHED */
@@ -4462,6 +4532,35 @@ setup_cortex(struct imsgbuf *ibuf)
 							imsg_compose(&neup2->ibuf, IMSG_NOTIFY_MESSAGE, 0, 0, -1, imsg.data, datalen);
 							msgbuf_write(&neup2->ibuf.w);
 							break;
+						case IMSG_DUMP_CACHE:
+							SLIST_FOREACH(neup2, &neuronhead, entries) {
+								if (neup2->desc == MY_IMSG_FORWARD)
+									break;
+							}
+							/* didn't find it?  skip */
+							if (neup2 == NULL)
+								break;
+
+						
+							imsg_compose(&neup2->ibuf, IMSG_DUMP_CACHE, 0, 0, -1, imsg.data, datalen);
+							msgbuf_write(&neup2->ibuf.w);
+							break;
+
+						case IMSG_DUMP_CACHEREPLYEOF:
+						case IMSG_DUMP_CACHEREPLY:
+							SLIST_FOREACH(neup2, &neuronhead, entries) {
+								if (neup2->desc == MY_IMSG_UNIXCONTROL)
+									break;
+							}
+							/* didn't find it?  skip */
+							if (neup2 == NULL)
+								break;
+
+						
+							imsg_compose(&neup2->ibuf, imsg.hdr.type, 0, 0, -1, imsg.data, datalen);
+							msgbuf_write(&neup2->ibuf.w);
+							break;
+
 						default:
 							/* unknown imsg */
 							break;

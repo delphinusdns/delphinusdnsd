@@ -461,6 +461,7 @@ expire_db(ddDB *db, int all)
 	struct rrset *rp, *rp0, *rp2;
 	struct rr *rt1 = NULL, *rt2 = NULL;
 	int totalcount = 0, count = 0;
+	int remove;
 	time_t now;
 
 	if (all == 0)
@@ -474,6 +475,7 @@ expire_db(ddDB *db, int all)
 #endif
 	
 	RB_FOREACH_SAFE(walk, domaintree, &db->head, walk0) {
+		remove = 0;
 		rbt = (struct rbtree *)walk->data;
 		if (rbt == NULL)
 			continue;
@@ -481,7 +483,7 @@ expire_db(ddDB *db, int all)
 		TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
 			rp2 = find_rr(rbt, rp->rrtype);
 			if (rp2 == NULL) {
-				return 0;
+				goto nextrbt;
 			}
 			if (rp->rrtype != DNS_TYPE_RRSIG) {
 				if (difftime(now, rp2->created) >= (double)rp2->ttl) {
@@ -496,8 +498,7 @@ expire_db(ddDB *db, int all)
 
 					TAILQ_REMOVE(&rbt->rrset_head, rp2, entries);
 					free(rp2);
-
-					return (count);
+					remove = 1;
 				}
 			} else {
 				count = 0;
@@ -514,15 +515,19 @@ expire_db(ddDB *db, int all)
 				if (TAILQ_EMPTY(&rp2->rr_head)) {
 					TAILQ_REMOVE(&rbt->rrset_head, rp, entries);
 					free(rp2);
+					remove = 1;
 				}
 			}
 			
 			totalcount += count;
 		}
 
-		RB_REMOVE(domaintree, &db->head, walk);
-		free(walk);
-		free(rbt);
+		if (remove) {
+			RB_REMOVE(domaintree, &db->head, walk);
+			free(walk);
+		}
+nextrbt:
+		continue;
 	}
 
 	return (totalcount);

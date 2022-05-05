@@ -88,6 +88,7 @@ int	configtest(int argc, char *argv[]);
 int	bindfile(int argc, char *argv[]);
 int	sshfp(int argc, char *argv[]);
 int	count_db(ddDB *);
+int 	dumpcache(int argc, char *argv[]);
 
 
 /* glue */
@@ -160,6 +161,7 @@ struct _mycmdtab {
 } mycmdtab[] = {
 	{ "bindfile", bindfile },
 	{ "configtest", configtest },
+	{ "dumpcache", dumpcache },
 	{ "query", dig },
 	{ "help", usage },
 	{ "sign", signmain },
@@ -442,6 +444,77 @@ command_socket(char *sockpath)
 	}
 
 	return (so);
+}
+
+int	
+dumpcache(int argc, char *argv[])
+{
+	char buf[512], sockpathbuf[512];
+	char *socketpath = SOCKPATH;
+	char *ident = NULL;
+	struct dddcomm *dc;
+	int so, usesp = 0;
+	int ch, len;
+
+	while ((ch = getopt(argc, argv, "I:s:")) != -1) {
+		switch (ch) {
+		case 'I':
+			ident = optarg;
+			break;
+		case 's':
+			socketpath = optarg;
+			usesp = 1;
+			break;
+		default:
+			usage(argc, argv);
+			exit(1);
+		}
+	}
+
+	if (ident != NULL && usesp) {
+		fprintf(stderr, "cannot specify -I and -s together\n");
+		exit(1);
+	} 
+
+	if (ident != NULL) {
+		snprintf(sockpathbuf, sizeof(sockpathbuf), 
+			"/var/run/delphinusdnsd-%s.sock", ident);
+		
+		socketpath = sockpathbuf;
+	}
+	if (geteuid() != 0) {
+		fprintf(stderr, "must be root\n");
+		exit(1);
+	}
+
+	fprintf(stderr, "dumping cache\n");
+
+	if ((so = command_socket(socketpath)) < 0) {
+		perror(socketpath);
+		exit(1);
+	}		
+
+	memset(&buf, 0, sizeof(buf));
+	dc = (struct dddcomm *)&buf[0];
+	dc->command = IMSG_DUMP_CACHE;
+	if (send(so, buf, sizeof(struct dddcomm), 0) < 0) {
+		perror("send");
+		close(so);
+		exit(1);
+	}
+	while ((len = recv(so, buf, sizeof(buf), 0)) != 0) {
+		if (len < 0) {
+			perror("recv");
+			close(so);
+			exit(1);
+		}
+		write (STDOUT_FILENO, buf, len);
+	}
+	close(so);
+
+	printf("\n");
+		
+	return (0);
 }
 
 int	
