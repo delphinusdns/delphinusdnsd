@@ -770,12 +770,8 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	sessid = 0;
 	SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwq2) {
 		if (difftime(now, fwq1->time) > 5) {
-			int skip;
-
-			skip = 0;
 			SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
 				if (fwq1->sessid == cq2->sessid) {
-					skip = 1;
 					SLIST_REMOVE(&closehead, cq2, closequeue, entries);
 					fwq1->answered = 1;
 					free(cq2);
@@ -1156,7 +1152,7 @@ newqueue:
 				}
 				return;
 			}
-			if (setsockopt(fwq1->so, SOL_SOCKET, SO_REUSEPORT, on, sizeof(on)) < 0){
+			if (setsockopt(fwq1->so, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) < 0){
 				dolog(LOG_INFO, "setsockopt failed: %s\n", strerror(errno));
 				/* not really fatal */
 			}
@@ -2552,8 +2548,6 @@ rawsend6(int so, char *buf, uint16_t len, struct sockaddr_in6 *sin6, int oldsel,
 void
 dump_cache(ddDB *db, struct imsgbuf *ibuf)
 {
-	int datalen;
-	char buf[512];
 	struct node *walk, *walk0;
 	struct rbtree *rbt = NULL;
 	
