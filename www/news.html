@@ -72,7 +72,7 @@ restart/stop delphinusdnsd (found on Linux, possibly fixed other OS's too).</li>
 <li>
 This is hopefully the last release in the 1.4 branch, with 1.5.0 release happening in two to three months (november at the latest).
 </li>
-<li>After several years of having a CVSweb online repo browser, cvsweb has been retired.  What remains is a <a href="https://gotweb.centroid.eu/cgi-bin/gotweb/gotweb?path=delphinusdnsd.git&action=tree">Gotweb repo</a> in its place.  I will eventually switch entirely from CVS to Git (or Got) by the end of this year, marking an end of 15 years of development with CVS.  I should be CVS-free by the 1.5.0 release.</li>
+<li>After several years of having a CVSweb online repo browser, cvsweb has been retired.  What remains is a <a href="https://gotweb.delphinusdns.org/cgi-bin/gotweb/gotweb?path=delphinusdnsd.git&action=tree">Gotweb repo</a> in its place.  I will eventually switch entirely from CVS to Git (or Got) by the end of this year, marking an end of 15 years of development with CVS.  I should be CVS-free by the 1.5.0 release.</li>
 <li>Snapshot configfiles after July 15, 2020 will have to have a <b>version of 1
 </b> instead of 9, I've rolled back.  Also note that online manpages will have a
 version 1, where delphinusdnsd 1.4.X require a version 9.  More in the blog.</li>
@@ -101,7 +101,7 @@ regarding DNS and delphinusdnsd</li>
 dddctl on July 6th, 2019, but it's not default yet (as recommended by RFC 8624).
   Grab tomorrow's snapshot and also benefit of a signing bugfix that also 
 covers RSA signing.</li>
-<li>A change in snapshot's gets rid of notify keywords after June 26, 2019.  Please see <a href="https://gotweb.centroid.eu/cgi-bin/gotweb/gotweb?path=delphinusdnsd.git&action=diff&commit=e141bddad128f3188bdfe7bb7fab178aab398e3e">commit revision 1.67 (e141bddad128f3188bdfe7bb7fab178aab398e3e)</a></li>
+<li>A change in snapshot's gets rid of notify keywords after June 26, 2019.  Please see <a href="https://gotweb.delphinusdns.org/cgi-bin/gotweb/gotweb?path=delphinusdnsd.git&action=diff&commit=e141bddad128f3188bdfe7bb7fab178aab398e3e">commit revision 1.67 (e141bddad128f3188bdfe7bb7fab178aab398e3e)</a></li>
 <li>When using DNSSEC signed and non-signed zones on the same server, there
 was a bug with non-signed answers when the DO bit was set on the query, as 
 of April 7th, 2019 this was fixed.</li>
