@@ -2,6 +2,8 @@ Changes in RELEASE_1_7 from RELEASE_1_6
 
 - a selectable forwarding strategy between "single" and "spray" pertaining
  to the entered forwarders.  (experimental).
+- added a non-documented "dddctl dumpcache" for debugging the expiring of
+  names.
 
 [2021] Changes in RELEASE_1_6 from RELEASE_1_5
 
