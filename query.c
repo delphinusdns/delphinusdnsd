@@ -127,6 +127,8 @@ extern uint64_t timethuman(time_t);
 extern char * 	bitmap2human(char *, int);
 
 extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_eui48(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_eui64(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -188,6 +190,8 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_CDNSKEY, 1, raxfr_cdnskey },
 	{ DNS_TYPE_CDS, 1, raxfr_cds },
 	{ DNS_TYPE_LOC, 0, raxfr_loc },
+	{ DNS_TYPE_EUI48, 0, raxfr_eui48 },
+	{ DNS_TYPE_EUI64, 0, raxfr_eui64 },
 	/* end new support */
 	{ 0, 0, NULL }
 };

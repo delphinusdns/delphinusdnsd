@@ -243,6 +243,8 @@ int 		fill_sshfp(ddDB *, char *, char *, int, int, int, char *);
 int 		fill_srv(ddDB *, char *, char *, int, int, int, int, char *);
 int 		fill_tlsa(ddDB *, char *, char *,int, uint8_t, uint8_t, uint8_t, char *);
 int 		fill_txt(ddDB *, char *, char *, int, char *);
+int 		fill_eui48(ddDB *, char *, char *, int, char *);
+int 		fill_eui64(ddDB *, char *, char *, int, char *);
 int		fill_dnskey(ddDB *, char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, char *, uint16_t);
 int		fill_rrsig(ddDB *, char *, char *, uint32_t, char *, uint8_t, uint8_t, uint32_t, uint64_t, uint64_t, uint16_t, char *, char *);
 int 		fill_nsec(ddDB *, char *, char *, uint32_t, char *, char *);
@@ -1089,6 +1091,14 @@ zonestatement:
 				if (debug)
 					printf(" %s TXT -> %s\n", $1, $7);
 #endif
+			} else if (strcasecmp($3, "eui48") == 0) {
+				if (fill_eui48(mydb, $1, $3, $5, $7) < 0) {
+					return -1;
+				}
+			} else if (strcasecmp($3, "eui64") == 0) {
+				if (fill_eui64(mydb, $1, $3, $5, $7) < 0) {
+					return -1;
+				}
 			} else {
 				if (debug)
 					printf("another txt like record I don't know?\n");
@@ -3023,6 +3033,95 @@ fill_naptr(ddDB *db, char *name, char *type, int myttl, int order, int preferenc
 		free (converted_name);
 
 	
+	return (0);
+
+}
+
+int
+fill_eui48(ddDB *db, char *name, char *type, int myttl, char *eui48)
+{
+	struct rbtree *rbt;
+	struct eui48 *eui;
+	int converted_namelen;
+	char *converted_name;
+	int i;
+	uint8_t e[6];
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_EUI48, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	if ((eui = (struct eui48 *)calloc(1, sizeof(struct eui48))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+	sscanf(eui48, "%hhx-%hhx-%hhx-%hhx-%hhx-%hhx", &e[0], &e[1]
+							, &e[2], &e[3]
+							, &e[4], &e[5]);
+
+	memcpy(&eui->eui48, &e, sizeof(eui->eui48));
+	
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_EUI48, eui, myttl, 0);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+	
+	if (converted_name)
+		free (converted_name);
+	
+	return (0);
+
+}
+
+int
+fill_eui64(ddDB *db, char *name, char *type, int myttl, char *eui64)
+{
+	struct rbtree *rbt;
+	struct eui64 *eui;
+	int converted_namelen;
+	char *converted_name;
+	int i;
+	uint8_t e[8];
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_EUI64, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	if ((eui = (struct eui64 *)calloc(1, sizeof(struct eui64))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+
+	sscanf(eui64, "%hhx-%hhx-%hhx-%hhx-%hhx-%hhx-%hhx-%hhx", &e[0], &e[1]
+						, &e[2], &e[3]
+						, &e[4], &e[5], &e[6], &e[7]);
+
+	memcpy(&eui->eui64, &e, sizeof(eui->eui64));
+
+	
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_EUI64, eui, myttl, 0);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+	
+	if (converted_name)
+		free (converted_name);
+	
+
 	return (0);
 
 }

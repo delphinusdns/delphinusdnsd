@@ -117,6 +117,8 @@ extern struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, cha
 extern struct rbtree *  Lookup_zone(ddDB *, char *, uint16_t, uint16_t, int);
 extern int 	memcasecmp(u_char *, u_char *, int);
 extern int 	reply_a(struct sreply *, int *, ddDB *);
+extern int 	reply_eui48(struct sreply *, int *, ddDB *);
+extern int 	reply_eui64(struct sreply *, int *, ddDB *);
 extern int 	reply_aaaa(struct sreply *, int *, ddDB *);
 extern int 	reply_any(struct sreply *, int *, ddDB *);
 extern int 	reply_badvers(struct sreply *, int *, ddDB *);
@@ -266,6 +268,10 @@ static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_ZONEMD, DNS_TYPE_ZONEMD, BUILD_OTHER, reply_zonemd },
 	{ DNS_TYPE_LOC, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_LOC, DNS_TYPE_LOC, BUILD_OTHER, reply_loc },
+	{ DNS_TYPE_EUI48, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_EUI48, DNS_TYPE_EUI48, BUILD_OTHER, reply_eui48 },
+	{ DNS_TYPE_EUI64, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_EUI64, DNS_TYPE_EUI64, BUILD_OTHER, reply_eui64 },
 	{ 0, 0, 0, NULL }
 };
 

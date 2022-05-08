@@ -217,6 +217,9 @@ struct dns_question_hdr {
 
 #define DNS_TYPE_ZONEMD	63		/* RFC 8976 */
 
+#define DNS_TYPE_EUI48	108		/* RFC 7043 */
+#define DNS_TYPE_EUI64	109		/* RFC 7043 */
+
 #define DNS_TYPE_TKEY	249		/* RFC 2930 */
 #define DNS_TYPE_TSIG	250		/* RFC 2845, page 3 */
 #define DNS_TYPE_IXFR	251		/* RFC 1995, page 2  */

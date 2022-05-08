@@ -1226,6 +1226,36 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 				buf);
 		}
 	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_EUI48)) != NULL) {
+		uint8_t e[6];
+
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no eui48 RR in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			memcpy(&e, &((struct eui48 *)rrp2->rdata)->eui48, sizeof(struct eui48));
+			fprintf(of, "%s %d IN EUI48 %02x-%02x-%02x-%02x-%02x-%02x\n", 
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl,
+				e[0], e[1], e[2], e[3], e[4], e[5]);
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_EUI64)) != NULL) {
+		uint8_t e[8];
+
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no eui64 RR in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			memcpy(&e, &((struct eui64 *)rrp2->rdata)->eui64, sizeof(struct eui64));
+			fprintf(of, "%s %d IN EUI64 %02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x\n", 
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl,
+				e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
+		}
+	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) != NULL) {
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
 			dolog(LOG_INFO, "no a RR in zone!\n");

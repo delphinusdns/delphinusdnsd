@@ -129,6 +129,8 @@ static int	sign_caa(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_dnskey(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_cdnskey(ddDB *, char *, int, struct rbtree *, int);
 static int 	sign_a(ddDB *, char *, int, struct rbtree *, int);
+static int 	sign_eui48(ddDB *, char *, int, struct rbtree *, int);
+static int 	sign_eui64(ddDB *, char *, int, struct rbtree *, int);
 static int 	sign_mx(ddDB *, char *, int, struct rbtree *, int);
 static int 	sign_ns(ddDB *, char *, int, struct rbtree *, int);
 static int 	sign_srv(ddDB *, char *, int, struct rbtree *, int);
@@ -230,6 +232,8 @@ extern int insert_passlist(char *, char *);
 extern int insert_notifyddd(char *, char *);
 
 extern void zonemd_hash_a(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_eui48(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_eui64(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_aaaa(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_loc(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_soa(SHA512_CTX *, struct rrset *, struct rbtree *, uint32_t *);
@@ -1838,6 +1842,18 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 			if (notglue(db, rbt, zonename) && 
 				sign_a(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_a error\n");
+				return -1;
+			}
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_EUI48)) != NULL) {
+			if (sign_eui48(db, zonename, expiry, rbt, rollmethod) < 0) {
+				fprintf(stderr, "sign_eui48 error\n");
+				return -1;
+			}
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_EUI64)) != NULL) {
+			if (sign_eui64(db, zonename, expiry, rbt, rollmethod) < 0) {
+				fprintf(stderr, "sign_eui64 error\n");
 				return -1;
 			}
 		}
@@ -6633,6 +6649,461 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 	return 0;
 }
 
+/*
+ * create a RRSIG for an EUI48 record
+ */
+
+static int
+sign_eui48(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
+{
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
+
+	char tmp[4096];
+	char signature[4096];
+	char shabuf[64];
+	
+
+	char *dnsname;
+	char *p, *q, *r;
+	char **canonsort;
+	char *key, *tmpkey;
+	char *zone;
+
+	uint32_t ttl;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
+
+	int labellen;
+	int keyid;
+	int len, rlen, i;
+	uint16_t clen;
+	int keylen, siglen = sizeof(signature);
+	int labels;
+	int nzk = 0;
+	int csort = 0;
+
+	char timebuf[32];
+	struct tm tm;
+	uint32_t expiredon2, signedon2;
+
+
+	memset(&shabuf, 0, sizeof(shabuf));
+
+	key = malloc(10 * 4096);
+	if (key == NULL) {
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
+		return -1;
+	}
+
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
+		return -1;
+	}
+
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
+		}
+	}
+
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag((u_char *)key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
+			return -1;
+		}
+		
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
+
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
+
+		if ((rrset = find_rr(rbt, DNS_TYPE_EUI48)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no EUI48 records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no EUI48 records\n");
+			return -1;
+		}
+		
+		p = key;
+
+		pack16(p, htons(DNS_TYPE_EUI48));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(rrset->ttl));
+		p += 4;
+			
+#if __FreeBSD__
+		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lu", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+#else
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+#endif
+
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
+
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_EUI48));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(rrset->ttl));
+			q += 4;
+			pack16(q, htons(sizeof(struct eui48)));
+			q += 2;
+			pack(q, ((struct eui48 *)rrp2->rdata)->eui48, 6);
+			q += 6;
+
+		        r = canonsort[csort] = calloc(1, 68000);
+			if (r == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
+
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
+
+			csort++;
+		}
+		
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
+		}
+
+		memcpy(p, r, rlen);
+		//pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
+
+		keylen = (p - key);	
+
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode((const u_char *)signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "EUI48", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
+	
+	return 0;
+}
+
+/*
+ * create a RRSIG for an EUI48 record
+ */
+
+static int
+sign_eui64(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
+{
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
+
+	char tmp[4096];
+	char signature[4096];
+	char shabuf[64];
+	
+
+	char *dnsname;
+	char *p, *q, *r;
+	char **canonsort;
+	char *key, *tmpkey;
+	char *zone;
+
+	uint32_t ttl;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
+
+	int labellen;
+	int keyid;
+	int len, rlen, i;
+	uint16_t clen;
+	int keylen, siglen = sizeof(signature);
+	int labels;
+	int nzk = 0;
+	int csort = 0;
+
+	char timebuf[32];
+	struct tm tm;
+	uint32_t expiredon2, signedon2;
+
+
+	memset(&shabuf, 0, sizeof(shabuf));
+
+	key = malloc(10 * 4096);
+	if (key == NULL) {
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
+		return -1;
+	}
+
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
+		return -1;
+	}
+
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
+		}
+	}
+
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag((u_char *)key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
+			return -1;
+		}
+		
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
+
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
+
+		if ((rrset = find_rr(rbt, DNS_TYPE_EUI64)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no EUI64 records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no EUI64 records\n");
+			return -1;
+		}
+		
+		p = key;
+
+		pack16(p, htons(DNS_TYPE_EUI64));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(rrset->ttl));
+		p += 4;
+			
+#if __FreeBSD__
+		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lu", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+#else
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+#endif
+
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
+
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_EUI64));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(rrset->ttl));
+			q += 4;
+			pack16(q, htons(sizeof(struct eui64)));
+			q += 2;
+			pack(q, ((struct eui64 *)rrp2->rdata)->eui64, 8);
+			q += 8;
+
+		        r = canonsort[csort] = calloc(1, 68000);
+			if (r == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
+
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
+
+			csort++;
+		}
+		
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
+		}
+
+		memcpy(p, r, rlen);
+		//pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
+
+		keylen = (p - key);	
+
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode((const u_char *)signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "EUI64", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
+	
+	return 0;
+}
+
+
 int
 create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 {
@@ -7800,6 +8271,12 @@ fixup_zonemd(ddDB *db, char *zonename, int expiry, int rollmethod)
 		if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
 			zonemd_hash_a(&ctx, rrset, rbt);
 		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_EUI48)) != NULL) {
+			zonemd_hash_eui48(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_EUI64)) != NULL) {
+			zonemd_hash_eui64(&ctx, rrset, rbt);
+		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
 			zonemd_hash_ns(&ctx, rrset, rbt);
 		}
@@ -7946,6 +8423,12 @@ add_zonemd(ddDB *db, char *zonename, int check)
 
 		if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
 			zonemd_hash_a(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_EUI48)) != NULL) {
+			zonemd_hash_eui48(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_EUI64)) != NULL) {
+			zonemd_hash_eui64(&ctx, rrset, rbt);
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
 			zonemd_hash_ns(&ctx, rrset, rbt);
@@ -8186,6 +8669,10 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			strlcat(bitmap, "SSHFP ", sizeof(bitmap));	
 		if (find_rr(rbt, DNS_TYPE_ZONEMD) != NULL) 	  /* 63 */
 			strlcat(bitmap, "ZONEMD ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_EUI48) != NULL)	/* 108 */
+			strlcat(bitmap, "EUI48 ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_EUI64) != NULL)	/* 109 */
+			strlcat(bitmap, "EUI64 ", sizeof(bitmap));
 
 		if (find_rr(rbt, DNS_TYPE_CAA) != NULL)
 			strlcat(bitmap, "CAA ", sizeof(bitmap));	
@@ -8611,7 +9098,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
-			dolog(LOG_INFO, "no naptr in zone!\n");
+			dolog(LOG_INFO, "no a in zone!\n");
 			return -1;
 		}
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
@@ -8620,6 +9107,37 @@ print_rbt(FILE *of, struct rbtree *rbt)
 				convert_name(rbt->zone, rbt->zonelen),
 				rrset->ttl,
 				buf);
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_EUI48)) != NULL) {
+		uint8_t e[6];
+
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no eui48 in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			memcpy(&e, &((struct eui48 *)rrp2->rdata)->eui48, 6);
+			fprintf(of, "  %s,eui48,%d,\"%02x-%02x-%02x-%02x-%02x-%02x\"\n", 
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl,
+				e[0], e[1], e[2], e[3], e[4], e[5]);
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_EUI64)) != NULL) {
+		uint8_t e[8];
+
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no eui64 in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			inet_ntop(AF_INET, &((struct a *)rrp2->rdata)->a, buf, sizeof(buf));
+			memcpy(&e, &((struct eui64 *)rrp2->rdata)->eui64, 8);
+			fprintf(of, "  %s,eui64,%d,\"%02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x\"\n", 
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl,
+				e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
 		}
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_RP)) != NULL) {

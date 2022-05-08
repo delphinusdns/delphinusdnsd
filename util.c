@@ -107,6 +107,8 @@ uint16_t udp_cksum(uint16_t *, uint16_t, struct ip *, struct udphdr *);
 uint16_t udp_cksum6(uint16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
 
 void zonemd_hash_a(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_eui48(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_eui64(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_aaaa(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_soa(DDD_SHA512_CTX *, struct rrset *, struct rbtree *, uint32_t *);
 void zonemd_hash_ns(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
@@ -156,6 +158,8 @@ extern int     find_tsig_key(char *, int, char *, int);
 extern int      mybase64_decode(char const *, u_char *, size_t);
 
 extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_eui48(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_eui64(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -216,6 +220,8 @@ struct typetable {
 	{ "CDS", DNS_TYPE_CDS },
 	{ "CDNSKEY", DNS_TYPE_CDNSKEY },
 	{ "LOC", DNS_TYPE_LOC },
+	{ "EUI48", DNS_TYPE_EUI48 },
+	{ "EUI64", DNS_TYPE_EUI64 },
 	{ NULL, 0}
 };
 
@@ -229,6 +235,8 @@ static struct rrtab myrrtab[] =  {
  { "delegate",  DNS_TYPE_NS, 		DNS_TYPE_NS },
  { "dnskey", 	DNS_TYPE_DNSKEY, 	DNS_TYPE_DNSKEY },
  { "ds", 	DNS_TYPE_DS, 		DNS_TYPE_DS },
+ { "eui48",	DNS_TYPE_EUI48,		DNS_TYPE_EUI48 },
+ { "eui64",	DNS_TYPE_EUI64,		DNS_TYPE_EUI64 },
  { "hinfo",	DNS_TYPE_HINFO,		DNS_TYPE_HINFO },
  { "hint",      DNS_TYPE_HINT,		DNS_TYPE_NS }, 
  { "loc",	DNS_TYPE_LOC,		DNS_TYPE_LOC },
@@ -275,6 +283,8 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_CDNSKEY, 1, raxfr_cdnskey },
 	{ DNS_TYPE_CDS, 1, raxfr_cds },
 	{ DNS_TYPE_LOC, 0, raxfr_loc },
+	{ DNS_TYPE_EUI48, 0, raxfr_eui48 },
+	{ DNS_TYPE_EUI64, 0, raxfr_eui64 },
 	{ 0, 0, NULL }
 };
 
@@ -938,6 +948,28 @@ check_qtype(struct rbtree *rbt, uint16_t type, int nxdomain, int *error)
 	case DNS_TYPE_ZONEMD:
 		if (find_rr(rbt, DNS_TYPE_ZONEMD) != NULL) {
 			returnval = DNS_TYPE_ZONEMD;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
+		}
+
+		*error = -1;
+		return 0;
+	case DNS_TYPE_EUI48:
+		if (find_rr(rbt, DNS_TYPE_EUI48) != NULL) {
+			returnval = DNS_TYPE_EUI48;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
+		}
+
+		*error = -1;
+		return 0;
+	case DNS_TYPE_EUI64:
+		if (find_rr(rbt, DNS_TYPE_EUI64) != NULL) {
+			returnval = DNS_TYPE_EUI64;
 			break;
 		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
 			returnval = DNS_TYPE_CNAME;
@@ -2754,6 +2786,12 @@ compress_label(u_char *buf, uint16_t offset, int labellen)
 		case DNS_TYPE_A:
 			p += sizeof(in_addr_t);
 			break;
+		case DNS_TYPE_EUI48:
+			p += 6;
+			break;
+		case DNS_TYPE_EUI64:
+			p += 8;
+			break;
 		case DNS_TYPE_AAAA:
 			p += 16;		/* sizeof 4 * 32 bit */
 			break;
@@ -3168,6 +3206,156 @@ zonemd_hash_a(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		q += 2;
 		pack32(q, ((struct a *)rrp2->rdata)->a);
 		q += 4;
+
+		r = canonsort[csort] = calloc(1, 68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+		csort++;
+	}
+                
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	delphinusdns_SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+
+	free(tmpkey);
+}
+
+void
+zonemd_hash_eui48(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_EUI48));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+		pack16(q, htons(6));
+		q += 2;
+		pack(q, ((struct eui48 *)rrp2->rdata)->eui48, 6);
+		q += 6;
+
+		r = canonsort[csort] = calloc(1, 68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+		csort++;
+	}
+                
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	delphinusdns_SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+
+	free(tmpkey);
+}
+
+void
+zonemd_hash_eui64(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_EUI64));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+		pack16(q, htons(8));
+		q += 2;
+		pack(q, ((struct eui64 *)rrp2->rdata)->eui64, 8);
+		q += 8;
 
 		r = canonsort[csort] = calloc(1, 68000);
 		if (r == NULL) {

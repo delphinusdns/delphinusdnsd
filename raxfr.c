@@ -81,6 +81,8 @@ extern struct rzone *rz0, *rz;
 extern int replicant_axfr_old_behaviour;
 
 int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_eui48(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_eui64(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -202,6 +204,8 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_CDNSKEY, 1, raxfr_cdnskey },
 	{ DNS_TYPE_CDS, 1, raxfr_cds },
 	{ DNS_TYPE_LOC, 0, raxfr_loc },
+	{ DNS_TYPE_EUI48, 0, raxfr_eui48 },
+	{ DNS_TYPE_EUI64, 0, raxfr_eui64 },
 	{ 0, 0, NULL }
 };
 
@@ -1318,6 +1322,48 @@ raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint
 		fprintf(f, "%s\n", buf);
 
 	p += sizeof(ia);
+
+	if (ctx != NULL)
+		delphinusdns_HMAC_Update(ctx, q, p - q);
+
+	return (p - estart);
+}
+
+int
+raxfr_eui48(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
+{
+	uint8_t e[6];
+	u_char *q = p;
+
+	BOUNDS_CHECK((p + 6), q, rdlen, end);
+	memcpy(&e, p, 6);
+
+	if (f != NULL)
+		fprintf(f, "\"%02x-%02x-%02x-%02x-%02x-%02x\"\n", e[0]
+			, e[1], e[2], e[3], e[4], e[5]);
+
+	p += 6;
+
+	if (ctx != NULL)
+		delphinusdns_HMAC_Update(ctx, q, p - q);
+
+	return (p - estart);
+}
+
+int
+raxfr_eui64(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
+{
+	u_char *q = p;
+	uint8_t e[8];
+
+	BOUNDS_CHECK((p + 8), q, rdlen, end);
+	memcpy(&e, p, 8);
+
+	if (f != NULL)
+		fprintf(f, "\"%02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x\"\n", e[0]
+			, e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
+
+	p += 8;
 
 	if (ctx != NULL)
 		delphinusdns_HMAC_Update(ctx, q, p - q);

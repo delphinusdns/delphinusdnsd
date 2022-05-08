@@ -227,6 +227,14 @@ struct txt {
         int txtlen;                             /* len of TXT */
 };
 
+struct eui48 {
+	uint8_t eui48[6];
+};
+
+struct eui64 {
+	uint8_t eui64[8];
+};
+
 struct hinfo {
 	char cpu[255];
 	int cpulen;
