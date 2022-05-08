@@ -8409,7 +8409,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			else
 				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-			answer->rdlength = htons(6);
+			answer->rdlength = htons(sizeof(struct eui48));
 
 			memcpy((char *)&answer->rdata, (char *)&((struct eui48 *)rrp->rdata)->eui48, 6);			
 
@@ -8452,9 +8452,9 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			else
 				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-			answer->rdlength = htons(8);
+			answer->rdlength = htons(sizeof(struct eui64));
 
-			memcpy((char *)&answer->rdata, (char *)&((struct eui64 *)rrp->rdata)->eui64, 6);			
+			memcpy((char *)&answer->rdata, (char *)&((struct eui64 *)rrp->rdata)->eui64, sizeof(struct eui64));			
 
 			eui64_count++;
 			offset += 18;
