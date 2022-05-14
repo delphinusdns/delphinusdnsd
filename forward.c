@@ -327,6 +327,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	int pi[2];
 	int bipi[2];
 	int i, count, skip;
+	int econnreset = 0;
 	uint32_t sessid;
 	u_int packetcount = 0;
 
@@ -421,15 +422,16 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		if (bpibuf->fd > max)
 			max = bpibuf->fd;
 
-		SLIST_FOREACH(fwq1, &fwqhead, entries) {
-			SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
-				if (difftime(time(NULL), cq2->timeout) >= 120) {
-					/* clean up the left-behinds */
-					SLIST_REMOVE(&closehead, cq2, closequeue, entries);
-					free(cq2);
-				}
+		SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
+			if (difftime(time(NULL), cq2->timeout) >= 120) {
+				/* clean up the left-behinds */
+				SLIST_REMOVE(&closehead, cq2, closequeue, entries);
+				free(cq2);
 			}
+		}
 
+
+		SLIST_FOREACH(fwq1, &fwqhead, entries) {
 			if (fwq1->so == -1)
 				continue;
 
@@ -437,6 +439,9 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 				max = fwq1->so;
 	
 			FD_SET(fwq1->so, &rset);
+#if DEBUG
+			dolog(LOG_INFO, "set fwq1->so (%d)\n", fwq1->so);
+#endif
 		}
 
 		/*
@@ -464,10 +469,16 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 		
 		SLIST_FOREACH_SAFE(fwq1, &fwqhead, entries, fwq3) {
 			if (FD_ISSET(fwq1->so, &rset)) {
+#if DEBUG
+					dolog(LOG_INFO, "fwq1->so %d isset\n", fwq1->so);
+#endif
 				skip = 0;
 				SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
 					if (fwq1->sessid == cq2->sessid) {
 						skip = 1;
+#if DEBUG	
+						dolog(LOG_INFO, "skip = 1\n");
+#endif
 						SLIST_REMOVE(&closehead, cq2, closequeue, entries);
 						free(cq2);
 						break;
@@ -492,17 +503,35 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					if (len <= 0) 
 						goto drop;
 
-					if (fwq1->answered == 1 || skip)
+#if 1
+					if (!econnreset && skip)
 						goto drop;
+#endif
 					
+#if DEBUG
+					dolog(LOG_INFO, "fwq1->so %d returnit\n", fwq1->so);
+#endif
 					returnit(db, cfg, fwq1, buf, len, pibuf);
 				} else {
 					len = recv(fwq1->so, buf, 0xffff, 0);
-					if (len < 0) 
+					if (len < 0) {
+						if (errno == ECONNREFUSED) {
+							econnreset = 1;
+							goto drop;
+						}
+#if DEBUG
+						dolog(LOG_INFO, "recv: %s\n", strerror(errno));
+#endif
 						goto drop;
+					}
 
-					if (fwq1->answered == 1 || skip)
+#if 1
+					if (!econnreset && skip)
 						goto drop;
+#endif
+#if DEBUG
+					dolog(LOG_INFO, "udp fwq1->so %d returnit\n", fwq1->so);
+#endif
 
 					returnit(db, cfg, fwq1, buf, len, pibuf);
 				}
@@ -533,6 +562,8 @@ drop:
 				cq1->sessid = sessid;
 				cq1->timeout = time(NULL);
 				SLIST_INSERT_HEAD(&closehead, cq1, entries);
+
+				FD_ZERO(&rset); 	/* go back to select */
 
 			}
 		}
@@ -2146,7 +2177,7 @@ check_tsig(char *buf, int len, char *mac)
 			if (memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
 #endif
 #if DEBUG
-				dolog(LOG_INFO, "HMAC did not verify\n");
+				dolog(LOG_INFO, "HMAC %d did not verify\n", mcheck);
 #endif
 				rtsig->tsigerrorcode = DNS_BADSIG;
 				if (mcheck == 4)
