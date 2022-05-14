@@ -2666,11 +2666,17 @@ lower_dnsname(char *buf, int len)
 	if (len > sizeof(save))
 		return (-1);
 
+	if (len == 1 && buf[0] == '\0')
+		return (0);
+
 	memcpy(save, buf, len);
 
 	q = &buf[0];
 	for (p = q, offset = 0; offset <= len && *p != 0; offset += (*p + 1), p += (*p + 1)) {
 		labellen = *p;
+		/* we found compression in this name, just exit */
+		if (*p & 0xC0)
+			break;
 		if (labellen > DNS_MAXLABEL)
 			goto err;	
 

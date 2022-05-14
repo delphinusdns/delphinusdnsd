@@ -143,6 +143,7 @@ void 	stirforwarders(void);
 int rawsend(int, char *, uint16_t, struct sockaddr_in *, int, struct cfg *);
 int rawsend6(int, char *, uint16_t, struct sockaddr_in6 *, int, struct cfg *);
 void dump_cache(ddDB *, struct imsgbuf *);
+void parse_lowercase(char *, int);
 
 extern uint16_t	udp_cksum(uint16_t *, uint16_t, struct ip *, struct udphdr *);
 extern uint16_t	udp_cksum6(uint16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
@@ -1650,6 +1651,10 @@ endimsg:
 		return;
 	}
 
+	/* read back our, now modified packet */
+        memcpy(p, &pi->pkt_s.buf, rlen);
+	dh = (struct dns_header *)p;
+
 	if (unpack32((char *)&pi->pkt_s.tsig.have_tsig) == 1) {
 		NTOHS(dh->additional);
 		if (dh->additional > 0)
@@ -2376,6 +2381,13 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 							memcpy(&pi->pkt_s.tsig, stsig, sizeof(struct tsig));
 					}
 
+					/* 
+					 * lowercase names - linux doesn't
+					 * 	so we must hack around it
+					 */
+
+					parse_lowercase(packet, rlen);
+
 					/* check for cache */
 					if (unpack32((char *)&pi->pkt_s.cache)) {
 							estart = (u_char *)packet;
@@ -2395,6 +2407,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 						if (unpack32((char *)&pi0->pkt_s.read) == 1) {
 							memcpy(pi0, pi, sizeof(struct pkt_imsg));
+							memcpy(&pi0->pkt_s.buf, packet, rlen);
 							pack32((char *)&pi0->pkt_s.read, 0);
 							break;
 						}
@@ -2564,4 +2577,89 @@ dump_cache(ddDB *db, struct imsgbuf *ibuf)
 
 	imsg_compose(ibuf, IMSG_DUMP_CACHEREPLYEOF, 0, 0, -1, "*", 1);
 	msgbuf_write(&ibuf->w);
+}
+
+void
+parse_lowercase(char *packet, int len)
+{
+	struct dns_header *hdr = (struct dns_header *)packet;
+	u_char expand[DNS_MAXNAME + 1];
+	char *end_name = NULL;
+	int rlen, i, elen = 0;
+	uint16_t val16;
+	
+	i = sizeof(struct dns_header);
+        elen = 0;
+        memset(&expand, 0, sizeof(expand));
+        end_name = expand_compression((u_char *)&packet[i], (u_char *)packet, (u_char *)&packet[len], (u_char *)&expand, &elen, sizeof(expand));
+        if (end_name == NULL) {
+                dolog(LOG_ERR, "expand_compression() failed, bad formatted question name\n");
+                return;
+        }
+
+	rlen = (end_name - (char *)&packet[i]);
+        if (rlen == elen) {
+		lower_dnsname((char *)&packet[i], rlen);
+	}
+
+	i += (rlen + sizeof(uint16_t) + sizeof(uint16_t)); /* skip clas,type */
+
+	for (int j = 0; i <= len && j < (ntohs(hdr->answer) + ntohs(hdr->additional)); j++) {
+		elen = 0;
+		memset(&expand, 0, sizeof(expand));
+		end_name = expand_compression((u_char *)&packet[i], (u_char *)\
+			packet, (u_char *)&packet[len], (u_char *)&expand, \
+			&elen, sizeof(expand));
+        	if (end_name == NULL) {
+                	dolog(LOG_ERR, "expand_compression() failed, bad formatted name\n");
+                	return;
+        	}
+		rlen = (end_name - (char *)&packet[i]);
+		lower_dnsname((char *)&packet[i], rlen);
+
+		i += rlen;
+		
+		val16 = unpack16((char *)&packet[i]);
+		switch (ntohs(val16)) {	
+		case DNS_TYPE_CNAME:
+		case DNS_TYPE_NS:
+		case DNS_TYPE_PTR:
+			i += 8;		/* type, class, ttl */
+			val16 = unpack16((char *)&packet[i]);
+
+			i += 2;		/* rdlen */
+			
+			elen = 0;
+			memset(&expand, 0, sizeof(expand));
+			end_name = expand_compression((u_char *)&packet[i], (u_char *)\
+				packet, (u_char *)&packet[len], (u_char *)&expand, \
+				&elen, sizeof(expand));
+			if (end_name == NULL) {
+				dolog(LOG_ERR, "expand_compression() failed, bad formatted name\n");
+				return;
+			}
+			rlen = (end_name - (char *)&packet[i]);
+			if (rlen == ntohs(val16))
+				lower_dnsname(&packet[i], rlen);
+
+			if ((i + ntohs(val16)) > len)
+				goto out;
+
+			i += ntohs(val16);
+			break;
+		default:
+			i += 8;		/* type, class, ttl */
+			val16 = unpack16((char *)&packet[i]);
+
+			if ((2 + i + ntohs(val16)) > len)
+				goto out;
+
+			i += (2 + ntohs(val16));		/* rdlen + rdlen contents */
+			break;	
+		}	/* switch */
+	} /* for(;;) */
+
+out:
+	/* we're done here just return */
+	return;
 }
