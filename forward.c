@@ -126,6 +126,7 @@ SLIST_HEAD(, closequeue) closehead;
 struct closequeue {
 	time_t timeout;
 	uint32_t sessid;
+	int econnreset;
 	SLIST_ENTRY(closequeue) entries;	/* next entry */
 } *cq1, *cq2, *cqp;
 
@@ -416,6 +417,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 
 		FD_ZERO(&rset);	
 		FD_SET(ibuf->fd, &rset);
+		econnreset = 0;
 		if (ibuf->fd > max)
 			max = ibuf->fd;
 		FD_SET(bpibuf->fd, &rset);
@@ -475,7 +477,8 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 				skip = 0;
 				SLIST_FOREACH_SAFE(cq2, &closehead, entries, cqp) {
 					if (fwq1->sessid == cq2->sessid) {
-						skip = 1;
+						if (! cq2->econnreset)
+							skip = 1;
 #if DEBUG	
 						dolog(LOG_INFO, "skip = 1\n");
 #endif
@@ -504,7 +507,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 						goto drop;
 
 #if 1
-					if (!econnreset && skip)
+					if (skip)
 						goto drop;
 #endif
 					
@@ -526,7 +529,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					}
 
 #if 1
-					if (!econnreset && skip)
+					if (skip)
 						goto drop;
 #endif
 #if DEBUG
@@ -559,6 +562,8 @@ drop:
 					dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 					continue;	
 				}
+				if (econnreset)
+					cq1->econnreset = 1;
 				cq1->sessid = sessid;
 				cq1->timeout = time(NULL);
 				SLIST_INSERT_HEAD(&closehead, cq1, entries);
