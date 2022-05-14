@@ -73,7 +73,6 @@ typedef SHA_CTX		DDD_SHA_CTX;
 
 typedef BIGNUM 		DDD_BIGNUM;
 typedef BN_CTX		DDD_BN_CTX;
-//typedef BN_GENCB 	DDD_BN_GENCB;
 typedef RSA		DDD_RSA;
 
 #define DDD_RSA_F4	RSA_F4

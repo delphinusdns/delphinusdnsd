@@ -2352,10 +2352,6 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 		if (tsigkey) {
 			segmentcount += ntohs(rwh->dh.additional);
 			*additionalcount += ntohs(rwh->dh.additional);
-#if 0
-			printf("additional = %d\n", ntohs(rwh->dh.additional));
-			// rwh->dh.additional = 0;
-#endif
 		} 
 		*answers += segmentcount;
 

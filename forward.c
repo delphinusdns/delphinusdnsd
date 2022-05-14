@@ -2444,7 +2444,6 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 						if (unpack32((char *)&pi0->pkt_s.read) == 1) {
 							memcpy(pi0, pi, sizeof(struct pkt_imsg));
-							//memcpy(&pi0->pkt_s.buf, packet, rlen);
 							pack32((char *)&pi0->pkt_s.read, 0);
 							break;
 						}

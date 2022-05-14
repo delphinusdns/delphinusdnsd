@@ -706,8 +706,6 @@ cache_a(struct scache *scache)
 	ar.a = unpack32((char *)p);
 	p += sizeof(ia);
 
-	// memcpy(&ar.a, &ia, sizeof(ar.a));
-
 	transmit_rr(scache, &ar, sizeof(ar));
 
 	return (p - scache->estart);

@@ -6621,7 +6621,6 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 		}
 
 		memcpy(p, r, rlen);
-		//pack(p, r, rlen);
 		p += rlen;
 
 		free (r);
@@ -6848,7 +6847,6 @@ sign_eui48(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		}
 
 		memcpy(p, r, rlen);
-		//pack(p, r, rlen);
 		p += rlen;
 
 		free (r);
@@ -7075,7 +7073,6 @@ sign_eui64(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		}
 
 		memcpy(p, r, rlen);
-		//pack(p, r, rlen);
 		p += rlen;
 
 		free (r);
