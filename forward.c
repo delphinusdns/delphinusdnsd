@@ -1652,8 +1652,9 @@ endimsg:
 	}
 
 	/* read back our, now modified packet */
-        memcpy(p, &pi->pkt_s.buf, rlen);
+	memcpy(p, &pi->pkt_s.buf, rlen);
 	dh = (struct dns_header *)p;
+
 
 	if (unpack32((char *)&pi->pkt_s.tsig.have_tsig) == 1) {
 		NTOHS(dh->additional);
@@ -2407,7 +2408,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 						if (unpack32((char *)&pi0->pkt_s.read) == 1) {
 							memcpy(pi0, pi, sizeof(struct pkt_imsg));
-							memcpy(&pi0->pkt_s.buf, packet, rlen);
+							//memcpy(&pi0->pkt_s.buf, packet, rlen);
 							pack32((char *)&pi0->pkt_s.read, 0);
 							break;
 						}
@@ -2586,6 +2587,7 @@ parse_lowercase(char *packet, int len)
 	u_char expand[DNS_MAXNAME + 1];
 	char *end_name = NULL;
 	int rlen, i, elen = 0;
+	int tmplen;
 	uint16_t val16;
 	
 	i = sizeof(struct dns_header);
@@ -2603,8 +2605,10 @@ parse_lowercase(char *packet, int len)
 	}
 
 	i += (rlen + sizeof(uint16_t) + sizeof(uint16_t)); /* skip clas,type */
+	
+	tmplen = ntohs(hdr->answer) + ntohs(hdr->nsrr) + ntohs(hdr->additional);
 
-	for (int j = 0; i <= len && j < (ntohs(hdr->answer) + ntohs(hdr->additional)); j++) {
+	for (int j = 0; (i <= len) && (j < tmplen); j++) {
 		elen = 0;
 		memset(&expand, 0, sizeof(expand));
 		end_name = expand_compression((u_char *)&packet[i], (u_char *)\
@@ -2624,6 +2628,9 @@ parse_lowercase(char *packet, int len)
 		case DNS_TYPE_CNAME:
 		case DNS_TYPE_NS:
 		case DNS_TYPE_PTR:
+			if ((i + 10) > len)
+				goto out;
+
 			i += 8;		/* type, class, ttl */
 			val16 = unpack16((char *)&packet[i]);
 
@@ -2648,6 +2655,9 @@ parse_lowercase(char *packet, int len)
 			i += ntohs(val16);
 			break;
 		default:
+			if ((i + 8) > len)
+				goto out;
+
 			i += 8;		/* type, class, ttl */
 			val16 = unpack16((char *)&packet[i]);
 
