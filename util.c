@@ -1174,7 +1174,7 @@ build_question(char *buf, int len, uint16_t additional, char *mac)
 		return NULL;
 	}
 
-	if ((end_name - buf) < elen) {
+	if ((end_name - &buf[sizeof(struct dns_header)]) < elen) {
 		dolog(LOG_ERR, "compression in question #1\n");
 		return NULL;
 	}
