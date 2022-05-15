@@ -2337,7 +2337,10 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 							break;
 						}
 
-						if (recv(imsg.fd, packet, unpack32((char *)&pi->pkt_s.buflen), MSG_WAITALL) < 0) {
+
+						rlen = unpack32((char *)&pi->pkt_s.buflen);
+
+						if (recv(imsg.fd, packet, rlen, MSG_WAITALL) < 0) {
 							dolog(LOG_INFO, "recv in forward sandbox: %s\n", strerror(errno));
 							rc = PARSE_RETURN_NAK;
 							/* send the descriptor back to them */
@@ -2444,6 +2447,10 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 						if (unpack32((char *)&pi0->pkt_s.read) == 1) {
 							memcpy(pi0, pi, sizeof(struct pkt_imsg));
+							if (istcp) {
+								memcpy(pi0->pkt_s.buf, packet, rlen);
+								pack32((char *)&pi0->pkt_s.buflen, rlen);
+							}
 							pack32((char *)&pi0->pkt_s.read, 0);
 							break;
 						}
