@@ -600,10 +600,10 @@ struct pkt_imsg {
 			char buf[0];			
 		} s;
 
-		char buf[16384];
+		char buf[71680];
 	} u;
 #define pkt_s u.s
-};							/* 16384 */
+};							/* 71680 */
 
 
 #define	SHAREDMEMSIZE	400
