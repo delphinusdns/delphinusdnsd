@@ -1692,12 +1692,14 @@ endimsg:
 	dh = (struct dns_header *)p;
 
 
+#if 0
 	if (unpack32((char *)&pi->pkt_s.tsig.have_tsig) == 1) {
 		NTOHS(dh->additional);
 		if (dh->additional > 0)
 			dh->additional--;
 		HTONS(dh->additional);
 	}
+#endif
 
 	if (unpack32((char *)&pi->pkt_s.tsigcheck) == 1)
 		rlen = unpack32((char *)&pi->pkt_s.tsig.tsigoffset);
