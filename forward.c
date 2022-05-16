@@ -2242,6 +2242,8 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 		}
 	}
 
+	setlogmask(LOG_UPTO(LOG_ERR));
+
 #if __OpenBSD__
 	if (pledge("stdio sendfd recvfd", NULL) < 0) {
 		perror("pledge");
