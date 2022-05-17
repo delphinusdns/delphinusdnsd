@@ -5,6 +5,8 @@ Changes in RELEASE_1_7 from RELEASE_1_6
 - added a non-documented "dddctl dumpcache" for debugging the expiring of
   names.
 - added RFC 7043 (EUI48 and EUI64) support
+- fixed NAPTR and SRV (in regular and ANY replies) to NOT compress names in
+  their rdata (as per RFC)
 
 [2021] Changes in RELEASE_1_6 from RELEASE_1_5
 
