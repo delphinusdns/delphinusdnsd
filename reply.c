@@ -8243,12 +8243,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct naptr *)rrp->rdata)->replacementlen;
 
-			if (compress) {
-				if ((tmplen = compress_label((u_char*)reply, offset, ((struct naptr *)rrp->rdata)->replacementlen)) > 0) {
-					offset = tmplen;
-				} 
-			}
-
 			answer->rdlength = htons(&reply[offset] - answer->rdata);
 			naptr_count++;
 		}
@@ -8308,13 +8302,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy((char *)&reply[offset], (char *)((struct srv *)rrp->rdata)->target, ((struct srv *)rrp->rdata)->targetlen);
 
 			offset += ((struct srv *)rrp->rdata)->targetlen;
-
-			if (compress) {
-				if ((tmplen = compress_label((u_char*)reply, offset, ((struct srv *)rrp->rdata)->targetlen)) > 0) {
-					offset = tmplen;
-				} 
-			}
-
 			answer->rdlength = htons(&reply[offset] - answer->rdata);
 			srv_count++;
 		}
