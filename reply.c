@@ -4901,7 +4901,6 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int tmplen, savelen;
-	int namelen;
 	char *p;
 	int retlen = -1;
 	u_int16_t rollback;
@@ -4988,14 +4987,18 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		memcpy((char *)p, (char *)((struct naptr *)rrp->rdata)->replacement, ((struct naptr *)rrp->rdata)->replacementlen);
 	
-		namelen = ((struct naptr *)rrp->rdata)->replacementlen;
-
 		outlen += (12 + 4 + ((struct naptr *)rrp->rdata)->replacementlen);
 
+#if 0
+		/* RFC 2915 section 2 (at end) says that replacement does not
+		 * get compressed, so deadening this code is correct! XXX
+		 */
 		/* compress the label if possible */
 		if ((tmplen = compress_label((u_char*)reply, outlen, namelen)) > 0) {
 			outlen = tmplen;
 		}
+
+#endif
 
 		answer->rdlength = htons(outlen - (savelen + 12));
 
@@ -7820,12 +7823,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct naptr *)rrp->rdata)->replacementlen;
 
-			if (compress) {
-				if ((tmplen = compress_label((u_char*)reply, offset, ((struct naptr *)rrp->rdata)->replacementlen)) > 0) {
-					offset = tmplen;
-				} 
-			}
-
 			answer->rdlength = htons(&reply[offset] - answer->rdata);
 			naptr_count++;
 		}
@@ -7885,13 +7882,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy((char *)&reply[offset], (char *)((struct srv *)rrp->rdata)->target, ((struct srv *)rrp->rdata)->targetlen);
 
 			offset += ((struct srv *)rrp->rdata)->targetlen;
-
-			if (compress) {
-				if ((tmplen = compress_label((u_char*)reply, offset, ((struct srv *)rrp->rdata)->targetlen)) > 0) {
-					offset = tmplen;
-				} 
-			}
-
 			answer->rdlength = htons(&reply[offset] - answer->rdata);
 			srv_count++;
 		}
