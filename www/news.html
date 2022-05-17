@@ -19,6 +19,13 @@
 	News
 </h2>
 <ul>
+<li><b>Delphinusdnsd-1.6.2</b> has been released on May 17th, 2022.
+Changes are backpatches from -current as of this date.  In particular
+answers to SRV and NAPTR RR's and ANY answers that include these records,
+now don't compress DNS names in the RDATA section.  Uncompressed names in
+the SRV target and NAPTR replacement section is required by RFC.</li>
+</ul>
+<ul>
 <li><b>Milestone: On April 22nd, 2022 we have 1000 commits</b> under the 
 delphinusdns name.  The project in total is 5988 days old (as commit records 
 show), 2716 days under the delphinusdns name.  We have
@@ -28,13 +35,6 @@ would have to be discarded).  We have two committers currently.  We were
 developed since day one on OpenBSD (then version 3.8, now version 7.1) and
 we always tried to include the latest OpenBSD mitigations against attackers.
 </li>
-</ul>
-<ul>
-<li><b>Delphinusdnsd-1.6.2</b> has been released on May 17th, 2022.
-Changes are backpatches from -current as of this date.  In particular
-answers to SRV and NAPTR RR's and ANY answers that include these records,
-now don't compress DNS names in the RDATA section.  Uncompressed names in
-the SRV target and NAPTR replacement section is required by RFC.</li>
 </ul>
 <ul>
 <li><b>Delphinusdnsd-1.6.1</b> has been released on March 22nd, 2022.
