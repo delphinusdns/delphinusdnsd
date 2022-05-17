@@ -5317,7 +5317,6 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int tmplen, savelen;
-	int namelen;
 	char *p;
 	int retlen = -1;
 	uint16_t rollback;
@@ -5404,8 +5403,6 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		memcpy((char *)p, (char *)((struct naptr *)rrp->rdata)->replacement, ((struct naptr *)rrp->rdata)->replacementlen);
 	
-		namelen = ((struct naptr *)rrp->rdata)->replacementlen;
-
 		outlen += (12 + 4 + ((struct naptr *)rrp->rdata)->replacementlen);
 
 #if 0
