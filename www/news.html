@@ -30,6 +30,13 @@ we always tried to include the latest OpenBSD mitigations against attackers.
 </li>
 </ul>
 <ul>
+<li><b>Delphinusdnsd-1.6.2</b> has been released on May 17th, 2022.
+Changes are backpatches from -current as of this date.  In particular
+answers to SRV and NAPTR RR's and ANY answers that include these records,
+now don't compress DNS names in the RDATA section.  Uncompressed names in
+the SRV target and NAPTR replacement section is required by RFC.</li>
+</ul>
+<ul>
 <li><b>Delphinusdnsd-1.6.1</b> has been released on March 22nd, 2022.
 Changes are backpatches from -current as of this date which include among 
 others safer sandboxes by closing non-needed descriptors and a safety check
