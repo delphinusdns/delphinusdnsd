@@ -5408,10 +5408,16 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		outlen += (12 + 4 + ((struct naptr *)rrp->rdata)->replacementlen);
 
+#if 0
+		/* RFC 2915 section 2 (at end) says that replacement does not
+		 * get compressed, so deadening this code is correct! XXX
+		 */
 		/* compress the label if possible */
 		if ((tmplen = compress_label((u_char*)reply, outlen, namelen)) > 0) {
 			outlen = tmplen;
 		}
+
+#endif
 
 		answer->rdlength = htons(outlen - (savelen + 12));
 
