@@ -357,8 +357,8 @@ version 1.0.0 due to complications with DNSSEC.
 <li><b>Wildcarding</b><br>
 <p>
 Delphinusdnsd has disabled wildcarding in version 1.0.0.  It took 10 years.
-In 2019 FreeLogic considered a fork, with my blessings, time will tell if
-wildcarddnsd gets revived.
+In 2019 FreeLogic considered a fork, with my blessings.  In 2021 a rudamentary
+wildcarding was brought back, and supported by dnssec.
 </p></li>
 <li><b>Truncation</b><br>
 <p>
@@ -371,11 +371,8 @@ revisited in 2017 with delphinusdnsd-1.2.0 and truncated answers now give an
 <p>
 TCP support came to Delphinusdnsd on March 12th, 2010, so relatively late.
 TCP support is a needed function in DNS and MUST be supported according to
-many DNS related RFC's.  Unfortunately when a dns packet gets truncated in
-UDP it will also get truncated in TCP even though TCP supports a packet
-length of up to 65535 characters.  This still needs work.  The AXFR function
-which is solely TCP is seperated from the main dns code so that there is
-no possibility for a denial of service while a zone transfer takes place.
+many DNS related RFC's.  In its lifetime the TCP code was overhauled at least
+once.
 </p></li>
 <li><b>IPv6</b><br>
 <p>
@@ -384,7 +381,8 @@ IPv6 support has been in delphinusdnsd from day one.
 <li><b>SRV RR</b><br>
 <p>
 SRV support came in April 2012.  It is based heavily on the MX RR and has not
-been tested as much as the author would like.  Feedback is always welcome.
+been tested as much as the author would like.  In 2022 the author noticed that
+SRV was compressing the target name which was illegal.  This is now corrected.
 </p></li>
 <li><b>TSIG support</b><br>
 <p>
