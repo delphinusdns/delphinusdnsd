@@ -1900,6 +1900,8 @@ axfrentry:
 
 				ret = send_to_parser(cfg, pibuf, buf, len, &pq);
 				switch (ret) {	
+				case -1:
+					goto drop;
 				case PARSE_RETURN_NOTAQUESTION:
 					dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
 					goto drop;
@@ -2999,6 +3001,8 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 
 				ret = send_to_parser(cfg, pibuf, pbuf, len, &pq);
 				switch (ret) {	
+				case -1:
+					goto drop;
 				case PARSE_RETURN_NOTAQUESTION:
 					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 					goto drop;
