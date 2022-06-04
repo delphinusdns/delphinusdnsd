@@ -193,6 +193,7 @@ size_t			sm_size(size_t, size_t);
 void			sm_lock(char *, size_t);
 void			sm_unlock(char *, size_t);
 int			same_refused(u_char *, void *, int, void *, int);
+static int 		send_to_parser(struct cfg *, struct imsgbuf *, char *, int, struct parsequestion *);
 int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, char *, uint16_t *, uint16_t *, uint16_t *);
 int			add_cache(struct querycache *, char *, int, struct question *,  char *, int, uint16_t);
 uint16_t		crc16(uint8_t *, int);
@@ -1414,7 +1415,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	pid_t idata;
 
 	uint32_t received_ttl;
-	uint32_t imsg_type;
 	u_char *ttlptr;
 
 	uint8_t aregion;			/* region where the address comes from */
@@ -1455,17 +1455,14 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	struct iovec iov;
 	struct imsgbuf *tcp_ibuf, *udp_ibuf, parse_ibuf;
 	struct imsgbuf *pibuf;
-	struct imsg imsg;
-	struct pq_imsg *pq0;
 
 	struct sforward *sforward;
 	static struct querycache qc;
 
-	ssize_t n, datalen;
+	int ret;
 	int ix;
 	int sretlen;
 	int passnamewc;
-	int pq_offset;
 	u_int md_len;
 
 	DDD_EVP_MD_CTX *rctx;
@@ -1901,123 +1898,48 @@ axfrentry:
 
 				crc = crc16((uint8_t *)buf, len);
 
-				/* branch to pledge parser here */
-				imsg_type = IMSG_PARSE_MESSAGE;
-				
-				if (imsg_compose(pibuf, imsg_type, 
-					0, 0, -1, buf, len) < 0) {
-					dolog(LOG_INFO, "imsg_compose %s\n", strerror(errno));
-				}
-				msgbuf_write(&pibuf->w);
-
-				FD_ZERO(&rset);
-				FD_SET(pibuf->fd, &rset);
-
-				tv.tv_sec = 10;
-				tv.tv_usec = 0;
-
-				sel = select(pibuf->fd + 1, &rset, NULL, NULL, &tv);
-
-				if (sel < 0) {
-					dolog(LOG_ERR, "internal error around select, dropping packet\n");
+				ret = send_to_parser(cfg, pibuf, buf, len, &pq);
+				switch (ret) {	
+				case PARSE_RETURN_NOTAQUESTION:
+					dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
 					goto drop;
-				}
-
-				if (sel == 0) {
-					dolog(LOG_ERR, "internal error, timeout on parse imsg, drop\n");
+				case PARSE_RETURN_NOQUESTION:
+					dolog(LOG_INFO, "on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
+					/* format error */
+					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
+					slen = reply_fmterror(&sreply, &sretlen, NULL);
+					dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
 					goto drop;
-				}
-
-				if (FD_ISSET(pibuf->fd, &rset)) {
-	
-						if (((n = imsg_read(pibuf)) == -1 && errno != EAGAIN) || n == 0) {
-							dolog(LOG_ERR, "internal error, parse child likely died, exit\n");
-							exit(1);
-						}
-
-						for (;;) {
-						
-							if ((n = imsg_get(pibuf, &imsg)) == -1) {
-								break;
-							}
-
-							if (n == 0) {
-								break;
-							}
-
-							datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
-
-							switch (imsg.hdr.type) {
-							case IMSG_PARSEREPLY_MESSAGE:
-								if (datalen != sizeof(int)) {
-									dolog(LOG_ERR, "datalen != sizeof(int), can't work with this, drop\n");
-									goto drop;
-								}
-					
-								memcpy((char *)&pq_offset, imsg.data, datalen);
-								pq0 = (struct pq_imsg *)&cfg->shptr_pq[0];
-								pq0 += pq_offset;
-								memcpy((char *)&pq, (char *)&pq0->pqi_pq, sizeof(struct parsequestion));
-
-								sm_lock(cfg->shptr_pq, cfg->shptr_pqsize);
-								pack32((char *)&pq0->u.s.read, 1);
-								sm_unlock(cfg->shptr_pq, cfg->shptr_pqsize);
-
-								if (pq.rc != PARSE_RETURN_ACK) {
-									switch (pq.rc) {
-									case PARSE_RETURN_MALFORMED:
-										dolog(LOG_INFO, "on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
-										imsg_free(&imsg);
-										goto drop;
-									case PARSE_RETURN_NOQUESTION:
-										dolog(LOG_INFO, "on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[i], address);
-										/* format error */
-										build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-										slen = reply_fmterror(&sreply, &sretlen, NULL);
-										dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
-										imsg_free(&imsg);
-										goto drop;
-									case PARSE_RETURN_NOTAQUESTION:
-										dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[i], address);
-										imsg_free(&imsg);
-										goto drop;
-									case PARSE_RETURN_NAK:
-										dolog(LOG_INFO, "on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
-										imsg_free(&imsg);
-										goto drop;
-									case PARSE_RETURN_NOTAUTH:
-										if (filter && pq.tsig.have_tsig == 0) {
-											build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-											delphinusdns_EVP_DigestInit_ex(rctx, md, NULL);
-											delphinusdns_EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
-											delphinusdns_EVP_DigestUpdate(rctx, address, addrlen);
-											delphinusdns_EVP_DigestFinal_ex(rctx, rdigest, &md_len);
-	refusedtime = time(NULL);
-											slen = reply_refused(&sreply, &sretlen, NULL, 0);
-											dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, received_ttl, aregion);
-											imsg_free(&imsg);
-											goto drop;
-										}
-									}
-								}
-
-								question = convert_question(&pq, 1);
-								if (question == NULL) {
-									dolog(LOG_INFO, "on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[i], address);
-									imsg_free(&imsg);
-									goto drop;
-								}
-
-											
-									
-								break;
-							} /* switch */
-
-							imsg_free(&imsg);
-						} /* for (;;) */
-				} else { 	 /* FD_ISSET */
+				case PARSE_RETURN_MALFORMED:
+					dolog(LOG_INFO, "on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
 					goto drop;
+				case PARSE_RETURN_NAK:
+					dolog(LOG_INFO, "on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
+					goto drop;
+				case PARSE_RETURN_NOTAUTH:
+					if (filter && pq.tsig.have_tsig == 0) {
+						build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
+						delphinusdns_EVP_DigestInit_ex(rctx, md, NULL);
+						delphinusdns_EVP_DigestUpdate(rctx, (void*)&buf[2], len - 2);
+						delphinusdns_EVP_DigestUpdate(rctx, address, addrlen);
+						delphinusdns_EVP_DigestFinal_ex(rctx, rdigest, &md_len);
+refusedtime = time(NULL);
+						slen = reply_refused(&sreply, &sretlen, NULL, 0);
+						dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[i], address, received_ttl, aregion);
+						goto drop;
+					}
+
+					/* FALLTHROUGH */
+				default:
+					question = convert_question(&pq, 1);
+					if (question == NULL) {
+						dolog(LOG_INFO, "on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[i], address);
+						goto drop;
+					}
+
+					break;
 				}
+
 		
 				/* goto drop beyond this point should goto out instead */
 
@@ -2744,6 +2666,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 {
 	fd_set rset;
 	int sel;
+	int ret;
 	int len, slen = 0;
 	int i;
 	int istcp = 1;
@@ -2788,17 +2711,11 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	struct timeval tv = { 10, 0};
 	struct imsgbuf parse_ibuf;
 	struct imsgbuf *pibuf;
-	struct imsg imsg;
 	struct parsequestion pq;
-	struct pq_imsg *pq0;
-
-	ssize_t n, datalen;
-	uint32_t imsg_type;
 
 	struct sforward *sforward;
 	int ix;
 	int sretlen;
-	int pq_offset;
 
 
 	sforward = (struct sforward *)calloc(1, sizeof(struct sforward));
@@ -3079,112 +2996,43 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					goto drop;
 				}
 
-				imsg_type = IMSG_PARSE_MESSAGE;
-				if (imsg_compose(pibuf, imsg_type, 
-					0, 0, -1, pbuf, len) < 0) {
-					dolog(LOG_INFO, "imsg_compose %s\n", strerror(errno));
-				}
-				msgbuf_write(&pibuf->w);
 
-				FD_ZERO(&rset);
-				FD_SET(pibuf->fd, &rset);
-
-				tv.tv_sec = 10;
-				tv.tv_usec = 0;
-
-				sel = select(pibuf->fd + 1, &rset, NULL, NULL, &tv);
-
-				if (sel < 0) {
-					dolog(LOG_ERR, "tcploop internal error around select, dropping packet\n");
+				ret = send_to_parser(cfg, pibuf, pbuf, len, &pq);
+				switch (ret) {	
+				case PARSE_RETURN_NOTAQUESTION:
+					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 					goto drop;
-				}
-
-				if (sel == 0) {
-					dolog(LOG_ERR, "tcploop internal error, timeout on parse imsg, drop\n");
+				case PARSE_RETURN_NOQUESTION:
+					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+					/* format error */
+					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
+					slen = reply_fmterror(&sreply, &sretlen, NULL);
+					dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 					goto drop;
-				}
-	
-				if (((n = imsg_read(pibuf)) == -1 && errno != EAGAIN) || n == 0) {
-					dolog(LOG_ERR, "tcploop internal error, parse child likely died, exit\n");
-					ddd_shutdown();
-					exit(1);
-				}
-
-				for (;;) {
-				
-					if ((n = imsg_get(pibuf, &imsg)) == -1) {
-						break;
+				case PARSE_RETURN_MALFORMED:
+					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+					goto drop;
+				case PARSE_RETURN_NAK:
+					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+					goto drop;
+				case PARSE_RETURN_NOTAUTH:
+					if (filter && pq.tsig.have_tsig == 0) {
+						build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
+						slen = reply_refused(&sreply, &sretlen, NULL, 0);
+						dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion);
+						goto drop;
 					}
 
-					if (n == 0) {
-						break;
+					/* FALLTHROUGH */
+				default:
+					question = convert_question(&pq, 1);
+					if (question == NULL) {
+						dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+						goto drop;
 					}
 
-					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
-
-					switch (imsg.hdr.type) {
-					case IMSG_PARSEREPLY_MESSAGE:
-						if (datalen != sizeof(int)) {
-							dolog(LOG_ERR, "tcploop datalen != sizeof(int), can't work with this, drop\n");
-							imsg_free(&imsg);
-							goto drop;
-						}
-			
-						memcpy((char *)&pq_offset, imsg.data, datalen);
-						pq0 = (struct pq_imsg *)&cfg->shptr_pq[0];
-						pq0 += pq_offset;
-						memcpy((char *)&pq, (char *)&pq0->pqi_pq, sizeof(struct parsequestion));
-
-						sm_lock(cfg->shptr_pq, cfg->shptr_pqsize);
-						pack32((char *)&pq0->u.s.read, 1);
-						sm_unlock(cfg->shptr_pq, cfg->shptr_pqsize);
-
-						if (pq.rc != PARSE_RETURN_ACK) {
-							switch (pq.rc) {
-							case PARSE_RETURN_MALFORMED:
-								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
-								imsg_free(&imsg);
-								goto drop;
-							case PARSE_RETURN_NOQUESTION:
-								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
-								/* format error */
-								build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-								slen = reply_fmterror(&sreply, &sretlen, NULL);
-								dolog(LOG_INFO, "TCP question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
-								imsg_free(&imsg);
-								goto drop;
-							case PARSE_RETURN_NOTAQUESTION:
-								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
-								imsg_free(&imsg);
-								goto drop;
-							case PARSE_RETURN_NAK:
-								dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
-								imsg_free(&imsg);
-								goto drop;
-							case PARSE_RETURN_NOTAUTH:
-								if (filter && pq.tsig.have_tsig == 0) {
-									build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf);
-									slen = reply_refused(&sreply, &sretlen, NULL, 0);
-									dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d) replying REFUSED, not a tsig\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion);
-									imsg_free(&imsg);
-									goto drop;
-								}
-							}
-						}	
-
-						question = convert_question(&pq, 1);
-						if (question == NULL) {
-							dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" internal error from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
-							imsg_free(&imsg);
-							goto drop;
-						}
-							
-					
-						break;
-					} /* switch */
-
-					imsg_free(&imsg);
-				} /* for (;;) */
+					break;
+				}
 
 				/* goto drop beyond this point should goto out instead */
 				fakequestion = NULL;
@@ -5043,4 +4891,111 @@ intcmp(struct csnode *e1, struct csnode *e2)
 {
 	return (e1->requestlen < e2->requestlen ? -1 : e1->requestlen > \
 		e2->requestlen);
+}
+
+
+/*
+ * SEND_TO_PARSER - send a received packet to the parser with imsg
+ *
+ */
+
+static int
+send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struct parsequestion *pq)
+{
+	struct timeval tv;
+	struct imsg imsg;
+	struct pq_imsg *pq0;
+	ssize_t n, datalen;
+	fd_set rset;
+	uint32_t imsg_type;
+	int pq_offset;
+	int sel;
+
+	/* branch to pledge parser here */
+	imsg_type = IMSG_PARSE_MESSAGE;
+	if (imsg_compose(pibuf, imsg_type, 0, 0, -1, buf, len) < 0) {
+		dolog(LOG_INFO, "imsg_compose %s\n", strerror(errno));
+		return -1;
+	}
+
+	msgbuf_write(&pibuf->w);
+
+	FD_ZERO(&rset);
+	FD_SET(pibuf->fd, &rset);
+
+	tv.tv_sec = 10;
+	tv.tv_usec = 0;
+
+	sel = select(pibuf->fd + 1, &rset, NULL, NULL, &tv);
+
+	if (sel < 0) {
+		dolog(LOG_ERR, "internal error around select, dropping packet\n");
+		return -1;
+	}
+
+	if (sel == 0) {
+		dolog(LOG_ERR, "internal error, timeout on parse imsg, drop\n");
+		return -1;
+	}
+
+	if (FD_ISSET(pibuf->fd, &rset)) {
+
+		if (((n = imsg_read(pibuf)) == -1 && errno != EAGAIN) || n == 0) {
+			dolog(LOG_ERR, "internal error, parse child likely died, exit\n");
+			exit(1);
+		}
+
+		for (;;) {
+			if ((n = imsg_get(pibuf, &imsg)) == -1) {
+				break;
+			}
+
+			if (n == 0) {
+				break;
+			}
+
+			datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+			switch (imsg.hdr.type) {
+			case IMSG_PARSEREPLY_MESSAGE:
+				if (datalen != sizeof(int)) {
+					dolog(LOG_ERR, "datalen != sizeof(int), can't work with this, drop\n");
+					return -1;
+				}
+
+				memcpy((char *)&pq_offset, imsg.data, datalen);
+				pq0 = (struct pq_imsg *)&cfg->shptr_pq[0];
+				pq0 += pq_offset;
+				memcpy((char *)pq, (char *)&pq0->pqi_pq, sizeof(struct parsequestion));
+
+				sm_lock(cfg->shptr_pq, cfg->shptr_pqsize);
+				pack32((char *)&pq0->u.s.read, 1);
+				sm_unlock(cfg->shptr_pq, cfg->shptr_pqsize);
+
+				if (pq->rc != PARSE_RETURN_ACK) {
+					switch (pq->rc) {
+					case PARSE_RETURN_MALFORMED:
+						imsg_free(&imsg);
+						return PARSE_RETURN_MALFORMED;
+					case PARSE_RETURN_NOQUESTION:
+						imsg_free(&imsg);
+						return PARSE_RETURN_NOQUESTION; 
+					case PARSE_RETURN_NOTAQUESTION:
+						imsg_free(&imsg);
+						return PARSE_RETURN_NOTAQUESTION;
+					case PARSE_RETURN_NAK:
+						imsg_free(&imsg);
+						return PARSE_RETURN_NAK;
+
+					case PARSE_RETURN_NOTAUTH:
+						imsg_free(&imsg);
+						return PARSE_RETURN_NOTAUTH;
+					} /* switch */
+				} /* if */
+				break;
+			} /* switch */
+			imsg_free(&imsg);
+		} /* for (;;) */
+	}  /* FD_ISSET */
+
+	return PARSE_RETURN_ACK;
 }
