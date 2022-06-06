@@ -2209,7 +2209,7 @@ forwardudp:
 						for (sfi = (struct sf_imsg *)&cfg->shptr[0], ix = 0;
 								 ix < SHAREDMEMSIZE; ix++, sfi++) {
 									if (unpack32((char *)&sfi->u.s.read) == 1) {
-										memcpy(sfi, &sf, sizeof(struct sf_imsg) - PAGE_SIZE);
+										memcpy(sfi, &sf, sizeof(struct sf_imsg) - sysconf(_SC_PAGESIZE));
 										pack32((char *)&sfi->u.s.read, 0);
 										break;
 									}
@@ -3261,7 +3261,7 @@ forwardtcp:
 						for (sfi = (struct sf_imsg *)&cfg->shptr[0], ix = 0;
 								 ix < SHAREDMEMSIZE; ix++, sfi++) {
 									if (unpack32((char *)&sfi->u.s.read) == 1) {
-										memcpy(sfi, &sf, sizeof(struct sf_imsg) - PAGE_SIZE);
+										memcpy(sfi, &sf, sizeof(struct sf_imsg) - sysconf(_SC_PAGESIZE));
 										pack32((char *)&sfi->u.s.read, 0);
 										break;
 									}
@@ -4652,8 +4652,8 @@ sm_zebra(char *shmptr, size_t members, size_t size_member)
 	size_t i;
 
 	for (i = 1; i <= members; i++) {
-		guardpage = (shmptr + (i * size_member)) - PAGE_SIZE;
-		if (mprotect(guardpage, PAGE_SIZE, PROT_NONE) == -1) {	
+		guardpage = (shmptr + (i * size_member)) - sysconf(_SC_PAGESIZE);
+		if (mprotect(guardpage, sysconf(_SC_PAGESIZE), PROT_NONE) == -1) {	
 			dolog(LOG_INFO, "sm_zebra mprotect: %s\n", strerror(errno));
 			ddd_shutdown();
 			exit(1);

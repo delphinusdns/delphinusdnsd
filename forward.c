@@ -1551,7 +1551,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
 	for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 		if (unpack32((char *)&pi0->pkt_s.read) == 1) {
-				memcpy(pi0, pi, sizeof(struct pkt_imsg) - PAGE_SIZE);
+				memcpy(pi0, pi, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
 				pack32((char *)&pi0->pkt_s.read, 0);
 				break;
 		}
@@ -1646,7 +1646,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
 					pi0 = &pi0[i];
 
-					memcpy(pi, pi0, sizeof(struct pkt_imsg) - PAGE_SIZE);
+					memcpy(pi, pi0, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
 
 					pack32((char *)&pi0->pkt_s.read, 1);
 					sm_unlock(cfg->shptr3, cfg->shptr3size);
@@ -2323,7 +2323,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
 					pi0 = &pi0[i];
 
-					memcpy(pi, pi0, sizeof(struct pkt_imsg) - PAGE_SIZE);
+					memcpy(pi, pi0, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
 					pack32((char *)&pi0->pkt_s.read, 1);
 
 					sm_unlock(cfg->shptr3, cfg->shptr3size);
@@ -2450,7 +2450,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
 					for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 						if (unpack32((char *)&pi0->pkt_s.read) == 1) {
-							memcpy(pi0, pi, sizeof(struct pkt_imsg) - PAGE_SIZE);
+							memcpy(pi0, pi, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
 							if (istcp) {
 								memcpy(pi0->pkt_s.buf, packet, rlen);
 								pack32((char *)&pi0->pkt_s.buflen, rlen);
@@ -2641,7 +2641,7 @@ parse_lowercase(char *packet, int len)
         memset(&expand, 0, sizeof(expand));
         end_name = expand_compression((u_char *)&packet[i], (u_char *)packet, (u_char *)&packet[len], (u_char *)&expand, &elen, sizeof(expand));
         if (end_name == NULL) {
-                dolog(LOG_ERR, "expand_compression() failed, bad formatted question name\n");
+                dolog(LOG_ERR, "expand_compression() failed 1, bad formatted question name\n");
                 return;
         }
 
@@ -2661,7 +2661,7 @@ parse_lowercase(char *packet, int len)
 			packet, (u_char *)&packet[len], (u_char *)&expand, \
 			&elen, sizeof(expand));
         	if (end_name == NULL) {
-                	dolog(LOG_ERR, "expand_compression() failed, bad formatted name\n");
+                	dolog(LOG_ERR, "expand_compression() failed 2, bad formatted name\n");
                 	return;
         	}
 		rlen = (end_name - (char *)&packet[i]);
@@ -2688,7 +2688,7 @@ parse_lowercase(char *packet, int len)
 				packet, (u_char *)&packet[len], (u_char *)&expand, \
 				&elen, sizeof(expand));
 			if (end_name == NULL) {
-				dolog(LOG_ERR, "expand_compression() failed, bad formatted name\n");
+				dolog(LOG_ERR, "expand_compression() failed 3, bad formatted name\n");
 				return;
 			}
 			rlen = (end_name - (char *)&packet[i]);
