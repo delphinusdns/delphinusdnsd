@@ -1508,13 +1508,13 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 
 	/* send it on to our sandbox */
 	if (pi == NULL) {
-		pi = (struct pkt_imsg *)calloc(1, sizeof(struct pkt_imsg));
+		pi = (struct pkt_imsg *)calloc(1, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
 		if (pi == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 			return;
 		}
 	} else {
-		memset(pi, 0, sizeof(struct pkt_imsg));
+		memset(pi, 0, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
 	}
 
 	memcpy(&pi->pkt_s.mac, &fwq->mac, sizeof(pi->pkt_s.mac));
@@ -1522,7 +1522,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	if (fwq->istcp) {
 		pack32((char *)&pi->pkt_s.buflen, rlen);
 	} else {
-		if (rlen > (sizeof(struct pkt_imsg) - sizeof(pi->pkt_s))) {
+		if (rlen > (sizeof(struct pkt_imsg) - (sizeof(pi->pkt_s) + sysconf(_SC_PAGESIZE)))) {
 			dolog(LOG_INFO, "can't send UDP packet to parser, too big\n");
 			return;
 		}
@@ -2262,7 +2262,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 #endif
 
 
-	pi = (struct pkt_imsg *)calloc(1, sizeof(struct pkt_imsg));
+	pi = (struct pkt_imsg *)calloc(1, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
 	if (pi == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 		ddd_shutdown();
