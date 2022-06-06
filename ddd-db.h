@@ -18,7 +18,11 @@
 #ifndef _DDD_DB_H
 #define _DDD_DB_H
 
+#if __NetBSD__
+#include <machine/vmparam.h>
+#else
 #include <machine/param.h>
+#endif
 #include <sys/types.h>
 #include <limits.h>
 
