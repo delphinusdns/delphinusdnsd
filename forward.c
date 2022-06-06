@@ -1551,7 +1551,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
 	for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 		if (unpack32((char *)&pi0->pkt_s.read) == 1) {
-				memcpy(pi0, pi, sizeof(struct pkt_imsg));
+				memcpy(pi0, pi, sizeof(struct pkt_imsg) - PAGE_SIZE);
 				pack32((char *)&pi0->pkt_s.read, 0);
 				break;
 		}
@@ -1646,7 +1646,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
 					pi0 = &pi0[i];
 
-					memcpy(pi, pi0, sizeof(struct pkt_imsg));
+					memcpy(pi, pi0, sizeof(struct pkt_imsg) - PAGE_SIZE);
 
 					pack32((char *)&pi0->pkt_s.read, 1);
 					sm_unlock(cfg->shptr3, cfg->shptr3size);
@@ -2323,7 +2323,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
 					pi0 = &pi0[i];
 
-					memcpy(pi, pi0, sizeof(struct pkt_imsg));
+					memcpy(pi, pi0, sizeof(struct pkt_imsg) - PAGE_SIZE);
 					pack32((char *)&pi0->pkt_s.read, 1);
 
 					sm_unlock(cfg->shptr3, cfg->shptr3size);
@@ -2450,7 +2450,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
 					for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 						if (unpack32((char *)&pi0->pkt_s.read) == 1) {
-							memcpy(pi0, pi, sizeof(struct pkt_imsg));
+							memcpy(pi0, pi, sizeof(struct pkt_imsg) - PAGE_SIZE);
 							if (istcp) {
 								memcpy(pi0->pkt_s.buf, packet, rlen);
 								pack32((char *)&pi0->pkt_s.buflen, rlen);

@@ -18,6 +18,7 @@
 #ifndef _DDD_DB_H
 #define _DDD_DB_H
 
+#include <machine/param.h>
 #include <sys/types.h>
 #include <limits.h>
 
@@ -600,10 +601,11 @@ struct pkt_imsg {
 			char buf[0];			
 		} s;
 
-		char buf[71680];
+		char buf[((71680 / PAGE_SIZE) + 1) * PAGE_SIZE];
 	} u;
 #define pkt_s u.s
-};							/* 71680 */
+	char guard[PAGE_SIZE];
+};							/* variable */
 
 
 #define	SHAREDMEMSIZE	400

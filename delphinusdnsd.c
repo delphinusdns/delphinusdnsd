@@ -192,6 +192,7 @@ char *			sm_init(size_t, size_t);
 size_t			sm_size(size_t, size_t);
 void			sm_lock(char *, size_t);
 void			sm_unlock(char *, size_t);
+void			sm_zebra(char *, size_t, size_t);
 int			same_refused(u_char *, void *, int, void *, int);
 static int 		send_to_parser(struct cfg *, struct imsgbuf *, char *, int, struct parsequestion *);
 int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, char *, uint16_t *, uint16_t *, uint16_t *);
@@ -1214,6 +1215,7 @@ main(int argc, char *argv[], char *environ[])
 			shptr = sm_init(SHAREDMEMSIZE3, sizeof(struct pkt_imsg));
 			cfg->shptr3 = shptr;
 			cfg->shptr3size = sm_size(SHAREDMEMSIZE3, sizeof(struct pkt_imsg));
+			sm_zebra(shptr, SHAREDMEMSIZE3, sizeof(struct pkt_imsg));
 
 
 			/* raise fd limits to hard limit */
@@ -4640,6 +4642,19 @@ sm_init(size_t members, size_t size_member)
 	sm_unlock(shptr, shsize);
 	return (shptr);
 }
+
+void
+sm_zebra(char *shmptr, size_t members, size_t size_member)
+{
+	char *guardpage;
+	size_t i;
+
+	for (i = 1; i <= members; i++) {
+		guardpage = (shmptr + (i * size_member)) - PAGE_SIZE;
+		mprotect(guardpage, PAGE_SIZE, PROT_NONE);
+	}
+}
+
 
 size_t
 sm_size(size_t members, size_t size_member)
