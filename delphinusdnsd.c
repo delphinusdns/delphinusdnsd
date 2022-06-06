@@ -1194,6 +1194,7 @@ main(int argc, char *argv[], char *environ[])
 		shptr = sm_init(SHAREDMEMSIZE, sizeof(struct sf_imsg));
 		cfg->shptr = shptr;
 		cfg->shptrsize = sm_size(SHAREDMEMSIZE, sizeof(struct sf_imsg));
+		sm_zebra(shptr, SHAREDMEMSIZE, sizeof(struct sf_imsg));
 
 		switch (pid = fork()) {
 		case -1:
@@ -2208,7 +2209,7 @@ forwardudp:
 						for (sfi = (struct sf_imsg *)&cfg->shptr[0], ix = 0;
 								 ix < SHAREDMEMSIZE; ix++, sfi++) {
 									if (unpack32((char *)&sfi->u.s.read) == 1) {
-										memcpy(sfi, &sf, sizeof(struct sf_imsg));
+										memcpy(sfi, &sf, sizeof(struct sf_imsg) - PAGE_SIZE);
 										pack32((char *)&sfi->u.s.read, 0);
 										break;
 									}
@@ -3260,7 +3261,7 @@ forwardtcp:
 						for (sfi = (struct sf_imsg *)&cfg->shptr[0], ix = 0;
 								 ix < SHAREDMEMSIZE; ix++, sfi++) {
 									if (unpack32((char *)&sfi->u.s.read) == 1) {
-										memcpy(sfi, &sf, sizeof(struct sf_imsg));
+										memcpy(sfi, &sf, sizeof(struct sf_imsg) - PAGE_SIZE);
 										pack32((char *)&sfi->u.s.read, 0);
 										break;
 									}

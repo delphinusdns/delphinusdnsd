@@ -557,9 +557,10 @@ struct sf_imsg {
 			struct sforward sf;	/* 924 */
 		} s;
 
-		char pad[1024];
+		char pad[((1024 / PAGE_SIZE) + 1) * PAGE_SIZE];
 	} u;
 #define sfi_sf u.s.sf
+	char guard[PAGE_SIZE];
 };
 
 struct rr_imsg {
