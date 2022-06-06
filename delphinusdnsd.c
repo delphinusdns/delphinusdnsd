@@ -4651,7 +4651,11 @@ sm_zebra(char *shmptr, size_t members, size_t size_member)
 
 	for (i = 1; i <= members; i++) {
 		guardpage = (shmptr + (i * size_member)) - PAGE_SIZE;
-		mprotect(guardpage, PAGE_SIZE, PROT_NONE);
+		if (mprotect(guardpage, PAGE_SIZE, PROT_NONE) == -1) {	
+			dolog(LOG_INFO, "sm_zebra mprotect: %s\n", strerror(errno));
+			ddd_shutdown();
+			exit(1);
+		}
 	}
 }
 
