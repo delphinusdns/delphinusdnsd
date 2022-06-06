@@ -89,6 +89,7 @@ linux() {
 	else
 		echo configuring for Linux
 		cp Makefile.linux Makefile
+		echo "#define DDD_PAGE_SIZE `getconf PAGE_SIZE`" >> ddd-config.h
 	fi
 }
 

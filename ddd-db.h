@@ -20,6 +20,8 @@
 
 #if __NetBSD__
 #include <machine/vmparam.h>
+#elif __linux__
+#define PAGE_SIZE DDD_PAGE_SIZE
 #else
 #include <machine/param.h>
 #endif
