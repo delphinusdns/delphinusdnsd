@@ -1211,6 +1211,7 @@ main(int argc, char *argv[], char *environ[])
 			shptr = sm_init(SHAREDMEMSIZE, sizeof(struct rr_imsg));
 			cfg->shptr2 = shptr;
 			cfg->shptr2size = sm_size(SHAREDMEMSIZE, sizeof(struct rr_imsg));
+			sm_zebra(shptr, SHAREDMEMSIZE, sizeof(struct rr_imsg));
 
 			shptr = sm_init(SHAREDMEMSIZE3, sizeof(struct pkt_imsg));
 			cfg->shptr3 = shptr;

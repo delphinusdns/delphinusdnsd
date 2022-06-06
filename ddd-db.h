@@ -582,9 +582,10 @@ struct rr_imsg {
 			} rr;				
 		} s;
 
-		char pad[8192];
+		char pad[((8192 / PAGE_SIZE) + 1) * PAGE_SIZE];
 	} u;
 #define rri_rr u.s.rr
+	char guard[PAGE_SIZE];
 }; /* end of struct rr_imsg */
 
 struct pkt_imsg {

@@ -169,7 +169,7 @@ transmit_rr(struct scache *scache, void *rr, int rrsize)
 	int i;
 
 	/* we don't fit */
-	if (rrsize > (sizeof(struct rr_imsg) - sizeof(ri.rri_rr)))
+	if (rrsize > (sizeof(struct rr_imsg) - (sizeof(ri.rri_rr) + PAGE_SIZE)))
 		return;
 
 	memcpy(ri.rri_rr.name, scache->name, sizeof(ri.rri_rr.name));
@@ -195,7 +195,7 @@ transmit_rr(struct scache *scache, void *rr, int rrsize)
 	for (pri = (struct rr_imsg *)&scache->cfg->shptr2[0], i = 0; 
 			i < SHAREDMEMSIZE; i++, pri++) {
 		if (unpack32((char *)&pri->u.s.read) == 1) {
-			memcpy(pri, &ri, sizeof(struct rr_imsg));
+			memcpy(pri, &ri, sizeof(struct rr_imsg) - PAGE_SIZE);
 			pack32((char *)&pri->u.s.read, 0);
 			break;
 		}
