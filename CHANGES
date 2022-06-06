@@ -7,6 +7,10 @@ Changes in RELEASE_1_7 from RELEASE_1_6
 - added RFC 7043 (EUI48 and EUI64) support
 - fixed NAPTR and SRV (in regular and ANY replies) to NOT compress names in
   their rdata (as per RFC)
+- shared memory in delphinusdnsd now has a guard page between each slot, if
+  this region of memory gets used delphinusdnsd will segment violate and a
+  possible attack is foiled.  The detriment is a higher memory footprint,
+  but we can't do without this now that it's in.
 
 [2021] Changes in RELEASE_1_6 from RELEASE_1_5
 
