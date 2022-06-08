@@ -2403,9 +2403,10 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 						}
 						break;
 					}
+
+					rlen = tmp;
 			
 					if (unpack32((char *)&pi->pkt_s.tsigcheck)) {
-							rlen = tmp;
 							memcpy((char *)&mac, (char *)&pi->pkt_s.mac, sizeof(mac));
 							stsig = check_tsig((char *)packet, rlen, mac);
 							if (stsig == NULL) {
