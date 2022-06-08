@@ -429,6 +429,21 @@ and all we send is the slot number.  There is a simple basic locking mechanism
 that should be good enough to detect races on this shared memory.  The locking
 may serialize all operations around the lock.
 </p></li>
+<li><b>Memoization of replies</b>
+<p>
+This is a sort of cache which skips the entire parsing of packets (copying
+between 2 processes back and forth), deciding on what to answer, and writing
+out the reply via socket.  It will just answer what a similar query did before
+it (up to 10 different times, round-robin).  This is called on wikipedia
+<a href="https://en.wikipedia.org/wiki/Memoization">memoization</a> and we
+get speedups of 8-9 times of what it normally takes (on one particular host).
+In the git logs I may have called this the query cache, before being unknowing
+of the memoizatoin term.  ''Also the way that DNS was designed (RFC 1035) it had
+no EDNS tags appended at the end, making me believe that memoization was used
+before, or thought of before, in implementation design.  EDNS broke a perfect
+query in such a way, that it made memoization harder.''  This is my personal
+opinion though.
+</p></li>
 </ul>
 <h2><a name="dnssec">Design obstacles with DNSSEC</a></h2>
 <p>
