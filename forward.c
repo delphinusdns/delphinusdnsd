@@ -338,7 +338,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 
 	char *ptr;
 	
-	ptr = cfg->shptr;
+	ptr = cfg->shm[SM_FORWARD].shptr;
 
 	forward = 0; 		/* in this process we don't need forward on */
 	dolog(LOG_INFO, "FORWARD: expired %d records from non-forwarding DB\n",  expire_db(db, TTL_EXPIRE_ALL));
@@ -363,12 +363,13 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	case 0:
 #ifndef __OpenBSD__
                 /* OpenBSD has minherit() */
-                if (munmap(cfg->shptr, cfg->shptrsize) == -1) {
+                if (munmap(cfg->shm[SM_FORWARD].shptr, 
+			cfg->shm[SM_FORWARD].shptrsize) == -1) {
                         dolog(LOG_INFO, "unmapping shptr failed: %s\n", \
                                 strerror(errno));
                 }
 #endif
-		cfg->shptrsize = 0;
+		cfg->shm[SM_FORWARD].shptrsize = 0;
 
 		close(ibuf->fd);
 		close(cortex->fd);
@@ -630,9 +631,9 @@ drop:
 
 						forwardthis(db, cfg, -1, (struct sforward *)rdata);	
 						free(rdata);
-						sm_lock(ptr, cfg->shptrsize);
+						sm_lock(ptr, cfg->shm[SM_FORWARD].shptrsize);
 						sf->u.s.read = 1;
-						sm_unlock(ptr, cfg->shptrsize);
+						sm_unlock(ptr, cfg->shm[SM_FORWARD].shptrsize);
 
 						break;
 
@@ -659,9 +660,9 @@ drop:
 						forwardthis(db, cfg, imsg.fd, (struct sforward *)rdata);
 						free(rdata);
 						/* aquire lock */
-						sm_lock(ptr, cfg->shptrsize);
+						sm_lock(ptr, cfg->shm[SM_FORWARD].shptrsize);
 						sf->u.s.read = 1;
-						sm_unlock(ptr, cfg->shptrsize);
+						sm_unlock(ptr, cfg->shm[SM_FORWARD].shptrsize);
 
 						break;
 					}
@@ -702,8 +703,9 @@ drop:
 
 						memcpy(&i, imsg.data, sizeof(i));
 
-						sm_lock(cfg->shptr2, cfg->shptr2size);
-						ri = (struct rr_imsg *)&cfg->shptr2[0];
+						sm_lock(cfg->shm[SM_RESOURCE].shptr, 
+								cfg->shm[SM_RESOURCE].shptrsize);
+						ri = (struct rr_imsg *)&cfg->shm[SM_RESOURCE].shptr[0];
 						for (i = 0; i < SHAREDMEMSIZE; i++, ri++) {
 							if (unpack32((char *)&ri->u.s.read) == 0) {
 								rdata = malloc(ri->rri_rr.buflen);
@@ -739,7 +741,8 @@ drop:
 								pack32((char *)&ri->u.s.read, 1);
 							} /* if */
 						} /* for */
-						sm_unlock(cfg->shptr2, cfg->shptr2size);
+						sm_unlock(cfg->shm[SM_RESOURCE].shptr,
+							cfg->shm[SM_RESOURCE].shptrsize);
 
 						break;
 		
@@ -1547,8 +1550,8 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		pack32((char *)&pi->pkt_s.istcp, 0);
 	
 	/* lock */
-	sm_lock(cfg->shptr3, cfg->shptr3size);
-	pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
+	sm_lock(cfg->shm[SM_PACKET].shptr, cfg->shm[SM_PACKET].shptrsize);
+	pi0 = (struct pkt_imsg *)&cfg->shm[SM_PACKET].shptr[0];
 	for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 		if (unpack32((char *)&pi0->pkt_s.read) == 1) {
 				memcpy(pi0, pi, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
@@ -1557,7 +1560,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		}
 	}
 
-	sm_unlock(cfg->shptr3, cfg->shptr3size);
+	sm_unlock(cfg->shm[SM_PACKET].shptr, cfg->shm[SM_PACKET].shptrsize);
 
 	if (imsg_compose(ibuf, IMSG_PARSE_MESSAGE, 0, 0, (fwq->istcp == 1) ? fwq->so : -1, &i, sizeof(i)) < 0) {
 			dolog(LOG_INFO, "imsg_compose: %s\n", strerror(errno));
@@ -1642,14 +1645,16 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 					memcpy(&i, imsg.data, sizeof(int));
 
 					/* lock */
-					sm_lock(cfg->shptr3, cfg->shptr3size);
-					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
+					sm_lock(cfg->shm[SM_PACKET].shptr, 
+						cfg->shm[SM_PACKET].shptrsize);
+					pi0 = (struct pkt_imsg *)&cfg->shm[SM_PACKET].shptr[0];
 					pi0 = &pi0[i];
 
 					memcpy(pi, pi0, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
 
 					pack32((char *)&pi0->pkt_s.read, 1);
-					sm_unlock(cfg->shptr3, cfg->shptr3size);
+					sm_unlock(cfg->shm[SM_PACKET].shptr, 
+						cfg->shm[SM_PACKET].shptrsize);
 
 				if (fwq->istcp == 1) 
 					fwq->so = imsg.fd;
@@ -2319,14 +2324,16 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					memcpy(&i, imsg.data, datalen);
 
 					/* lock */
-					sm_lock(cfg->shptr3, cfg->shptr3size);
-					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
+					sm_lock(cfg->shm[SM_PACKET].shptr, 
+						cfg->shm[SM_PACKET].shptrsize);
+					pi0 = (struct pkt_imsg *)&cfg->shm[SM_PACKET].shptr[0];
 					pi0 = &pi0[i];
 
 					memcpy(pi, pi0, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
 					pack32((char *)&pi0->pkt_s.read, 1);
 
-					sm_unlock(cfg->shptr3, cfg->shptr3size);
+					sm_unlock(cfg->shm[SM_PACKET].shptr, 
+							cfg->shm[SM_PACKET].shptrsize);
 
 					istcp = unpack32((char *)&pi->pkt_s.istcp);
 
@@ -2447,8 +2454,9 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 					pack32((char *)&pi->pkt_s.rc, PARSE_RETURN_ACK);
 
-					sm_lock(cfg->shptr3, cfg->shptr3size);
-					pi0 = (struct pkt_imsg *)&cfg->shptr3[0];
+					sm_lock(cfg->shm[SM_PACKET].shptr, 
+						cfg->shm[SM_PACKET].shptrsize);
+					pi0 = (struct pkt_imsg *)&cfg->shm[SM_PACKET].shptr[0];
 					for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 						if (unpack32((char *)&pi0->pkt_s.read) == 1) {
 							memcpy(pi0, pi, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
@@ -2464,7 +2472,8 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &i, sizeof(int));
 					msgbuf_write(&ibuf->w);
 
-					sm_unlock(cfg->shptr3, cfg->shptr3size);
+					sm_unlock(cfg->shm[SM_PACKET].shptr, 
+							cfg->shm[SM_PACKET].shptrsize);
 
 					free(stsig);
 

@@ -420,14 +420,16 @@ struct cfg {
 	int sockcount;			/* set sockets */
 	int nth;
 	pid_t pid;
-	char *shptr;			/* shared memory 1 */
-	size_t shptrsize;
-	char *shptr2;			/* shared memory 2 */
-	size_t shptr2size;
-	char *shptr3;			/* shared memory 3 */
-	size_t shptr3size;
-	char *shptr_pq;			/* shared memory 4 */
-	size_t shptr_pqsize;
+	struct {
+		char *shptr;			/* shared memory 1 */
+		size_t shptrsize;
+#define SM_FORWARD		0
+#define SM_RESOURCE		1
+#define SM_PACKET		2
+#define SM_PARSEQUESTION 	3
+#define SM_INCOMING		4
+#define SM_MAX			5
+	} shm[SM_MAX];
 	ddDB *db;			/* database */
 };
 

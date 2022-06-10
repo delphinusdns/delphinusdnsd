@@ -190,9 +190,11 @@ transmit_rr(struct scache *scache, void *rr, int rrsize)
 	ri.u.s.read = 0;
 
 	/* wait for lock */
-	sm_lock(scache->cfg->shptr2, scache->cfg->shptr2size);
+	sm_lock(scache->cfg->shm[SM_RESOURCE].shptr, 
+		scache->cfg->shm[SM_RESOURCE].shptrsize);
 	
-	for (pri = (struct rr_imsg *)&scache->cfg->shptr2[0], i = 0; 
+	for (pri = (struct rr_imsg *)&scache->cfg->shm[SM_RESOURCE].shptr[0], \
+			i = 0; 
 			i < SHAREDMEMSIZE; i++, pri++) {
 		if (unpack32((char *)&pri->u.s.read) == 1) {
 			memcpy(pri, &ri, sizeof(struct rr_imsg) - sysconf(_SC_PAGESIZE));
@@ -205,7 +207,8 @@ transmit_rr(struct scache *scache, void *rr, int rrsize)
 		dolog(LOG_INFO, "can't find an open slot in sharedmemsize\n");
 	}
 
-	sm_unlock(scache->cfg->shptr2, scache->cfg->shptr2size);
+	sm_unlock(scache->cfg->shm[SM_RESOURCE].shptr, 
+			scache->cfg->shm[SM_RESOURCE].shptrsize);
 }
 
 int
