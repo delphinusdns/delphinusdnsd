@@ -3664,14 +3664,14 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 								break;
 							}
 						}
+						sm_unlock(cfg->shm[SM_PARSEQUESTION].shptr, 
+								cfg->shm[SM_PARSEQUESTION].shptrsize);
 						if (i == SHAREDMEMSIZE) {
 							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
 						} else {
 							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&i, sizeof(int));
 							msgbuf_write(&mybuf->w);
 						}
-						sm_unlock(cfg->shm[SM_PARSEQUESTION].shptr, 
-								cfg->shm[SM_PARSEQUESTION].shptrsize);
 						break;
 					}
 
@@ -3688,14 +3688,14 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 								break;
 							}
 						}
+						sm_unlock(cfg->shm[SM_PARSEQUESTION].shptr, 
+							cfg->shm[SM_PARSEQUESTION].shptrsize);
 						if (i == SHAREDMEMSIZE) {
 							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
 						} else {
 							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&i, sizeof(int));
 							msgbuf_write(&mybuf->w);
 						}
-						sm_unlock(cfg->shm[SM_PARSEQUESTION].shptr, 
-							cfg->shm[SM_PARSEQUESTION].shptrsize);
 						break;
 					}
 					dh = (struct dns_header *)packet;
@@ -3714,14 +3714,14 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 								break;
 							}
 						}
+						sm_unlock(cfg->shm[SM_PARSEQUESTION].shptr, 
+							cfg->shm[SM_PARSEQUESTION].shptrsize);
 						if (i == SHAREDMEMSIZE) {
 							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
 						} else {
 							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&i, sizeof(int));
 							msgbuf_write(&mybuf->w);
 						}
-						sm_unlock(cfg->shm[SM_PARSEQUESTION].shptr, 
-							cfg->shm[SM_PARSEQUESTION].shptrsize);
 						break;
 					}
 
@@ -3743,14 +3743,14 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 								break;
 							}
 						}
+						sm_unlock(cfg->shm[SM_PARSEQUESTION].shptr,
+							cfg->shm[SM_PARSEQUESTION].shptrsize);
 						if (i == SHAREDMEMSIZE) {
 							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
 						} else {
 							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&i, sizeof(int));
 							msgbuf_write(&mybuf->w);
 						}
-						sm_unlock(cfg->shm[SM_PARSEQUESTION].shptr,
-							cfg->shm[SM_PARSEQUESTION].shptrsize);
 						break;
 					}
 
@@ -3768,14 +3768,14 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 								break;
 							}
 						}
+						sm_unlock(cfg->shm[SM_PARSEQUESTION].shptr, 
+							cfg->shm[SM_PARSEQUESTION].shptrsize);
 						if (i == SHAREDMEMSIZE) {
 							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
 						} else {
 							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&i, sizeof(int));
 							msgbuf_write(&mybuf->w);
 						}
-						sm_unlock(cfg->shm[SM_PARSEQUESTION].shptr, 
-							cfg->shm[SM_PARSEQUESTION].shptrsize);
 						break;
 					}
 					
@@ -4996,6 +4996,10 @@ send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struc
 			break;
 		}
 	}
+
+	sm_unlock(cfg->shm[SM_INCOMING].shptr, 
+		cfg->shm[SM_INCOMING].shptrsize);
+
 	if (i == SHAREDMEMSIZE3) {
 		dolog(LOG_INFO, "increase SHAREDMEMSIZE3 for SM_INCOMING!!!\n");
 	} else {
@@ -5008,8 +5012,6 @@ send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struc
 		msgbuf_write(&pibuf->w);
 	}
 
-	sm_unlock(cfg->shm[SM_INCOMING].shptr, 
-		cfg->shm[SM_INCOMING].shptrsize);
 
 	/* branch to pledge parser here */
 
