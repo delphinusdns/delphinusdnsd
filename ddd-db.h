@@ -612,6 +612,12 @@ struct pkt_imsg {
 			char buf[0];			
 		} s;
 
+		struct {
+			int read;
+			int buflen;
+			char buf[0];
+		} i;
+
 		char buf[((71680 / PAGE_SIZE) + 1) * PAGE_SIZE];
 	} u;
 #define pkt_s u.s

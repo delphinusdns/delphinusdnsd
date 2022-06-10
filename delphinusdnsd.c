@@ -1306,6 +1306,11 @@ main(int argc, char *argv[], char *environ[])
 	cfg->shm[SM_PARSEQUESTION].shptrsize = sm_size(SHAREDMEMSIZE, sizeof(struct pq_imsg));
 	sm_zebra(shptr, SHAREDMEMSIZE, sizeof(struct pq_imsg));
 
+	shptr = sm_init(SHAREDMEMSIZE3, sizeof(struct pkt_imsg));
+	cfg->shm[SM_INCOMING].shptr = shptr;
+	cfg->shm[SM_INCOMING].shptrsize = sm_size(SHAREDMEMSIZE3, sizeof(struct pkt_imsg));
+	sm_zebra(shptr, SHAREDMEMSIZE3, sizeof(struct pkt_imsg));
+
 #ifdef DEFAULT_LOCATION
 	if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
 #else
@@ -3562,9 +3567,11 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	struct dns_header *dh = NULL;
 	struct question *question = NULL;
 	struct parsequestion pq;
+	struct pkt_imsg *incoming0;
 	char *packet;
 	fd_set rset;
 	int sel, i;
+	int incoming_offset = 0;
 	int fd = mybuf->fd;
 	ssize_t n, datalen;
 	struct pq_imsg *pq0;
@@ -3589,7 +3596,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	}
 #endif
 
-	packet = calloc(1, MAX_IMSGSIZE);
+	packet = calloc(1, 65535 + 2);
 	if (packet == NULL) {
 		dolog(LOG_ERR, "calloc: %m");
 		ddd_shutdown();
@@ -3624,12 +3631,27 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 
 				datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
 
-				memset(&pq, 0, sizeof(struct parsequestion));
-
 				switch (imsg.hdr.type) {
 				case IMSG_PARSE_MESSAGE:
+					if (datalen != sizeof(int)) {
+						dolog(LOG_ERR, "datalen of imsg is not sizeof int!\n");
+						goto out;
+					}
 
-					if (datalen > MAX_IMSGSIZE) {
+					memset(&pq, 0, sizeof(struct parsequestion));
+					memcpy((char *)&incoming_offset, imsg.data, datalen);
+					incoming0 = (struct pkt_imsg *)&cfg->shm[SM_INCOMING].shptr[0];
+					incoming0 += incoming_offset;
+					datalen = unpack32((char *)&incoming0->u.i.buflen);
+					memcpy((char *)packet, (char *)&incoming0->u.i.buf, MIN(datalen, (65535 + 2)));
+
+					sm_lock(cfg->shm[SM_INCOMING].shptr, 
+						cfg->shm[SM_INCOMING].shptrsize);
+					pack32((char *)&incoming0->u.i.read, 1);
+					sm_unlock(cfg->shm[SM_INCOMING].shptr, 
+						cfg->shm[SM_INCOMING].shptrsize);
+
+					if (datalen > (65535 + 2)) {
 						pq.rc = PARSE_RETURN_NAK;
 						sm_lock(cfg->shm[SM_PARSEQUESTION].shptr, 
 								cfg->shm[SM_PARSEQUESTION].shptrsize);
@@ -3652,7 +3674,6 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 								cfg->shm[SM_PARSEQUESTION].shptrsize);
 						break;
 					}
-					memcpy(packet, imsg.data, datalen);
 
 					if (datalen < sizeof(struct dns_header)) {
 						pq.rc = PARSE_RETURN_NAK;
@@ -3810,6 +3831,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 					free_question(question);
 					break;
 				}
+out:
 
 				imsg_free(&imsg);
 
@@ -4954,20 +4976,42 @@ send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struc
 	struct timeval tv;
 	struct imsg imsg;
 	struct pq_imsg *pq0;
+	struct pkt_imsg *incoming;
 	ssize_t n, datalen;
 	fd_set rset;
 	uint32_t imsg_type;
 	int pq_offset;
-	int sel;
+	int sel, i;
 
-	/* branch to pledge parser here */
-	imsg_type = IMSG_PARSE_MESSAGE;
-	if (imsg_compose(pibuf, imsg_type, 0, 0, -1, buf, len) < 0) {
-		dolog(LOG_INFO, "imsg_compose %s\n", strerror(errno));
-		return -1;
+	/* write to shared memory slot */
+	sm_lock(cfg->shm[SM_INCOMING].shptr, cfg->shm[SM_INCOMING].shptrsize);
+
+	incoming = (struct pkt_imsg *)&cfg->shm[SM_INCOMING].shptr[0];
+	for (i = 0; i < SHAREDMEMSIZE3; i++, incoming++) {
+		if (unpack32((char *)&incoming->u.i.read) == 1) {
+			memcpy((char *)&incoming->u.i.buf, (char *)buf, 
+					MIN(len, sizeof(struct pkt_imsg)));
+			pack32((char *)&incoming->u.i.buflen, len);
+			pack32((char *)&incoming->u.i.read, 0);
+			break;
+		}
+	}
+	if (i == SHAREDMEMSIZE3) {
+		dolog(LOG_INFO, "increase SHAREDMEMSIZE3 for SM_INCOMING!!!\n");
+	} else {
+		imsg_type = IMSG_PARSE_MESSAGE;
+		if (imsg_compose(pibuf, imsg_type, 0, 0, -1, &i, sizeof(int)) < 0) {
+			dolog(LOG_INFO, "imsg_compose %s\n", strerror(errno));
+			return -1;
+		}
+
+		msgbuf_write(&pibuf->w);
 	}
 
-	msgbuf_write(&pibuf->w);
+	sm_unlock(cfg->shm[SM_INCOMING].shptr, 
+		cfg->shm[SM_INCOMING].shptrsize);
+
+	/* branch to pledge parser here */
 
 	FD_ZERO(&rset);
 	FD_SET(pibuf->fd, &rset);
