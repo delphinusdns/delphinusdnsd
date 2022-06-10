@@ -551,9 +551,10 @@ struct pq_imsg {
 			struct parsequestion pq;
 		} s;
 
-		char pad[1024];
+		char pad[((1024 / PAGE_SIZE) + 1) * PAGE_SIZE];
 	} u;
 #define pqi_pq u.s.pq
+	char guard[PAGE_SIZE];
 };
 
 struct sf_imsg {

@@ -1304,6 +1304,7 @@ main(int argc, char *argv[], char *environ[])
 	shptr = sm_init(SHAREDMEMSIZE, sizeof(struct pq_imsg));
 	cfg->shm[SM_PARSEQUESTION].shptr = shptr;
 	cfg->shm[SM_PARSEQUESTION].shptrsize = sm_size(SHAREDMEMSIZE, sizeof(struct pq_imsg));
+	sm_zebra(shptr, SHAREDMEMSIZE, sizeof(struct pq_imsg));
 
 #ifdef DEFAULT_LOCATION
 	if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
