@@ -17,8 +17,9 @@ For 1.7.0 release
   to have replicant compatibility for NSEC
 - EUI48 and EUI64 support (RFC 7043)				[DONE]
 - HTTPS/SVCB support (draft will enter standard soon)
-- ADD RFC 2385 (TCP_MD5SIG) protection to AXFR port which turns off axfr'ing
+- Add RFC 2385 (TCP_MD5SIG) protection to AXFR port which turns off axfr'ing
 	over port 53, add this functionality to dddctl query for axfr.
+- Add cookies to the forward mode, so that we can get rid of x20 entirely.
 
 For 1.6.0 release
 
