@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <!-- This is an automatically generated file.  Do not edit.
-   Copyright (c) 2014-2021 Peter J. Philipp
+   Copyright (c) 2014-2022 Peter J. Philipp
    All rights reserved.
   
    Redistribution and use in source and binary forms, with or without
@@ -109,9 +109,8 @@ options &quot;cool stuff&quot; {
 	log;
 	;dnssec;
 	;tcp-on-any-only;
+	axfrport 10053;
 }
-
-axfrport &quot;10053&quot;;
 
 axfr-for &quot;these hosts&quot; {
 	127.0.0.1;
@@ -147,6 +146,7 @@ options &quot;some options&quot; {
         log;
         dnssec;
         versionstring &quot;delphinusdnsd 1.5.0&quot;;
+	axfrport 10053;
 }
 axfr-for &quot;these hosts&quot; {
         ::1/128;
@@ -154,7 +154,6 @@ axfr-for &quot;these hosts&quot; {
         10.110.99.88/32;
 }
 
-axfrport &quot;10053&quot;;
 
 mzone &quot;centroid.eu&quot; {
 	zonename &quot;centroid.eu&quot;;
@@ -228,13 +227,11 @@ Notice the /var/delphinusdnsd/replicant/ directory, this is a hardcoded path.
 <h1 class="Sh" id="GRAMMAR"><a class="permalink" href="#GRAMMAR">GRAMMAR</a></h1>
 <p class="Pp">Syntax for <code class="Nm">delphinusdns.conf</code> in BNF:</p>
 <div class="Bd Pp Li">
-<pre>line = ( 	version | axfrport | include | zinclude | zone | region |
+<pre>line = ( 	version | include | zinclude | zone | region |
 		axfr | mzone | passlist | filter | comment | options |
 		forward | rzone | tsig | tsig-auth | tsigpassname )
 
 version = &quot;version&quot; (&quot;number&quot;) ;
-
-axfrport = &quot;axfrport&quot; (&quot;port number&quot;) ;
 
 include = &quot;include&quot; (&quot;filename&quot;) ;
 
@@ -306,7 +303,7 @@ optionlist = (  optinterface | optfork | optport | optratelimit |
 		optratelimit-cidr | optratelimit-cidr6 |
 		optbind | optdnssec | opttcponanyonly |
 		optmaxudppayload | optnocookies | optcookiesecret |
-		optrdomain )
+		optrdomain | optaxfrport | strictaxfr )
 optinterface = &quot;interface&quot; (&quot;string&quot;) ;
 optfork = &quot;fork&quot; (number) ;
 optratelimit = &quot;ratelimit-pps&quot; (number) ;
@@ -319,6 +316,8 @@ optmaxudppayload = &quot;max-udp-payload&quot; (number) ;
 optnocookies = &quot;nocookies&quot; ;
 optcookiesecret = &quot;cookie-secret&quot; (&quot;base64string&quot;) ;
 optrdomain = &quot;rdomain&quot; (number) ;
+optaxfrport = &quot;axfrport&quot; (number) ;
+optstrictaxfr = &quot;strictaxfr&quot; ;
 
 </pre>
 </div>
@@ -342,7 +341,7 @@ optrdomain = &quot;rdomain&quot; (number) ;
 </div>
 <table class="foot">
   <tr>
-    <td class="foot-date">November 19, 2021</td>
+    <td class="foot-date">August 13, 2022</td>
     <td class="foot-os">OpenBSD 7.1</td>
   </tr>
 </table>
