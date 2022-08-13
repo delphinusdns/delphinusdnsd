@@ -11,6 +11,8 @@ Changes in RELEASE_1_7 from RELEASE_1_6
   this region of memory gets used delphinusdnsd will segment violate and a
   possible attack is foiled.  The detriment is a higher memory footprint,
   but we can't do without this now that it's in.
+- axfrport has been moved to options syntax is ie. "axfrport 10053;"
+- strictaxfr only allows authenticated AXFR's and is an option ie. "strictaxfr;"
 
 [2021] Changes in RELEASE_1_6 from RELEASE_1_5
 

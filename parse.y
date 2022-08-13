@@ -179,7 +179,6 @@ SLIST_HEAD(mzones ,mzone)	mzones = SLIST_HEAD_INITIALIZER(mzones);
 #define CONFIG_RECURSEFOR       0x40
 #define CONFIG_LOGGING          0x80		/* deprecated */
 #define CONFIG_AXFRFOR          0x100
-#define CONFIG_AXFRPORT         0x200
 #define CONFIG_ZINCLUDE		0x400
 #define CONFIG_RZONE		0x800
 
@@ -216,6 +215,7 @@ int converted_namelen;
 uint32_t zonenumber = 0;
 ddDBT key, data;
 int axfrport = 0;
+int strictaxfr = 0;
 time_t time_changed;
 int dnssec = 0;
 int raxfrflag = 0;
@@ -284,7 +284,7 @@ int		dottedquad(char *);
 
 %token VERSION OBRACE EBRACE REGION RZONE AXFRFOR 
 %token DOT COLON TEXT WOF INCLUDE ZONE COMMA CRLF 
-%token ERROR AXFRPORT OPTIONS FILTER MZONE
+%token ERROR OPTIONS FILTER MZONE
 %token PASSLIST ZINCLUDE PRIMARY PRIMARYPORT TSIGAUTH
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
 %token INCOMINGTSIG DESTINATION CACHE STRICTX20
@@ -316,7 +316,6 @@ cmd	:
 	| rzone
 	| mzone
 	| tsigauth
-	| axfrport
 	| include
 	| zinclude
 	| zone
@@ -359,19 +358,6 @@ version:
 	}
 	;
 
-axfrport:
-	AXFRPORT quotednumber SEMICOLON CRLF
-	{
-		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
-			dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
-			return (-1);
-		}
-		if (file->descend == DESCEND_YES) {
-			axfrport = atoi($2);
-		}
-		free ($2);
-	}
-	;
 
 quotednumber:
 	QUOTEDSTRING
@@ -1409,6 +1395,9 @@ optionsstatement:
 			} else if (strcasecmp($1, "primary-axfr-old-behaviour") == 0) {
 				dolog(LOG_DEBUG, "using old primary AXFR behaviour (no questions in axfr)\n");
 				primary_axfr_old_behaviour = 1;
+			} else if (strcasecmp($1, "strictaxfr") == 0) {
+				dolog(LOG_DEBUG, "only allowing authenticated AXFR's\n");
+				strictaxfr = 1;
 			}
 		}
 	}
@@ -1460,7 +1449,12 @@ optionsstatement:
 	STRING NUMBER SEMICOLON CRLF
 	{
 		if (file->descend == DESCEND_YES) {
-			if (strcasecmp($1, "fork") == 0) {
+			if (strcasecmp($1, "axfrport") == 0) {
+				if ($2 > 0 && $2 <= 65535) {
+					dolog(LOG_DEBUG, "axfrport at %d\n", $2);
+					axfrport = $2;
+				}
+			} else if (strcasecmp($1, "fork") == 0) {
 				dolog(LOG_DEBUG, "forking %d times\n", $2);
 				nflag = $2;
 			} else if (strcasecmp($1, "ratelimit-pps") == 0) {
@@ -1964,7 +1958,6 @@ struct tab {
 
 
 struct tab cmdtab[] = {
-	{ "axfrport", AXFRPORT, 0},
 	{ "axfr-for", AXFRFOR, STATE_IP },
 	{ "bytelimit", BYTELIMIT, 0 },
 	{ "cache", CACHE, 0 },

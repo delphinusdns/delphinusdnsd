@@ -119,6 +119,7 @@ extern long glob_time_offset;
 extern struct zonetree zonehead;
 extern struct walkentry *we1, *wep;
 extern int primary_axfr_old_behaviour;
+extern int strictaxfr;
 
 SLIST_HEAD(, axfrentry) axfrhead;
 
@@ -1057,6 +1058,16 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		
 			if (delphinusdns_HMAC_Init_ex(tsigctx, (const void *)&tsigkey, tsigkeylen, md, NULL) == 0) {
 				dolog(LOG_ERR, "AXFR tsig initialization error, drop\n");
+				goto drop;
+			}
+		} else {
+			if (strictaxfr) {
+				dolog(LOG_ERR, "%s request for zone \"%s\","\
+					" not authenticated, drop\n", \
+					(ntohs(question->hdr->qtype) == \
+						DNS_TYPE_AXFR ? "AXFR" \
+					: "IXFR"), question->converted_name);
+
 				goto drop;
 			}
 		}
