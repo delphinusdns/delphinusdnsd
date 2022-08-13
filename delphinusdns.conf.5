@@ -1,4 +1,4 @@
-.\" Copyright (c) 2014-2021 Peter J. Philipp
+.\" Copyright (c) 2014-2022 Peter J. Philipp
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -84,9 +84,8 @@ options "cool stuff" {
 	log;
 	;dnssec;
 	;tcp-on-any-only;
+	axfrport 10053;
 }
-
-axfrport "10053";
 
 axfr-for "these hosts" {
 	127.0.0.1;
@@ -123,6 +122,7 @@ options "some options" {
         log;
         dnssec;
         versionstring "delphinusdnsd 1.5.0";
+	axfrport 10053;
 }
 axfr-for "these hosts" {
         ::1/128;
@@ -130,7 +130,6 @@ axfr-for "these hosts" {
         10.110.99.88/32;
 }
 
-axfrport "10053";
 
 mzone "centroid.eu" {
 	zonename "centroid.eu";
@@ -207,13 +206,11 @@ Syntax for
 .Nm
 in BNF:
 .Bd -literal
-line = ( 	version | axfrport | include | zinclude | zone | region | 
+line = ( 	version | include | zinclude | zone | region | 
 		axfr | mzone | passlist | filter | comment | options | 
 		forward | rzone | tsig | tsig-auth | tsigpassname )
 
 version = "version" ("number") ;
-
-axfrport = "axfrport" ("port number") ; 
 
 include = "include" ("filename") ; 
 
@@ -285,7 +282,7 @@ optionlist = (  optinterface | optfork | optport | optratelimit |
 		optratelimit-cidr | optratelimit-cidr6 |
 		optbind | optdnssec | opttcponanyonly |
 		optmaxudppayload | optnocookies | optcookiesecret |
-		optrdomain )
+		optrdomain | optaxfrport | strictaxfr )
 optinterface = "interface" ("string") ;
 optfork = "fork" (number) ; 
 optratelimit = "ratelimit-pps" (number) ; 
@@ -298,6 +295,8 @@ optmaxudppayload = "max-udp-payload" (number) ;
 optnocookies = "nocookies" ;
 optcookiesecret = "cookie-secret" ("base64string") ;
 optrdomain = "rdomain" (number) ;
+optaxfrport = "axfrport" (number) ;
+optstrictaxfr = "strictaxfr" ;
 
 .Ed
 .Sh FILES
