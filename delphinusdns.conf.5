@@ -69,7 +69,7 @@ Here is a sample
 file:
 .Bd -literal
 version "1";
-options "cool stuff" {
+options {
 	interface "lo0";
 	interface "em0";
 
@@ -87,7 +87,7 @@ options "cool stuff" {
 	axfrport 10053;
 }
 
-axfr-for "these hosts" {
+axfr-for {
 	127.0.0.1;
 	::1;
 	192.168.0.0/16;
@@ -113,7 +113,7 @@ Here is a sample
 file suited for DNSSEC:
 .Bd -literal
 version "1";
-options "some options" {
+options {
         ratelimit-pps 12;
         bind 127.0.0.1;
         bind ::1;
@@ -124,7 +124,7 @@ options "some options" {
         versionstring "delphinusdnsd 1.5.0";
 	axfrport 10053;
 }
-axfr-for "these hosts" {
+axfr-for {
         ::1/128;
         127.0.0.1/32;
         10.110.99.88/32;
@@ -148,7 +148,7 @@ A forwarding-only config may look like this:
 .Bd -literal
 version "1";
 
-options "this mess" {
+options {
         interface "em0";
         interface "lo0";
         port 8053;
@@ -157,11 +157,11 @@ options "this mess" {
 }
 
 tsig-auth secret "9qD4Qi4ghqFR1xm0fIwGF9t0aLx+SZWVEPAqEvysZFg=";
-tsig "these hosts" {
+tsig {
         0.0.0.0/0;
 }
 
-forward "to these hosts" {
+forward {
         incoming-tsig yes;
         destination 127.0.0.1 port 5353 key NOKEY;
 	forwardstrategy spray;
@@ -176,7 +176,7 @@ with only one zone:
 .Bd -literal
 version "1";
 
-options "arrowhead" {
+options {
         ratelimit-pps 12;
         interface "lo0";
         interface "vio0";
@@ -231,7 +231,7 @@ region = "region" ("string") [ "{" cidrlist "}"
 
 cidrlist = { [ cidr-address ] ; ... }
 
-axfr = "axfr-for" ("string") [ "{" cidrlist "}" ]
+axfr = "axfr-for" [ "{" cidrlist "}" ]
 
 mzonelist = ( optzonename | optnotifydest | optnotifybind )
 optzonename = "zonename" ("string") ;
@@ -240,9 +240,9 @@ optnotifybind = "notifybind" cidr-address ;
 
 mzone = "mzone" ("string") [ "{" mzonelist "}" ]
 
-passlist = "passlist" ("string") [ "{" cidrlist "}" ]
+passlist = "passlist" [ "{" cidrlist "}" ]
 
-filter = "filter" ("string") [ "{" cidrlist "}" ]
+filter = "filter" [ "{" cidrlist "}" ]
 
 base64-string = (string)
 tsig-auth = "tsig-auth" (string) ("base64-string") ;
@@ -262,7 +262,7 @@ optconstraints = "constraints" (number), (number), (number) ;
 optbytelimit = "bytelimit" (number) ;
 
 
-forward = "forward" ("string") [ "{" forwardlist "}" ]
+forward = "forward"  [ "{" forwardlist "}" ]
 forwardlist = ( optdestination | optstrictx20 | optcache | optincomingtsig |
 			optfudge | optrdomain | optstrategy )
 
@@ -277,7 +277,7 @@ optstrategy = "forwardstrategy" ("single" | "spray") ;
 
 comment = ( ; | pound ) line
 
-options = "options" ("string") [ "{" optionlist "}" ]
+options = "options" [ "{" optionlist "}" ]
 optionlist = (  optinterface | optfork | optport | optratelimit | 
 		optratelimit-cidr | optratelimit-cidr6 |
 		optbind | optdnssec | opttcponanyonly |

@@ -1349,17 +1349,13 @@ zonestatement:
 
 
 options:
-	OPTIONS optionslabel optionscontent
+	OPTIONS optionscontent
 	{
 		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
                         dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
                         return (-1);
                 }
 	}
-	;
-
-optionslabel:
-	QUOTEDSTRING 
 	;
 
 optionscontent:
@@ -1517,20 +1513,16 @@ optionsstatement:
 	| comment CRLF
 	;
 
-/* tsig "these hosts" { .. } */
+/* tsig { .. } */
 
 tsig:
-	TSIG tsiglabel tsigcontent
+	TSIG tsigcontent
 	{
 		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
                         dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
                         return (-1);
                 }
 	}
-	;
-
-tsiglabel:
-	QUOTEDSTRING
 	;
 
 tsigcontent:
@@ -1572,20 +1564,16 @@ tsigstatement	:	ipcidr SEMICOLON CRLF
 			| comment CRLF
 			;	
 
-/* tsigpassname "these names" { .. } */
+/* tsigpassname { .. } */
 
 tsigpassname:
-	TSIGPASSNAME tsigpassnamelabel tsigpassnamecontent
+	TSIGPASSNAME tsigpassnamecontent
 	{
 		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
                         dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
                         return (-1);
                 }
 	}
-	;
-
-tsigpassnamelabel:
-	QUOTEDSTRING
 	;
 
 tsigpassnamecontent:
@@ -1614,17 +1602,13 @@ tsigpassnamestatement	:	QUOTEDSTRING SEMICOLON CRLF
 /* passlist "these hosts" { .. } */
 
 passlist:
-	PASSLIST passlistlabel passlistcontent
+	PASSLIST passlistcontent
 	{
 		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
                         dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
                         return (-1);
                 }
 	}
-	;
-
-passlistlabel:
-	QUOTEDSTRING
 	;
 
 passlistcontent:
@@ -1666,10 +1650,10 @@ passliststatement	:	ipcidr SEMICOLON CRLF
 			| comment CRLF
 			;	
 
-/* forward "these hosts" { .. } */
+/* forward { .. } */
 
 forward:
-	FORWARD forwardlabel forwardcontent
+	FORWARD forwardcontent
 	{
 		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
                         dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
@@ -1678,10 +1662,6 @@ forward:
 
 		forward = 1;
 	}
-	;
-
-forwardlabel:
-	QUOTEDSTRING
 	;
 
 forwardcontent:
@@ -1783,17 +1763,13 @@ forwardstatement	:	INCOMINGTSIG STRING SEMICOLON CRLF
 /* filter "these hosts" { .. } */
 
 filter:
-	FILTER filterlabel filtercontent
+	FILTER filtercontent
 	{
 		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
                         dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
                         return (-1);
                 }
 	}
-	;
-
-filterlabel:
-	QUOTEDSTRING
 	;
 
 filtercontent:
@@ -1833,20 +1809,16 @@ filterstatement	:	ipcidr SEMICOLON CRLF
 			| comment CRLF
 			;	
 
-/* axfr-for "these hosts" { .. } */
+/* axfr-for {  .. } */
 
 axfr:
-	AXFRFOR axfrlabel axfrcontent
+	AXFRFOR axfrcontent
 	{
 		if ((confstatus & CONFIG_VERSION) != CONFIG_VERSION) {
                         dolog(LOG_INFO, "There must be a version at the top of the first configfile\n");
                         return (-1);
                 }
 	}
-	;
-
-axfrlabel:
-	QUOTEDSTRING
 	;
 
 axfrcontent:
