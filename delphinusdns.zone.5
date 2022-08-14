@@ -1,4 +1,4 @@
-.\" Copyright (c) 2021 Peter J. Philipp
+.\" Copyright (c) 2021,2022 Peter J. Philipp
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -95,6 +95,16 @@ DNSKEY Resource Record (usually automatically created with dddctl sign)
 DS Resource Record
 .Bd -literal
 	subdomain.delphinusdns.org,ds,86400,59385,13,2,"07B5A3F59E461A075FDA284D431F780909595A9"
+.Ed
+.Pp
+EUI48 Resource Record
+.Bd -literal
+	subdomain.delphinusdns.org,eui48,86400,"aa-bb-cc-dd-ee-ff"
+.Ed
+.Pp
+EUI64 Resource Record
+.Bd -literal
+	subdomain.delphinusdns.org,eui64,86400,"aa-bb-cc-dd-ee-ff-gg-hh"
 .Ed
 .Pp
 HINFO Resource Record
