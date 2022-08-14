@@ -1,11 +1,11 @@
 version "1";
-options "cool stuff" {
+options {
 	versionstring "DELPHINUSDNSD - http://delphinusdns.centroid.eu";
 	interface "lo0";
 	port 9999;
 }
 
-filter "check this" {
+filter {
 	127.0.0.1;
 }
 

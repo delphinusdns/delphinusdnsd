@@ -1,5 +1,5 @@
 version "1";
-options "cool stuff" {
+options {
 	bind 127.0.0.1;
 	port 4053;
 	log;

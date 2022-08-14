@@ -976,7 +976,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			return -1;
 		}
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
-			fprintf(of, "%s %d IN NAPTR %d\t%d\t\"", 
+			fprintf(of, "%s %d IN NAPTR %d %d \"", 
 				convert_name(rbt->zone, rbt->zonelen),
 				rrset->ttl, 
 				((struct naptr *)rrp2->rdata)->order, 
@@ -985,15 +985,15 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			for (x = 0; x < ((struct naptr *)rrp2->rdata)->flagslen; x++) {
 				fprintf(of, "%c", ((struct naptr *)rrp2->rdata)->flags[x]);
 			}
-			fprintf(of, "\"\t\"");
+			fprintf(of, "\" \"");
 			for (x = 0; x < ((struct naptr *)rrp2->rdata)->serviceslen; x++) {
 				fprintf(of, "%c", ((struct naptr *)rrp2->rdata)->services[x]);
 			}
-			fprintf(of, "\"\t\"");
+			fprintf(of, "\" \"");
 			for (x = 0; x < ((struct naptr *)rrp2->rdata)->regexplen; x++) {
 				fprintf(of, "%c", ((struct naptr *)rrp2->rdata)->regexp[x]);
 			}
-			fprintf(of, "\"\t%s\n", (((struct naptr *)rrp2->rdata)->replacement[0] == '\0') ? "." : convert_name(((struct naptr *)rrp2->rdata)->replacement, ((struct naptr *)rrp2->rdata)->replacementlen));
+			fprintf(of, "\" %s\n", (((struct naptr *)rrp2->rdata)->replacement[0] == '\0') ? "." : convert_name(((struct naptr *)rrp2->rdata)->replacement, ((struct naptr *)rrp2->rdata)->replacementlen));
 		}
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_CAA)) != NULL) {
