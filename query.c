@@ -696,11 +696,12 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 	/* end of question */
 
 	if (q->cookie.have_cookie) {
+		int have_client_cookie = 0;
 		int j;
 
 		printf("; SERVER COOKIE: ");
 		
-		for (i = len - 9; i >= 0; i--) {
+		for (i = len - 9; i >= sizeof(struct dns_header); i--) {
 			if (memcmp(&reply[i], q->cookie.clientcookie, 8) == 0) {
 				uint16_t *cookie_len;
 			
@@ -710,6 +711,7 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 				} else
 					break;
 
+				have_client_cookie = 1;
 				for (j = 0; i < len && j < *cookie_len; i++, j++) {
 					printf("%02X", reply[i] & 0xff);
 				
@@ -717,6 +719,11 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 				break;
 			}
 		}
+
+		if (! have_client_cookie)
+			printf(" [client cookie not copied, INSECURE!]");
+		else
+			printf(" (good)");
 
 		printf("\n");
 	}
