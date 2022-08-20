@@ -721,7 +721,7 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 		}
 
 		if (! have_client_cookie)
-			printf(" [client cookie not copied, INSECURE!]");
+			printf("[client cookie not copied]");
 		else
 			printf(" (good)");
 
