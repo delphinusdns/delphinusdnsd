@@ -34,8 +34,6 @@
 #include <unistd.h>
 #include <ctype.h>
 
-#include <openssl/bn.h>
-
 #ifdef __linux__
 #include <grp.h>
 #define __USE_BSD 1
@@ -137,7 +135,7 @@ struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
 
 char *canonical_sort(char **, int, int *);
 static int cs_cmp(const void *, const void *);
-int add_cookie(char *, int, int, BIGNUM *, u_char *, int);
+int add_cookie(char *, int, int, DDD_BIGNUM *, u_char *, int);
 
 int bytes_received;
 
@@ -5234,7 +5232,7 @@ zonemd_hash_nsec3param(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *
 
 
 int
-add_cookie(char *packet, int maxlen, int offset, BIGNUM *saved_cookie, u_char *cookieback, int cb_len)
+add_cookie(char *packet, int maxlen, int offset, DDD_BIGNUM *saved_cookie, u_char *cookieback, int cb_len)
 {
 	int i = 0, j = 0;
 	uint16_t opt_codelen;
@@ -5277,14 +5275,14 @@ add_cookie(char *packet, int maxlen, int offset, BIGNUM *saved_cookie, u_char *c
 
 		goto out;
 	} else {
-		cookie_len = BN_num_bytes(saved_cookie);
+		cookie_len = delphinusdns_BN_num_bytes(saved_cookie);
 		cookie = malloc(cookie_len);
 		if (cookie == NULL) {
 			return -1;
 		}
 	
 
-		BN_bn2bin(saved_cookie, cookie);
+		delphinusdns_BN_bn2bin(saved_cookie, cookie);
 
 		if ((offset + 4 + cookie_len) > maxlen) {
 			free(cookie);
@@ -5304,7 +5302,7 @@ add_cookie(char *packet, int maxlen, int offset, BIGNUM *saved_cookie, u_char *c
 		
 		free(cookie);
 
-		snprintf(cookieback, cb_len, "%s", BN_bn2hex(saved_cookie));
+		snprintf(cookieback, cb_len, "%s", delphinusdns_BN_bn2hex(saved_cookie));
 	}
 
 out:

@@ -384,6 +384,44 @@ delphinusdns_BN_bin2bn(const unsigned char *s, int len, DDD_BIGNUM *ret)
 	return (ret0);
 }
 
+int
+delphinusdns_BN_hex2bn(DDD_BIGNUM **ap, const char *str)
+{
+	int ret0;
+
+#ifdef USE_OPENSSL
+	ret0 = BN_hex2bn((BIGNUM **)ap, str);
+#endif
+
+	return (ret0);
+}
+
+char *
+delphinusdns_BN_bn2hex(const DDD_BIGNUM *a)
+{
+	char *ret0;
+
+#ifdef USE_OPENSSL
+	ret0 = BN_bn2hex((const BIGNUM *)a);
+#endif
+
+	return (ret0);
+}
+	
+
+int
+delphinusdns_BN_num_bytes(const DDD_BIGNUM *a)
+{
+	int ret0;
+
+#ifdef USE_OPENSSL
+	ret0 = BN_num_bytes((BIGNUM *)a);
+#endif
+	
+	return (ret0);
+}
+
+
 DDD_BIGNUM *
 delphinusdns_BN_dup(const DDD_BIGNUM *from)
 {

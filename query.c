@@ -30,8 +30,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <openssl/bn.h>
-
 #ifdef __linux__
 #include <grp.h>
 #define __USE_BSD 1
@@ -166,7 +164,7 @@ extern int  			find_tsig_key(char *, int, char *, int);
 extern int  			insert_tsig_key(char *, int, char *);
 extern int 			insert_region(char *, char *);
 
-extern int			add_cookie(char *, int, int, BIGNUM *, u_char *, int);
+extern int			add_cookie(char *, int, int, DDD_BIGNUM *, u_char *, int);
 
 
 /* this struct must be under externs */
@@ -201,7 +199,7 @@ static struct raxfr_logic supported[] = {
 	{ 0, 0, NULL }
 };
 
-BIGNUM *provided_cookie = NULL;
+DDD_BIGNUM *provided_cookie = NULL;
 int nocookie = 0;
 
 /*
@@ -234,13 +232,13 @@ dig(int argc, char *argv[])
 	while ((ch = getopt(argc, argv, "C:c:@:DIONP:TZp:Q:y:")) != -1) {
 		switch (ch) {
 		case 'C':
-			provided_cookie = BN_new();
+			provided_cookie = delphinusdns_BN_new();
 			if (provided_cookie == NULL) {
 				fprintf(stderr, "bignum failure\n");
 				exit(1);
 			}
-			BN_hex2bn(&provided_cookie, optarg);
-			if (BN_num_bytes(provided_cookie) != 24) {
+			delphinusdns_BN_hex2bn(&provided_cookie, optarg);
+			if (delphinusdns_BN_num_bytes(provided_cookie) != 24) {
 				fprintf(stderr, "cookie must be 24 bytes!\n");
 				exit(1);
 			}
