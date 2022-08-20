@@ -36,12 +36,6 @@
 
 #include <openssl/bn.h>
 
-#if __OpenBSD__ 
-#include <siphash.h>
-#else
-#include "siphash.h"
-#endif
-
 #ifdef __linux__
 #include <grp.h>
 #define __USE_BSD 1
@@ -5242,14 +5236,8 @@ zonemd_hash_nsec3param(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *
 int
 add_cookie(char *packet, int maxlen, int offset, BIGNUM *saved_cookie, u_char *cookieback, int cb_len)
 {
-	SIPHASH_CTX ctx;
 	int i = 0, j = 0;
-	char digest[SIPHASH_DIGEST_LENGTH];
-	uint8_t version = 1, reserved = 0;
 	uint16_t opt_codelen;
-	uint32_t timestamp, compts;
-	struct sockaddr_in *sin;
-	struct sockaddr_in6 *sin6;
 	char *cookie;
 	char cookie_len;
 	
