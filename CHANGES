@@ -13,7 +13,9 @@ Changes in RELEASE_1_7 from RELEASE_1_6
   but we can't do without this now that it's in.
 - axfrport has been moved to options syntax is ie. "axfrport 10053;"
 - strictaxfr only allows authenticated AXFR's and is an option ie. "strictaxfr;"
-- config file changes dropping the "label" after options, tsig, passlist, etc..  
+- config file changes dropping the "label" after options, tsig, passlist, etc.. 
+- by default dddctl query now uses cookies (it does not cross check these) and
+  if they aren't wanted they can be turned off with -N flag.
 
 [2021] Changes in RELEASE_1_6 from RELEASE_1_5
 
