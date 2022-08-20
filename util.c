@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2002-2022 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -33,6 +33,14 @@
 #include <syslog.h>
 #include <unistd.h>
 #include <ctype.h>
+
+#include <openssl/bn.h>
+
+#if __OpenBSD__ 
+#include <siphash.h>
+#else
+#include "siphash.h"
+#endif
 
 #ifdef __linux__
 #include <grp.h>
@@ -135,6 +143,7 @@ struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
 
 char *canonical_sort(char **, int, int *);
 static int cs_cmp(const void *, const void *);
+int add_cookie(char *, int, int, BIGNUM *, u_char *, int);
 
 int bytes_received;
 
@@ -5227,4 +5236,89 @@ zonemd_hash_nsec3param(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *
 
 	free(canonsort);
 	free(tmpkey);
+}
+
+
+int
+add_cookie(char *packet, int maxlen, int offset, BIGNUM *saved_cookie, u_char *cookieback, int cb_len)
+{
+	SIPHASH_CTX ctx;
+	int i = 0, j = 0;
+	char digest[SIPHASH_DIGEST_LENGTH];
+	uint8_t version = 1, reserved = 0;
+	uint16_t opt_codelen;
+	uint32_t timestamp, compts;
+	struct sockaddr_in *sin;
+	struct sockaddr_in6 *sin6;
+	char *cookie;
+	char cookie_len;
+	
+	/* send a unique client cookie to server */
+	if (saved_cookie == NULL) {
+
+		if ((offset + 4 + 8) > maxlen)
+			return -1;
+
+		cookie_len = 8;
+		cookie = malloc(cookie_len);
+		if (cookie == NULL) {
+			return -1;
+		}
+		arc4random_buf(cookie, cookie_len);
+
+		opt_codelen = DNS_OPT_CODE_COOKIE;
+		pack16(&packet[offset], htons(opt_codelen));
+		offset += 2;
+		
+		opt_codelen = 8;
+		pack16(&packet[offset], htons(opt_codelen));
+		offset += 2;
+
+		pack(&packet[offset], (char *)cookie, cookie_len);
+		offset += cookie_len;
+		
+
+		for (i = 0; i < 8; i++) {
+			snprintf(&cookieback[j], cb_len - j, "%02X", cookie[i] & 0xff);
+			j += 2;
+		}
+
+		cookieback[j] = '\0';
+
+		free(cookie);
+
+		goto out;
+	} else {
+		cookie_len = BN_num_bytes(saved_cookie);
+		cookie = malloc(cookie_len);
+		if (cookie == NULL) {
+			return -1;
+		}
+	
+
+		BN_bn2bin(saved_cookie, cookie);
+
+		if ((offset + 4 + cookie_len) > maxlen) {
+			free(cookie);
+			return -1;
+		}
+
+		opt_codelen = DNS_OPT_CODE_COOKIE;
+		pack16(&packet[offset], htons(opt_codelen));
+		offset += 2;
+		
+		opt_codelen = cookie_len;
+		pack16(&packet[offset], htons(opt_codelen));
+		offset += 2;
+
+		pack(&packet[offset], (char *)cookie, cookie_len);
+		offset += cookie_len;
+		
+		free(cookie);
+
+		snprintf(cookieback, cb_len, "%s", BN_bn2hex(saved_cookie));
+	}
+
+out:
+	return (offset);
 }

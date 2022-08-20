@@ -30,6 +30,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <openssl/bn.h>
+
 #ifdef __linux__
 #include <grp.h>
 #define __USE_BSD 1
@@ -81,6 +83,7 @@ extern int verbose;
 extern int dnssec;
 extern int tsig;
 extern int bytes_received;
+extern int cookies;
 
 /* externs */
 
@@ -163,6 +166,8 @@ extern int  			find_tsig_key(char *, int, char *, int);
 extern int  			insert_tsig_key(char *, int, char *);
 extern int 			insert_region(char *, char *);
 
+extern int			add_cookie(char *, int, int, BIGNUM *, u_char *, int);
+
 
 /* this struct must be under externs */
 
@@ -196,6 +201,9 @@ static struct raxfr_logic supported[] = {
 	{ 0, 0, NULL }
 };
 
+BIGNUM *provided_cookie = NULL;
+int nocookie = 0;
+
 /*
  * DDDCTL QUERY 
  */
@@ -223,8 +231,20 @@ dig(int argc, char *argv[])
 	int oldbehaviour = 0;
 	struct soa_constraints constraints = { 0, 0, 0 };
 
-	while ((ch = getopt(argc, argv, "c:@:DIOP:TZp:Q:y:")) != -1) {
+	while ((ch = getopt(argc, argv, "C:c:@:DIONP:TZp:Q:y:")) != -1) {
 		switch (ch) {
+		case 'C':
+			provided_cookie = BN_new();
+			if (provided_cookie == NULL) {
+				fprintf(stderr, "bignum failure\n");
+				exit(1);
+			}
+			BN_hex2bn(&provided_cookie, optarg);
+			if (BN_num_bytes(provided_cookie) != 24) {
+				fprintf(stderr, "cookie must be 24 bytes!\n");
+				exit(1);
+			}
+			break;
 		case 'c':
 			class = atoi(optarg);
 			break;
@@ -241,6 +261,9 @@ dig(int argc, char *argv[])
 		case 'O':
 			oldbehaviour = 1;
 			break;	
+		case 'N':
+			nocookie = 1;
+			break;
 		case 'P':
 			port = atoi(optarg);
 			break;
@@ -445,8 +468,9 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 	int numansw, numaddi, numauth;
 	int printansw = 1, printauth = 1, printaddi = 1;
 	int rrtype, soacount = 0;
+	int tmplen;
 	uint16_t rdlen;
-	char query[512];
+	char query[4096];
 	char *reply;
 	struct raxfr_logic *sr;
 	struct question *q;
@@ -459,6 +483,7 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 	u_char *p, *name;
 
 	u_char *end, *estart;
+	u_char cookie[64];
 	int totallen, zonelen, rrlen;
 	int replysize = 0;
 	uint16_t class = 0, type = 0, tcpsize;
@@ -528,10 +553,28 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 	if ((format & DNSSEC_FORMAT))
 		SET_DNS_ERCODE_DNSSECOK(optrr);
 	HTONL(optrr->ttl);
-	optrr->rdlen = 0;
+
+	if (! nocookie) {
+		cookies = 1;
+		if (provided_cookie != NULL)
+			optrr->rdlen = htons(2 + 2 + 24);
+		else
+			optrr->rdlen = htons(2 + 2 + 8);
+	} else
+		optrr->rdlen = 0;
+
 	optrr->rdata[0] = 0;
 
 	totallen += (sizeof(struct dns_optrr));
+
+	/* add cookie */
+	if (! nocookie) {
+		tmplen = add_cookie(query, sizeof(query), totallen, provided_cookie, (u_char *)&cookie, sizeof(cookie));
+		if (tmplen > totallen) {
+			totallen = tmplen;
+			printf("; COOKIE: %s\n", cookie);
+		}
+	}
 
 	if (format & TCP_FORMAT) {
 		tcpsize = htons(totallen - 2);
@@ -541,6 +584,9 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 	if (send(so, query, totallen, 0) < 0) {
 		return -1;
 	}
+
+	printf(";; QUESTION SECTION:\n");
+	printf("; %s.\tIN\t%s\n", zonename, get_dns_type(myrrtype, 0));
 
 	/* catch reply */
 
@@ -616,6 +662,16 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 		return -1;
 	}
 
+#if 0
+	for (i = 0; i < len; i++) {
+		if (i && i % 16 == 0)
+			printf("\n");
+
+		printf("%02X ", reply[i] & 0xff);
+	}
+	printf("\n");
+#endif
+
 
 	q = build_question((char *)&wh->dh, len, ntohs(wh->dh.additional), NULL);
 	if (q == NULL) {
@@ -640,7 +696,32 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 	p += sizeof(uint16_t);		/* class */
 
 	/* end of question */
-	
+
+	if (q->cookie.have_cookie) {
+		int j;
+
+		printf("; SERVER COOKIE: ");
+		
+		for (i = len - 9; i >= 0; i--) {
+			if (memcmp(&reply[i], q->cookie.clientcookie, 8) == 0) {
+				uint16_t *cookie_len;
+			
+				if (i >= 2) {
+					cookie_len = (uint16_t *)&reply[i - 2];
+					NTOHS(*cookie_len);
+				} else
+					break;
+
+				for (j = 0; i < len && j < *cookie_len; i++, j++) {
+					printf("%02X", reply[i] & 0xff);
+				
+				}
+				break;
+			}
+		}
+
+		printf("\n");
+	}
 
 	estart = (u_char *)&rwh->dh;
 
