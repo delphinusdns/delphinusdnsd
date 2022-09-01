@@ -170,6 +170,7 @@ extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
 
 extern int		dn_contains(char *, int, char *, int);
+extern char *		param_tlv2human(char *, int);
 
 
 /* The following alias helps with bounds checking all input, needed! */
@@ -1049,9 +1050,8 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 int
 raxfr_https(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
-	int i, j;
+	char *tmp;
 	u_char *q = p;
-	uint16_t segmentlen = 256;
 	uint16_t priority;
 	char *save, *humanname;
 	u_char expand[256];
@@ -1076,39 +1076,36 @@ raxfr_https(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 		return -1;
 	}
 
-
-	BOUNDS_CHECK(p, q, rdlen, end);
+	BOUNDS_CHECK(q, p, rdlen, end);
 
 	if (f != NULL) 
 		fprintf(f, "%u,%s,\"", ntohs(priority), (*humanname == '\0') ? "." : humanname);
 
-	for (i = 0, j = 0; i < rdlen; i++, j++) {
-		if (j % segmentlen == 0) {
-			segmentlen = p[i] + 1;
-			j = 0;
-			continue;
-		}
-
-		if (f != NULL) 
-			fprintf(f, "%c", p[i]);	
+	if (f != NULL) {
+		tmp = param_tlv2human(q, (&p[rdlen] - q));
+		if (tmp != NULL) {
+			fprintf(f, "%s", tmp);
+			free(tmp);
+		} 
 	}
+
+	q = &p[rdlen];
+
 	if (f != NULL)
 		fprintf(f, "\"\n");
 
-	p += i;
-	
+
 	if (ctx != NULL)
-		delphinusdns_HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, p, q - p);
 	
-	return (p - estart);
+	return (q - estart);
 }
 
 int
 raxfr_svcb(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
-	int i, j;
+	char *tmp;
 	u_char *q = p;
-	uint16_t segmentlen = 256;
 	uint16_t priority;
 	char *save, *humanname;
 	u_char expand[256];
@@ -1134,30 +1131,28 @@ raxfr_svcb(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	}
 
 
-	BOUNDS_CHECK(p, q, rdlen, end);
+	BOUNDS_CHECK(q, p, rdlen, end);
 
 	if (f != NULL) 
 		fprintf(f, "%u,%s,\"", ntohs(priority), (*humanname == '\0') ? "." : humanname);
 
-	for (i = 0, j = 0; i < rdlen; i++, j++) {
-		if (j % segmentlen == 0) {
-			segmentlen = p[i] + 1;
-			j = 0;
-			continue;
+	if (f != NULL) {
+		tmp = param_tlv2human(q, (&p[rdlen] - q));
+		if (tmp != NULL) {
+			fprintf(f, "%s", tmp);
+			free(tmp);
 		}
-
-		if (f != NULL) 
-			fprintf(f, "%c", p[i]);	
 	}
+
+	q = &p[rdlen];
+
 	if (f != NULL)
 		fprintf(f, "\"\n");
 
-	p += i;
-	
 	if (ctx != NULL)
-		delphinusdns_HMAC_Update(ctx, q, p - q);
+		delphinusdns_HMAC_Update(ctx, p, q - p);
 	
-	return (p - estart);
+	return (q - estart);
 }
 
 
