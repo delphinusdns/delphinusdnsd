@@ -276,9 +276,9 @@ static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_EUI48, DNS_TYPE_EUI48, BUILD_OTHER, reply_eui48 },
 	{ DNS_TYPE_EUI64, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_EUI64, DNS_TYPE_EUI64, BUILD_OTHER, reply_eui64 },
-	{ DNS_TYPE_SVCB, DNS_TYPE_SVCB, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_SVCB, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_SVCB, DNS_TYPE_SVCB, BUILD_OTHER, reply_svcb },
-	{ DNS_TYPE_HTTPS, DNS_TYPE_HTTPS, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_HTTPS, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_HTTPS, DNS_TYPE_HTTPS, BUILD_OTHER, reply_https },
 	{ 0, 0, 0, NULL }
 };

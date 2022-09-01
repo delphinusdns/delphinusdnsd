@@ -4422,8 +4422,7 @@ reply_https(struct sreply *sreply, int *sretlen, ddDB *db)
 		uint16_t class;
 		uint32_t ttl;
 		uint16_t rdlength;	 /* 12 */
-		uint16_t priority;
-		char rdata;		
+		char rdata[0];		
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -4507,10 +4506,11 @@ reply_https(struct sreply *sreply, int *sretlen, ddDB *db)
 		answer->rdlength = htons(2 + ((struct https *)rrp->rdata)->targetlen + ((struct https *)rrp->rdata)->paramlen);
 		outlen += 12;
 
-		answer->priority = htons(((struct https *)rrp->rdata)->priority);
-
 		p = (char *)&answer->rdata;
 
+		pack16(p, htons(((struct https *)rrp->rdata)->priority));
+		p += 2;
+		outlen += 2;
 
 		memcpy(p, ((struct https *)rrp->rdata)->target, ((struct https *)rrp->rdata)->targetlen); 
 		p += ((struct https *)rrp->rdata)->targetlen;
@@ -4637,8 +4637,7 @@ reply_svcb(struct sreply *sreply, int *sretlen, ddDB *db)
 		uint16_t class;
 		uint32_t ttl;
 		uint16_t rdlength;	 /* 12 */
-		uint16_t priority;
-		char rdata;		
+		char rdata[0];		
 	} __attribute__((packed));
 
 	struct answer *answer;
@@ -4718,20 +4717,19 @@ reply_svcb(struct sreply *sreply, int *sretlen, ddDB *db)
 		else
 			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-		/* 12 bytes */
 		answer->rdlength = htons(2 + ((struct svcb *)rrp->rdata)->targetlen + ((struct svcb *)rrp->rdata)->paramlen);
+
 		outlen += 12;
-
-		answer->priority = htons(((struct svcb *)rrp->rdata)->priority);
-
 		p = (char *)&answer->rdata;
 
+		pack16(p, htons(((struct svcb *)rrp->rdata)->priority));
+		p += 2;
+		outlen += 2;
 
 		memcpy(p, ((struct svcb *)rrp->rdata)->target, ((struct svcb *)rrp->rdata)->targetlen); 
 		p += ((struct svcb *)rrp->rdata)->targetlen;
 		outlen += ((struct svcb *)rrp->rdata)->targetlen;
 		
-		/* XXX */
 		memcpy(p, ((struct svcb *)rrp->rdata)->param, ((struct svcb *)rrp->rdata)->paramlen);
 		p += (((struct svcb *)rrp->rdata)->paramlen);
 		outlen += (((struct svcb *)rrp->rdata)->paramlen);
