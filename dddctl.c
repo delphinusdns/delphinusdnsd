@@ -152,6 +152,7 @@ extern int label_count(char *);
 extern char *get_dns_type(int, int);
 extern char * hash_name(char *, int, struct nsec3param *);
 extern char * base32hex_encode(u_char *input, int len);
+extern char * param_tlv2human(char *, int);
 
 
 
@@ -1054,6 +1055,48 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 				fprintf(of, "%c", ((struct txt *)rrp2->rdata)->txt[i]);
 			}
 			fprintf(of, "\"\n");
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_HTTPS)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no txt in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			fprintf(of, "%s %d IN HTTPS %u %s %s", 
+					convert_name(rbt->zone, rbt->zonelen),
+					rrset->ttl,
+					((struct https *)rrp2->rdata)->priority,
+					convert_name(((struct https *)rrp2->rdata)->target,
+					((struct https *)rrp2->rdata)->targetlen),
+					(((struct svcb *)rrp2->rdata)->paramlen > 0) ? "( " : \
+					"");
+					
+			fprintf(of, "%s", param_tlv2human(((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen));
+
+			fprintf(of, "%s\n", (((struct svcb *)rrp2->rdata)->paramlen > 0) \
+					? " )" : "");
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_SVCB)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no txt in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			fprintf(of, "%s %d IN SVCB %u %s %s", 
+					convert_name(rbt->zone, rbt->zonelen),
+					rrset->ttl,
+					((struct https *)rrp2->rdata)->priority,
+					convert_name(((struct https *)rrp2->rdata)->target,
+					((struct https *)rrp2->rdata)->targetlen),
+					(((struct svcb *)rrp2->rdata)->paramlen > 0) ? "( " : \
+					"");
+					
+			fprintf(of, "%s", param_tlv2human(((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen));
+
+			fprintf(of, "%s\n", (((struct svcb *)rrp2->rdata)->paramlen > 0) \
+					? " )" : "");
 		}
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != NULL) {

@@ -141,6 +141,8 @@ extern int 	reply_srv(struct sreply *, int *, ddDB *);
 extern int 	reply_sshfp(struct sreply *, int *, ddDB *);
 extern int 	reply_tlsa(struct sreply *, int *, ddDB *);
 extern int 	reply_txt(struct sreply *, int *, ddDB *);
+extern int	reply_svcb(struct sreply *, int *, ddDB *);
+extern int	reply_https(struct sreply *, int *, ddDB *);
 extern int 	reply_version(struct sreply *, int *, ddDB *);
 extern int      reply_rrsig(struct sreply *, int *, ddDB *);
 extern int	reply_dnskey(struct sreply *, int *, ddDB *);
@@ -274,6 +276,10 @@ static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_EUI48, DNS_TYPE_EUI48, BUILD_OTHER, reply_eui48 },
 	{ DNS_TYPE_EUI64, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_EUI64, DNS_TYPE_EUI64, BUILD_OTHER, reply_eui64 },
+	{ DNS_TYPE_SVCB, DNS_TYPE_SVCB, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_SVCB, DNS_TYPE_SVCB, BUILD_OTHER, reply_svcb },
+	{ DNS_TYPE_HTTPS, DNS_TYPE_HTTPS, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_HTTPS, DNS_TYPE_HTTPS, BUILD_OTHER, reply_https },
 	{ 0, 0, 0, NULL }
 };
 

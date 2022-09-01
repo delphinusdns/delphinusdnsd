@@ -16,7 +16,7 @@ For 1.7.0 release
 - Shape up the NSEC code as it seems NSEC is having a renaissance, at least
   to have replicant compatibility for NSEC
 - EUI48 and EUI64 support (RFC 7043)				[DONE]
-- HTTPS/SVCB support (draft will enter standard soon)
+- HTTPS/SVCB support (draft will enter standard soon)		[DONE]
 - Add cookies to the forward mode, so that we can get rid of x20 entirely.
 
 For 1.6.0 release

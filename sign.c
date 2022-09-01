@@ -137,6 +137,8 @@ static int 	sign_srv(ddDB *, char *, int, struct rbtree *, int);
 static int 	sign_cname(ddDB *, char *, int, struct rbtree *, int);
 static int 	sign_soa(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_txt(ddDB *, char *, int, struct rbtree *, int);
+static int	sign_svcb(ddDB *, char *, int, struct rbtree *, int);
+static int	sign_https(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_aaaa(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_ptr(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_nsec3(ddDB *, char *, int, struct rbtree *, int);
@@ -241,6 +243,8 @@ extern void zonemd_hash_ns(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_cname(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_ptr(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_txt(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_svcb(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_https(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_rp(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_hinfo(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_srv(SHA512_CTX *, struct rrset *, struct rbtree *);
@@ -259,6 +263,7 @@ extern void zonemd_hash_nsec3param(SHA512_CTX *, struct rrset *, struct rbtree *
 extern struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
 
 extern char *		canonical_sort(char **, int, int *);
+extern char * 		param_tlv2human(char *, int);
 
 extern int dnssec;
 extern int tsig;
@@ -1875,6 +1880,18 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 				return -1;
 			}
 		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_SVCB)) != NULL) {
+			if (sign_svcb(db, zonename, expiry, rbt, rollmethod) < 0) {
+				fprintf(stderr, "sign_svcb error\n");
+				return -1;
+			}
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_HTTPS)) != NULL) {
+			if (sign_https(db, zonename, expiry, rbt, rollmethod) < 0) {
+				fprintf(stderr, "sign_https error\n");
+				return -1;
+			}
+		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {
 			if (sign_txt(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_txt error\n");
@@ -2177,6 +2194,474 @@ sign_soa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			return -1;
 		}
 
+	} while ((*++zsk_key) != NULL);
+	
+	return 0;
+}
+
+/*
+ * create a RRSIG for a HTTPS record
+ */
+
+static int
+sign_https(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
+{
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL, *rrp2 = NULL;
+	struct keysentry **zsk_key;
+
+	char tmp[4096];
+	char signature[4096];
+	char shabuf[64];
+	
+
+	char *dnsname;
+	char *p, *q, *r;
+	char **canonsort;
+	char *key, *tmpkey = NULL;
+	char *zone;
+
+	uint32_t ttl;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
+
+	int labellen;
+	int keyid;
+	int len, rlen, clen, i;
+	int keylen, siglen = sizeof(signature);
+	int labels;
+	int nzk = 0;
+	int csort = 0;
+
+	char timebuf[32];
+	struct tm tm;
+	uint32_t expiredon2, signedon2;
+
+	memset(&shabuf, 0, sizeof(shabuf));
+
+	key = malloc(10 * 4096);
+	if (key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");
+		return -1;
+	}
+
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
+		return -1;
+	}
+
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
+		return -1;
+	}
+
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
+		}
+	}
+
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag((u_char *)key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
+			return -1;
+		}
+		
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
+
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
+
+		if ((rrset = find_rr(rbt, DNS_TYPE_HTTPS)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no HTTPS records but have rrset entry!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no HTTPS records\n");
+			return -1;
+		}
+		
+		p = key;
+
+		pack16(p, htons(DNS_TYPE_HTTPS));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(rrset->ttl));
+		p += sizeof(uint32_t);
+			
+#if __FreeBSD__
+		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lu", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+#else
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+#endif
+
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
+
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
+
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+  			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_HTTPS));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			/* the below uses rrp! because we can't have an rrsig differ */
+			pack32(q, htonl(rrset->ttl));
+			q += 4;
+			/* insert */
+			pack16(q, htons(((struct https *)rrp2->rdata)->paramlen + ((struct https *)rrp2->rdata)->targetlen + 2));
+			q += 2;
+
+			pack16(q, htons(((struct https *)rrp2->rdata)->priority));
+			q += 2;
+			pack(q, (char *)((struct https *)rrp2->rdata)->target, ((struct https *)rrp2->rdata)->targetlen);
+			q += ((struct https *)rrp2->rdata)->targetlen;
+
+			pack(q, (char *)((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen);
+			q += ((struct https *)rrp2->rdata)->paramlen;
+
+#if 0
+			printf("%d == paramlen\n", ((struct https *)rrp2->rdata)->paramlen);
+#endif
+
+			r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
+
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
+
+			csort++;
+		}
+
+
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
+		}
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
+
+		keylen = (p - key);	
+
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode((const u_char *)signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "HTTPS", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
+	
+	return 0;
+}
+
+/*
+ * create a RRSIG for a SVCB record
+ */
+
+static int
+sign_svcb(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
+{
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL, *rrp2 = NULL;
+	struct keysentry **zsk_key;
+
+	char tmp[4096];
+	char signature[4096];
+	char shabuf[64];
+	
+
+	char *dnsname;
+	char *p, *q, *r;
+	char **canonsort;
+	char *key, *tmpkey = NULL;
+	char *zone;
+
+	uint32_t ttl;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
+
+	int labellen;
+	int keyid;
+	int len, rlen, clen, i;
+	int keylen, siglen = sizeof(signature);
+	int labels;
+	int nzk = 0;
+	int csort = 0;
+
+	char timebuf[32];
+	struct tm tm;
+	uint32_t expiredon2, signedon2;
+
+	memset(&shabuf, 0, sizeof(shabuf));
+
+	key = malloc(10 * 4096);
+	if (key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");
+		return -1;
+	}
+
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
+		return -1;
+	}
+
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
+		return -1;
+	}
+
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
+		}
+	}
+
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag((u_char *)key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
+			return -1;
+		}
+		
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
+
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
+
+		if ((rrset = find_rr(rbt, DNS_TYPE_SVCB)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no SVCB records but have rrset entry!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no SVCB records\n");
+			return -1;
+		}
+		
+		p = key;
+
+		pack16(p, htons(DNS_TYPE_SVCB));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(rrset->ttl));
+		p += sizeof(uint32_t);
+			
+#if __FreeBSD__
+		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lu", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+#else
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+#endif
+
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
+
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
+
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+  			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_SVCB));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			/* the below uses rrp! because we can't have an rrsig differ */
+			pack32(q, htonl(rrset->ttl));
+			q += 4;
+
+			pack16(q, htons(((struct svcb *)rrp2->rdata)->paramlen + ((struct svcb *)rrp2->rdata)->targetlen + 2));
+			q += 2;
+
+			pack16(q, htons(((struct svcb *)rrp2->rdata)->priority));
+			q += 2;
+			pack(q, (char *)((struct svcb *)rrp2->rdata)->target, ((struct svcb *)rrp2->rdata)->targetlen);
+			q += ((struct svcb *)rrp2->rdata)->targetlen;
+
+			pack(q, (char *)((struct svcb *)rrp2->rdata)->param, ((struct svcb *)rrp2->rdata)->paramlen);
+			q += ((struct svcb *)rrp2->rdata)->paramlen;
+
+			r = canonsort[csort] = malloc(68000);
+			if (r == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
+
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
+
+			csort++;
+		}
+
+
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
+		}
+
+		pack(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
+
+		keylen = (p - key);	
+
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode((const u_char *)signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "SVCB", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
 	} while ((*++zsk_key) != NULL);
 	
 	return 0;
@@ -8274,6 +8759,12 @@ fixup_zonemd(ddDB *db, char *zonename, int expiry, int rollmethod)
 		if ((rrset = find_rr(rbt, DNS_TYPE_EUI64)) != NULL) {
 			zonemd_hash_eui64(&ctx, rrset, rbt);
 		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_SVCB)) != NULL) {
+			zonemd_hash_svcb(&ctx, rrset, rbt);
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_HTTPS)) != NULL) {
+			zonemd_hash_https(&ctx, rrset, rbt);
+		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
 			zonemd_hash_ns(&ctx, rrset, rbt);
 		}
@@ -8666,6 +9157,10 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			strlcat(bitmap, "SSHFP ", sizeof(bitmap));	
 		if (find_rr(rbt, DNS_TYPE_ZONEMD) != NULL) 	  /* 63 */
 			strlcat(bitmap, "ZONEMD ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_SVCB) != NULL)
+			strlcat(bitmap, "SVCB ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_HTTPS) != NULL)
+			strlcat(bitmap, "HTTPS ", sizeof(bitmap));
 		if (find_rr(rbt, DNS_TYPE_EUI48) != NULL)	/* 108 */
 			strlcat(bitmap, "EUI48 ", sizeof(bitmap));
 		if (find_rr(rbt, DNS_TYPE_EUI64) != NULL)	/* 109 */
@@ -8948,6 +9443,38 @@ print_rbt(FILE *of, struct rbtree *rbt)
 				fprintf(of, "%c", ((struct naptr *)rrp2->rdata)->regexp[x]);
 			}
 			fprintf(of, "\",%s\n", (((struct naptr *)rrp2->rdata)->replacement[0] == '\0') ? "." : convert_name(((struct naptr *)rrp2->rdata)->replacement, ((struct naptr *)rrp2->rdata)->replacementlen));
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_HTTPS)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no https in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			fprintf(of, "  %s,https,%d,%u,%s,\"", 
+					convert_name(rbt->zone, rbt->zonelen),
+					rrset->ttl,
+					((struct https *)rrp2->rdata)->priority,
+					convert_name(((struct https *)rrp->rdata)->target, ((struct https *)rrp->rdata)->targetlen));
+
+			fprintf(of, "%s", param_tlv2human(((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen));
+			fprintf(of, "\"\n");
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_SVCB)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no svcb in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			fprintf(of, "  %s,svcb,%d,%u,%s,\"", 
+					convert_name(rbt->zone, rbt->zonelen),
+					rrset->ttl,
+					((struct svcb *)rrp2->rdata)->priority,
+					convert_name(((struct svcb *)rrp->rdata)->target, ((struct svcb *)rrp->rdata)->targetlen));
+
+			fprintf(of, "%s", param_tlv2human(((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen));
+			fprintf(of, "\"\n");
 		}
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) != NULL) {

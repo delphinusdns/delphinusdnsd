@@ -111,6 +111,7 @@ extern int display_rr(struct rrset *rrset);
 extern void flag_rr(struct rbtree *, uint32_t);
 extern int pull_rzone(struct rzone *, time_t);
 extern int finalize_nsec3(void);
+extern int param_human2tlv(char *, char *, int *);
 
 extern int tsigpassname;
 extern int passlist;
@@ -1281,7 +1282,21 @@ zonestatement:
 				if (debug)
 					printf("%s CAA -> %lld %s \"%s\"\n", $1, $7, $9, $11);
 #endif
+			} else if (strcasecmp($3, "svcb") == 0) {
+				if (fill_svcb(mydb, $1, $3, $5, $7, $9, $11) < 0) {	
+					return -1;
+				}
 
+				if (debug)
+					printf("%s SVCB -> %llu %s %s\n", $1, $7, $9, $11);
+
+			} else if (strcasecmp($3, "https") == 0) {
+				if (fill_https(mydb, $1, $3, $5, $7, $9, $11) < 0) {	
+					return -1;
+				}
+
+				if (debug)
+					printf("%s HTTPS -> %llu %s %s\n", $1, $7, $9, $11);
 			} else {
 				if (debug)
 					printf("another record I don't know about?");
@@ -3086,6 +3101,148 @@ fill_eui64(ddDB *db, char *name, char *type, int myttl, char *eui64)
 	if (converted_name)
 		free (converted_name);
 	
+
+	return (0);
+
+}
+
+int
+fill_svcb(ddDB *db, char *name, char *type, int myttl, uint16_t priority, char *target, char *param)
+{
+	struct rbtree *rbt;
+	struct svcb *svcb;
+	int converted_namelen, target_namelen;
+	char *converted_name, *targetname;
+	int len, i;
+	u_char *tmp;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_SVCB, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	
+
+	if ((svcb = (struct svcb *)calloc(1, sizeof(struct svcb))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+	len = 65535;
+	tmp = calloc(1, len);
+	if (tmp == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+	if (param_human2tlv(param, tmp, &len) < 0) {
+		dolog(LOG_ERR, "param_human2tlv\n");
+		return -1;
+	}
+
+	memcpy(&svcb->param, tmp, len);
+	svcb->paramlen = len;
+
+	svcb->priority = priority;
+
+	targetname = check_rr(target, type, DNS_TYPE_SVCB, &target_namelen);
+	if (targetname == NULL) {
+		return -1;
+	}
+
+	memcpy(&svcb->target, targetname, target_namelen);
+	svcb->targetlen = target_namelen;
+
+
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_SVCB, svcb, myttl, 0);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+
+	if (targetname)
+		free (targetname);
+	
+	if (converted_name)
+		free (converted_name);
+	
+	free (tmp);
+
+
+	return (0);
+
+}
+
+int
+fill_https(ddDB *db, char *name, char *type, int myttl, uint16_t priority, char *target, char *param)
+{
+	struct rbtree *rbt;
+	struct https *https;
+	int converted_namelen, target_namelen;
+	char *converted_name, *targetname;
+	int len, i;
+	u_char *tmp;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_HTTPS, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	
+
+	if ((https = (struct https *)calloc(1, sizeof(struct https))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+	len = 65535;
+	tmp = calloc(1, len);
+	if (tmp == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+	if (param_human2tlv(param, tmp, &len) < 0) {
+		dolog(LOG_ERR, "param_human2tlv\n");
+		return -1;
+	}
+
+	memcpy(&https->param, tmp, len);
+	https->paramlen = len;
+
+	https->priority = priority;
+
+	targetname = check_rr(target, type, DNS_TYPE_HTTPS, &target_namelen);
+	if (targetname == NULL) {
+		return -1;
+	}
+
+	memcpy(&https->target, targetname, target_namelen);
+	https->targetlen = target_namelen;
+
+
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_HTTPS, https, myttl, 0);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+
+	if (targetname)
+		free (targetname);
+	
+	if (converted_name)
+		free (converted_name);
+	
+	free (tmp);
+
 
 	return (0);
 

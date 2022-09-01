@@ -293,6 +293,24 @@ struct zonemd {
 	uint16_t	hashlen;	/* the length of the hash used */
 };	
 
+
+struct svcb {
+	uint16_t	priority;		/* section 2.1 */
+	char		target[DNS_MAXNAME];	/* <domain-name> */
+	int		targetlen;
+        char 		param[1024];            /* TXT string */
+        int 		paramlen;               /* len of TXT */
+	
+};
+
+struct https {
+	uint16_t	priority;		/* mirrors svcb */
+	char		target[DNS_MAXNAME];	/* <domain-name> */
+	int		targetlen;
+        char 		param[1024];            /* TXT string */
+        int 		paramlen;               /* len of TXT */
+	
+};
 	
 
 struct sreply {

@@ -109,6 +109,8 @@ uint16_t udp_cksum6(uint16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
 void zonemd_hash_a(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_eui48(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_eui64(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_svcb(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_https(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_aaaa(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_soa(DDD_SHA512_CTX *, struct rrset *, struct rbtree *, uint32_t *);
 void zonemd_hash_ns(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
@@ -136,6 +138,9 @@ struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
 char *canonical_sort(char **, int, int *);
 static int cs_cmp(const void *, const void *);
 int add_cookie(char *, int, int, DDD_BIGNUM *, u_char *, int);
+static uint16_t svcb_paramkey(char *);
+char * param_tlv2human(char *, int);
+int param_human2tlv(char *, char *, int *);
 
 int bytes_received;
 
@@ -161,6 +166,8 @@ extern int      mybase64_decode(char const *, u_char *, size_t);
 extern int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_eui48(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_eui64(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_svcb(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_https(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_tlsa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_srv(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_naptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -223,6 +230,8 @@ struct typetable {
 	{ "LOC", DNS_TYPE_LOC },
 	{ "EUI48", DNS_TYPE_EUI48 },
 	{ "EUI64", DNS_TYPE_EUI64 },
+	{ "SVCB", DNS_TYPE_SVCB },
+	{ "HTTPS", DNS_TYPE_HTTPS },
 	{ NULL, 0}
 };
 
@@ -240,6 +249,7 @@ static struct rrtab myrrtab[] =  {
  { "eui64",	DNS_TYPE_EUI64,		DNS_TYPE_EUI64 },
  { "hinfo",	DNS_TYPE_HINFO,		DNS_TYPE_HINFO },
  { "hint",      DNS_TYPE_HINT,		DNS_TYPE_NS }, 
+ { "https", 	DNS_TYPE_HTTPS,		DNS_TYPE_HTTPS },
  { "loc",	DNS_TYPE_LOC,		DNS_TYPE_LOC },
  { "mx",        DNS_TYPE_MX, 		DNS_TYPE_MX },
  { "naptr", 	DNS_TYPE_NAPTR,		DNS_TYPE_NAPTR },
@@ -253,6 +263,7 @@ static struct rrtab myrrtab[] =  {
  { "soa",       DNS_TYPE_SOA, 		DNS_TYPE_SOA },
  { "srv",       DNS_TYPE_SRV, 		DNS_TYPE_SRV },
  { "sshfp", 	DNS_TYPE_SSHFP,		DNS_TYPE_SSHFP },
+ { "svcb",	DNS_TYPE_SVCB,		DNS_TYPE_SVCB },
  { "tlsa", 	DNS_TYPE_TLSA,		DNS_TYPE_TLSA },
  { "txt",       DNS_TYPE_TXT,		DNS_TYPE_TXT },
  { "zonemd",	DNS_TYPE_ZONEMD,	DNS_TYPE_ZONEMD },
@@ -286,6 +297,8 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_LOC, 0, raxfr_loc },
 	{ DNS_TYPE_EUI48, 0, raxfr_eui48 },
 	{ DNS_TYPE_EUI64, 0, raxfr_eui64 },
+	{ DNS_TYPE_SVCB, 0, raxfr_svcb },
+	{ DNS_TYPE_HTTPS, 0, raxfr_https },
 	{ 0, 0, NULL }
 };
 
@@ -971,6 +984,28 @@ check_qtype(struct rbtree *rbt, uint16_t type, int nxdomain, int *error)
 	case DNS_TYPE_EUI64:
 		if (find_rr(rbt, DNS_TYPE_EUI64) != NULL) {
 			returnval = DNS_TYPE_EUI64;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
+		}
+
+		*error = -1;
+		return 0;
+	case DNS_TYPE_SVCB:
+		if (find_rr(rbt, DNS_TYPE_SVCB) != NULL) {
+			returnval = DNS_TYPE_SVCB;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CNAME;
+			break;
+		}
+
+		*error = -1;
+		return 0;
+	case DNS_TYPE_HTTPS:
+		if (find_rr(rbt, DNS_TYPE_HTTPS) != NULL) {
+			returnval = DNS_TYPE_HTTPS;
 			break;
 		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
 			returnval = DNS_TYPE_CNAME;
@@ -2973,6 +3008,8 @@ compress_label(u_char *buf, uint16_t offset, int labellen)
 		case DNS_TYPE_CAA:
 		case DNS_TYPE_HINFO:
 		case DNS_TYPE_ZONEMD:
+		case DNS_TYPE_SVCB:
+		case DNS_TYPE_HTTPS:
 			/* above are FALLTHROUGH */
 		default:
 			p += a->rdlength;
@@ -3687,6 +3724,172 @@ zonemd_hash_ptr(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 	delphinusdns_SHA384_Update(ctx, tmpkey, keylen);
 
 	free(tmpkey);
+
+}
+void
+zonemd_hash_https(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_HTTPS));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		/* the below uses rrp! because we can't have an rrsig differ */
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+
+		pack16(q, htons(((struct https *)rrp2->rdata)->priority));
+		q += 2;
+		
+		pack(q, (char *)((struct https *)rrp2->rdata)->target, ((struct https *)rrp2->rdata)->targetlen);
+		q += ((struct https *)rrp2->rdata)->targetlen;
+
+
+		pack16(q, htons(((struct https *)rrp2->rdata)->paramlen));
+		q += 2;
+		pack(q, (char *)((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen);
+		q += ((struct https *)rrp2->rdata)->paramlen;
+
+		r = canonsort[csort] = malloc(68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+
+		csort++;
+	}
+
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	delphinusdns_SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+	free(tmpkey);
+
+
+}
+void
+zonemd_hash_svcb(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_SVCB));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		/* the below uses rrp! because we can't have an rrsig differ */
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+
+		pack16(q, htons(((struct svcb *)rrp2->rdata)->priority));
+		q += 2;
+		
+		pack(q, (char *)((struct svcb *)rrp2->rdata)->target, ((struct svcb *)rrp2->rdata)->targetlen);
+		q += ((struct svcb *)rrp2->rdata)->targetlen;
+
+
+		pack16(q, htons(((struct svcb *)rrp2->rdata)->paramlen));
+		q += 2;
+		pack(q, (char *)((struct svcb *)rrp2->rdata)->param, ((struct svcb *)rrp2->rdata)->paramlen);
+		q += ((struct svcb *)rrp2->rdata)->paramlen;
+
+		r = canonsort[csort] = malloc(68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+
+		csort++;
+	}
+
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	delphinusdns_SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+	free(tmpkey);
+
 
 }
 void
@@ -5307,4 +5510,481 @@ add_cookie(char *packet, int maxlen, int offset, DDD_BIGNUM *saved_cookie, u_cha
 
 out:
 	return (offset);
+}
+
+int
+param_human2tlv(char *input, char *output, int *len)
+{
+	char *p, *q, *o;
+	char *outp = output;
+	char *r[256];
+	char addrbuf[16];
+	uint16_t keytype, qlen;
+	uint16_t tmp16;
+	int ilen = strlen(input);
+	int i, numtokens;
+
+#if 0
+	*len = strlen(input);
+	memcpy(output, input, *len);
+	return 0;
+#endif
+
+	*len = 0;
+	for (p = input; (p - input) < ilen ; p = o) {
+		q = strchr(p, '=');
+		if (q == NULL)
+			return -1;	
+		*q++ = '\0';
+
+		o = strchr(q, ' ');
+		if (o == NULL) {
+			i = strlen(q);
+			if (i == 0)
+				return -1;
+			else
+				o = &q[i];
+		} else
+			*o++ = '\0';
+		
+		qlen = (uint16_t) strlen(q);
+
+		if ((keytype = svcb_paramkey(p)) == 65535)
+			return -1;
+
+		if (strchr(q, ',') != NULL) {
+			r[0] = strtok(q, ",");
+			for (numtokens = 1; numtokens < 255; numtokens++) {
+				if ((r[numtokens] = strtok(NULL, ",")) == NULL)
+					break;
+			}
+		} else {
+			r[0] = q;
+			numtokens = 1;
+		}
+		
+
+		switch (keytype) {
+		case 0:
+			qlen = numtokens * 2;
+			break;
+		case 1:
+			/* FALLTHROUGH */
+		case 2:
+			qlen = qlen + (numtokens);
+			break;
+		case 3:
+			qlen = numtokens * 2;
+			break;
+		case 4:		/* ipv4hint */
+			qlen = numtokens * sizeof(in_addr_t);
+			break;
+		case 5:
+			break;
+		case 6:		/* ipv6hint */
+			qlen = numtokens * sizeof(struct in6_addr);
+			break;
+		}
+
+		pack16(outp, htons(keytype));
+		outp += 2;
+		*len += 2;
+		
+		pack16(outp, htons(qlen));
+		outp += 2;
+		*len += 2;
+		
+		if (numtokens) {
+			for (i = 0; i < numtokens; i++) {
+				uint8_t alen = 0;
+				uint16_t mandatory;
+
+				switch (keytype) {
+				case 0:
+					if ((mandatory = svcb_paramkey(r[i])) == 65535)
+						return -1;
+
+					pack16(outp, htons(mandatory));
+					outp += 2;
+					*len += 2;
+
+					break;
+
+				case 1:	/* alpn */
+					alen = (uint8_t)strlen(r[i]);
+					*outp = alen;
+					outp += 1;
+					*len += 1;
+			
+					pack(outp, r[i], alen);
+					outp += alen;
+					*len += alen;
+					break;
+				case 2:	
+					alen = (uint8_t)strlen(r[i]);
+					pack8(outp, htons(alen));
+					outp += 1;
+					*len += 1;
+			
+					pack(outp, r[i], alen);
+					outp += alen;
+					*len += alen;
+					break;
+
+				case 3:
+					
+					tmp16 = atoi(r[i]);
+					pack16(outp, htons(tmp16));
+					outp += 2;
+					*len += 2;
+					break;
+
+				case 4:
+					inet_pton(AF_INET, r[i], &addrbuf);
+					pack(outp, addrbuf, sizeof(in_addr_t));
+					outp += sizeof(in_addr_t);
+					*len += sizeof(in_addr_t);
+					break;
+
+				case 6:
+					inet_pton(AF_INET6, r[i], &addrbuf);
+					pack(outp, addrbuf, sizeof(struct in6_addr));
+					outp += sizeof(struct in6_addr);
+					*len += sizeof(struct in6_addr);
+					break;
+				}
+			}
+		} 
+	} /* for(;;) */
+
+#if 0
+	for (i = 0; i < *len; i++) {
+		printf("%02X ", output[i] & 0xff);
+	}
+	printf("\n");
+#endif
+
+	return 0;
+}
+
+char *
+param_tlv2human(char *input, int len)
+{
+	char buf[64];
+	char *ret;
+	int i, outlen = 0;
+	uint16_t key, klen, mkey, port;
+	uint8_t alpn;
+	const int inet6size = 16;
+	const int inetsize = 4;
+	int pass = 0;
+	int comma, save;
+
+#if 0
+	return (input);
+#endif
+	
+	do {
+		/* first pass */
+		for (i = 0; i < len;) {
+			key = unpack16(&input[i]);
+			i += 2;
+			klen = unpack16(&input[i]);
+			i += 2;
+
+			NTOHS(klen);
+
+			switch (ntohs(key)) {
+			case 0:
+				if (pass) {
+					strlcat(ret, "mandatory=", outlen);
+				} else
+					outlen += strlen("mandatory=");
+
+				for (int j = 0; j < klen; j += 2) {
+					mkey = unpack16(&input[i+j]);
+					switch (ntohs(mkey)) {
+					case 0:
+						if (pass) {
+							strlcat(ret, "mandatory", outlen);
+						} else {
+							outlen += strlen("mandatory");
+						}
+						break;
+					case 1:
+						if (pass) {
+							strlcat(ret, "alpn", outlen);
+						} else {
+							outlen += strlen("alpn");		
+						}
+						break;
+					case 2:
+						if (pass) {
+							strlcat(ret, "no-default-alpn", outlen);
+						} else {
+							outlen += strlen("no-default-alpn");
+						}
+						break;
+					case 3:
+						if (pass) {
+							strlcat(ret, "port", outlen);
+						} else {
+							outlen += strlen("port");
+						}
+						break;
+					case 4:
+						if (pass) {
+							strlcat(ret, "ipv4hint", outlen);
+						} else {
+							outlen += strlen("ipv4hint");
+						}
+						break;
+					case 5:
+						if (pass) {
+							strlcat(ret, "ech", outlen);
+						} else {
+							outlen += strlen("ech");
+						}
+						break;
+					case 6:
+						if (pass) {
+							strlcat(ret, "ipv6hint", outlen);
+						} else {
+							outlen += strlen("ipv6hint");
+						}
+						break;
+					default:
+						snprintf(buf, sizeof(buf), "key%u", ntohs(mkey));
+						if (pass) {
+							strlcat(ret, buf, outlen);
+						} else {
+							outlen += strlen(buf);
+						}
+						break;
+					} /* switch */
+
+					if (j + 2 < klen) {
+						if (pass) {
+							strlcat(ret, ",", outlen);
+						} else {
+							outlen++; /* comma seperator */
+						}
+					}
+				} /* for */
+				i += klen;
+				break;
+			case 1:
+				if (pass) {
+					strlcat(ret, "alpn=", outlen);
+				} else {
+					outlen += strlen("alpn=");
+				}
+				save = i;
+				for (int j = 0; j < klen; j++) {
+					alpn = (uint8_t)input[i];
+					j += alpn + 1;
+					if (pass) {
+						int retlen = strlen(ret);
+						char *p = &input[i];
+						p++;
+						pack(&ret[retlen], p, alpn);
+						ret[retlen + alpn] = '\0';
+					} else {
+						outlen += alpn + 1;
+					}
+
+					if (j < (klen - 1))
+						outlen++; /* comma seperator */
+
+					i += alpn + 1;
+				} /* for */
+				i = save + klen;
+				break;	
+			case 2:
+
+				if (pass) {
+					strlcat(ret, "no-default-alpn=", outlen);
+				} else {
+					outlen += strlen(" no-default-alpn=");
+				}
+				save = i;
+				for (int j = 0; j < klen; j++) {
+					alpn = (uint8_t)input[i];
+					j += alpn + 1;
+					if (pass) {
+						int retlen = strlen(ret);
+						char *p = &input[i];
+						p++;
+						pack(&ret[retlen], p, alpn);
+						ret[retlen + alpn] = '\0';
+					} else {
+						outlen += alpn + 1;
+					}
+
+					if (j < (klen - 1)) {
+						if (pass) {
+							strlcat(ret, ",", outlen);
+						} else {
+							outlen++; /* comma seperator */
+						}	
+					}
+					i += alpn + 1;
+				} /* for */
+				i = save + klen;
+				break;	
+			case 3:
+				if (pass) {
+					strlcat(ret, "port=", outlen);
+				} else {
+					outlen += strlen("port=");
+				}
+				for (int x = 0; x < klen; x += 2) {
+					port = unpack16(&input[i + x]);
+					NTOHS(port);
+
+					snprintf(buf, sizeof(buf), "%u", port);
+					if (pass) {
+						strlcat(ret, buf, outlen);
+					} else {
+						outlen += atoi(buf);
+					}
+		
+					if (x + 2 < klen) {
+						if (pass) {
+							strlcat(ret, ",", outlen);
+						} else {
+							outlen++;	
+						}
+					}
+				}
+				i += klen;
+				break;
+			case 4:
+
+				if (pass) {
+					strlcat(ret, "ipv4hint=", outlen);
+				} else {
+					outlen += strlen("ipv4hint=");
+				}
+				comma = (klen / 4);
+				if ((klen) >= inetsize) {
+					int tlen = 0;
+
+					comma--;
+					for (int x = 0; x < klen; x += 4, comma--) {
+						inet_ntop(AF_INET, &input[i + x], buf, sizeof(buf));	
+						tlen = strlen(buf);
+	
+						if (pass) {
+							strlcat(ret, buf, outlen);	
+
+							if (comma) {
+								strlcat(ret, ",", outlen);
+							}
+						} else {
+							outlen += tlen;
+							if (comma) {
+								outlen++;
+							}
+						}
+					}
+				}
+				i += klen;
+				break;
+			case 5:
+				if (pass) {
+					strlcat(ret, "ech=", outlen);
+				} else {
+					outlen += strlen("ech=");
+				}
+
+				break;
+			case 6:
+				if (pass) {
+					strlcat(ret, "ipv6hint=", outlen);
+				} else {
+					outlen += strlen("ipv6hint=");
+				}
+				comma = (klen / 16);
+				if ((klen) >= inet6size) {
+					int tlen = 0;
+
+					comma--;
+					for (int x = 0; x < (klen); x += 16, comma--) {
+						inet_ntop(AF_INET6, &input[i + x], buf, sizeof(buf));	
+						tlen = strlen(buf);
+	
+						if (pass) {
+							strlcat(ret, buf, outlen);	
+
+							if (comma) {
+								strlcat(ret, ",", outlen);
+							}
+						} else {
+							outlen += tlen;
+							if (comma) {
+								outlen++;
+							}
+						}
+					}
+				}
+				i += klen;
+				break;
+			default:
+				if (pass)
+					free(ret);
+
+				return (NULL);
+				break;	
+			}
+
+			if (pass) {
+				strlcat(ret, " ", outlen);
+			} else {
+				outlen++;
+			}
+
+		} /* for */
+
+		if (pass == 0) {
+			ret = calloc(1, outlen + 1);
+			if (ret == NULL)
+				return (NULL);
+		} else
+			break;
+
+		i = 0;
+	} while (pass++ < 1);
+
+	return (ret);
+}
+
+static uint16_t
+svcb_paramkey(char *input)
+{
+	uint16_t ret = 65535;
+
+	if (strcasecmp(input, "mandatory") == 0) {
+		ret = 0;
+	} else if (strcasecmp(input, "alpn") == 0) {
+		ret = 1;
+	} else if (strcasecmp(input, "no-default-alpn") == 0) {
+		ret = 2;
+	} else if (strcasecmp(input, "port") == 0) {
+		ret = 3;
+	} else if (strcasecmp(input, "ipv4hint") == 0) {
+		ret = 4;
+	} else if (strcasecmp(input, "ech") == 0) {
+		ret = 5;
+	} else if (strcasecmp(input, "ipv6hint") == 0) {
+		ret = 6;
+	} else if (strncasecmp(input, "key", 3) == 0) {
+		char *p;
+
+		p = input; p += 3;
+		ret = atoi(p);
+	} else
+		ret = 65535;
+
+	return (ret);
 }

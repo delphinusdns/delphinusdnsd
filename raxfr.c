@@ -81,6 +81,8 @@ extern struct rzone *rz0, *rz;
 extern int replicant_axfr_old_behaviour;
 
 int raxfr_a(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_svcb(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_https(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_eui48(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_eui64(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_aaaa(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -206,6 +208,8 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_LOC, 0, raxfr_loc },
 	{ DNS_TYPE_EUI48, 0, raxfr_eui48 },
 	{ DNS_TYPE_EUI64, 0, raxfr_eui64 },
+	{ DNS_TYPE_SVCB, 0, raxfr_svcb },
+	{ DNS_TYPE_HTTPS, 0, raxfr_https },
 	{ 0, 0, NULL }
 };
 
@@ -1042,6 +1046,120 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 	return (p - estart);
 }
 
+int
+raxfr_https(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
+{
+	int i, j;
+	u_char *q = p;
+	uint16_t segmentlen = 256;
+	uint16_t priority;
+	char *save, *humanname;
+	u_char expand[256];
+	int max = sizeof(expand);
+	int elen = 0;
+
+	BOUNDS_CHECK((q + 2), p, rdlen, end);
+	priority = unpack16((char *)q);
+	q += 2;
+
+	memset(&expand, 0, sizeof(expand));
+	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
+	if (save == NULL) {
+		fprintf(stderr, "expanding compression failure 2\n");
+		return -1;
+	} else  {
+		q = (u_char *)save;
+	}
+
+	humanname = convert_name((char *)expand, elen);
+	if (humanname == NULL) {
+		return -1;
+	}
+
+
+	BOUNDS_CHECK(p, q, rdlen, end);
+
+	if (f != NULL) 
+		fprintf(f, "%u,%s,\"", ntohs(priority), (*humanname == '\0') ? "." : humanname);
+
+	for (i = 0, j = 0; i < rdlen; i++, j++) {
+		if (j % segmentlen == 0) {
+			segmentlen = p[i] + 1;
+			j = 0;
+			continue;
+		}
+
+		if (f != NULL) 
+			fprintf(f, "%c", p[i]);	
+	}
+	if (f != NULL)
+		fprintf(f, "\"\n");
+
+	p += i;
+	
+	if (ctx != NULL)
+		delphinusdns_HMAC_Update(ctx, q, p - q);
+	
+	return (p - estart);
+}
+
+int
+raxfr_svcb(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
+{
+	int i, j;
+	u_char *q = p;
+	uint16_t segmentlen = 256;
+	uint16_t priority;
+	char *save, *humanname;
+	u_char expand[256];
+	int max = sizeof(expand);
+	int elen = 0;
+
+	BOUNDS_CHECK((q + 2), p, rdlen, end);
+	priority = unpack16((char *)q);
+	q += 2;
+
+	memset(&expand, 0, sizeof(expand));
+	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
+	if (save == NULL) {
+		fprintf(stderr, "expanding compression failure 2\n");
+		return -1;
+	} else  {
+		q = (u_char *)save;
+	}
+
+	humanname = convert_name((char *)expand, elen);
+	if (humanname == NULL) {
+		return -1;
+	}
+
+
+	BOUNDS_CHECK(p, q, rdlen, end);
+
+	if (f != NULL) 
+		fprintf(f, "%u,%s,\"", ntohs(priority), (*humanname == '\0') ? "." : humanname);
+
+	for (i = 0, j = 0; i < rdlen; i++, j++) {
+		if (j % segmentlen == 0) {
+			segmentlen = p[i] + 1;
+			j = 0;
+			continue;
+		}
+
+		if (f != NULL) 
+			fprintf(f, "%c", p[i]);	
+	}
+	if (f != NULL)
+		fprintf(f, "\"\n");
+
+	p += i;
+	
+	if (ctx != NULL)
+		delphinusdns_HMAC_Update(ctx, q, p - q);
+	
+	return (p - estart);
+}
+
 
 int
 raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
@@ -1140,8 +1258,8 @@ raxfr_rp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 int
 raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
 {
-	char *save, *humanname;
 	u_char *q = p;
+	char *save, *humanname;
 	u_char expand[256];
 	int max = sizeof(expand);
 	int elen = 0;

@@ -16,6 +16,7 @@ Changes in RELEASE_1_7 from RELEASE_1_6
 - config file changes dropping the "label" after options, tsig, passlist, etc.. 
 - by default dddctl query now uses cookies (it does not cross check these) and
   if they aren't wanted they can be turned off with -N flag.
+- added HTTPS and SVCB support (still in draft, standard hopefully in november 2022)
 
 [2021] Changes in RELEASE_1_6 from RELEASE_1_5
 

@@ -216,6 +216,8 @@ struct dns_question_hdr {
 #define DNS_TYPE_CDNSKEY	60	/* RFC 7344, RFC 8078 */
 
 #define DNS_TYPE_ZONEMD	63		/* RFC 8976 */
+#define DNS_TYPE_SVCB	64		/* draft-ietf-dnsop-svcb-https */
+#define DNS_TYPE_HTTPS	65		/* draft-ietf-dnsop-svcb-https */
 
 #define DNS_TYPE_EUI48	108		/* RFC 7043 */
 #define DNS_TYPE_EUI64	109		/* RFC 7043 */
