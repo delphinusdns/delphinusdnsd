@@ -4447,7 +4447,7 @@ reply_https(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_HTTPS)) == 0)
 		return -1;
 
 	if (istcp) {
@@ -4662,7 +4662,7 @@ reply_svcb(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_SVCB)) == 0)
 		return -1;
 
 	if (istcp) {
