@@ -139,8 +139,10 @@ char *canonical_sort(char **, int, int *);
 static int cs_cmp(const void *, const void *);
 int add_cookie(char *, int, int, DDD_BIGNUM *, u_char *, int);
 static uint16_t svcb_paramkey(char *);
-char * param_tlv2human(char *, int);
+char * param_tlv2human(char *, int, int);
 int param_human2tlv(char *, char *, int *);
+static int param_cmp(const void *, const void *);
+static char * param_expand(char *, int, int);
 
 int bytes_received;
 
@@ -5512,17 +5514,40 @@ out:
 	return (offset);
 }
 
-int
-param_human2tlv(char *input, char *output, int *len)
+static int
+param_cmp(const void *a, const void *b)
 {
-	char *p, *q, *o;
-	char *outp = output;
+	uint16_t k1, k2;
+
+	k1 = unpack16((char *)&a[2]);
+	k2 = unpack16((char *)&b[2]);
+
+	return (k1 < k2 ? -1 : k1 > k2);
+}
+
+int
+param_human2tlv(char *input, char *output_sorted, int *len)
+{
+	char *p, *q, *o, *outp = NULL;
+	char *output;
 	char *r[256];
 	char addrbuf[16];
 	uint16_t keytype, qlen;
 	uint16_t tmp16;
 	int ilen = strlen(input);
 	int i, numtokens;
+	int outcount = 0, outblock = 0;
+	int maxlen = 0;
+	int blocklen, sortlen = 0;
+
+	SLIST_HEAD(, paramlist) paramhead;
+	struct paramlist {
+		SLIST_ENTRY(paramlist) entries;
+		char *output;
+		int len;
+	} *n1, *n2, *np;
+
+	SLIST_INIT(&paramhead);
 
 #if 0
 	*len = strlen(input);
@@ -5530,24 +5555,49 @@ param_human2tlv(char *input, char *output, int *len)
 	return 0;
 #endif
 
-	*len = 0;
+	output = (char *)calloc(1, 65535);
+	if (output == NULL) {
+		dolog(LOG_ERR, "%s calloc2: %s\n", __func__, strerror(errno));
+		return -1;
+	}
+
 	for (p = input; (p - input) < ilen ; p = o) {
 		q = strchr(p, '=');
-		if (q == NULL)
+		if (q == NULL) {
+			dolog(LOG_INFO, "q == NULL\n");
 			return -1;	
+		}
 		*q++ = '\0';
 
 		o = strchr(q, ' ');
 		if (o == NULL) {
 			i = strlen(q);
-			if (i == 0)
+			if (i == 0) {
+				dolog(LOG_INFO, "i == 0\n");
 				return -1;
-			else
+			} else
 				o = &q[i];
 		} else
 			*o++ = '\0';
 		
 		qlen = (uint16_t) strlen(q);
+
+		for (i = 0; i < qlen; i++) {
+			int decimal;
+			
+			if (q[i] == '\\') {
+				decimal = 0;
+				decimal = (decimal * 10) + (q[i + 1] - '0');
+				decimal = (decimal * 10) + (q[i + 2] - '0');
+				decimal = (decimal * 10) + (q[i + 3] - '0');
+				
+				q[i] = decimal;
+				
+				memmove(&q[i + 1], &q[i + 4], (qlen - 3) - i);
+				qlen -= 3;
+				i += 4;
+			}
+		}
 
 		if ((keytype = svcb_paramkey(p)) == 65535)
 			return -1;
@@ -5584,15 +5634,27 @@ param_human2tlv(char *input, char *output, int *len)
 		case 6:		/* ipv6hint */
 			qlen = numtokens * sizeof(struct in6_addr);
 			break;
+		default:
+			break;
 		}
+
+		n1 = calloc(1, sizeof(struct paramlist));
+		if (n1 == NULL) {
+			dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, __LINE__,
+					strerror(errno));
+			return -1;
+		}
+
+		outp = output;
+
+		pack16(outp, qlen + 4);
+		outp += 2;
 
 		pack16(outp, htons(keytype));
 		outp += 2;
-		*len += 2;
 		
 		pack16(outp, htons(qlen));
 		outp += 2;
-		*len += 2;
 		
 		if (numtokens) {
 			for (i = 0; i < numtokens; i++) {
@@ -5606,7 +5668,6 @@ param_human2tlv(char *input, char *output, int *len)
 
 					pack16(outp, htons(mandatory));
 					outp += 2;
-					*len += 2;
 
 					break;
 
@@ -5614,21 +5675,17 @@ param_human2tlv(char *input, char *output, int *len)
 					alen = (uint8_t)strlen(r[i]);
 					*outp = alen;
 					outp += 1;
-					*len += 1;
 			
 					pack(outp, r[i], alen);
 					outp += alen;
-					*len += alen;
 					break;
 				case 2:	
 					alen = (uint8_t)strlen(r[i]);
 					pack8(outp, htons(alen));
 					outp += 1;
-					*len += 1;
 			
 					pack(outp, r[i], alen);
 					outp += alen;
-					*len += alen;
 					break;
 
 				case 3:
@@ -5636,30 +5693,83 @@ param_human2tlv(char *input, char *output, int *len)
 					tmp16 = atoi(r[i]);
 					pack16(outp, htons(tmp16));
 					outp += 2;
-					*len += 2;
 					break;
 
 				case 4:
 					inet_pton(AF_INET, r[i], &addrbuf);
 					pack(outp, addrbuf, sizeof(in_addr_t));
 					outp += sizeof(in_addr_t);
-					*len += sizeof(in_addr_t);
 					break;
 
 				case 6:
 					inet_pton(AF_INET6, r[i], &addrbuf);
 					pack(outp, addrbuf, sizeof(struct in6_addr));
 					outp += sizeof(struct in6_addr);
-					*len += sizeof(struct in6_addr);
 					break;
+
+				default:
+
+					pack(outp, q, qlen);
+					outp += qlen;
+					break;
+					
 				}
 			}
 		} 
+
+		n1->len = qlen + 6;
+		n1->output = calloc(1, n1->len);
+		if (n1->output == NULL) {
+			dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, __LINE__,
+					strerror(errno));
+			return -1;
+		}
+		memcpy(n1->output, output, n1->len);
+
+		SLIST_INSERT_HEAD(&paramhead, n1, entries);
 	} /* for(;;) */
+
+
+	free(output);
+
+	outcount = 0;
+	SLIST_FOREACH(np, &paramhead, entries) {
+		if (maxlen < np->len)
+			maxlen = np->len;
+
+		outcount++;
+	}
+
+	output = calloc(outcount, maxlen);
+	if (output == NULL) {
+		dolog(LOG_ERR, "%s calloc line %d: %s\n", __func__, __LINE__,
+			strerror(errno));
+		return -1;
+	}
+	
+	SLIST_FOREACH_SAFE(np, &paramhead, entries, n2) {
+		memcpy(&output[outblock], np->output, np->len);
+		outblock += maxlen;
+		
+		SLIST_REMOVE(&paramhead, np, paramlist, entries);
+		free(np->output);
+		free(np);
+	}
+
+	qsort(output, outcount, maxlen, param_cmp);
+		
+	for (outblock = 0; outblock < (outcount * maxlen); outblock += maxlen) {
+		blocklen = unpack16(&output[outblock]);
+		memcpy(&output_sorted[sortlen], &output[outblock + 2], blocklen);
+		sortlen += blocklen;
+
+	}
+
+	*len = sortlen;
 
 #if 0
 	for (i = 0; i < *len; i++) {
-		printf("%02X ", output[i] & 0xff);
+		printf("%02X ", output_sorted[i] & 0xff);
 	}
 	printf("\n");
 #endif
@@ -5667,11 +5777,49 @@ param_human2tlv(char *input, char *output, int *len)
 	return 0;
 }
 
+static char *
+param_expand(char *input, int len, int bindfile)
+{
+	char *ret, *p;
+	int i;
+		
+	ret = calloc(1, 65535);
+	if (ret == NULL) {
+		dolog(LOG_ERR, "%s calloc line %d: %s\n", __func__, __LINE__,
+			strerror(errno));
+		return NULL;
+	}
+
+	p = ret;
+
+	for (i = 0; i < len; i++) {
+		if (input[i] == ' ') {
+			*p = '\\'; p++;
+			if (! bindfile) { *p = '\\'; p++; }
+			*p = '0'; p++;
+			*p = '3'; p++;
+			*p = '2'; p++;
+		} else if (! isalnum(input[i])) {
+			*p = '\\'; p++;
+			if (! bindfile) { *p = '\\'; p++; }
+			snprintf(p, (65535 - (p - ret)), "%u", input[i] & 0xff);
+			p += 3;
+		} else {
+			*p = input[i];
+			p++;
+		}
+	}
+
+	*p = '\0';
+
+	return (ret);
+}
+
 char *
-param_tlv2human(char *input, int len)
+param_tlv2human(char *input, int len, int bindfile)
 {
 	char buf[64];
-	char *ret;
+	char *ret, *b;
 	int i, outlen = 0;
 	uint16_t key, klen, mkey, port;
 	uint8_t alpn;
@@ -5931,10 +6079,25 @@ param_tlv2human(char *input, int len)
 				i += klen;
 				break;
 			default:
-				if (pass)
-					free(ret);
+				snprintf(buf, sizeof(buf), "key%u=", ntohs(key));
+				if (pass) {
+					strlcat(ret, buf, outlen);
+					b = param_expand(&input[i], klen, bindfile);
+					if (b == NULL)
+						return NULL;
+					strlcat(ret, b, outlen);
+					free(b);
+				} else {
+					outlen += strlen(buf);
+					b = param_expand(&input[i], klen, bindfile);
+					if (b == NULL)
+						return NULL;
+					outlen += strlen(b);
+					free(b);
+				}
 
-				return (NULL);
+				i += klen;
+
 				break;	
 			}
 

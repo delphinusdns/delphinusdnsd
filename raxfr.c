@@ -170,7 +170,7 @@ extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
 
 extern int		dn_contains(char *, int, char *, int);
-extern char *		param_tlv2human(char *, int);
+extern char *		param_tlv2human(char *, int, int);
 
 
 /* The following alias helps with bounds checking all input, needed! */
@@ -1082,7 +1082,7 @@ raxfr_https(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 		fprintf(f, "%u,%s,\"", ntohs(priority), (*humanname == '\0') ? "." : humanname);
 
 	if (f != NULL) {
-		tmp = param_tlv2human(q, (&p[rdlen] - q));
+		tmp = param_tlv2human(q, (&p[rdlen] - q), 0);
 		if (tmp != NULL) {
 			fprintf(f, "%s", tmp);
 			free(tmp);
@@ -1137,7 +1137,7 @@ raxfr_svcb(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 		fprintf(f, "%u,%s,\"", ntohs(priority), (*humanname == '\0') ? "." : humanname);
 
 	if (f != NULL) {
-		tmp = param_tlv2human(q, (&p[rdlen] - q));
+		tmp = param_tlv2human(q, (&p[rdlen] - q), 0);
 		if (tmp != NULL) {
 			fprintf(f, "%s", tmp);
 			free(tmp);

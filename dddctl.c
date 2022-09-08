@@ -152,7 +152,7 @@ extern int label_count(char *);
 extern char *get_dns_type(int, int);
 extern char * hash_name(char *, int, struct nsec3param *);
 extern char * base32hex_encode(u_char *input, int len);
-extern char * param_tlv2human(char *, int);
+extern char * param_tlv2human(char *, int, int);
 
 
 
@@ -1072,7 +1072,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 					(((struct svcb *)rrp2->rdata)->paramlen > 0) ? "( " : \
 					"");
 					
-			fprintf(of, "%s", param_tlv2human(((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen));
+			fprintf(of, "%s", param_tlv2human(((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen, 1));
 
 			fprintf(of, "%s\n", (((struct svcb *)rrp2->rdata)->paramlen > 0) \
 					? " )" : "");
@@ -1093,7 +1093,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 					(((struct svcb *)rrp2->rdata)->paramlen > 0) ? "( " : \
 					"");
 					
-			fprintf(of, "%s", param_tlv2human(((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen));
+			fprintf(of, "%s", param_tlv2human(((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen, 1));
 
 			fprintf(of, "%s\n", (((struct svcb *)rrp2->rdata)->paramlen > 0) \
 					? " )" : "");

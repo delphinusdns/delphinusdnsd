@@ -263,7 +263,7 @@ extern void zonemd_hash_nsec3param(SHA512_CTX *, struct rrset *, struct rbtree *
 extern struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
 
 extern char *		canonical_sort(char **, int, int *);
-extern char * 		param_tlv2human(char *, int);
+extern char * 		param_tlv2human(char *, int, int);
 
 extern int dnssec;
 extern int tsig;
@@ -9457,7 +9457,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 					((struct https *)rrp2->rdata)->priority,
 					convert_name(((struct https *)rrp->rdata)->target, ((struct https *)rrp->rdata)->targetlen));
 
-			fprintf(of, "%s", param_tlv2human(((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen));
+			fprintf(of, "%s", param_tlv2human(((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen, 0));
 			fprintf(of, "\"\n");
 		}
 	}
@@ -9473,7 +9473,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 					((struct svcb *)rrp2->rdata)->priority,
 					convert_name(((struct svcb *)rrp->rdata)->target, ((struct svcb *)rrp->rdata)->targetlen));
 
-			fprintf(of, "%s", param_tlv2human(((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen));
+			fprintf(of, "%s", param_tlv2human(((struct https *)rrp2->rdata)->param, ((struct https *)rrp2->rdata)->paramlen, 0));
 			fprintf(of, "\"\n");
 		}
 	}
