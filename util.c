@@ -5783,8 +5783,6 @@ param_human2tlv(char *input, char *output_sorted, int *len)
 		case 4:		/* ipv4hint */
 			qlen = numtokens * sizeof(in_addr_t);
 			break;
-		case 5:
-			break;
 		case 6:		/* ipv6hint */
 			qlen = numtokens * sizeof(struct in6_addr);
 			break;
