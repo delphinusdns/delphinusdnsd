@@ -304,6 +304,23 @@ static struct raxfr_logic supported[] = {
 	{ 0, 0, NULL }
 };
 
+struct mandatorynode {
+	RB_ENTRY(mandatorynode) entry;
+	uint16_t key;
+} *mn, *mn1;
+
+static int param_mcmp(struct mandatorynode *, struct mandatorynode *);
+
+static int
+param_mcmp(struct mandatorynode *e1, struct mandatorynode *e2)
+{
+	return (e1->key < e2->key ? -1 : e1->key > e2->key);
+}
+
+RB_HEAD(mandatorytree, mandatorynode) mandatoryhead = RB_INITIALIZER(&mandatoryhead);
+RB_PROTOTYPE(mandatorytree, mandatorynode, entry, param_mcmp)
+RB_GENERATE(mandatorytree, mandatorynode, entry, param_mcmp)
+
 /*
  * LABEL_COUNT - count the labels and return that number
  */
@@ -5525,21 +5542,22 @@ param_cmp(const void *a, const void *b)
 	return (k1 < k2 ? -1 : k1 > k2);
 }
 
+
 int
 param_human2tlv(char *input, char *output_sorted, int *len)
 {
 	char *p, *q, *o, *outp = NULL;
 	char *output;
-	char *r[256];
 	char addrbuf[16];
 	uint16_t keytype, qlen;
 	uint16_t tmp16;
 	int ilen = strlen(input);
-	int i, numtokens;
+	int i, j, numtokens = 0, last;
 	int outcount = 0, outblock = 0;
 	int maxlen = 0;
 	int blocklen, sortlen = 0;
 
+	TAILQ_HEAD(, tokenlist) tokenhead;
 	SLIST_HEAD(, paramlist) paramhead;
 	struct paramlist {
 		SLIST_ENTRY(paramlist) entries;
@@ -5547,7 +5565,15 @@ param_human2tlv(char *input, char *output_sorted, int *len)
 		int len;
 	} *n1, *n2, *np;
 
+	struct tokenlist {
+		TAILQ_ENTRY(tokenlist) tentries;
+		char *token;
+		int len;
+	} *t1, *t2, *tp;
+	
+
 	SLIST_INIT(&paramhead);
+	TAILQ_INIT(&tokenhead);
 
 #if 0
 	*len = strlen(input);
@@ -5582,37 +5608,161 @@ param_human2tlv(char *input, char *output_sorted, int *len)
 		
 		qlen = (uint16_t) strlen(q);
 
-		for (i = 0; i < qlen; i++) {
-			int decimal;
-			
-			if (q[i] == '\\') {
-				decimal = 0;
-				decimal = (decimal * 10) + (q[i + 1] - '0');
-				decimal = (decimal * 10) + (q[i + 2] - '0');
-				decimal = (decimal * 10) + (q[i + 3] - '0');
-				
-				q[i] = decimal;
-				
-				memmove(&q[i + 1], &q[i + 4], (qlen - 3) - i);
-				qlen -= 3;
-				i += 4;
-			}
-		}
-
 		if ((keytype = svcb_paramkey(p)) == 65535)
 			return -1;
 
-		if (strchr(q, ',') != NULL) {
-			r[0] = strtok(q, ",");
-			for (numtokens = 1; numtokens < 255; numtokens++) {
-				if ((r[numtokens] = strtok(NULL, ",")) == NULL)
-					break;
+		/* if we're an alpn construct and contain a comma */
+		if ((keytype == 1 || keytype == 2 || keytype > 6) && 
+			strchr(q, ',') != NULL) {
+			for (last = 0, j = 0; j < qlen; j++) {
+				if (q[j] == ',' && j > 1 && 
+					(q[j - 1] != '\\' ))  {
+
+					t1 = calloc(1, sizeof(struct tokenlist));
+					if (t1 == NULL) {
+						dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, 	
+							__LINE__, strerror(errno));
+						return -1;
+					}
+
+					t1->len = (j - last) + 1;
+					if ((t1->token = calloc(1, t1->len)) == NULL) {
+						dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, 	
+							__LINE__, strerror(errno));
+						return -1;
+					}
+					strlcpy(t1->token, &q[last], t1->len);
+					TAILQ_INSERT_TAIL(&tokenhead, t1, tentries);
+
+					last = j + 1;
+				} else if (q[j] == ',' && j > 2 && 
+					(q[j - 1] == '\\' ))  {
+					continue;  /* make it obvious */
+				}
+			}  /* for */
+
+			t1 = calloc(1, sizeof(struct tokenlist));
+			if (t1 == NULL) {
+				dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, 	
+					__LINE__, strerror(errno));
+				return -1;
 			}
+
+			t1->len = (j - last) + 1;
+			if ((t1->token = calloc(1, t1->len)) == NULL) {
+				dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, 	
+					__LINE__, strerror(errno));
+				return -1;
+			}
+			strlcpy(t1->token, &q[last], t1->len);
+			TAILQ_INSERT_TAIL(&tokenhead, t1, tentries);
+
+			last = j + 1;
+		} else if ((keytype == 0 || keytype == 3 || 
+			keytype == 4 || keytype == 6) &&
+			strchr(q, ',') != NULL) {
+
+			/* if we're an ipv4hint or an ipv6hint */
+			for (last = 0, j = 0; j < qlen; j++) {
+				if (q[j] == ',') {
+					t1 = calloc(1, sizeof(struct tokenlist));
+					if (t1 == NULL) {
+						dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, 	
+							__LINE__, strerror(errno));
+						return -1;
+					}
+
+					t1->len = (j - last) + 1;
+					if ((t1->token = calloc(1, t1->len)) == NULL) {
+						dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, 	
+							__LINE__, strerror(errno));
+						return -1;
+					}
+					strlcpy(t1->token, &q[last], t1->len);
+					TAILQ_INSERT_TAIL(&tokenhead, t1, tentries);
+
+					last = j + 1;
+				} 
+			}  /* for */
+
+			t1 = calloc(1, sizeof(struct tokenlist));
+			if (t1 == NULL) {
+				dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, 	
+					__LINE__, strerror(errno));
+				return -1;
+			}
+
+			t1->len = (j - last) + 1;
+			if ((t1->token = calloc(1, t1->len)) == NULL) {
+				dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, 	
+					__LINE__, strerror(errno));
+				return -1;
+			}
+			strlcpy(t1->token, &q[last], t1->len);
+			TAILQ_INSERT_TAIL(&tokenhead, t1, tentries);
+
+			last = j + 1;
 		} else {
-			r[0] = q;
-			numtokens = 1;
+			t1 = calloc(1, sizeof(struct tokenlist));
+			if (t1 == NULL) {
+				dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, 	
+					__LINE__, strerror(errno));
+				return -1;
+			}
+
+			t1->len = qlen + 1;
+			if ((t1->token = calloc(1, t1->len)) == NULL) {
+				dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, 	
+					__LINE__, strerror(errno));
+				return -1;
+			}
+			strlcpy(t1->token, q, t1->len);
+			TAILQ_INSERT_TAIL(&tokenhead, t1, tentries);
 		}
+
+		/* reduce \\, \, and \210 */
+
+		if ((keytype == 1 || keytype == 2 || keytype > 6)) {
+			TAILQ_FOREACH(tp, &tokenhead, tentries) {
+				char *a = tp->token;
+
+				for (i = 0; i < tp->len; i++) {
+					int decimal;
+
+					if (a[i] == '\\') {
+						if (a[i + 1] == '\\') {
+							memmove(&a[i + 1], &a[i + 2], (tp->len - 1) - i);
+							a[i] = 0x5c;
+							i++;
+							tp->len--;
+						} else if (a[i + 1] == ',') {
+							memmove(&a[i], &a[i + 1], (tp->len - 1) - i);		
+							i++;
+							tp->len--;
+						} else {
+							decimal = 0;
+							decimal = (decimal * 10) + (a[i + 1] - '0');
+							decimal = (decimal * 10) + (a[i + 2] - '0');
+							decimal = (decimal * 10) + (a[i + 3] - '0');
+							
+							a[i] = decimal;
+							
+							memmove(&a[i + 1], &a[i + 4], (tp->len - 3) - i);
+							tp->len -= 4;
+							i += 4; /* XXX */
+						}
+					} /* if */
+				} /* for */
+
+			} /* TAILQ_FOREACH */
+		} /* if keytype 1 and 2 and > 6 */
+
+		/* count tokens */
 		
+		numtokens = 0;
+		TAILQ_FOREACH(tp, &tokenhead, tentries) {
+			numtokens++;
+		}
 
 		switch (keytype) {
 		case 0:
@@ -5621,7 +5771,11 @@ param_human2tlv(char *input, char *output_sorted, int *len)
 		case 1:
 			/* FALLTHROUGH */
 		case 2:
-			qlen = qlen + (numtokens);
+			qlen = 0;
+			TAILQ_FOREACH(tp, &tokenhead, tentries) {
+				qlen += strlen(tp->token);
+				qlen++;	/* alpn length */
+			}
 			break;
 		case 3:
 			qlen = numtokens * 2;
@@ -5635,14 +5789,11 @@ param_human2tlv(char *input, char *output_sorted, int *len)
 			qlen = numtokens * sizeof(struct in6_addr);
 			break;
 		default:
+			qlen = 0;
+			TAILQ_FOREACH(tp, &tokenhead, tentries) {
+				qlen += strlen(tp->token);
+			}
 			break;
-		}
-
-		n1 = calloc(1, sizeof(struct paramlist));
-		if (n1 == NULL) {
-			dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, __LINE__,
-					strerror(errno));
-			return -1;
 		}
 
 		outp = output;
@@ -5656,66 +5807,96 @@ param_human2tlv(char *input, char *output_sorted, int *len)
 		pack16(outp, htons(qlen));
 		outp += 2;
 		
-		if (numtokens) {
-			for (i = 0; i < numtokens; i++) {
-				uint8_t alen = 0;
-				uint16_t mandatory;
+		TAILQ_FOREACH(tp, &tokenhead, tentries) {
+			uint8_t alen = 0;
+			uint16_t mandatory;
 
-				switch (keytype) {
-				case 0:
-					if ((mandatory = svcb_paramkey(r[i])) == 65535)
-						return -1;
+			switch (keytype) {
+			case 0:
+				if ((mandatory = svcb_paramkey(tp->token)) == 65535)
+					return -1;
 
-					pack16(outp, htons(mandatory));
-					outp += 2;
-
-					break;
-
-				case 1:	/* alpn */
-					alen = (uint8_t)strlen(r[i]);
-					*outp = alen;
-					outp += 1;
-			
-					pack(outp, r[i], alen);
-					outp += alen;
-					break;
-				case 2:	
-					alen = (uint8_t)strlen(r[i]);
-					pack8(outp, htons(alen));
-					outp += 1;
-			
-					pack(outp, r[i], alen);
-					outp += alen;
-					break;
-
-				case 3:
-					
-					tmp16 = atoi(r[i]);
-					pack16(outp, htons(tmp16));
-					outp += 2;
-					break;
-
-				case 4:
-					inet_pton(AF_INET, r[i], &addrbuf);
-					pack(outp, addrbuf, sizeof(in_addr_t));
-					outp += sizeof(in_addr_t);
-					break;
-
-				case 6:
-					inet_pton(AF_INET6, r[i], &addrbuf);
-					pack(outp, addrbuf, sizeof(struct in6_addr));
-					outp += sizeof(struct in6_addr);
-					break;
-
-				default:
-
-					pack(outp, q, qlen);
-					outp += qlen;
-					break;
-					
+				if ((mn = malloc(sizeof(struct mandatorynode))) == NULL) {
+					dolog(LOG_ERR, "%s malloc %d: %s\n", __func__, __LINE__,
+						strerror(errno));
+					return -1;
 				}
+
+				mn->key = mandatory;
+				
+				RB_INSERT(mandatorytree, &mandatoryhead, mn);
+
+				break;
+
+			case 1:	/* alpn */
+				alen = (uint8_t)strlen(tp->token);
+				*outp = alen;
+				outp += 1;
+
+				pack(outp, tp->token, alen);
+				outp += alen;
+				break;
+			case 2:	
+				alen = (uint8_t)strlen(tp->token);
+				*outp = alen;
+				outp += 1;
+
+		
+				pack(outp, tp->token, alen);
+				outp += alen;
+				break;
+
+			case 3:
+
+				tmp16 = atoi(tp->token);
+				pack16(outp, htons(tmp16));
+				outp += 2;
+				break;
+
+			case 4:
+				inet_pton(AF_INET, tp->token, &addrbuf);
+				pack(outp, addrbuf, sizeof(in_addr_t));
+				outp += sizeof(in_addr_t);
+				break;
+
+			case 6:
+				inet_pton(AF_INET6, tp->token, &addrbuf);
+				pack(outp, addrbuf, sizeof(struct in6_addr));
+				outp += sizeof(struct in6_addr);
+				break;
+
+			default:
+
+				pack(outp, tp->token, tp->len);
+				outp += tp->len;
+				break;
+				
 			}
-		} 
+		} /* TAILQ_FOREACH */
+
+		if (keytype == 0) {
+			RB_FOREACH_SAFE(mn, mandatorytree, &mandatoryhead, mn1) {
+				pack16(outp, htons(mn->key));
+				outp += 2;
+
+				RB_REMOVE(mandatorytree, &mandatoryhead, mn);
+			}
+		}
+
+		/* clean up the tokens */
+		TAILQ_FOREACH_SAFE(tp, &tokenhead, tentries, t2) {
+			TAILQ_REMOVE(&tokenhead, tp, tentries);
+			free(tp->token);
+			free(tp);
+		}
+
+		/* construct the to be sorted parameters */
+		n1 = calloc(1, sizeof(struct paramlist));
+		if (n1 == NULL) {
+			dolog(LOG_ERR, "%s calloc %d: %s\n", __func__, __LINE__,
+					strerror(errno));
+			return -1;
+		}
 
 		n1->len = qlen + 6;
 		n1->output = calloc(1, n1->len);
@@ -5727,9 +5908,9 @@ param_human2tlv(char *input, char *output_sorted, int *len)
 		memcpy(n1->output, output, n1->len);
 
 		SLIST_INSERT_HEAD(&paramhead, n1, entries);
-	} /* for(;;) */
+	} 
 
-
+	/* we don't need output anymore, it will get reused */
 	free(output);
 
 	outcount = 0;
@@ -5756,6 +5937,7 @@ param_human2tlv(char *input, char *output_sorted, int *len)
 		free(np);
 	}
 
+	/* quick sort the output list */
 	qsort(output, outcount, maxlen, param_cmp);
 		
 	for (outblock = 0; outblock < (outcount * maxlen); outblock += maxlen) {
@@ -5768,6 +5950,7 @@ param_human2tlv(char *input, char *output_sorted, int *len)
 	*len = sortlen;
 
 #if 0
+	printf("sorted list output\n");
 	for (i = 0; i < *len; i++) {
 		printf("%02X ", output_sorted[i] & 0xff);
 	}
@@ -5799,10 +5982,23 @@ param_expand(char *input, int len, int bindfile)
 			*p = '0'; p++;
 			*p = '3'; p++;
 			*p = '2'; p++;
-		} else if (! isalnum(input[i])) {
+		} else if (input[i] == 0x5c) {
+			*p = '\\'; p++;
+			*p = '\\'; p++;
+			if (! bindfile) {
+				*p = '\\'; p++;
+				*p = '\\'; p++;
+			}
+		} else if (input[i] == ',') {
+			*p = '\\'; p++;
+			if (! bindfile) {
+				*p = '\\'; p++;
+			}
+			*p = ','; p++;
+		} else if (input[i] < 0x20 || input[i] > 0x7f) {
 			*p = '\\'; p++;
 			if (! bindfile) { *p = '\\'; p++; }
-			snprintf(p, (65535 - (p - ret)), "%u", input[i] & 0xff);
+			snprintf(p, (65535 - (p - ret)), "%03u", input[i] & 0xff);
 			p += 3;
 		} else {
 			*p = input[i];
@@ -5932,17 +6128,26 @@ param_tlv2human(char *input, int len, int bindfile)
 					alpn = (uint8_t)input[i];
 					j += alpn + 1;
 					if (pass) {
-						int retlen = strlen(ret);
-						char *p = &input[i];
-						p++;
-						pack(&ret[retlen], p, alpn);
-						ret[retlen + alpn] = '\0';
+						b = param_expand(&input[i + 1], alpn, bindfile);
+						if (b == NULL)
+							return NULL;
+						strlcat(ret, b, outlen);
+						free(b);
 					} else {
-						outlen += alpn + 1;
+						b = param_expand(&input[i + 1], alpn, bindfile);
+						if (b == NULL)
+							return NULL;
+						outlen += strlen(b);
+						free(b);
 					}
 
-					if (j < (klen - 1))
-						outlen++; /* comma seperator */
+					if (j < (klen - 1)) {
+						if (pass) {
+							strlcat(ret, ",", outlen);
+						} else {
+							outlen++; /* comma seperator */
+						}
+					}
 
 					i += alpn + 1;
 				} /* for */
@@ -5960,13 +6165,17 @@ param_tlv2human(char *input, int len, int bindfile)
 					alpn = (uint8_t)input[i];
 					j += alpn + 1;
 					if (pass) {
-						int retlen = strlen(ret);
-						char *p = &input[i];
-						p++;
-						pack(&ret[retlen], p, alpn);
-						ret[retlen + alpn] = '\0';
+						b = param_expand(&input[i + 1], alpn, bindfile);
+						if (b == NULL)
+							return NULL;
+						strlcat(ret, b, outlen);
+						free(b);
 					} else {
-						outlen += alpn + 1;
+						b = param_expand(&input[i + 1], alpn, bindfile);
+						if (b == NULL)
+							return NULL;
+						outlen += strlen(b);
+						free(b);
 					}
 
 					if (j < (klen - 1)) {
