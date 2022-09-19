@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2021 Peter J. Philipp.  All rights reserved.
+ * Copyright (c) 2014-2022 Peter J. Philipp.  All rights reserved.
  * Copyright (c) 2008 Gilles Chehade <gilles@poolp.org>
  * Copyright (c) 2008 Pierre-Yves Ritschard <pyr@openbsd.org>
  * Copyright (c) 2002, 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -236,6 +236,7 @@ int 		fill_aaaa(ddDB *, char *, char *, int, char *);
 int 		fill_ptr(ddDB *, char *, char *, int, char *);
 int 		fill_cname(ddDB *, char *, char *, int, char *);
 int 		fill_mx(ddDB *, char *, char *, int, int, char *);
+int 		fill_kx(ddDB *, char *, char *, int, int, char *);
 int 		fill_naptr(ddDB *, char *, char *, int, int, int, char *, char *, char *, char *);
 int 		fill_ns(ddDB *, char *, char *, int, char *);
 int 		fill_soa(ddDB *, char *, char *, int, char *, char *, int, int, int, int, int);
@@ -1056,6 +1057,16 @@ zonestatement:
 					printf("%s MX -> %lld %s\n", $1, $7, $9);
 #endif
 
+			} else if (strcasecmp($3, "kx") == 0) {
+				if (fill_kx(mydb, $1, $3, $5, $7, $9) < 0) {
+					return -1;
+				}
+
+#if DEBUG
+				if (debug)
+					printf("%s MX -> %lld %s\n", $1, $7, $9);
+#endif
+				
 			} else {
 				if (debug)
 					printf("another record I don't know about?");
@@ -3494,6 +3505,56 @@ fill_srv(ddDB *db, char *name, char *type, int myttl, int priority, int weight, 
 		free (converted_name);
 	
 	
+	return (0);
+
+}
+
+int
+fill_kx(ddDB *db, char *name, char *type, int myttl, int priority, char *kxhost)
+{
+	struct kx *kx;	
+	struct rbtree *rbt;
+	int converted_namelen;
+	char *converted_name;
+	char *kxname;
+	int len, i;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_KX, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	if ((kx = (struct kx *)calloc(1, sizeof(struct kx))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+	kx->preference = priority;
+
+	kxname = dns_label(kxhost, &len);
+	if (kxname == NULL) {
+		dolog(LOG_INFO, "illegal kx server, skipping line %d\n", file->lineno);
+		return (-1);
+	}
+
+	kx->exchangelen = len;
+	memcpy((char *)&kx->exchange, kxname, len);
+	free (kxname);
+
+	
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_KX, kx, myttl, 0);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+
+	if (converted_name)
+		free (converted_name);
+	
+
 	return (0);
 
 }

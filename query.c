@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2020-2022 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -141,6 +141,7 @@ extern int raxfr_cname(FILE *, u_char *, u_char *, u_char *, struct soa *, uint1
 extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_kx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -199,6 +200,7 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_EUI64, 0, raxfr_eui64 },
 	{ DNS_TYPE_SVCB, 0, raxfr_svcb },
 	{ DNS_TYPE_HTTPS, 0, raxfr_https },
+	{ DNS_TYPE_KX, 0, raxfr_kx },
 	/* end new support */
 	{ 0, 0, NULL }
 };

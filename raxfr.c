@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2019-2022 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -94,6 +94,7 @@ int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_H
 int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_kx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -211,6 +212,7 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_EUI64, 0, raxfr_eui64 },
 	{ DNS_TYPE_SVCB, 0, raxfr_svcb },
 	{ DNS_TYPE_HTTPS, 0, raxfr_https },
+	{ DNS_TYPE_KX, 0, raxfr_kx },
 	{ 0, 0, NULL }
 };
 
@@ -918,6 +920,53 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 
 	if (f != NULL)
 		fprintf(f, "%u,", ntohs(mxpriority));
+
+	q += 2;
+
+	memset(&expand, 0, sizeof(expand));
+	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
+	if (save == NULL) {
+		fprintf(stderr, "expanding compression failure 2\n");
+		return -1;
+	} else  {
+		q = (u_char *)save;
+	}
+
+	humanname = convert_name((char *)expand, elen);
+	if (humanname == NULL) {
+		return -1;
+	}
+
+	if (f != NULL) {
+		if (*humanname == '\0')
+			fprintf(f, ".\n");
+		else
+			fprintf(f, "%s\n", humanname);
+	}
+
+	free(humanname);
+
+	if (ctx != NULL)
+		delphinusdns_HMAC_Update(ctx, p, q - p);
+
+	return (q - estart);
+}
+
+int 
+raxfr_kx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
+{
+	uint16_t kxpriority;
+	char *save, *humanname;
+	u_char *q = p;
+	u_char expand[256];
+	int max = sizeof(expand);
+	int elen = 0;
+
+	BOUNDS_CHECK((q + 2), p, rdlen, end);
+	kxpriority = unpack16((char *)q);
+
+	if (f != NULL)
+		fprintf(f, "%u,", ntohs(kxpriority));
 
 	q += 2;
 

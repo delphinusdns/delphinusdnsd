@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2002-2022 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -201,6 +201,7 @@ struct dns_question_hdr {
 
 #define DNS_TYPE_SRV	33		/* RFC 2782, page 8 */
 #define DNS_TYPE_NAPTR	35		/* RFC 2915, page 3 */
+#define DNS_TYPE_KX	36		/* RFC 2230, page 8 */
 #define DNS_TYPE_OPT	41		/* RFC 6891, page 7 */
 #define DNS_TYPE_DS	43		/* RFC 4034, section 5 */
 #define DNS_TYPE_SSHFP	44		/* RFC 4255 */

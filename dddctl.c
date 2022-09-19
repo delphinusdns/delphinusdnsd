@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2016-2022 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -929,6 +929,19 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 				rrset->ttl, 
 				((struct smx *)rrp2->rdata)->preference, 
 				convert_name(((struct smx *)rrp2->rdata)->exchange, ((struct smx *)rrp2->rdata)->exchangelen));
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_KX)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no kx in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			fprintf(of, "%s %d IN KX %d %s\n", 
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl, 
+				((struct kx *)rrp2->rdata)->preference, 
+				convert_name(((struct kx *)rrp2->rdata)->exchange, ((struct kx *)rrp2->rdata)->exchangelen));
 		}
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_CDS)) != NULL) {

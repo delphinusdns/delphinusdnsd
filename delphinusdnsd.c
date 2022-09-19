@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2002-2022 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -133,6 +133,7 @@ extern int 	reply_noerror(struct sreply *, int *, ddDB *);
 extern int	reply_notify(struct sreply *, int *, ddDB *);
 extern int 	reply_soa(struct sreply *, int *, ddDB *);
 extern int 	reply_mx(struct sreply *, int *, ddDB *);
+extern int 	reply_kx(struct sreply *, int *, ddDB *);
 extern int 	reply_naptr(struct sreply *, int *, ddDB *);
 extern int 	reply_ns(struct sreply *, int *, ddDB *);
 extern int 	reply_ptr(struct sreply *, int *, ddDB *);
@@ -280,6 +281,8 @@ static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_SVCB, DNS_TYPE_SVCB, BUILD_OTHER, reply_svcb },
 	{ DNS_TYPE_HTTPS, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_HTTPS, DNS_TYPE_HTTPS, BUILD_OTHER, reply_https },
+	{ DNS_TYPE_KX, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_KX, DNS_TYPE_KX, BUILD_OTHER, reply_kx },
 	{ 0, 0, 0, NULL }
 };
 

@@ -120,6 +120,7 @@ int		reply_cds(struct sreply *, int *, ddDB *);
 int		reply_rrsig(struct sreply *, int *, ddDB *);
 int 		reply_aaaa(struct sreply *, int *, ddDB *);
 int 		reply_mx(struct sreply *, int *, ddDB *);
+int 		reply_kx(struct sreply *, int *, ddDB *);
 int 		reply_ns(struct sreply *, int *, ddDB *);
 int 		reply_notimpl(struct sreply *, int *, ddDB *);
 int 		reply_nxdomain(struct sreply *, int *, ddDB *);
@@ -2955,6 +2956,375 @@ out:
 	rotate_rr(rrset);
 
 	return (retlen);
+}
+
+/* 
+ * REPLY_KX() - replies a DNS question (*q) on socket (so)
+ *
+ */
+
+int
+reply_kx(struct sreply *sreply, int *sretlen, ddDB *db)
+{
+	char *reply = sreply->replybuf;
+	struct dns_header *odh;
+	int kx_count;
+	char *name;
+	uint16_t outlen = 0;
+	uint16_t namelen;
+	int tmplen = 0;
+
+	struct answer {
+		char name[2];
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		uint16_t kx_priority;
+		char exchange;
+	} __attribute__((packed));
+
+	struct answer *answer;
+
+	char *buf = sreply->buf;
+	int len = sreply->len;
+	struct question *q = sreply->q;
+	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *rbt0 = NULL;
+	struct rbtree *authority;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	int istcp = sreply->istcp;
+	int replysize = 512;
+	int retlen = -1;
+	uint16_t rollback;
+	time_t now;
+
+	int addiscount;
+
+	SLIST_HEAD(, addis) addishead;
+	struct addis {
+		char name[DNS_MAXNAME];
+		int namelen;
+		int contained;
+		SLIST_ENTRY(addis) addis_entries;
+	} *ad0, *ad1;
+	uint32_t zonenumberx;
+
+	zonenumberx = determine_zone(rbt);
+
+	SLIST_INIT(&addishead);
+	/* check for apex, delegations */
+
+	now = time(NULL);
+	
+	if ((rrset = find_rr(rbt, DNS_TYPE_KX)) == 0)
+		return -1;
+
+
+	if (istcp) {
+		replysize = 65535;
+	}
+	
+	if (! istcp && q->edns0len > 512)
+		replysize = MIN(q->edns0len, max_udp_payload);
+
+	odh = (struct dns_header *)&reply[0];
+
+	outlen = sizeof(struct dns_header);
+
+	if (len > replysize) {
+		return (retlen);
+	}
+
+	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+
+	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
+
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
+	set_reply_flags(rbt, odh, q);
+
+	odh->question = htons(1);
+	odh->answer = htons(0);
+	odh->nsrr = 0;
+	odh->additional = 0;
+
+	/* skip dns header, question name, qtype and qclass */
+	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
+		q->hdr->namelen + 4);
+
+	kx_count = 0;
+
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
+		answer->name[0] = 0xc0;
+		answer->name[1] = 0x0c;
+		answer->type = q->hdr->qtype;
+		answer->class = q->hdr->qclass;
+		
+		if (q->aa)
+			answer->ttl = htonl(rrset->ttl);
+		else
+			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
+		answer->rdlength = htons(sizeof(uint16_t) + ((struct kx *)rrp->rdata)->exchangelen);
+
+		answer->kx_priority = htons(((struct kx *)rrp->rdata)->preference);
+		memcpy((char *)&answer->exchange, (char *)((struct kx *)rrp->rdata)->exchange, ((struct kx *)rrp->rdata)->exchangelen);
+
+		name = ((struct kx *)rrp->rdata)->exchange;
+		namelen = ((struct kx *)rrp->rdata)->exchangelen;
+
+		outlen += (12 + 2 + ((struct kx *)rrp->rdata)->exchangelen);
+
+		/* can we afford to write another header? if no truncate */
+		if ((outlen + 12 + 2 + ((struct kx *)rrp->rdata)->exchangelen) > replysize) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
+			goto out;
+		}
+
+		ad0 = malloc(sizeof(struct addis));
+		if (ad0 == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+			return -1;
+		}
+
+		memcpy(ad0->name, name, namelen);
+		ad0->namelen = namelen;
+
+		if (dn_contains(name, namelen, rbt->zone, rbt->zonelen) == 1)
+			ad0->contained = 1;
+		else
+			ad0->contained = 0;
+
+		SLIST_INSERT_HEAD(&addishead, ad0, addis_entries);
+
+		/* set new offset for answer */
+		answer = (struct answer *)&reply[outlen];
+		kx_count++;
+	} 
+
+	odh->answer = htons(kx_count);
+
+	/* RRSIG reply_kx*/
+
+	if (dnssec && q->dnssecok && (rbt->flags & RBT_DNSSEC)) {
+		int origlen = outlen;
+		int retcount;
+
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_KX, rbt, reply, replysize, outlen, &retcount, q->aa);
+
+		if (tmplen == 0) {
+
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(kx_count + retcount);	
+
+		if (rbt->flags & RBT_WILDCARD) {
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
+	}
+
+	/* tack on additional A or AAAA records */
+
+	SLIST_FOREACH(ad0, &addishead, addis_entries) {
+		if (ad0->contained == 0)
+			continue;
+
+		addiscount = 0;
+		rbt0 = find_rrset(db, ad0->name, ad0->namelen);
+		if (rbt0 != NULL && find_rr(rbt0, DNS_TYPE_AAAA) != NULL) {
+			tmplen = additional_aaaa(ad0->name, ad0->namelen, rbt0, reply, replysize, outlen, &addiscount);
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+
+			outlen = tmplen;
+			NTOHS(odh->additional);
+			odh->additional += addiscount;
+			HTONS(odh->additional);
+
+			/* additional RRSIG for the additional AAAA */
+			if (dnssec && q->dnssecok && (rbt0->flags & RBT_DNSSEC)) {
+				int retcount;
+
+				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_AAAA, rbt0, reply, replysize, outlen, &retcount, q->aa);
+
+				if (tmplen == 0) {
+					/* we're forwarding and had no RRSIG return with -1 */
+					if (q->aa != 1)
+						return -1;
+
+					NTOHS(odh->query);
+					SET_DNS_TRUNCATION(odh);
+					HTONS(odh->query);
+					odh->answer = 0;
+					odh->nsrr = 0; 
+					odh->additional = 0;
+					outlen = rollback;
+					goto out;
+				}
+
+				NTOHS(odh->additional);
+				odh->additional += retcount;
+				HTONS(odh->additional);
+
+				outlen = tmplen;
+			}
+
+			rbt0 = NULL;
+		}
+
+		addiscount = 0;
+		rbt0 = find_rrset(db, ad0->name, ad0->namelen);
+		if (rbt0 != NULL && find_rr(rbt0, DNS_TYPE_A) != NULL) {
+			tmplen = additional_a(ad0->name, ad0->namelen, rbt0, reply, replysize, outlen, &addiscount);
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+
+			outlen = tmplen;
+			NTOHS(odh->additional);
+			odh->additional += addiscount;
+			HTONS(odh->additional);
+
+			/* additional RRSIG for the additional A RR */
+			if (dnssec && q->dnssecok && (rbt0->flags & RBT_DNSSEC)) {
+				int retcount;
+
+				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_A, rbt0, reply, replysize, outlen, &retcount, q->aa);
+
+				if (tmplen == 0) {
+					/* we're forwarding and had no RRSIG return with -1 */
+					if (q->aa != 1)
+						return -1;
+
+					NTOHS(odh->query);
+					SET_DNS_TRUNCATION(odh);
+					HTONS(odh->query);
+					odh->answer = 0;
+					odh->nsrr = 0; 
+					odh->additional = 0;
+					outlen = rollback;
+					goto out;
+				}
+
+				NTOHS(odh->additional);
+				odh->additional += retcount;
+				HTONS(odh->additional);
+
+				outlen = tmplen;
+
+				if (rbt->flags & RBT_WILDCARD) {
+					authority = get_soa(db, q);
+					if (authority == NULL) {
+						if (q->aa != 1)
+							return -1;
+
+						NTOHS(odh->query);
+						SET_DNS_TRUNCATION(odh);
+						HTONS(odh->query);
+						odh->answer = 0;
+						odh->nsrr = 0; 
+						odh->additional = 0;
+						outlen = rollback;
+						goto out;
+					}
+					tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+					if (tmplen != 0) {
+						outlen = tmplen;
+						odh->nsrr = htons(retcount);	
+					}
+				}
+					
+			}
+
+			rbt0 = NULL;
+		}
+
+	}
+
+out:
+	while (!SLIST_EMPTY(&addishead)) {  /* clean up */
+		ad1 = SLIST_FIRST(&addishead);
+		SLIST_REMOVE_HEAD(&addishead, addis_entries);
+		free(ad1);
+	}
+
+	if (q->edns0len) {
+		/* tag on edns0 opt record */
+		NTOHS(odh->additional);
+		odh->additional++;
+		HTONS(odh->additional);
+
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+	}
+
+	if (q->tsig.tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL, DEFAULT_TSIG_FUDGE);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
 /* 
@@ -7305,7 +7675,7 @@ uint16_t
 create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int soa, uint32_t zonenumberx, uint compress)
 {
 	int a_count, aaaa_count, ns_count, mx_count, srv_count, sshfp_count;
-	int txt_count;
+	int txt_count, kx_count;
 	int tlsa_count, typelen, zonemd_count;
 	int ds_count, dnskey_count;
 	int naptr_count, rrsig_count;
@@ -8288,6 +8658,68 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		}
 
 		answer->rdlength = htons(&reply[offset] - answer->rdata);
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_KX)) != 0) {
+
+		kx_count = 0;
+		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
+			if ((offset + q->hdr->namelen) > rlen) {
+				goto truncate;
+			}
+
+			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
+			offset += q->hdr->namelen;
+
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
+
+		
+			if (offset + 12 > rlen)
+				goto truncate;
+
+			answer = (struct answer *)&reply[offset];
+
+			answer->type = htons(DNS_TYPE_KX);
+			answer->class = htons(DNS_CLASS_IN);
+
+			if (q->aa)
+				answer->ttl = htonl(rrset->ttl);
+			else
+				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
+			answer->rdlength = htons(sizeof(uint16_t) + ((struct kx *)rrp->rdata)->exchangelen);
+
+			offset += 10;		/* up to rdata length */
+			
+			pack16(&reply[offset], htons(((struct kx *)rrp->rdata)->preference));
+			offset += sizeof(uint16_t);
+
+			if (offset + ((struct kx *)rrp->rdata)->exchangelen > rlen)
+				goto truncate;
+
+			memcpy((char *)&reply[offset], (char *)((struct kx *)rrp->rdata)->exchange, ((struct kx *)rrp->rdata)->exchangelen);
+
+			offset += ((struct kx *)rrp->rdata)->exchangelen;
+
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, ((struct kx *)rrp->rdata)->exchangelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
+
+			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			kx_count++;
+		}
+
+		NTOHS(odh->answer);
+		odh->answer += kx_count;
+		HTONS(odh->answer);
+
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) != 0) {
 

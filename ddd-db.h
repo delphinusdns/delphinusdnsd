@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2005-2022 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -173,6 +173,13 @@ struct smx {
 	char exchange[DNS_MAXNAME];	/* name of exchange server */
 	int exchangelen;		/* length of exchange server name */
 };
+
+struct kx {
+	uint16_t preference;		/* KX preference */
+	char exchange[DNS_MAXNAME];	/* name of exchange server */
+	int exchangelen;		/* length of exchange server name */
+};
+	
 
 struct ns {
 	char nsserver[DNS_MAXNAME];	/* NS name */
