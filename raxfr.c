@@ -861,8 +861,7 @@ raxfr_ipseckey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *myso
 	char *b;
 	u_char *q = p;
 	int len, remainlen, elen;
-	char *save;
-	char *humanname;
+	u_char *save;
 	u_char expand[256];
 	int max = sizeof(expand);
 
@@ -875,6 +874,7 @@ raxfr_ipseckey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *myso
 	
 	switch (ipk.gwtype) {
 	case 0:
+		ipk.dnsnamelen = 0;
 		break;
 	case 1:
 		BOUNDS_CHECK((p + 4), q, rdlen, end);
@@ -890,15 +890,12 @@ raxfr_ipseckey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *myso
 		memset(&expand, 0, sizeof(expand));
 		save = expand_compression(p, estart, end, (u_char *)&expand, &elen, max);
 		if (save == NULL) {
-			fprintf(stderr, "expanding compression failure line %dn", __LINE__);
+			dolog(LOG_ERR, "expanding compression failure\n");
 			return -1;
 		} else  {
+			memcpy(ipk.gateway.dnsname, p, (save - p));
+			ipk.dnsnamelen = (save - p);
 			p = (u_char *)save;
-		}
-
-		humanname = convert_name((char *)expand, elen);
-		if (humanname == NULL) {
-			return -1;
 		}
 
 		break;
