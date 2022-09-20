@@ -318,6 +318,28 @@ struct https {
         int 		paramlen;               /* len of TXT */
 	
 };
+
+struct ipseckey {
+	uint8_t		precedence;		/* precedence */
+	uint8_t		gwtype;			/* gateway type */
+#define IPSECKEY_NOGATEWAY	0
+#define IPSECKEY_IPV4		1
+#define IPSECKEY_IPV6		2
+#define	IPSECKEY_DOMAINNAME	3
+	uint8_t		alg;			/* algorithm */
+#define IPSECKEY_NOKEY		0
+#define IPSECKEY_DSA		1
+#define IPSECKEY_RSA		2
+	union {
+		in_addr_t ip4;			/* 4 byte IPv4 address */
+		struct in6_addr ip6;		/* 16 byte IPv6 address */
+		char dnsname[DNS_MAXNAME];	/* a dns name */
+	} gateway;
+	int dnsnamelen;
+	char key[4096];				/* public key */
+	int keylen;
+};
+	
 	
 
 struct sreply {

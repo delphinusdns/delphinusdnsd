@@ -205,6 +205,7 @@ struct dns_question_hdr {
 #define DNS_TYPE_OPT	41		/* RFC 6891, page 7 */
 #define DNS_TYPE_DS	43		/* RFC 4034, section 5 */
 #define DNS_TYPE_SSHFP	44		/* RFC 4255 */
+#define DNS_TYPE_IPSECKEY	45	/* RFC 4025, section 1 */
 #define DNS_TYPE_RRSIG	46		/* RFC 4034, section 3 */
 #define DNS_TYPE_NSEC	47		/* RFC 4034, section 4 */
 #define DNS_TYPE_DNSKEY	48		/* RFC 4034, section 2 */

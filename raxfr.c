@@ -95,6 +95,7 @@ int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DD
 int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_kx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_ipseckey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -172,6 +173,7 @@ extern void 	unpack(char *, char *, int);
 
 extern int		dn_contains(char *, int, char *, int);
 extern char *		param_tlv2human(char *, int, int);
+extern char * 		ipseckey_type(struct ipseckey *);
 
 
 /* The following alias helps with bounds checking all input, needed! */
@@ -213,6 +215,7 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_SVCB, 0, raxfr_svcb },
 	{ DNS_TYPE_HTTPS, 0, raxfr_https },
 	{ DNS_TYPE_KX, 0, raxfr_kx },
+	{ DNS_TYPE_IPSECKEY, 0, raxfr_ipseckey },
 	{ 0, 0, NULL }
 };
 
@@ -841,6 +844,92 @@ raxfr_cdnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa
 	if (f != NULL) {
 		fprintf(f, "%u,%u,%u,\"%s\"\n", dk.flags, dk.protocol, 
 			dk.algorithm, b);
+	}
+
+	free(b);
+
+	if (ctx != NULL)
+		delphinusdns_HMAC_Update(ctx, q, p - q);
+
+	return (p - estart);
+}
+
+int 
+raxfr_ipseckey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
+{
+	struct ipseckey ipk;
+	char *b;
+	u_char *q = p;
+	int len, remainlen, elen;
+	char *save;
+	char *humanname;
+	u_char expand[256];
+	int max = sizeof(expand);
+
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	ipk.precedence = *p++;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	ipk.gwtype = *p++;
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	ipk.alg = *p++;
+	
+	switch (ipk.gwtype) {
+	case 0:
+		break;
+	case 1:
+		BOUNDS_CHECK((p + 4), q, rdlen, end);
+		memcpy(&ipk.gateway.ip4, p, 4);
+		p += 4;
+		break;
+	case 2:
+		BOUNDS_CHECK((p + 16), q, rdlen, end);
+		memcpy(&ipk.gateway.ip6, p, 16);
+		p += 16;
+		break;
+	case 3:
+		memset(&expand, 0, sizeof(expand));
+		save = expand_compression(p, estart, end, (u_char *)&expand, &elen, max);
+		if (save == NULL) {
+			fprintf(stderr, "expanding compression failure line %dn", __LINE__);
+			return -1;
+		} else  {
+			p = (u_char *)save;
+		}
+
+		humanname = convert_name((char *)expand, elen);
+		if (humanname == NULL) {
+			return -1;
+		}
+
+		break;
+	}
+
+	remainlen = rdlen - (p - q);
+	if (remainlen < 0 || remainlen > sizeof(ipk.key)) {
+		dolog(LOG_ERR, "keylength out of range\n");
+		return -1;
+	}
+
+	ipk.keylen = remainlen;
+	memcpy(&ipk.key, p, remainlen);
+	p += remainlen;
+
+
+	b = malloc(remainlen * 2);
+	if (b == NULL) {
+		return -1;
+	}
+
+	if ((len = mybase64_encode((const u_char *)ipk.key, ipk.keylen, b, remainlen * 2)) < 0) {
+		free(b);
+		return -1;
+	}
+
+	b[len] = '\0';
+
+	if (f != NULL) {
+		fprintf(f, "%u,%u,%u,\"%s\",\"%s\"\n", ipk.precedence, ipk.gwtype,
+			ipk.alg, ipseckey_type(&ipk), b);
 	}
 
 	free(b);

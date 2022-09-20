@@ -153,6 +153,7 @@ extern char *get_dns_type(int, int);
 extern char * hash_name(char *, int, struct nsec3param *);
 extern char * base32hex_encode(u_char *input, int len);
 extern char * param_tlv2human(char *, int, int);
+extern char * ipseckey_type(struct ipseckey *);
 
 
 
@@ -942,6 +943,24 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 				rrset->ttl, 
 				((struct kx *)rrp2->rdata)->preference, 
 				convert_name(((struct kx *)rrp2->rdata)->exchange, ((struct kx *)rrp2->rdata)->exchangelen));
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_IPSECKEY)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no ipseckey in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			len = mybase64_encode((const u_char *)((struct ipseckey *)rrp2->rdata)->key, ((struct ipseckey *)rrp2->rdata)->keylen, buf, sizeof(buf));
+			buf[len] = '\0';
+			fprintf(of, "%s %d IN IPSECKEY ( %d %d %d %s %s )\n", 
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl, 
+				((struct ipseckey *)rrp2->rdata)->precedence,
+				((struct ipseckey *)rrp2->rdata)->gwtype,
+				((struct ipseckey *)rrp2->rdata)->alg,
+				ipseckey_type((struct ipseckey *)rrp2->rdata),
+				buf);
 		}
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_CDS)) != NULL) {

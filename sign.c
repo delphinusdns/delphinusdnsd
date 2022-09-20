@@ -133,6 +133,7 @@ static int 	sign_eui48(ddDB *, char *, int, struct rbtree *, int);
 static int 	sign_eui64(ddDB *, char *, int, struct rbtree *, int);
 static int 	sign_mx(ddDB *, char *, int, struct rbtree *, int);
 static int 	sign_kx(ddDB *, char *, int, struct rbtree *, int);
+static int 	sign_ipseckey(ddDB *, char *, int, struct rbtree *, int);
 static int 	sign_ns(ddDB *, char *, int, struct rbtree *, int);
 static int 	sign_srv(ddDB *, char *, int, struct rbtree *, int);
 static int 	sign_cname(ddDB *, char *, int, struct rbtree *, int);
@@ -253,6 +254,7 @@ extern void zonemd_hash_naptr(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_caa(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_mx(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_kx(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void zonemd_hash_ipseckey(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_tlsa(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_sshfp(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_ds(SHA512_CTX *, struct rrset *, struct rbtree *);
@@ -266,6 +268,7 @@ extern struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
 
 extern char *		canonical_sort(char **, int, int *);
 extern char * 		param_tlv2human(char *, int, int);
+extern char * 		ipseckey_type(struct ipseckey *);
 
 extern int dnssec;
 extern int tsig;
@@ -1836,6 +1839,12 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 		if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != NULL) {
 			if (sign_dnskey(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_dnskey error\n");
+				return -1;
+			}
+		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_IPSECKEY)) != NULL) {
+			if (sign_ipseckey(db, zonename, expiry, rbt, rollmethod) < 0) {
+				fprintf(stderr, "sign_ipseckey error\n");
 				return -1;
 			}
 		}
@@ -7145,6 +7154,263 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 	return 0;
 }
 
+/*
+ * create a RRSIG for an IPSECKEY record
+ */
+
+static int
+sign_ipseckey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
+{
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct rr *rrp2 = NULL;
+	struct keysentry **zsk_key;
+
+	char tmp[4096];
+	char signature[4096];
+	char shabuf[64];
+	
+
+	char *dnsname;
+	char *p, *q, *r;
+	char **canonsort;
+	char *key, *tmpkey;
+	char *zone;
+
+	uint32_t ttl;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
+
+	int labellen;
+	int keyid;
+	int len, rlen, i;
+	uint16_t clen;
+	int keylen, siglen = sizeof(signature);
+	int labels;
+	int nzk = 0;
+	int csort = 0;
+
+	char timebuf[32];
+	struct tm tm;
+	uint32_t expiredon2, signedon2;
+	int ipseckeylen;
+
+
+
+	memset(&shabuf, 0, sizeof(shabuf));
+
+	key = malloc(10 * 4096);
+	if (key == NULL) {
+		dolog(LOG_INFO, "key out of memory\n");
+		return -1;
+	}
+	tmpkey = malloc(10 * 4096);
+	if (tmpkey == NULL) {
+		dolog(LOG_INFO, "tmpkey out of memory\n");
+		return -1;
+	}
+
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
+		return -1;
+	}
+
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
+		}
+	}
+
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do {
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (p - key);
+		if (keyid != keytag((u_char *)key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
+			return -1;
+		}
+		
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
+
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
+
+		if ((rrset = find_rr(rbt, DNS_TYPE_IPSECKEY)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no IPSECKEY records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no IPSECKEY records\n");
+			return -1;
+		}
+		
+		p = key;
+
+		pack16(p, htons(DNS_TYPE_IPSECKEY));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(rrset->ttl));
+		p += 4;
+			
+#if __FreeBSD__
+		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lu", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+#else
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+#endif
+
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
+
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+		if (canonsort == NULL) {
+			dolog(LOG_INFO, "canonsort out of memory\n");
+			return -1;
+		}
+		
+		csort = 0;
+		
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			q = tmpkey;
+			pack(q, rbt->zone, rbt->zonelen);
+			q += rbt->zonelen;
+			pack16(q, htons(DNS_TYPE_IPSECKEY));
+			q += 2;
+			pack16(q, htons(DNS_CLASS_IN));
+			q += 2;
+			pack32(q, htonl(rrset->ttl));
+			q += 4;
+
+			switch (((struct ipseckey *)rrp2->rdata)->gwtype) {
+			case 1:
+				ipseckeylen = 4;
+				break;
+			case 2:
+				ipseckeylen = 16;
+				break;
+			case 3:
+				ipseckeylen = ((struct ipseckey *)rrp2->rdata)->dnsnamelen;
+				break;
+			default:
+				ipseckeylen = 0;
+				break;
+			}	
+
+			pack16(q, htons(3 + ipseckeylen + ((struct ipseckey *)rrp2->rdata)->keylen));
+			q += 2;
+			pack8(q, ((struct ipseckey *)rrp2->rdata)->precedence);
+			q++;
+			pack8(q, ((struct ipseckey *)rrp2->rdata)->gwtype);
+			q++;
+			pack8(q, ((struct ipseckey *)rrp2->rdata)->alg);
+			q++;
+
+			if (ipseckeylen) {
+				pack(q, (char *)&((struct ipseckey *)rrp2->rdata)->gateway, ipseckeylen);
+				q += ipseckeylen;
+			}
+
+			pack(q, ((struct ipseckey *)rrp2->rdata)->key,
+					((struct ipseckey *)rrp2->rdata)->keylen);
+			q += ((struct ipseckey *)rrp2->rdata)->keylen;
+
+		        r = canonsort[csort] = calloc(1, 68000);
+			if (r == NULL) {
+				dolog(LOG_INFO, "c1 out of memory\n");
+				return -1;
+			}
+
+			clen = (q - tmpkey);
+			pack16(r, clen);
+			r += 2;
+			pack(r, tmpkey, clen);
+
+			csort++;
+		}
+		
+		r = canonical_sort(canonsort, csort, &rlen);
+		if (r == NULL) {
+			dolog(LOG_INFO, "canonical_sort failed\n");
+			return -1;
+		}
+
+		memcpy(p, r, rlen);
+		p += rlen;
+
+		free (r);
+		for (i = 0; i < csort; i++) {
+			free(canonsort[i]);
+		}
+		free(canonsort);
+
+		keylen = (p - key);	
+
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode((const u_char *)signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "IPSECKEY", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
+	
+	return 0;
+}
+
 
 /*
  * create a RRSIG for an A record
@@ -8992,6 +9258,9 @@ fixup_zonemd(ddDB *db, char *zonename, int expiry, int rollmethod)
 		if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {
 			zonemd_hash_a(&ctx, rrset, rbt);
 		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_IPSECKEY)) != NULL) {
+			zonemd_hash_ipseckey(&ctx, rrset, rbt);
+		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_EUI48)) != NULL) {
 			zonemd_hash_eui48(&ctx, rrset, rbt);
 		}
@@ -9402,6 +9671,8 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			strlcat(bitmap, "DS ", sizeof(bitmap));	
 		if (find_rr(rbt, DNS_TYPE_SSHFP) != NULL)	 /* 44 */
 			strlcat(bitmap, "SSHFP ", sizeof(bitmap));	
+		if (find_rr(rbt, DNS_TYPE_IPSECKEY) != NULL)
+			strlcat(bitmap, "IPSECKEY ", sizeof(bitmap));
 		if (find_rr(rbt, DNS_TYPE_ZONEMD) != NULL) 	  /* 63 */
 			strlcat(bitmap, "ZONEMD ", sizeof(bitmap));
 		if (find_rr(rbt, DNS_TYPE_SVCB) != NULL)
@@ -9868,7 +10139,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) != NULL) {
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
-			dolog(LOG_INFO, "no naptr in zone!\n");
+			dolog(LOG_INFO, "no sshfp in zone!\n");
 			return -1;
 		}
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
@@ -9878,6 +10149,25 @@ print_rbt(FILE *of, struct rbtree *rbt)
 				((struct sshfp *)rrp2->rdata)->algorithm,
 				((struct sshfp *)rrp2->rdata)->fptype,
 				bin2hex(((struct sshfp *)rrp2->rdata)->fingerprint, ((struct sshfp *)rrp2->rdata)->fplen));
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_IPSECKEY)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no ipseckey in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+                        len = mybase64_encode((const u_char *)((struct ipseckey *)rrp2->rdata)->key, ((struct ipseckey *)rrp2->rdata)->keylen, buf, sizeof(buf));
+                        buf[len] = '\0';
+
+			fprintf(of, "  %s,ipseckey,%d,%d,%d,%d,\"%s\",\"%s\"\n", 
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl,
+				((struct ipseckey *)rrp2->rdata)->precedence,
+				((struct ipseckey *)rrp2->rdata)->gwtype,
+				((struct ipseckey *)rrp2->rdata)->alg,
+				ipseckey_type((struct ipseckey *)rrp2->rdata),
+				buf);
 		}
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_A)) != NULL) {

@@ -257,6 +257,7 @@ int		fill_rp(ddDB *, char *, char *, int, char *, char *);
 int		fill_hinfo(ddDB *, char *, char *, int, char *, char *);
 int		fill_caa(ddDB *, char *, char *, int, uint8_t, char *, char *);
 int 		fill_zonemd(ddDB *, char *, char *, int, uint32_t, uint8_t, uint8_t, char *, int);
+int		fill_ipseckey(ddDB *, char *, char *, int, uint8_t, uint8_t, uint8_t, char *, char *);
 
 void		create_nsec_bitmap(char *, char *, int *);
 int             findeol(void);
@@ -893,6 +894,26 @@ zonestatement:
 			free ($3);
 			free ($7);
 			free ($9);
+		}
+		|
+		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING COMMA QUOTEDSTRING CRLF
+		{
+			if (strcasecmp($3, "ipseckey") == 0) { 
+				if (fill_ipseckey(mydb, $1, $3, $5, $7, $9, $11, $13, $15) < 0) {
+					dolog(LOG_ERR, "error in ipseckey\n");
+					return -1;
+				}
+
+			} else {
+				if (debug)
+					printf("another record I don't know about?");
+				return (-1);
+			}
+
+			free ($1);
+			free ($3);
+			free ($13);
+			free ($15);
 		}
 		| 
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA FLOAT COMMA STRING COMMA NUMBER COMMA NUMBER COMMA FLOAT COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER CRLF
@@ -2460,6 +2481,95 @@ check_rr(char *domainname, char *mytype, int itype, int *converted_namelen)
 	}
 
 	return (converted_name);
+}
+
+int
+fill_ipseckey(ddDB *db, char *name, char *type, int myttl, uint8_t precedence, uint8_t gwtype, uint8_t alg, char *gateway, char *key)
+{
+	struct rbtree *rbt;
+	struct ipseckey *ipseckey;
+	char *myname, *converted_name;
+	int len, converted_namelen;
+	int i;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_IPSECKEY, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	if ((ipseckey = calloc(1, sizeof(struct ipseckey))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+	
+	ipseckey->gwtype = gwtype;
+
+	switch (gwtype) {
+	case 1:
+		inet_pton(AF_INET, gateway, &ipseckey->gateway.ip4);
+		break;
+	case 2:
+		inet_pton(AF_INET6, gateway, &ipseckey->gateway.ip6);
+		break;
+			
+	case 3:
+		myname = dns_label(gateway, (int *)&len);	
+		if (myname == NULL) {
+			dolog(LOG_INFO, "illegal nameserver, skipping line %d\n", file->lineno);
+			return 0;
+		}
+
+		if (len > 0xff || len < 0) {
+			dolog(LOG_INFO, "illegal len value , line %d\n", file->lineno);
+			return -1;
+		}
+
+		ipseckey->dnsnamelen = len;
+		memcpy(&ipseckey->gateway.dnsname, myname, len);
+		free(myname);
+
+		break;
+
+	default:
+		dolog (LOG_ERR, "unknown IPSECKEY gateway type %d\n", gwtype);
+		return -1;
+		break;
+	}
+
+	ipseckey->precedence = precedence;
+	ipseckey->alg = alg;
+
+	if (alg != 0) {
+		int ret;
+
+		ret = mybase64_decode(key, (u_char *)ipseckey->key, sizeof(ipseckey->key));
+		if (ret < 0)  {
+			dolog(LOG_INFO, "ipseckey invalid key\n");
+			return (-1);
+		}
+
+		ipseckey->keylen = ret;
+	} else
+		ipseckey->keylen = 0;
+
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_IPSECKEY, ipseckey, myttl, 0);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+	
+	if (converted_name)
+		free (converted_name);
+
+	
+	return (0);
+
+
 }
 
 int

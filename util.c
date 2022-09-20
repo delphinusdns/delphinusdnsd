@@ -124,6 +124,7 @@ void zonemd_hash_naptr(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_caa(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_mx(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_kx(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_ipseckey(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_tlsa(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_loc(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_sshfp(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
@@ -144,6 +145,7 @@ char * param_tlv2human(char *, int, int);
 int param_human2tlv(char *, char *, int *);
 static int param_cmp(const void *, const void *);
 static char * param_expand(char *, int, int);
+char * ipseckey_type(struct ipseckey *);
 
 int bytes_received;
 
@@ -181,6 +183,7 @@ extern int raxfr_ns(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t
 extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_kx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_ipseckey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -237,6 +240,7 @@ struct typetable {
 	{ "SVCB", DNS_TYPE_SVCB },
 	{ "HTTPS", DNS_TYPE_HTTPS },
 	{ "KX", DNS_TYPE_KX },
+	{ "IPSECKEY", DNS_TYPE_IPSECKEY },
 	{ NULL, 0}
 };
 
@@ -255,6 +259,7 @@ static struct rrtab myrrtab[] =  {
  { "hinfo",	DNS_TYPE_HINFO,		DNS_TYPE_HINFO },
  { "hint",      DNS_TYPE_HINT,		DNS_TYPE_NS }, 
  { "https", 	DNS_TYPE_HTTPS,		DNS_TYPE_HTTPS },
+ { "ipseckey",	DNS_TYPE_IPSECKEY,	DNS_TYPE_IPSECKEY },
  { "kx",	DNS_TYPE_KX,		DNS_TYPE_KX },
  { "loc",	DNS_TYPE_LOC,		DNS_TYPE_LOC },
  { "mx",        DNS_TYPE_MX, 		DNS_TYPE_MX },
@@ -306,6 +311,7 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_SVCB, 0, raxfr_svcb },
 	{ DNS_TYPE_HTTPS, 0, raxfr_https },
 	{ DNS_TYPE_KX, 0, raxfr_kx },
+	{ DNS_TYPE_IPSECKEY, 0, raxfr_ipseckey },
 	{ 0, 0, NULL }
 };
 
@@ -862,6 +868,17 @@ check_qtype(struct rbtree *rbt, uint16_t type, int nxdomain, int *error)
 			break;
 		}
 
+		*error = -1;
+		return 0;
+	case DNS_TYPE_IPSECKEY:
+		if (find_rr(rbt, DNS_TYPE_IPSECKEY) != NULL) {
+			returnval = DNS_TYPE_IPSECKEY;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_IPSECKEY;
+			break;
+		}
+		
 		*error = -1;
 		return 0;
 	case DNS_TYPE_KX:
@@ -3047,6 +3064,7 @@ compress_label(u_char *buf, uint16_t offset, int labellen)
 		case DNS_TYPE_ZONEMD:
 		case DNS_TYPE_SVCB:
 		case DNS_TYPE_HTTPS:
+		case DNS_TYPE_IPSECKEY:
 			/* above are FALLTHROUGH */
 		default:
 			p += a->rdlength;
@@ -4428,6 +4446,109 @@ zonemd_hash_caa(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 	free(canonsort);
 	free(tmpkey);
 
+}
+
+void
+zonemd_hash_ipseckey(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+	int gwlen;
+
+	
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_IPSECKEY));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+		pack16(q, htons(2 + ((struct kx *)rrp2->rdata)->exchangelen));
+		q += 2;
+
+		pack8(q, ((struct ipseckey *)rrp2->rdata)->precedence);
+		q++;
+		pack8(q, ((struct ipseckey *)rrp2->rdata)->gwtype);
+		q++;
+		pack8(q, ((struct ipseckey *)rrp2->rdata)->alg);
+		q++;
+
+		switch (((struct ipseckey *)rrp2->rdata)->gwtype) {
+		case 1:
+			gwlen = 4;
+			break;
+		case 2:
+			gwlen = 16;
+			break;
+		case 3:
+			gwlen = ((struct ipseckey *)rrp2->rdata)->dnsnamelen;
+			break;
+		default:
+			gwlen = 0;
+			break;
+		}
+
+		if (gwlen) {
+			memcpy(q, (char *)&((struct ipseckey *)rrp2->rdata)->gateway, gwlen);
+			q += gwlen;
+		}
+
+		memcpy(q, ((struct ipseckey *)rrp2->rdata)->key, ((struct ipseckey *)rrp2->rdata)->keylen);
+		q += ((struct kx *)rrp2->rdata)->exchangelen;
+		
+		r = canonsort[csort] = malloc(68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+
+		clen = (q - tmpkey);
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+		
+		csort++;
+	}
+
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	delphinusdns_SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+	free(tmpkey);
 }
 
 
@@ -6452,6 +6573,32 @@ svcb_paramkey(char *input)
 		ret = atoi(p);
 	} else
 		ret = 65535;
+
+	return (ret);
+}
+
+char *
+ipseckey_type(struct ipseckey *ipseckey)
+{
+	static char ret[DNS_MAXNAME + 1];
+	char *convertname;
+
+	switch (ipseckey->gwtype) {
+	case 0:
+		ret[0] = '.'; ret[1] = '\0';
+		break;
+	case 1:
+		inet_ntop(AF_INET, &ipseckey->gateway.ip4, ret, sizeof(ret));
+		break;
+	case 2:
+		inet_ntop(AF_INET6, &ipseckey->gateway.ip6, ret, sizeof(ret));
+		break;
+	case 3:
+		convertname = convert_name((char *)&ipseckey->gateway.dnsname,
+					ipseckey->dnsnamelen);
+		strlcpy(ret, convertname, sizeof(ret));
+		break;
+	}
 
 	return (ret);
 }

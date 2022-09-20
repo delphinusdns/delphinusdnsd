@@ -134,6 +134,7 @@ extern int	reply_notify(struct sreply *, int *, ddDB *);
 extern int 	reply_soa(struct sreply *, int *, ddDB *);
 extern int 	reply_mx(struct sreply *, int *, ddDB *);
 extern int 	reply_kx(struct sreply *, int *, ddDB *);
+extern int 	reply_ipseckey(struct sreply *, int *, ddDB *);
 extern int 	reply_naptr(struct sreply *, int *, ddDB *);
 extern int 	reply_ns(struct sreply *, int *, ddDB *);
 extern int 	reply_ptr(struct sreply *, int *, ddDB *);
@@ -283,6 +284,8 @@ static struct reply_logic rlogic[] = {
 	{ DNS_TYPE_HTTPS, DNS_TYPE_HTTPS, BUILD_OTHER, reply_https },
 	{ DNS_TYPE_KX, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_KX, DNS_TYPE_KX, BUILD_OTHER, reply_kx },
+	{ DNS_TYPE_IPSECKEY, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_IPSECKEY, DNS_TYPE_IPSECKEY, BUILD_OTHER, reply_ipseckey },
 	{ 0, 0, 0, NULL }
 };
 
