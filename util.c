@@ -1865,6 +1865,8 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 	u_char *save = NULL;
 	uint16_t offset;
 
+	*elen = 0;
+
 	/* expand name */
 	while ((u_char)*p && p <= end) {
 		/* test for compression */
