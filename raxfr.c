@@ -860,7 +860,7 @@ raxfr_ipseckey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *myso
 	struct ipseckey ipk;
 	char *b;
 	u_char *q = p;
-	int len, remainlen, elen;
+	int len, remainlen, elen = 0;
 	u_char *save;
 	u_char expand[256];
 	int max = sizeof(expand);
