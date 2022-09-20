@@ -2786,10 +2786,10 @@ reply_ipseckey(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		outlen += 3;
 
-		if (! ((struct ipseckey *)rrp->rdata)->gwtype)
+		if (((struct ipseckey *)rrp->rdata)->gwtype) {
 			memcpy(&reply[outlen], (char *)&((struct ipseckey *)rrp->rdata)->gateway, gwlen);
-		
-		outlen += gwlen;
+			outlen += gwlen;
+		}
 		
 		memcpy(&reply[outlen], ((struct ipseckey*)rrp->rdata)->key,
 			((struct ipseckey *)rrp->rdata)->keylen);

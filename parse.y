@@ -2536,8 +2536,7 @@ fill_ipseckey(ddDB *db, char *name, char *type, int myttl, uint8_t precedence, u
 		break;
 
 	default:
-		dolog (LOG_ERR, "unknown IPSECKEY gateway type %d\n", gwtype);
-		return -1;
+		/* a zero set gateway */
 		break;
 	}
 
