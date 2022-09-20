@@ -8127,14 +8127,14 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			if ((offset + 3 + tmplen + ((struct ipseckey *)rrp->rdata)->keylen) > rlen)
 				goto truncate;
 
-			pack8(&reply[offset], htons(((struct ipseckey *)rrp->rdata)->precedence));
+			pack8(&reply[offset], ((struct ipseckey *)rrp->rdata)->precedence);
 			offset++;
 			
-			pack8(&reply[offset], htons(((struct ipseckey *)rrp->rdata)->gwtype));
+			pack8(&reply[offset], ((struct ipseckey *)rrp->rdata)->gwtype);
 
 			offset++;
 
-			pack8(&reply[offset], htons(((struct ipseckey *)rrp->rdata)->alg));
+			pack8(&reply[offset], ((struct ipseckey *)rrp->rdata)->alg);
 			offset++;
 
 			if (tmplen) {
