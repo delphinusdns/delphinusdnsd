@@ -9701,7 +9701,23 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		if (find_rr(rbt, DNS_TYPE_CAA) != NULL)
 			strlcat(bitmap, "CAA ", sizeof(bitmap));	
 
-		if (find_rr(rbt, DNS_TYPE_RRSIG) != NULL) 
+		if (find_rr(rbt, DNS_TYPE_NS) != NULL) {
+			char *zoneapex;
+			int apexlen;
+
+			zoneapex = dns_label(zone, &apexlen);
+			if (zoneapex == NULL) {	
+				dolog(LOG_INFO, "dns_label() in %s\n", __func__);
+				return -1;
+			}
+
+			if (rbt->zonelen == apexlen && 
+				memcasecmp((u_char*)rbt->zone, (u_char*)zoneapex, rbt->zonelen) == 0) {
+				strlcat(bitmap, "RRSIG ", sizeof(bitmap));
+			}
+	
+			free(zoneapex);
+		} else 
 			strlcat(bitmap, "RRSIG ", sizeof(bitmap));	
 
 		if (find_rr(rbt, DNS_TYPE_DNSKEY) != NULL)
