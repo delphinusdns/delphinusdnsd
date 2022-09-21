@@ -170,6 +170,7 @@ void		update_soa_serial(ddDB *, char *, time_t);
 void		debug_bindump(const char *, int);
 int 		dump_db(ddDB *, FILE *, char *);
 int		notglue(ddDB *, struct rbtree *, char *);
+static int 	rbt_isapex(struct rbtree *, char *);
 
 
 extern int debug;
@@ -1886,24 +1887,30 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
-			char *zoneapex;
-			int apexlen;
+			int isapex;
 
-			zoneapex = dns_label(zonename, &apexlen);
-			if (zoneapex == NULL) {	
-				dolog(LOG_INFO, "dns_label() in %s\n", __func__);
-				return -1;
-			}
-
-			if (rbt->zonelen == apexlen && 
-				memcasecmp((u_char*)rbt->zone, (u_char*)zoneapex, rbt->zonelen) == 0 &&
-				sign_ns(db, zonename, expiry, rbt, rollmethod) < 0) {
+			if ((isapex = rbt_isapex(rbt, zonename)) < 0) {
 				fprintf(stderr, "sign_ns error\n");
-				free(zoneapex);
 				return -1;
 			}
-		
-			free(zoneapex);
+
+			/*
+			 * check if we're a delegation point.
+			 * RFC 4035 section 2.2 says:
+			 * The NS RRset that appears at the zone apex 
+			 * name MUST be signed, but the NS RRsets that 
+			 * appear at delegation points (that is, the NS
+   			 * RRsets in the parent zone that delegate the 
+			 * name to the child zone's name servers) MUST NOT 
+			 * be signed.  Glue address RRsets associated with 
+			 * delegations MUST NOT be signed.
+			 */
+
+			if (isapex && sign_ns(db, zonename, expiry, rbt, 
+				rollmethod) < 0) {
+					fprintf(stderr, "sign_ns error\n");
+					return -1;
+			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
 			if (sign_soa(db, zonename, expiry, rbt, rollmethod) < 0) {
@@ -9702,21 +9709,16 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			strlcat(bitmap, "CAA ", sizeof(bitmap));	
 
 		if (find_rr(rbt, DNS_TYPE_NS) != NULL) {
-			char *zoneapex;
-			int apexlen;
+			int isapex;
 
-			zoneapex = dns_label(zone, &apexlen);
-			if (zoneapex == NULL) {	
-				dolog(LOG_INFO, "dns_label() in %s\n", __func__);
+			if ((isapex = rbt_isapex(rbt, zone)) < 0) {
+				dolog(LOG_INFO, "rbt_isapex failed\n");
 				return -1;
 			}
 
-			if (rbt->zonelen == apexlen && 
-				memcasecmp((u_char*)rbt->zone, (u_char*)zoneapex, rbt->zonelen) == 0) {
+			if (isapex) {
 				strlcat(bitmap, "RRSIG ", sizeof(bitmap));
 			}
-	
-			free(zoneapex);
 		} else 
 			strlcat(bitmap, "RRSIG ", sizeof(bitmap));	
 
@@ -10708,4 +10710,27 @@ update_soa_serial(ddDB *db, char *zonename, time_t serial)
 
 		((struct soa *)rrp->rdata)->serial = serial;
 	}
+}
+
+static int
+rbt_isapex(struct rbtree *rbt, char *zonename)
+{
+	char *zoneapex;
+	int apexlen, ret = 0;
+
+	zoneapex = dns_label(zonename, &apexlen);
+	if (zoneapex == NULL) {	
+		dolog(LOG_INFO, "dns_label() in %s\n", __func__);
+		return -1;
+	}
+
+	if (rbt->zonelen == apexlen && 
+		memcasecmp((u_char*)rbt->zone, (u_char*)zoneapex, 
+			rbt->zonelen) == 0) {
+				ret = 1;
+	}
+
+	free(zoneapex);
+
+	return (ret);
 }
