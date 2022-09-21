@@ -1886,10 +1886,24 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 			}
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NS)) != NULL) {
-			if (sign_ns(db, zonename, expiry, rbt, rollmethod) < 0) {
-				fprintf(stderr, "sign_ns error\n");
+			char *zoneapex;
+			int apexlen;
+
+			zoneapex = dns_label(zonename, &apexlen);
+			if (zoneapex == NULL) {	
+				dolog(LOG_INFO, "dns_label() in %s\n", __func__);
 				return -1;
 			}
+
+			if (rbt->zonelen == apexlen && 
+				memcasecmp((u_char*)rbt->zone, (u_char*)zoneapex, rbt->zonelen) == 0 &&
+				sign_ns(db, zonename, expiry, rbt, rollmethod) < 0) {
+				fprintf(stderr, "sign_ns error\n");
+				free(zoneapex);
+				return -1;
+			}
+		
+			free(zoneapex);
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL) {
 			if (sign_soa(db, zonename, expiry, rbt, rollmethod) < 0) {
@@ -9687,9 +9701,8 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		if (find_rr(rbt, DNS_TYPE_CAA) != NULL)
 			strlcat(bitmap, "CAA ", sizeof(bitmap));	
 
-
-		/* they all have RRSIG */
-		strlcat(bitmap, "RRSIG ", sizeof(bitmap));	
+		if (find_rr(rbt, DNS_TYPE_RRSIG) != NULL) 
+			strlcat(bitmap, "RRSIG ", sizeof(bitmap));	
 
 		if (find_rr(rbt, DNS_TYPE_DNSKEY) != NULL)
 			strlcat(bitmap, "DNSKEY ", sizeof(bitmap));	
