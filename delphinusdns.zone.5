@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 19, 2021
+.Dd September 21, 2022
 .Dt DELPHINUSDNS.ZONE 5
 .Os 
 .Sh NAME
@@ -112,6 +112,21 @@ HINFO Resource Record
 	delphinusdns.org,hinfo,86400,"arm64","OpenBSD"
 .Ed
 .Pp
+HTTPS Resource Record
+.Bd -literal
+	delphinusdns.org,https,86400,0,example.delphinusdns.org.,""
+.Ed
+.Pp
+IPSECKEY Resource Record
+.Bd -literal
+	delphinusdns.org,ipseckey,86400,10,0,2,".","AQNRU3mG7TVTO2BkR47usntb102uFJtugbo6BSGvgqt4AQ=="
+.Ed
+.Pp
+KX Resource Record
+.Bd -literal
+	delphinusdns.org,kx,86400,1,kx1.delphinusdns.org
+.Ed
+.Pp
 LOC Resource Record (units in centimeters)
 .Bd -literal
 	delphinusdns.org,loc,86400,50,04,3.600,N,10,15,4.600,E,10035000,100,0,0
@@ -170,6 +185,11 @@ SRV Resource Record
 SSHFP Resource Record (usually created with dddctl sshfp)
 .Bd -literal
 	delphinusdns.org,sshfp,86400,4,2,"1005202de476ab11946c0c10e3faf1b32f08b004f49a7945ef4451e5af07acc5"
+.Ed
+.Pp
+SVCB Resource Record
+.Bd -literal
+	figure8.delphinusdns.org,svcb,86400,1,delphinusdns.org.,"ipv6hint=2001:db8:122:344::192.0.2.33"
 .Ed
 .Pp
 TLSA Resource Record
