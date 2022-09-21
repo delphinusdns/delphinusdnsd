@@ -19,6 +19,9 @@ Changes in RELEASE_1_7 from RELEASE_1_6
 - added HTTPS and SVCB support (still in draft, standard hopefully in november 2022)
 - added KX RR support (RFC 2230)
 - added IPSECKEY RR support (RFC 4025)
+- fixed delegation points according to RFC 4035 section 2.2 regarding NS RR's
+  This was a long standing bug but noone noticed since we don't delegate much
+  with delphinusdnsd.
 
 [2021] Changes in RELEASE_1_6 from RELEASE_1_5
 
