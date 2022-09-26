@@ -121,6 +121,14 @@ int vslen = 0;
 char *versionstring = NULL;
 uint64_t expiredon, signedon;
 
+int tls = 0;
+uint16_t tls_port = 853;
+char *tls_certfile = NULL;
+char *tls_keyfile = NULL;
+char *tls_protocols = NULL;
+char *tls_ciphers = NULL;
+
+
 /* externs */
 
 extern int	dig(int argc, char *argv[]);

@@ -28,6 +28,8 @@
 #include <syslog.h>
 #include <time.h>
 
+#include <tls.h>
+
 #ifdef __linux__
 #include <grp.h>
 #define __USE_BSD 1
@@ -10143,6 +10145,7 @@ reply_sendpacket(char *reply, uint16_t len, struct sreply *sreply, int *sretlen)
 	struct question *q = sreply->q;
 	struct sockaddr *sa = sreply->sa;
 	socklen_t salen = sreply->salen;
+	struct tls *ctx = sreply->ctx;
 
 	int retlen = -1;
 	int istcp = sreply->istcp;
@@ -10162,6 +10165,7 @@ reply_sendpacket(char *reply, uint16_t len, struct sreply *sreply, int *sretlen)
 		}
 		free(tmpbuf);
 	} else if (istcp == 2) {
+		char *pt;
 		tmpbuf = malloc(len + 2);
 		if (tmpbuf == 0) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
@@ -10169,10 +10173,23 @@ reply_sendpacket(char *reply, uint16_t len, struct sreply *sreply, int *sretlen)
 		}
 		pack16(tmpbuf, htons(len));
 		memcpy(&tmpbuf[2], reply, len);
+	
+		len += 2;
+		pt = tmpbuf;
 
-		if ((retlen = send(so, tmpbuf, len + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
+		while (len > 0) {
+			ssize_t ret;
+
+			ret = tls_write(ctx, pt, len);
+			if (ret == TLS_WANT_POLLIN || ret == TLS_WANT_POLLOUT)
+				continue;
+			if (ret == -1)
+				dolog(LOG_INFO, "tls_write: %s\n", tls_error(ctx));
+			pt += (int)ret;
+			len -= (int)ret;
+			retlen += (int)ret;
 		}
+
 		free(tmpbuf);
 	} else {
 		if (q && q->rawsocket) {

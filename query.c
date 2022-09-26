@@ -30,6 +30,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <tls.h>
+
 #ifdef __linux__
 #include <grp.h>
 #define __USE_BSD 1
@@ -70,8 +72,9 @@ uint16_t port = 53;
 int	dig(int argc, char *argv[]);
 int	command_socket(char *);
 int 	connect_server(char *, int, uint32_t);
-int 	lookup_name(FILE *, int, char *, uint16_t, struct soa *, uint32_t, char *, uint16_t, int *, int*, uint16_t);
+int 	lookup_name(FILE *, int, char *, uint16_t, struct soa *, uint32_t, char *, uint16_t, int *, int*, uint16_t, struct tls *);
 int	notglue(ddDB *, struct rbtree *, char *);
+static struct tls * configure_client(void);
 
 
 
@@ -209,6 +212,7 @@ static struct raxfr_logic supported[] = {
 
 DDD_BIGNUM *provided_cookie = NULL;
 int nocookie = 0;
+extern int tls;
 
 /*
  * DDDCTL QUERY 
@@ -236,8 +240,9 @@ dig(int argc, char *argv[])
 	int additionalcount = 0;
 	int oldbehaviour = 0;
 	struct soa_constraints constraints = { 0, 0, 0 };
+	struct tls *ctx = NULL;
 
-	while ((ch = getopt(argc, argv, "C:c:@:DIONP:TZp:Q:y:")) != -1) {
+	while ((ch = getopt(argc, argv, "C:c:@:DIONP:tTZp:Q:y:")) != -1) {
 		switch (ch) {
 		case 'C':
 			provided_cookie = delphinusdns_BN_new();
@@ -272,6 +277,11 @@ dig(int argc, char *argv[])
 			break;
 		case 'P':
 			port = atoi(optarg);
+			break;
+		case 't':
+			format |= TCP_FORMAT;
+			port = 853;
+			tls = 1;
 			break;
 		case 'T':
 			format |= TCP_FORMAT;
@@ -365,9 +375,25 @@ dig(int argc, char *argv[])
 	gettimeofday(&tv0, NULL);	
 	current_time = time(NULL);
 
-	so = connect_server(nameserver, port, format);
-	if (so < 0) {
-		exit(1);
+	if (tls) {
+		ctx = configure_client();	
+		if (ctx == NULL) {
+			perror("TLS");
+			exit(1);
+		}
+
+		if (tls_connect(ctx, nameserver, "853") < 0) {
+			exit(1);
+		}
+		if (tls_handshake(ctx) == -1) {
+			fprintf(stderr, "handshake failed: %s\n", tls_error(ctx));
+			exit(1);
+		}
+	} else {
+		so = connect_server(nameserver, port, format);
+		if (so < 0) {
+			exit(1);
+		}
 	}
 
 	segment = 0;
@@ -386,13 +412,18 @@ dig(int argc, char *argv[])
 
 				
 	} else {
-		if (lookup_name(f, so, domainname, type, &mysoa, format, nameserver, port, &answers, &additionalcount, class) < 0) {
+		if (lookup_name(f, so, domainname, type, &mysoa, format, nameserver, port, &answers, &additionalcount, class, ctx) < 0) {
 			/* XXX maybe a packet dump here? */
 			exit(1);
 		}
 	}
 
-	close(so);
+	if (tls) {
+		tls_close(ctx);
+	} else {
+		close(so);
+	}
+
 	gettimeofday(&tv, NULL);	
 
 	ms = 0;
@@ -463,13 +494,16 @@ connect_server(char *nameserver, int port, uint32_t format)
 		return -1;
 	}
 
+	if (tls) {
+	}
 
 	return (so);	
 }
 
 int
-lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *mysoa, uint32_t format, char *nameserver, uint16_t port, int *answers, int *additionalcount, uint16_t qclass)
+lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *mysoa, uint32_t format, char *nameserver, uint16_t port, int *answers, int *additionalcount, uint16_t qclass, struct tls *ctx)
 {
+	ssize_t slen = 0;
 	int len, i, tmp32;
 	int numansw, numaddi, numauth;
 	int printansw = 1, printauth = 1, printaddi = 1;
@@ -477,6 +511,7 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 	int tmplen;
 	uint16_t rdlen;
 	char query[4096];
+	char *pq = NULL;
 	char *reply;
 	struct raxfr_logic *sr;
 	struct question *q;
@@ -587,8 +622,25 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 		pack16(&query[0], tcpsize);
 	}
 
-	if (send(so, query, totallen, 0) < 0) {
-		return -1;
+	if (tls) {
+		pq = query;
+		while (totallen > 0) {
+                   ssize_t ret;
+
+                   ret = tls_write(ctx, pq, totallen);
+                   if (ret == TLS_WANT_POLLIN || ret == TLS_WANT_POLLOUT)
+                           continue;
+                   if (ret == -1)
+                           fprintf(stderr, "tls_write: %s", tls_error(ctx));
+
+                   pq += (int)ret;
+                   totallen -= (int)ret;
+           	}
+
+	} else {
+		if (send(so, query, totallen, 0) < 0) {
+			return -1;
+		}
 	}
 
 	printf(";; QUESTION SECTION:\n");
@@ -602,18 +654,71 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 		return -1;
 	}
 	
-	if (format & TCP_FORMAT) {
-		if ((len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL)) < 0) {
-			perror("recv");
-			return -1;
-		}
+	if (tls || (format & TCP_FORMAT)) {
+		if (tls) {
+			char *pb = reply;
+			size_t expect = 2;
 
-		plen = unpack16(reply);
-		tcplen = ntohs(plen);
+			while (expect > 0) {
+				ssize_t rret;
 
-		if ((len = recv(so, reply, tcplen + 2, MSG_WAITALL)) < 0) {
-			perror("recv");
-			return -1;
+				rret = tls_read(ctx, pb, expect);
+
+				if (rret == TLS_WANT_POLLIN || rret == TLS_WANT_POLLOUT)
+					continue;
+
+				if (rret == -1) {
+					fprintf(stderr, "tls_read(): %s\n", tls_error(ctx));
+					exit(1);
+				}
+
+				expect -= rret;
+				pb += rret;
+			}	
+
+			len = 2;
+
+			plen = unpack16(reply);
+			tcplen = ntohs(plen);
+
+			expect = tcplen;
+			pb = &reply[2];
+
+			while (expect > 0) {
+				ssize_t rret;
+
+				rret = tls_read(ctx, pb, expect);
+
+				if (rret == TLS_WANT_POLLIN || rret == TLS_WANT_POLLOUT)
+					continue;
+
+				if (rret == -1) {
+					fprintf(stderr, "tls_read(): %s\n", tls_error(ctx));
+					exit(1);
+				}
+
+				expect -= rret;
+				pb += rret;
+				slen += rret;
+			}	
+
+			plen = unpack16(reply);
+			tcplen = ntohs(plen);
+
+			len = slen;
+		} else {
+			if ((len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL)) < 0) {
+				perror("recv");
+				return -1;
+			}
+
+			plen = unpack16(reply);
+			tcplen = ntohs(plen);
+
+			if ((len = recv(so, reply, tcplen + 2, MSG_WAITALL)) < 0) {
+				perror("recv");
+				return -1;
+			}
 		}
 	} else {
 		if ((len = recv(so, reply, replysize, 0)) < 0) {
@@ -621,7 +726,8 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 		}
 	}
 
-	if (format & TCP_FORMAT)
+
+	if (tls || (format & TCP_FORMAT))
 		rwh = (struct whole_header *)&reply[2];
 	else
 		rwh = (struct whole_header *)&reply[0];
@@ -652,7 +758,7 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 			exit(1);
 		}
 
-		ret = lookup_name(f, so, zonename, myrrtype, mysoa, format, nameserver, port, answers, additionalcount, qclass);
+		ret = lookup_name(f, so, zonename, myrrtype, mysoa, format, nameserver, port, answers, additionalcount, qclass, ctx);
 		close(so);
 		return (ret);
 	}
@@ -800,4 +906,78 @@ skip:
 	} /* for () */
 
 	return 0;
+}
+
+static struct tls *
+configure_client(void)
+{
+	struct tls_config *tls_config;
+	struct tls *ctx;
+	uint32_t protocols = (TLS_PROTOCOL_TLSv1_2 | TLS_PROTOCOLS_DEFAULT);
+	char  *tls_protocols = NULL;
+	char *tls_ciphers = NULL;
+	char *tls_ca_mem = NULL;
+	size_t tls_ca_size;
+
+	tls_config = tls_config_new();
+	if (tls_config == NULL) {
+		exit(1);
+	}
+
+	if ((ctx = tls_client()) == NULL) {
+		exit(1);
+	}
+
+	if (tls_protocols) {
+		if (tls_config_parse_protocols(&protocols, 
+				tls_protocols) < 0) {
+			
+			exit(1);
+		}
+	}
+		
+	if (tls_config_set_protocols(tls_config, TLS_PROTOCOLS_ALL) < 0) {
+		exit(1);
+	}
+
+
+	if (tls_config_set_ciphers(tls_config, tls_ciphers) < 0) {
+		exit(1);
+	}
+
+#if 0
+	if (! tls_certfile || tls_config_set_cert_file(tls_config,
+		tls_certfile) < 0) {
+		exit(1);
+	}
+	
+	if (! tls_keyfile || tls_config_set_key_file(tls_config,
+		tls_keyfile) < 0) {
+		exit(1);
+	}
+#endif
+
+	/* thanks rpki-client.c */
+
+	tls_ca_mem = tls_load_file(tls_default_ca_cert_file(), &tls_ca_size,
+			NULL);
+	
+	if (tls_ca_mem == NULL) {
+		fprintf(stderr, "tls_load_file: %s", tls_default_ca_cert_file());
+		exit(1);
+	}
+
+	tls_config_set_ca_mem(tls_config, tls_ca_mem, tls_ca_size);
+
+
+	//tls_config_verify_client_optional(tls_config)I;
+
+	
+	if (tls_configure(ctx, tls_config) < 0) {
+		exit(1);
+	}
+
+	//tls_config_clear_keys(tls_config);
+
+	return (ctx);
 }

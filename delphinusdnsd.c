@@ -46,6 +46,8 @@
 #include <signal.h>
 #include <time.h>
 
+#include <tls.h>
+
 #ifdef __linux__
 #include <linux/bpf.h>
 #include <linux/filter.h>
@@ -313,6 +315,14 @@ uint8_t vslen = DD_VERSION_LEN;
 pid_t *ptr = 0;
 long glob_time_offset = 0;
 
+int tls = 0;
+uint16_t tls_port = 853;
+char *tls_certfile = NULL;
+char *tls_keyfile = NULL;
+char *tls_protocols = NULL;
+char *tls_ciphers = NULL;
+
+
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
  *
@@ -325,6 +335,7 @@ main(int argc, char *argv[], char *environ[])
 	static int tcp[DEFAULT_SOCKET];
 	static int afd[DEFAULT_SOCKET];
 	static int uafd[DEFAULT_SOCKET];
+	static int tlss[DEFAULT_SOCKET];
 	int n;
 
 	int ch, i, j;
@@ -621,6 +632,76 @@ main(int argc, char *argv[], char *environ[])
 		exit(1);
 	}
 
+	if (tls) {
+		struct tls_config *tls_config;
+		uint32_t protocols = (TLS_PROTOCOL_TLSv1_2 | TLS_PROTOCOLS_DEFAULT);
+		tls_init();
+
+		tls_config = tls_config_new();
+		if (tls_config == NULL) {
+			dolog(LOG_ERR, "tls_config_new()\n");
+			ddd_shutdown();
+			exit(1);
+		}
+
+		if ((cfg->ctx = tls_server()) == NULL) {
+			dolog(LOG_ERR, "tls_server()\n");
+			ddd_shutdown();
+			exit(1);
+		}
+
+		if (tls_protocols) {
+			if (tls_config_parse_protocols(&protocols, 
+					tls_protocols) < 0) {
+				
+				dolog(LOG_ERR, "tls_config_parse_protocols()\n");
+				ddd_shutdown();
+				exit(1);
+			}
+		}
+			
+		if (tls_config_set_protocols(tls_config, protocols) < 0) {
+			dolog(LOG_ERR, "tls_config_set_protocols()\n");
+			ddd_shutdown();
+			exit(1);
+		}
+	
+
+		if (tls_config_set_ciphers(tls_config, tls_ciphers) < 0) {
+			dolog(LOG_ERR, "tls_config_set_ciphers()\n");
+			ddd_shutdown();
+			exit(1);
+		}
+	
+		if (! tls_certfile || tls_config_set_cert_file(tls_config,
+			tls_certfile) < 0) {
+			dolog(LOG_ERR, "tls_config_set_cert_file()\n");
+			ddd_shutdown();
+			exit(1);
+		}
+		
+		if (! tls_keyfile || tls_config_set_key_file(tls_config,
+			tls_keyfile) < 0) {
+			dolog(LOG_ERR, "tls_config_set_key_file()\n");
+			ddd_shutdown();
+			exit(1);
+		}
+
+		tls_config_verify_client_optional(tls_config);
+
+		
+		if (tls_configure(cfg->ctx, tls_config) < 0) {
+			dolog(LOG_ERR, "tls_configure: %s\n", tls_error(cfg->ctx));
+			ddd_shutdown();
+			exit(1);
+		}
+
+		tls_config_clear_keys(tls_config);
+
+		freezero(tls_certfile, strlen(tls_certfile));
+		freezero(tls_keyfile, strlen(tls_keyfile));
+	}
+
 #ifdef __OpenBSD__
 	if (setrtable(rdomain) < 0) {
 		dolog(LOG_INFO, "setrtable: %s\n", strerror(errno));
@@ -742,6 +823,54 @@ main(int argc, char *argv[], char *environ[])
 				exit(1);
 			}
 
+			/* tls below */
+			if (tls) {
+				hints.ai_socktype = SOCK_STREAM;
+				hints.ai_protocol = IPPROTO_TCP;
+				hints.ai_flags = AI_NUMERICHOST;
+
+				snprintf(buf, sizeof(buf) - 1, "%u", tls_port);
+
+				if ((gai_error = getaddrinfo(bind_list[i], buf, &hints, &res0)) != 0) {
+					dolog(LOG_INFO, "getaddrinfo: %s\n", gai_strerror(gai_error));
+					ddd_shutdown();
+					exit (1);
+				}
+
+				res = res0;
+
+				if ((tlss[i] = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0) {
+					dolog(LOG_INFO, "tls socket: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				}
+				if (setsockopt(tlss[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
+					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				} 
+#ifdef __FreeBSD__
+				if (cap_enter() < 0) {
+					dolog(LOG_ERR, "cap_enter: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				}
+
+				cap_rights_init(&rights, CAP_BIND, CAP_LISTEN, CAP_ACCEPT, CAP_READ, CAP_WRITE, CAP_EVENT, CAP_SETSOCKOPT, CAP_CONNECT, CAP_FCNTL, CAP_GETPEERNAME);
+				if (cap_rights_limit(tlss[i], &rights) < 0) {
+					dolog(LOG_ERR, "cap_rights_limit: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				}
+#endif
+				if (bind(tlss[i], res->ai_addr, res->ai_addrlen) < 0) {
+					dolog(LOG_INFO, "tls bind: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				}
+
+			}
+
 			if (axfrport && axfrport != port) {
 				populate_zone(db);
 				/* axfr port below */
@@ -760,7 +889,7 @@ main(int argc, char *argv[], char *environ[])
 				res = res0;
 
 				if ((afd[i] = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) < 0) {
-					dolog(LOG_INFO, "tcp socket: %s\n", strerror(errno));
+					dolog(LOG_INFO, "axfr socket: %s\n", strerror(errno));
 					ddd_shutdown();
 					exit(1);
 				}
@@ -779,7 +908,7 @@ main(int argc, char *argv[], char *environ[])
 					exit(1);
 				} 
 				if (bind(afd[i], res->ai_addr, res->ai_addrlen) < 0) {
-					dolog(LOG_INFO, "tcp bind: %s\n", strerror(errno));
+					dolog(LOG_INFO, "axfr bind: %s\n", strerror(errno));
 					ddd_shutdown();
 					exit(1);
 				}
@@ -915,6 +1044,46 @@ main(int argc, char *argv[], char *environ[])
 				exit(1);
 			}		
 
+			if (tls) {
+				if (pifap->ifa_addr->sa_family == AF_INET) {
+					sin = (struct sockaddr_in *)pifap->ifa_addr;
+					sin->sin_port = htons(tls_port);
+				} else if (pifap->ifa_addr->sa_family == AF_INET6) {
+					sin6 = (struct sockaddr_in6 *)pifap->ifa_addr;
+					sin6->sin6_port = htons(tls_port);
+				} else {
+					dolog(LOG_DEBUG, "unknown address family %d\n", pifap->ifa_addr->sa_family);
+					ddd_shutdown();
+					exit(1);
+				}
+
+				if ((tlss[i] = socket(pifap->ifa_addr->sa_family, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+					dolog(LOG_INFO, "tls socket: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				}
+#ifdef __FreeBSD__
+					cap_rights_init(&rights, CAP_BIND, CAP_LISTEN, CAP_ACCEPT, CAP_READ, CAP_WRITE, CAP_EVENT, CAP_SETSOCKOPT, CAP_CONNECT, CAP_FCNTL, CAP_GETPEERNAME);
+
+					if (cap_rights_limit(tlss[i], &rights) < 0) {
+						dolog(LOG_ERR, "cap_rights_limit: %s\n", strerror(errno));
+						ddd_shutdown();
+						exit(1);
+					}
+#endif
+				if (setsockopt(tlss[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
+					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				} 
+				
+				if (bind(tlss[i], (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
+					dolog(LOG_INFO, "tcp bind: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				}		
+
+			}
 
 			/* axfr socket */
 			if (axfrport && axfrport != port) {
@@ -1075,6 +1244,8 @@ main(int argc, char *argv[], char *environ[])
 			for (j = 0; j < i; j++) {
 				close(tcp[j]);
 				close(udp[j]);
+				if (tls)
+					close(tlss[j]);
 				if (axfrport && axfrport != port)
 					close(uafd[j]);
 			
@@ -1087,7 +1258,7 @@ main(int argc, char *argv[], char *environ[])
 			/* NOTREACHED */
 			exit(1);
 		default:
-			/* close afd descriptors, they aren't needed here */
+			/* close axfr descriptors, they aren't needed here */
 			for (j = 0; j < i; j++) {
 				if (axfrport && axfrport != port)
 					close(afd[j]);
@@ -1136,6 +1307,9 @@ main(int argc, char *argv[], char *environ[])
 			for (j = 0; j < i; j++) {
 				close(tcp[j]);
 				close(udp[j]);
+
+				if (tls)
+					close(tlss[j]);
 
 				if (axfrport && axfrport != port)
 					close(uafd[j]);
@@ -1239,6 +1413,10 @@ main(int argc, char *argv[], char *environ[])
 			for (j = 0; j < i; j++) {
 				close(tcp[j]);
 				close(udp[j]);
+
+				if (tls)
+					close(tlss[j]);
+
 				if (axfrport && axfrport != port)
 					close(uafd[j]);
 
@@ -1330,6 +1508,9 @@ main(int argc, char *argv[], char *environ[])
 				cfg->udp[i] = udp[i];
 				cfg->tcp[i] = tcp[i];
 
+				if (tls)
+					cfg->tls[i] = tlss[i];
+
 				if (axfrport && axfrport != port)
 					cfg->axfr[i] = uafd[i];
 
@@ -1353,6 +1534,9 @@ main(int argc, char *argv[], char *environ[])
 	for (i = 0; i < cfg->sockcount; i++) {
 		cfg->udp[i] = udp[i];
 		cfg->tcp[i] = tcp[i];
+
+		if (tls)
+			cfg->tls[i] = tlss[i];
 
 		if (axfrport && axfrport != port)
 			cfg->axfr[i] = uafd[i];

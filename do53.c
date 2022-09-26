@@ -126,6 +126,7 @@ extern void 		pack32(char *, uint32_t);
 extern void 		pack8(char *, uint8_t);
 extern void 		parseloop(struct cfg *, struct imsgbuf *);
 extern void 		tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
+extern void		tlsloop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 extern void 		unpack(char *, char *, int);
 
 int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, char *, uint16_t *, uint16_t *, uint16_t *);
@@ -183,6 +184,7 @@ extern char *interface_list[255];
 extern char *identstring;
 extern pid_t *ptr;
 extern long glob_time_offset;
+extern int tls;
 
 
 /*
@@ -252,7 +254,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	struct msghdr msgh;
 	struct cmsghdr *cmsg = NULL;
 	struct iovec iov;
-	struct imsgbuf *tcp_ibuf, *udp_ibuf, parse_ibuf;
+	struct imsgbuf *tls_ibuf, *tcp_ibuf, *udp_ibuf, parse_ibuf;
 	struct imsgbuf *pibuf;
 
 	struct sforward *sforward;
@@ -313,6 +315,46 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				close(cfg->tcp[i]);
 		}
 		break;
+	}
+
+	if (tls) {
+		pid = fork();
+		switch (pid) {
+		case -1:
+			dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
+			ddd_shutdown();
+			exit(1);
+		case 0:
+			for (i = 0; i < cfg->sockcount; i++)  {
+					close(cfg->udp[i]);
+					if (axfrport && axfrport != port)
+						close(cfg->axfr[i]);
+			}
+			tls_ibuf = register_cortex(ibuf, MY_IMSG_TLS);
+			if (tls_ibuf == NULL) {
+				ddd_shutdown();
+				exit(1);
+			}
+			/* shptr has no business in a tcp parse process */
+			if (forward) {
+#if __OpenBSD__
+				minherit(cfg->shm[SM_FORWARD].shptr, 	
+					cfg->shm[SM_FORWARD].shptrsize,
+					MAP_INHERIT_NONE);
+#endif
+			}
+
+			setproctitle("TLS engine %d [%s]", cfg->pid, 
+					(identstring != NULL ? identstring : ""));
+			tlsloop(cfg, tls_ibuf, ibuf);
+			/* NOTREACHED */
+			exit(1);
+		default:
+			for (i = 0; i < cfg->sockcount; i++)  {
+					close(cfg->tls[i]);
+			}
+			break;
+		}
 	}
 
 	/* shptr has no business in a udp parse process */

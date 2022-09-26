@@ -142,6 +142,12 @@ extern char *bind_list[255];
 extern char *interface_list[255];
 extern char *versionstring;
 extern uint8_t vslen;
+extern int tls;
+extern char *tls_keyfile;
+extern char *tls_certfile;
+extern char *tls_protocols;
+extern char *tls_ciphers;
+extern uint16_t tls_port;
 
 
 
@@ -1457,6 +1463,30 @@ optionsstatement:
 		
 				dolog(LOG_DEBUG, "interface \"%s\" added\n", $2);
 				interface_list[icount++] = $2;
+			} else if (strcasecmp($1, "tls-certfile") == 0) {
+				tls_certfile = strdup($2);
+				if (tls_certfile == NULL) {
+					dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+					return -1;
+				}
+			} else if (strcasecmp($1, "tls-keyfile") == 0) {
+				tls_keyfile = strdup($2);
+				if (tls_keyfile == NULL) {
+					dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+					return -1;
+				}
+			} else if (strcasecmp($1, "tls-protocols") == 0) {
+				tls_protocols = strdup($2);
+				if (tls_protocols == NULL) {
+					dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+					return -1;
+				}
+			} else if (strcasecmp($1, "tls-ciphers") == 0) {
+				tls_ciphers = strdup($2);
+				if (tls_ciphers == NULL) {
+					dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+					return -1;
+				}
 			} else if (strcasecmp($1, "versionstring") == 0) {
 				if (strlen($2) > 255) {
 					dolog(LOG_ERR, "versionstring too long\n");
@@ -1524,9 +1554,12 @@ optionsstatement:
 				max_udp_payload = $2;
 
 				dolog(LOG_DEBUG, "max-udp-payload is now %u\n", max_udp_payload);
-			} 
-
-			
+			} else if (strcasecmp($1, "tls-port") == 0) {
+				tls = 1;
+				tls_port = $2;
+				
+				dolog(LOG_DEBUG, "tls-pot is %u\n", tls_port);
+			}	
 		}
 	}
 	|

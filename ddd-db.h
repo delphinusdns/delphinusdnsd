@@ -60,6 +60,7 @@
 #define IMSG_DUMP_CACHE		16	/* dump the forward cache */
 #define IMSG_DUMP_CACHEREPLY	17	/* reply the dump of forward cache */
 #define IMSG_DUMP_CACHEREPLYEOF	18	/* end of messages */
+#define IMSG_FORWARD_TLS	19	/* forward a TLS packet XXX */
 
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2
@@ -452,6 +453,7 @@ struct cfg {
 	int axfr[DEFAULT_SOCKET];	/* axfr udp socket */
 	char *ident[DEFAULT_SOCKET];	/* identification of interface */
 	struct sockaddr_storage ss[DEFAULT_SOCKET];	/* some addr storage */
+	struct tls *ctx;		/* the TLS context */
 	struct my_imsg {
 		int imsg_fds[2];
 	} my_imsg[100];
