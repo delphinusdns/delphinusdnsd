@@ -352,9 +352,13 @@ struct sreply {
 	struct rbtree *rbt1;	/* first resolved domain */
 	struct rbtree *rbt2;	/* CNAME to second resolved domain */
 	uint8_t region;	/* region of question */
-	int istcp;		/* when set it's tcp */
+	int istcp;		/* when set 1=tcp, 2=tls */
+#define DDD_IS_UDP     0
+#define DDD_IS_TCP     1
+#define DDD_IS_TLS     2
 	int wildcard;		/* wildcarding boolean */
 	char *replybuf;		/* reply buffer */
+	struct tls *ctx;	/* TLS context */
 };
 
 
@@ -444,6 +448,7 @@ struct rrtab {
 struct cfg {
 	int udp[DEFAULT_SOCKET];	/* udp sockets */
 	int tcp[DEFAULT_SOCKET];	/* tcp socket */
+	int tls[DEFAULT_SOCKET];	/* tls socket */
 	int axfr[DEFAULT_SOCKET];	/* axfr udp socket */
 	char *ident[DEFAULT_SOCKET];	/* identification of interface */
 	struct sockaddr_storage ss[DEFAULT_SOCKET];	/* some addr storage */
@@ -459,7 +464,8 @@ struct cfg {
 #define MY_IMSG_UNIXCONTROL	6
 #define MY_IMSG_UDP		7
 #define MY_IMSG_FORWARD		8
-#define MY_IMSG_MAX		9
+#define MY_IMSG_TLS		9
+#define MY_IMSG_MAX		10
 	int raw[2];
 #define RAW_IPSOCKET 0
 #define RAW_IP6SOCKET 1
