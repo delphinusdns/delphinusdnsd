@@ -490,7 +490,7 @@ restart:
 						rret = tls_read(tlsnp->ctx, pb, expect);
 
 						if (rret == TLS_WANT_POLLIN || rret == TLS_WANT_POLLOUT)
-							continue;
+							goto backselect;
 
 						if (rret == -1) {
 							dolog(LOG_INFO, "tls_read(): %s\n", tls_error(tlsnp->ctx));
@@ -516,7 +516,7 @@ restart:
 						rret = tls_read(tlsnp->ctx, pb, expect);
 
 						if (rret == TLS_WANT_POLLIN || rret == TLS_WANT_POLLOUT)
-							continue;
+							goto backselect;
 
 						if (rret == -1) {
 							dolog(LOG_INFO, "tls_read(): %s\n", tls_error(tlsnp->ctx));
@@ -1118,6 +1118,7 @@ tlsout:
 			if (conncnt > 0)
 				conncnt--;
 
+backselect:
 			continue;
 		
 		} /* TAILQ_FOREACH_SAFE */
