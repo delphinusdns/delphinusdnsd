@@ -396,6 +396,7 @@ dig(int argc, char *argv[])
 		}
 	}
 
+
 	segment = 0;
 	answers = 0;
 

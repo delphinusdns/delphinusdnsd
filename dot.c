@@ -334,7 +334,7 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 			FD_SET(tlsnp->so, &rset);
 		}
 	
-		tv.tv_sec = 3;
+		tv.tv_sec = 10;
 		tv.tv_usec = 0;
 
 		sel = select(maxso + 1, &rset, NULL, NULL, &tv);
@@ -346,7 +346,7 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 
 		if (sel == 0) {
 			TAILQ_FOREACH_SAFE(tlsnp, &tlshead, tlsentries, tlsn1) {
-				if ((tlsnp->last_used + 3) < time(NULL)) {
+				if ((tlsnp->last_used + 30) < time(NULL)) {
 					dolog(LOG_INFO, "tls timeout on interface \"%s\" for address %s\n", cfg->ident[tlsnp->intidx], tlsnp->address);
 					TAILQ_REMOVE(&tlshead, tlsnp, tlsentries);
 					tls_close(tlsnp->ctx);
@@ -445,13 +445,15 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					close(so);
 					continue;
 				}
-				
+
+
 				tlsn1 = malloc(sizeof(struct tlsentry));
 				if (tlsn1 == NULL) {
 					dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 					close(so);
 					continue;
 				}
+
 				tlsn1->bytes_read = 0;
 				tlsn1->bytes_expected = 0;
 				tlsn1->bytes_limit = 0;
@@ -459,7 +461,6 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				tlsn1->so = so;
 				tlsn1->last_used = time(NULL);
 				tlsn1->intidx = i;
-				tlsn1->address = strdup(address);
 
 				if (tls_accept_socket(cfg->ctx, &tlsn1->ctx, so) == -1) {
 					dolog(LOG_ERR, "tls_accept_socket()\n");
@@ -468,6 +469,14 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					continue;
 				}
 
+				if (tls_handshake(tlsn1->ctx) == -1) {
+					dolog(LOG_ERR, "tls_handshake()\n");
+					free(tlsn1);
+					close(so);
+					continue;
+				}
+
+				tlsn1->address = strdup(address);
 				
 				TAILQ_INSERT_TAIL(&tlshead, tlsn1, tlsentries);
 				conncnt++;
