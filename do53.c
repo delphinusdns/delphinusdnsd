@@ -305,6 +305,9 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 #endif
 		}
 
+		/* turn off tls */
+		tls = 0;
+
 		setproctitle("TCP engine %d [%s]", cfg->pid, 
 				(identstring != NULL ? identstring : ""));
 		tcploop(cfg, tcp_ibuf, ibuf);
@@ -353,6 +356,10 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 			for (i = 0; i < cfg->sockcount; i++)  {
 					close(cfg->tls[i]);
 			}
+
+			/* turn off tls */
+			tls = 0;
+
 			break;
 		}
 	}
