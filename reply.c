@@ -347,7 +347,7 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -554,7 +554,7 @@ reply_eui48(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -762,7 +762,7 @@ reply_eui64(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -978,7 +978,7 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -1206,7 +1206,7 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -1411,7 +1411,7 @@ reply_zonemd(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -1611,7 +1611,7 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -1806,7 +1806,7 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -1999,7 +1999,7 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -2197,7 +2197,7 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -2413,7 +2413,7 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -2635,7 +2635,7 @@ reply_generic_dnskey(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrt
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -2860,7 +2860,7 @@ reply_ipseckey(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -2962,7 +2962,7 @@ reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 	odh->answer = htons(a_count);
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -3142,7 +3142,7 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -3537,7 +3537,7 @@ out:
 		free(ad1);
 	}
 
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -3906,7 +3906,7 @@ out:
 		free(ad1);
 	}
 
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -4321,7 +4321,7 @@ out:
 	}
 
 
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -4542,7 +4542,7 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -4730,7 +4730,7 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -4981,7 +4981,7 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -5197,7 +5197,7 @@ reply_https(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -5411,7 +5411,7 @@ reply_svcb(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -5617,7 +5617,7 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -5719,7 +5719,7 @@ reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	answer->rdlength = htons(vslen + 1);
 
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -5899,7 +5899,7 @@ reply_loc(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -6095,7 +6095,7 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -6290,7 +6290,7 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -6521,7 +6521,7 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -6717,7 +6717,7 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -7155,7 +7155,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
@@ -7226,7 +7226,7 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
 	else
 		odh->question = htons(1);
 
-	if (tls || (haveq && q->edns0len)) {
+	if (haveq && q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 
@@ -7748,7 +7748,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -7876,7 +7876,7 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 
 skip:
 
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
@@ -9898,7 +9898,7 @@ reply_badvers(struct sreply *sreply, int *sretlen, ddDB *db)
 	odh->nsrr = 0;
 	odh->additional = 0;
 
-	if (tls || q->edns0len) {
+	if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		q->badvers = 1;
@@ -10096,7 +10096,7 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len || tls) {
+	 if (q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
