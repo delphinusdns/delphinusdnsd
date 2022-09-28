@@ -69,6 +69,7 @@ struct dns_optrr {
 }__attribute__((packed));
 
 #define DNS_OPT_CODE_COOKIE	10		/* RFC 7873 */
+#define DNS_OPT_CODE_PADDING	12		/* RFC 7830 */
 
 /*
  * TSIG RR, based on dns_rr 

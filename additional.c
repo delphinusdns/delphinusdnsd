@@ -62,7 +62,7 @@ int additional_a(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_aaaa(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_ds(char *, int, struct rbtree *, char *, int, int, int *);
-int additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t);
+int additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t, uint16_t);
 int additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 int additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int *, int);
@@ -98,6 +98,7 @@ extern int cookies;
 extern char *cookiesecret;
 extern int cookiesecret_len;
 extern int dnssec;
+extern int tls;
 
 
 /*
@@ -661,9 +662,10 @@ out:
  */
 
 int 
-additional_opt(struct question *question, char *reply, int replylen, int offset, struct sockaddr *sa, socklen_t salen)
+additional_opt(struct question *question, char *reply, int replylen, int offset, struct sockaddr *sa, socklen_t salen, uint16_t tlsbuf)
 {
 	struct dns_optrr *answer;
+	uint16_t opt_code;
 	int rcode = 0;
 
 	if ((offset + sizeof(struct dns_optrr)) > replylen) {
@@ -692,7 +694,6 @@ additional_opt(struct question *question, char *reply, int replylen, int offset,
 		SIPHASH_CTX ctx;
 		char digest[SIPHASH_DIGEST_LENGTH];
 		uint8_t version = 1, reserved = 0;
-		uint16_t opt_codelen;
 		uint32_t timestamp, compts;
 		struct sockaddr_in *sin;
 		struct sockaddr_in6 *sin6;
@@ -711,8 +712,8 @@ additional_opt(struct question *question, char *reply, int replylen, int offset,
 				if (offset + 8 + question->cookie.servercookie_len + 4 > replylen)
 					goto out;
 
-				opt_codelen = DNS_OPT_CODE_COOKIE;
-				pack16(&reply[offset], htons(opt_codelen));
+				opt_code = DNS_OPT_CODE_COOKIE;
+				pack16(&reply[offset], htons(opt_code));
 				offset += 2;
 				pack16(&reply[offset], htons(8 + question->cookie.servercookie_len));
 				offset += 2;
@@ -758,8 +759,8 @@ additional_opt(struct question *question, char *reply, int replylen, int offset,
 		if (offset + 24 + 4 > replylen)
 			goto out;
 
-		opt_codelen = DNS_OPT_CODE_COOKIE;
-		pack16(&reply[offset], htons(opt_codelen));
+		opt_code = DNS_OPT_CODE_COOKIE;
+		pack16(&reply[offset], htons(opt_code));
 		offset += 2;
 		pack16(&reply[offset], htons(24));
 		offset += 2;
@@ -776,6 +777,20 @@ additional_opt(struct question *question, char *reply, int replylen, int offset,
 		offset += sizeof(digest);
 
 		answer->rdlen = htons(4 + 24);
+	}
+	/* add padding if we're in the TLS process */
+	if (tls && tlsbuf > 0) {
+		if (offset + 2 + 2 + tlsbuf > replylen)
+			goto out;
+
+		opt_code = DNS_OPT_CODE_PADDING;
+		pack16(&reply[offset], htons(opt_code));
+		offset += 2;
+		pack16(&reply[offset], htons(tlsbuf));
+		offset += 2;
+		
+		memset(&reply[offset], 0, tlsbuf);
+		offset += tlsbuf;
 	}
 out:
 	return (offset);

@@ -71,7 +71,7 @@ extern int 		additional_aaaa(char *, int, struct rbtree *, char *, int, int, int
 extern int 		additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_ds(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
-extern int 		additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t);
+extern int 		additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t, uint16_t);
 extern int 		additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
 extern int 		additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int);
 extern int 		additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int);
@@ -161,6 +161,7 @@ extern int debug, verbose, dnssec, tcpanyonly;
 extern char *versionstring;
 extern uint8_t vslen;
 extern u_int max_udp_payload;
+extern int tls;
 
 
 
@@ -346,10 +347,10 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -553,10 +554,10 @@ reply_eui48(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -761,10 +762,10 @@ reply_eui64(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -977,10 +978,10 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -1205,10 +1206,10 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -1410,10 +1411,10 @@ reply_zonemd(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -1610,10 +1611,10 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -1805,10 +1806,10 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -1998,10 +1999,10 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -2196,10 +2197,10 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -2412,10 +2413,10 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -2634,10 +2635,10 @@ reply_generic_dnskey(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrt
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -2859,10 +2860,10 @@ reply_ipseckey(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -2961,10 +2962,10 @@ reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 	odh->answer = htons(a_count);
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -3141,10 +3142,10 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -3536,13 +3537,13 @@ out:
 		free(ad1);
 	}
 
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -3905,13 +3906,13 @@ out:
 		free(ad1);
 	}
 
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -4320,13 +4321,13 @@ out:
 	}
 
 
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -4541,13 +4542,13 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 	
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -4729,13 +4730,13 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 	
 	if (q->tsig.tsigverified == 1) {
@@ -4980,13 +4981,13 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	
@@ -5196,13 +5197,13 @@ reply_https(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -5410,13 +5411,13 @@ reply_svcb(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -5616,13 +5617,13 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -5718,13 +5719,13 @@ reply_version(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	answer->rdlength = htons(vslen + 1);
 
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	return (reply_sendpacket(reply, outlen, sreply, sretlen));
@@ -5898,13 +5899,13 @@ reply_loc(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -6094,13 +6095,13 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -6289,13 +6290,13 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -6520,13 +6521,13 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -6716,13 +6717,13 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
@@ -7154,10 +7155,10 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 
@@ -7225,14 +7226,14 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
 	else
 		odh->question = htons(1);
 
-	if (haveq && q->edns0len) {
+	if (tls || (haveq && q->edns0len)) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 
 		if (q->edns0len > 512)
 			replysize = MIN(q->edns0len, max_udp_payload);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	return (reply_sendpacket(reply, outlen, sreply, sretlen));
@@ -7747,13 +7748,13 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 	
 	if (q->tsig.tsigverified == 1) {
@@ -7875,13 +7876,13 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 
 skip:
 
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		NTOHS(odh->additional);
 		odh->additional++;
 		HTONS(odh->additional);
 
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 			
 	if (q->tsig.tsigverified == 1) {
@@ -9897,11 +9898,11 @@ reply_badvers(struct sreply *sreply, int *sretlen, ddDB *db)
 	odh->nsrr = 0;
 	odh->additional = 0;
 
-	if (q->edns0len) {
+	if (tls || q->edns0len) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
 		q->badvers = 1;
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	return (reply_sendpacket(reply, outlen, sreply, sretlen));
@@ -10095,10 +10096,10 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 out:
-	if (q->edns0len) {
+	if (q->edns0len || tls) {
 		/* tag on edns0 opt record */
 		odh->additional = htons(1);
-		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (1024 - outlen < 0) ? 0 :  (1024 - outlen));
 	}
 
 	if (q->tsig.tsigverified == 1) {
