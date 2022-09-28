@@ -789,7 +789,7 @@ additional_opt(struct question *question, char *reply, int replylen, int offset,
 		pack16(&reply[offset], htons(tlsbuf));
 		offset += 2;
 		
-		memset(&reply[offset], 0, tlsbuf);
+		arc4random_buf(&reply[offset], tlsbuf);
 		offset += tlsbuf;
 	}
 out:
