@@ -350,6 +350,7 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					dolog(LOG_INFO, "tls timeout on interface \"%s\" for address %s\n", cfg->ident[tlsnp->intidx], tlsnp->address);
 					TAILQ_REMOVE(&tlshead, tlsnp, tlsentries);
 					tls_close(tlsnp->ctx);
+					tls_free(tlsnp->ctx);
 					close(tlsnp->so);
 					free(tlsnp->address);
 					free(tlsnp);
@@ -549,6 +550,7 @@ restart:
 					}
 					TAILQ_REMOVE(&tlshead, tlsnp, tlsentries);
 					tls_close(tlsnp->ctx);
+					tls_free(tlsnp->ctx);
 					close(tlsnp->so);
 					free(tlsnp->address);
 					free(tlsnp);
@@ -899,6 +901,7 @@ forwardtls:
 						}
 						TAILQ_REMOVE(&tlshead, tlsnp, tlsentries);
 						tls_close(tlsnp->ctx);
+						tls_free(tlsnp->ctx);
 						close(tlsnp->so);
 						free(tlsnp->address);
 						free(tlsnp);
@@ -1121,6 +1124,7 @@ tlsout:
 
 			TAILQ_REMOVE(&tlshead, tlsnp, tlsentries);
 			tls_close(tlsnp->ctx);
+			tls_free(tlsnp->ctx);
 			close(tlsnp->so);
 			free(tlsnp->address);
 			free(tlsnp);
@@ -1141,6 +1145,7 @@ backselect:
 					dolog(LOG_INFO, "tls timeout on interface \"%s\" for address %s\n", cfg->ident[tlsnp->intidx], tlsnp->address);
 					TAILQ_REMOVE(&tlshead, tlsnp, tlsentries);
 					tls_close(tlsnp->ctx);
+					tls_free(tlsnp->ctx);
 					close(tlsnp->so);
 					free(tlsnp->address);
 					free(tlsnp);
