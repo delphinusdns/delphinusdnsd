@@ -791,6 +791,10 @@ additional_opt(struct question *question, char *reply, int replylen, int offset,
 		
 		arc4random_buf(&reply[offset], tlsbuf);
 		offset += tlsbuf;
+
+		NTOHS(answer->rdlen);
+		answer->rdlen += (4 + tlsbuf);
+		HTONS(answer->rdlen);
 	}
 out:
 	return (offset);
