@@ -264,6 +264,9 @@ int		fill_hinfo(ddDB *, char *, char *, int, char *, char *);
 int		fill_caa(ddDB *, char *, char *, int, uint8_t, char *, char *);
 int 		fill_zonemd(ddDB *, char *, char *, int, uint32_t, uint8_t, uint8_t, char *, int);
 int		fill_ipseckey(ddDB *, char *, char *, int, uint8_t, uint8_t, uint8_t, char *, char *);
+int		fill_https(ddDB *, char *, char *, int, uint16_t, char *, char *);
+int		fill_svcb(ddDB *, char *, char *, int, uint16_t, char *, char *);
+
 
 void		create_nsec_bitmap(char *, char *, int *);
 int             findeol(void);

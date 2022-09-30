@@ -1,15 +1,15 @@
 CC=gcc
 #CFLAGS=-DDEBUG
-CFLAGS=-D_XOPEN_SOURCE -D_DEFAULT_SOURCE -Wno-shift-count-overflow -DUSE_OPENSSL
-LDADD= -lresolv -lcrypto -lrt -lbsd 
+CFLAGS=-D_XOPEN_SOURCE -D_DEFAULT_SOURCE -Wno-shift-count-overflow -DUSE_OPENSSL -I /usr/local/include -L /usr/local/lib
+LDADD= -lresolv -lcrypto -lrt -lbsd -ltls
 YACC=bison
 AR=ar
 
 
 all: delphinusdnsd dddctl
 
-delphinusdnsd: imsg-buffer.o imsg.o additional.o parse.o delphinusdnsd.o do53.o do53t.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o crypto.o
-	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o imsg-buffer.o imsg.o delphinusdnsd.o do53.o do53t.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o crypto.o $(LDADD)
+delphinusdnsd: imsg-buffer.o imsg.o additional.o parse.o delphinusdnsd.o do53.o do53t.o dot.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o crypto.o
+	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o imsg-buffer.o imsg.o delphinusdnsd.o do53.o do53t.o dot.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o crypto.o $(LDADD)
 
 dddctl:  dddctl.o util.o dnssec.o parse.o base64.o ent.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o crypto.o
 	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o crypto.o $(LDADD)
@@ -55,6 +55,9 @@ do53.o: do53.c
 
 do53t.o: do53t.c
 	$(CC) $(CFLAGS) -c do53t.c
+
+dot.o: dot.c
+	$(CC) $(CFLAGS) -c dot.c
 
 reply.o: reply.c
 	$(CC) $(CFLAGS) -c reply.c
@@ -119,6 +122,8 @@ install-delphinusdnsd:
 	mkdir -p /usr/local/man/man5 && install -m 444 delphinusdns.conf.5 /usr/local/man/man5
 	install -m 444 delphinusdns.zone.5 /usr/local/man/man5
 
+libressl-portable:
+	cd libressl && make -f Makefile.linux
 
 clean:
 	rm -f *.o delphinusdnsd/delphinusdnsd dddctl/dddctl

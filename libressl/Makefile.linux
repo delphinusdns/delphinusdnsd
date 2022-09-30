@@ -1,0 +1,14 @@
+# This makefile was made for Linux Devuan.  Please study it and make appropriate
+# changes for your linux system.  LibreSSL installs to /usr/local.
+#
+
+all:
+	apt-get -y install automake autoconf git libtool perl
+	test -d portable/ || git clone https://github.com/libressl-portable/portable.git
+	cd portable && ./autogen.sh
+	cd portable && ./configure
+	cd portable && make 
+	# installs to /usr/local
+	cd portable && make install
+
+

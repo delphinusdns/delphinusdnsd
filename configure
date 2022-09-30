@@ -91,6 +91,11 @@ linux() {
 		cp Makefile.linux Makefile
 		echo "#define DDD_PAGE_SIZE `getconf PAGE_SIZE`" >> ddd-config.h
 	fi
+
+	echo If your system needs libressl a rudamentary way of building it is
+	echo made available to you by typing 'make libressl-portable'.  Please 
+	echo study the Makefile.linux in libressl directory to continue with 
+	echo this, FIRST.
 }
 
 darwin() {
