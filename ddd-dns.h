@@ -254,6 +254,7 @@ struct dns_question_hdr {
 #define DNS_MAXLABEL	63
 #define DNS_MAXNAME	255
 #define DNS_MAXUDP	512
+#define DNS_MAXTCP	65535
 
 /* SSHFP fingerprint sizes */
 

@@ -595,7 +595,7 @@ gawn:
 				pbuf = &tlsnp->buf[2];
 				so = tlsnp->so;
 
-				if (len > DNS_MAXUDP || len < sizeof(struct dns_header)){
+				if (len > DNS_MAXTCP || len < sizeof(struct dns_header)){
 					dolog(LOG_INFO, "TLS packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[tlsnp->intidx], tlsnp->address);
 
 					goto drop;

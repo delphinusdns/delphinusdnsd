@@ -519,7 +519,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				pbuf = &tcpnp->buf[2];
 				so = tcpnp->so;
 
-				if (len > DNS_MAXUDP || len < sizeof(struct dns_header)){
+				if (len > DNS_MAXTCP || len < sizeof(struct dns_header)){
 					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
 
 					goto drop;
