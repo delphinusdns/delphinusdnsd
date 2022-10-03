@@ -209,7 +209,7 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -416,7 +416,7 @@ reply_eui48(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_EUI48)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_EUI48)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -624,7 +624,7 @@ reply_eui64(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_EUI64)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_EUI64)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -833,7 +833,7 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -872,7 +872,7 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 	a_count = 0;
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == 0)
+	if (rrp == NULL)
 		return -1;
 
 	saltlen = ((struct nsec3param *)rrp->rdata)->saltlen;
@@ -1042,7 +1042,7 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -1086,7 +1086,7 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 	a_count = 0;
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == 0)
+	if (rrp == NULL)
 		return -1;
 
 	saltlen = ((struct nsec3 *)rrp->rdata)->saltlen;
@@ -1264,7 +1264,7 @@ reply_zonemd(struct sreply *sreply, int *sretlen, ddDB *db)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_ZONEMD)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_ZONEMD)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -1470,7 +1470,7 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_CAA)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_CAA)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -1664,7 +1664,7 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_HINFO)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_HINFO)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -1859,7 +1859,7 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_RP)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_RP)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -2056,7 +2056,7 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -2094,7 +2094,7 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 	a_count = 0;
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == 0)
+	if (rrp == NULL)
 		return -1;
 	
 	ndnlen = ((struct nsec *)rrp->rdata)->ndn_len;
@@ -2270,7 +2270,7 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, rrtype)) == 0)
+	if ((rrset = find_rr(rbt, rrtype)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -2494,7 +2494,7 @@ reply_generic_dnskey(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrt
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, rrtype)) == 0)
+	if ((rrset = find_rr(rbt, rrtype)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -2693,7 +2693,7 @@ reply_ipseckey(struct sreply *sreply, int *sretlen, ddDB *db)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_IPSECKEY)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_IPSECKEY)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -2912,7 +2912,7 @@ reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 	int tmplen = 0;
 	uint16_t rollback;
 
-	if ((find_rr(rbt, DNS_TYPE_RRSIG)) == 0)
+	if ((find_rr(rbt, DNS_TYPE_RRSIG)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -3003,12 +3003,9 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rr *rrp = NULL;
@@ -3023,7 +3020,7 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -3156,32 +3153,6 @@ out:
 		HTONS(odh->additional);
 	}
 
-
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
 	retlen = reply_sendpacket(reply, outlen, sreply, sretlen);
 	rotate_rr(rrset);
 
@@ -3248,7 +3219,7 @@ reply_kx(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 	
-	if ((rrset = find_rr(rbt, DNS_TYPE_KX)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_KX)) == NULL)
 		return -1;
 
 
@@ -3617,7 +3588,7 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 	
-	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_MX)) == NULL)
 		return -1;
 
 
@@ -3952,12 +3923,9 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *rbt0 = NULL, *rbt1 = NULL;
 	struct rbtree *authority;
@@ -4338,30 +4306,6 @@ out:
 		HTONS(odh->additional);
 	}
 
-	if (istcp) {
-		char *tmpbuf;
-
-		tmpbuf = malloc(outlen + 2);
-		if (tmpbuf == 0) {
-			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-		}
-		pack16(tmpbuf, htons(outlen));
-		memcpy(&tmpbuf[2], reply, outlen);
-		if ((retlen = send(so, tmpbuf, outlen + 2, 0)) < 0) {
-			dolog(LOG_INFO, "send: %s\n", strerror(errno));
-		}
-		free(tmpbuf);
-	} else {
-		if (q->rawsocket) {
-			*sretlen = retlen = outlen;
-		} else {
-			if ((*sretlen = retlen = sendto(so, 
-					reply, outlen, 0, sa, salen)) < 0) {
-				dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-			}
-		}
-	}
-
 	retlen = reply_sendpacket(reply, outlen, sreply, sretlen);
 	rotate_rr(rrset);
 
@@ -4411,7 +4355,7 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -4445,7 +4389,7 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	odh->additional = 0;
 	
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == 0)
+	if (rrp == NULL)
 		return -1;
 
 	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
@@ -4602,7 +4546,7 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	time_t now;
 
 	now = time(NULL);
-	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -4621,7 +4565,7 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	}
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == 0)
+	if (rrp == NULL)
 		return -1;
 
 	/* copy question to reply */
@@ -4792,7 +4736,7 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -4827,7 +4771,7 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	odh->additional = 0;
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == 0)
+	if (rrp == NULL)
 		return -1;
 
 	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
@@ -5046,7 +4990,7 @@ reply_https(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_HTTPS)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_HTTPS)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -5261,7 +5205,7 @@ reply_svcb(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_SVCB)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_SVCB)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -5475,7 +5419,7 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_TXT)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -5779,7 +5723,7 @@ reply_loc(struct sreply *sreply, int *sretlen, ddDB *db)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_LOC)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_LOC)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -5965,7 +5909,7 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_TLSA)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -6161,7 +6105,7 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_SSHFP)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -6357,7 +6301,7 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_NAPTR)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -6588,7 +6532,7 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) == 0)
+	if ((rrset = find_rr(rbt, DNS_TYPE_SRV)) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -6808,12 +6752,9 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rrset *rrset = NULL;
 	struct rbtree *rbt0 = NULL;
@@ -6848,8 +6789,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 	/* 
 	 * no SOA, use the old code
 	 */
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == 0) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
 
 		memcpy(reply, buf, len);
 		memset((char *)&odh->query, 0, sizeof(uint16_t));
@@ -6865,36 +6805,13 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 		}
 
 		HTONS(odh->query);		
-		if (istcp) {
-			char *tmpbuf;
 
-			tmpbuf = malloc(len + 2);
-			if (tmpbuf == 0) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			pack16(tmpbuf, htons(len));
-			memcpy(&tmpbuf[2], reply, len);
-
-			if ((retlen = send(so, tmpbuf, len + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if (q->rawsocket) {
-				*sretlen = retlen = outlen;
-			} else {
-				if ((*sretlen = retlen = sendto(so, 
-					reply, len, 0, sa, salen)) < 0) {
-					dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-				}
-			}
-		}
-
+		retlen = reply_sendpacket(reply, len, sreply, sretlen);
 		return (retlen);
 	}
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == 0)
+	if (rrp == NULL)
 		return -1;
 
 	/* copy question to reply */
@@ -7044,7 +6961,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 		origlen = outlen;
 		if (find_rr(rbt, DNS_TYPE_NSEC3PARAM)) {
 			rbt0 = find_nsec3_cover_next_closer(q->hdr->name, q->hdr->namelen, rbt, db);
-			if (rbt0 == 0)
+			if (rbt0 == NULL)
 				goto out;
 
 			memcpy(&uniq[rruniq].name, rbt0->zone, rbt0->zonelen);
@@ -7074,7 +6991,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 			origlen = outlen;
 
 			rbt0 = find_nsec3_match_closest(q->hdr->name, q->hdr->namelen, rbt, db);
-			if (rbt0 == 0)
+			if (rbt0 == NULL)
 				goto out;
 
 			memcpy(&uniq[rruniq].name, rbt0->zone, rbt0->zonelen);
@@ -7108,7 +7025,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 			origlen = outlen;
 
 			rbt0 = find_nsec3_wildcard_closest(q->hdr->name, q->hdr->namelen, rbt, db);
-			if (rbt0 == 0)
+			if (rbt0 == NULL)
 				goto out;
 
 			memcpy(&uniq[rruniq].name, rbt0->zone, rbt0->zonelen);
@@ -7426,12 +7343,9 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	struct answer *answer;
 
-	int so = sreply->so;
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct sockaddr *sa = sreply->sa;
-	int salen = sreply->salen;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rrset *rrset = NULL;
 	struct rbtree *rbt0 = NULL;
@@ -7467,42 +7381,17 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 	 * no SOA, use the old code
 	 */
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == 0) {
+	if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
 		memcpy(reply, buf, len);
 
 		memset((char *)&odh->query, 0, sizeof(uint16_t));
 		set_reply_flags(rbt, odh, q);
 
-		if (istcp) {
-			char *tmpbuf;
-
-			tmpbuf = malloc(len + 2);
-			if (tmpbuf == 0) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-			}
-			pack16(tmpbuf, htons(len));
-			memcpy(&tmpbuf[2], reply, len);
-
-			if ((retlen = send(so, tmpbuf, len + 2, 0)) < 0) {
-				dolog(LOG_INFO, "send: %s\n", strerror(errno));
-			}
-			free(tmpbuf);
-		} else {
-			if (q->rawsocket) {
-				*sretlen = retlen = outlen;
-			} else {
-				if ((*sretlen = retlen = sendto(so, 
-					reply, len, 0, sa, salen)) < 0) {
-					dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-				}
-			}
-		}
-
-		return (retlen);
+		return (reply_sendpacket(reply, len, sreply, sretlen));
 	}
 
 	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == 0)
+	if (rrp == NULL)
 		return -1;
 	
 	/* copy question to reply */
@@ -7949,7 +7838,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		HTONS(odh->answer);
 
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == 0)
+		if (rrp == NULL)
 			return -1;
 
 		if ((offset + q->hdr->namelen) > rlen) {
@@ -8644,7 +8533,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != 0) {
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == 0)
+		if (rrp == NULL)
 			return -1;
 
 		if (offset + q->hdr->namelen > rlen)
@@ -8728,7 +8617,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != 0) {
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == 0)
+		if (rrp == NULL)
 			return -1;
 
 		if (offset + q->hdr->namelen > rlen)
@@ -8796,7 +8685,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) != 0) {
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == 0)
+		if (rrp == NULL)
 			return -1;
 
 		if (offset + q->hdr->namelen > rlen)
@@ -8909,7 +8798,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) != 0) {
 
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == 0)
+		if (rrp == NULL)
 			return -1;
 
 		NTOHS(odh->answer);
@@ -9609,7 +9498,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != 0) {
 		rrp = TAILQ_FIRST(&rrset->rr_head);
-		if (rrp == 0)
+		if (rrp == NULL)
 			return -1;
 
 		NTOHS(odh->answer);
@@ -9964,7 +9853,7 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 	zonenumberx = determine_zone(rbt);
 	now = time(NULL);
 
-	if ((rrset = find_rr(rbt, ntohs(q->hdr->qtype))) == 0)
+	if ((rrset = find_rr(rbt, ntohs(q->hdr->qtype))) == NULL)
 		return -1;
 
 	if (istcp) {
@@ -10152,9 +10041,9 @@ reply_sendpacket(char *reply, uint16_t len, struct sreply *sreply, int *sretlen)
 	int istcp = sreply->istcp;
 	char *tmpbuf;
 
-	if (istcp == 1) {
+	if (istcp == DDD_IS_TCP) {
 		tmpbuf = malloc(len + 2);
-		if (tmpbuf == 0) {
+		if (tmpbuf == NULL) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 			return (-1);
 		}
@@ -10165,10 +10054,11 @@ reply_sendpacket(char *reply, uint16_t len, struct sreply *sreply, int *sretlen)
 			dolog(LOG_INFO, "send: %s\n", strerror(errno));
 		}
 		free(tmpbuf);
-	} else if (istcp == 2) {
+	} else if (istcp == DDD_IS_TLS) {
 		char *pt;
+
 		tmpbuf = malloc(len + 2);
-		if (tmpbuf == 0) {
+		if (tmpbuf == NULL) {
 			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 			return (-1);
 		}
@@ -10184,11 +10074,13 @@ reply_sendpacket(char *reply, uint16_t len, struct sreply *sreply, int *sretlen)
 			ret = tls_write(ctx, pt, len);
 			if (ret == TLS_WANT_POLLIN || ret == TLS_WANT_POLLOUT)
 				continue;
-			if (ret == -1)
+			if (ret == -1) {
 				dolog(LOG_INFO, "tls_write: %s\n", tls_error(ctx));
-			pt += (int)ret;
-			len -= (int)ret;
-			retlen += (int)ret;
+			} else {
+				pt += (int)ret;
+				len -= (int)ret;
+				retlen += (int)ret;
+			}
 		}
 
 		free(tmpbuf);

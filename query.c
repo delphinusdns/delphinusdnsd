@@ -65,6 +65,7 @@
 static struct timeval tv0;
 static time_t current_time;
 uint16_t port = 53;
+int noedns = 0;
 
 
 /* prototypes */
@@ -242,7 +243,7 @@ dig(int argc, char *argv[])
 	struct soa_constraints constraints = { 0, 0, 0 };
 	struct tls *ctx = NULL;
 
-	while ((ch = getopt(argc, argv, "C:c:@:DIONP:tTZp:Q:y:")) != -1) {
+	while ((ch = getopt(argc, argv, "C:c:@:DEIONP:tTZp:Q:y:")) != -1) {
 		switch (ch) {
 		case 'C':
 			provided_cookie = delphinusdns_BN_new();
@@ -265,6 +266,10 @@ dig(int argc, char *argv[])
 			break;
 		case 'D':
 			format |= DNSSEC_FORMAT;
+			break;
+		case 'E':
+			noedns = 1;
+			nocookie = 1;
 			break;
 		case 'I':
 			format |= INDENT_FORMAT;
@@ -551,7 +556,10 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 	wh->dh.question = htons(1);
 	wh->dh.answer = 0;
 	wh->dh.nsrr = 0;
-	wh->dh.additional = htons(1);
+	if (! noedns)
+		wh->dh.additional = htons(1);
+	else
+		wh->dh.additional = htons(0);
 
 	SET_DNS_QUERY(&wh->dh);
 	SET_DNS_RECURSION(&wh->dh);
@@ -584,37 +592,39 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 	pack16(&query[totallen], class);
 	totallen += sizeof(uint16_t);
 
-	/* attach EDNS0 */
+	if (! noedns) {
+		/* attach EDNS0 */
 
-	optrr = (struct dns_optrr *)&query[totallen];
+		optrr = (struct dns_optrr *)&query[totallen];
 
-	optrr->name[0] = 0;
-	optrr->type = htons(DNS_TYPE_OPT); 
-	optrr->class = htons(replysize);
-	optrr->ttl = htonl(0);		/* EDNS version 0 */
-	if ((format & DNSSEC_FORMAT))
-		SET_DNS_ERCODE_DNSSECOK(optrr);
-	HTONL(optrr->ttl);
+		optrr->name[0] = 0;
+		optrr->type = htons(DNS_TYPE_OPT); 
+		optrr->class = htons(replysize);
+		optrr->ttl = htonl(0);		/* EDNS version 0 */
+		if ((format & DNSSEC_FORMAT))
+			SET_DNS_ERCODE_DNSSECOK(optrr);
+		HTONL(optrr->ttl);
 
-	if (! nocookie) {
-		cookies = 1;
-		if (provided_cookie != NULL)
-			optrr->rdlen = htons(2 + 2 + 24);
-		else
-			optrr->rdlen = htons(2 + 2 + 8);
-	} else
-		optrr->rdlen = 0;
+		if (! nocookie) {
+			cookies = 1;
+			if (provided_cookie != NULL)
+				optrr->rdlen = htons(2 + 2 + 24);
+			else
+				optrr->rdlen = htons(2 + 2 + 8);
+		} else
+			optrr->rdlen = 0;
 
-	optrr->rdata[0] = 0;
+		optrr->rdata[0] = 0;
 
-	totallen += (sizeof(struct dns_optrr));
+		totallen += (sizeof(struct dns_optrr));
 
-	/* add cookie */
-	if (! nocookie) {
-		tmplen = add_cookie(query, sizeof(query), totallen, provided_cookie, (u_char *)&cookie, sizeof(cookie));
-		if (tmplen > totallen) {
-			totallen = tmplen;
-			printf("; COOKIE: %s\n", cookie);
+		/* add cookie */
+		if (! nocookie) {
+			tmplen = add_cookie(query, sizeof(query), totallen, provided_cookie, (u_char *)&cookie, sizeof(cookie));
+			if (tmplen > totallen) {
+				totallen = tmplen;
+				printf("; COOKIE: %s\n", cookie);
+			}
 		}
 	}
 
