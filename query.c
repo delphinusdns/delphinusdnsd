@@ -716,7 +716,7 @@ lookup_name(FILE *f, int so, char *zonename, uint16_t myrrtype, struct soa *myso
 			plen = unpack16(reply);
 			tcplen = ntohs(plen);
 
-			len = slen;
+			len += slen;
 		} else {
 			if ((len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL)) < 0) {
 				perror("recv");
