@@ -698,8 +698,15 @@ main(int argc, char *argv[], char *environ[])
 
 		tls_config_clear_keys(tls_config);
 
+#if defined __OpenBSD__ || defined __Linux__
 		freezero(tls_certfile, strlen(tls_certfile));
 		freezero(tls_keyfile, strlen(tls_keyfile));
+#else
+		memset(tls_certfile, 0, strlen(tls_certfile));
+		memset(tls_keyfile, 0, strlen(tls_keyfile));
+		free(tls_certfile);
+		free(tls_keyfile);
+#endif
 	}
 
 #ifdef __OpenBSD__
