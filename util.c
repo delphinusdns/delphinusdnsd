@@ -5754,10 +5754,12 @@ out:
 static int
 param_cmp(const void *a, const void *b)
 {
+	char *ta = (char *)a;
+	char *tb = (char *)b;
 	uint16_t k1, k2;
 
-	k1 = unpack16((char *)&a[2]);
-	k2 = unpack16((char *)&b[2]);
+	k1 = unpack16((char *)&ta[2]);
+	k2 = unpack16((char *)&tb[2]);
 
 	return (k1 < k2 ? -1 : k1 > k2);
 }
