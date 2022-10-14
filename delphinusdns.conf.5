@@ -191,7 +191,7 @@ include "/var/delphinusdnsd/etc/delphinusdns.tsig";
 rzone "ip6.centroid.eu." {
 	constraints 600, 600, 600;
 	bytelimit 65536;
-	; do make sure you have a tsig "" {} for this
+	; do make sure you have a tsig {} for this
         tsigkey "pass";
         primaryport 10053;
         primary 2a01:4f8:162:e700:881c:fe60:3582:f49c;
