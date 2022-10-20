@@ -1447,6 +1447,9 @@ build_question(char *buf, int len, uint16_t additional, char *mac)
 
 				switch (ntohs(option_code)) {
 				/* RFC 7873 DNS Cookies */
+				case DNS_OPT_CODE_TCP_KEEPALIVE:
+					q->tcpkeepalive = 1;
+					break;
 				case DNS_OPT_CODE_COOKIE:
 					if (cookies) {
 							q->cookie.have_cookie = 1;

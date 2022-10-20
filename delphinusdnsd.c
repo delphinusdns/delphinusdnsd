@@ -177,7 +177,7 @@ void			sm_unlock(char *, size_t);
 void			sm_zebra(char *, size_t, size_t);
 void 			build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, uint8_t, int, int, char *, struct tls *);
 void 			ddd_signal(int);
-void 			parseloop(struct cfg *, struct imsgbuf *);
+void 			parseloop(struct cfg *, struct imsgbuf *, int);
 void 			primary_reload(int);
 void 			primary_shutdown(int);
 void 			setup_primary(ddDB *, char **, char *, struct imsgbuf *);
@@ -1783,7 +1783,7 @@ primary_reload(int sig)
 }
 
 void
-parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
+parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 {
 	struct imsg imsg;
 	struct imsgbuf *mybuf = ibuf;
@@ -2029,6 +2029,11 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf)
 					pq.tsig.tsigorigid = question->tsig.tsigorigid;
 					pq.notify = question->notify;
 					memcpy((char *)&pq.cookie, (char *)&question->cookie, sizeof(struct dns_cookie));
+					if (istcp)
+						pq.tcpkeepalive = question->tcpkeepalive;
+					else
+						pq.tcpkeepalive = 0;
+		
 
 					/* put it in shared memory */
 					sm_lock(cfg->shm[SM_PARSEQUESTION].shptr, 
@@ -2146,6 +2151,7 @@ convert_question(struct parsequestion *pq, int authoritative)
 
 	q->notify = pq->notify;
 	q->rawsocket = 0;
+	q->tcpkeepalive = pq->tcpkeepalive;
 
 	memcpy((char *)&q->cookie, (char *)&pq->cookie, sizeof(struct dns_cookie));
 

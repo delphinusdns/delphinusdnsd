@@ -124,7 +124,7 @@ extern void 		pack(char *, char *, int);
 extern void 		pack16(char *, uint16_t);
 extern void 		pack32(char *, uint32_t);
 extern void 		pack8(char *, uint8_t);
-extern void 		parseloop(struct cfg *, struct imsgbuf *);
+extern void 		parseloop(struct cfg *, struct imsgbuf *, int);
 extern void 		unpack(char *, char *, int);
 
 void 			tlsloop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
@@ -144,6 +144,7 @@ struct tlsentry {
 	time_t last_used;
 	char buf[0xffff + 3];	
 	char *address;
+	uint16_t ms_timeout;
 	TAILQ_ENTRY(tlsentry) tlsentries;
 } *tlsn1, *tlsn2, *tlsnp;
 
@@ -282,7 +283,7 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
 		setproctitle("tls parse engine %d [%s]", cfg->pid,
 			(identstring != NULL ? identstring : ""));
-		parseloop(cfg, &parse_ibuf);
+		parseloop(cfg, &parse_ibuf, DDD_IS_TLS);
 		/* NOTREACHED */
 		exit(1);
 	default:
@@ -346,7 +347,10 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 
 		if (sel == 0) {
 			TAILQ_FOREACH_SAFE(tlsnp, &tlshead, tlsentries, tlsn1) {
-				if ((tlsnp->last_used + 30) < time(NULL)) {
+                        if (((tlsnp->ms_timeout == 0) && (tlsnp->last_used + 30) \
+                                < time(NULL)) ||
+                        (tlsnp->ms_timeout && (tlsnp->last_used + \
+                                (tlsnp->ms_timeout / 10)) < time(NULL))) {
 					dolog(LOG_INFO, "tls timeout on interface \"%s\" for address %s\n", cfg->ident[tlsnp->intidx], tlsnp->address);
 					TAILQ_REMOVE(&tlshead, tlsnp, tlsentries);
 					tls_close(tlsnp->ctx);
@@ -461,6 +465,7 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				tlsn1->seen = 0;
 				tlsn1->so = so;
 				tlsn1->last_used = time(NULL);
+				tlsn1->ms_timeout = 0;
 				tlsn1->intidx = i;
 
 				if (tls_accept_socket(cfg->ctx, &tlsn1->ctx, so) == -1) {
@@ -687,6 +692,11 @@ gawn:
 					}
 				} /* if question->notify */
 
+				/* if we have a tcp keepalive give the full */
+				if (question->tcpkeepalive) {
+					tlsnp->ms_timeout = DDD_TCP_TIMEOUT;
+				}
+
 				if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0)  {
 					if (question->tsig.have_tsig &&
 						question->tsig.tsigerrorcode == DNS_BADTIME &&
@@ -885,7 +895,7 @@ forwardtls:
 						slen = 0;
 
 						if (lflag)
-							dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TLS, region=%d, tta=NA) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (bytes=%d/%d, sum=NA)\n", so, cfg->ident[tlsnp->intidx], tlsnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), (question->cookie.have_cookie ? "cookie, " : ""),  replystring, len, slen);
+							dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TLS, region=%d, tta=NA) for \"%s\" type=%s class=%u, %s%s%s%s answering \"%s\" (bytes=%d/%d, sum=NA)\n", so, cfg->ident[tlsnp->intidx], tlsnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), (question->cookie.have_cookie ? "cookie, " : ""), (question->tcpkeepalive ? "keepalive, ": "" ), replystring, len, slen);
 
 						if (fakequestion != NULL) {
 							free_question(fakequestion);
@@ -1082,7 +1092,7 @@ forwardtls:
 			
 tlsout:
 				if (lflag)
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TLS, region=%d, tta=NA) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (bytes=%d/%d, sum=NA)\n", so, cfg->ident[tlsnp->intidx], tlsnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), replystring, len, slen);
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TLS, region=%d, tta=NA) for \"%s\" type=%s class=%u, %s%s%s%s answering \"%s\" (bytes=%d/%d, sum=NA)\n", so, cfg->ident[tlsnp->intidx], tlsnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), (question->tcpkeepalive ? "keepalive, ": "" ), replystring, len, slen);
 
 
 				if (fakequestion != NULL) {

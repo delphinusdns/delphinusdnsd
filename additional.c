@@ -796,6 +796,26 @@ additional_opt(struct question *question, char *reply, int replylen, int offset,
 		answer->rdlen += (4 + tlsbuf);
 		HTONS(answer->rdlen);
 	}
+
+	if (question->tcpkeepalive) {
+		if (offset + 2 + 2 + 2 > replylen)
+			goto out;
+
+		opt_code = DNS_OPT_CODE_TCP_KEEPALIVE;
+		pack16(&reply[offset], htons(opt_code));
+		offset += 2;
+		opt_code = 2;
+		pack16(&reply[offset], htons(opt_code)); /* length */
+		offset += 2;
+		opt_code = DDD_TCP_TIMEOUT;		/* max 420 seconds */
+		pack16(&reply[offset], htons(opt_code)); /* units of 10 Hz*/
+		offset += 2;
+
+		NTOHS(answer->rdlen);
+		answer->rdlen += 6; 		/* 2 + 2 + 2 */
+		HTONS(answer->rdlen);
+	}
+		
 out:
 	return (offset);
 

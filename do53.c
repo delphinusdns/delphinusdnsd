@@ -124,7 +124,7 @@ extern void 		pack(char *, char *, int);
 extern void 		pack16(char *, uint16_t);
 extern void 		pack32(char *, uint32_t);
 extern void 		pack8(char *, uint8_t);
-extern void 		parseloop(struct cfg *, struct imsgbuf *);
+extern void 		parseloop(struct cfg *, struct imsgbuf *, int);
 extern void 		tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 extern void		tlsloop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 extern void 		unpack(char *, char *, int);
@@ -478,7 +478,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
 		setproctitle("udp parse engine %d [%s]", cfg->pid, 
 			(identstring != NULL ? identstring : ""));
-		parseloop(cfg, &parse_ibuf);
+		parseloop(cfg, &parse_ibuf, 0);
 		/* NOTREACHED */
 		exit(1);
 	default:

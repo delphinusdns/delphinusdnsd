@@ -122,7 +122,7 @@ extern void 		pack(char *, char *, int);
 extern void 		pack16(char *, uint16_t);
 extern void 		pack32(char *, uint32_t);
 extern void 		pack8(char *, uint8_t);
-extern void 		parseloop(struct cfg *, struct imsgbuf *);
+extern void 		parseloop(struct cfg *, struct imsgbuf *, int);
 extern void 		unpack(char *, char *, int);
 
 void 			tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
@@ -141,6 +141,7 @@ struct tcpentry {
 	time_t last_used;
 	char buf[0xffff + 3];	
 	char *address;
+	uint16_t ms_timeout;
 	TAILQ_ENTRY(tcpentry) tcpentries;
 } *tcpn1, *tcpn2, *tcpnp;
 
@@ -284,7 +285,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
 		setproctitle("tcp parse engine %d [%s]", cfg->pid,
 			(identstring != NULL ? identstring : ""));
-		parseloop(cfg, &parse_ibuf);
+		parseloop(cfg, &parse_ibuf, DDD_IS_TCP);
 		/* NOTREACHED */
 		exit(1);
 	default:
@@ -459,6 +460,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				tcpn1->seen = 0;
 				tcpn1->so = so;
 				tcpn1->last_used = time(NULL);
+				tcpn1->ms_timeout = 0;
 				tcpn1->intidx = i;
 				tcpn1->address = strdup(address);
 				
@@ -610,6 +612,11 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 						goto tcpout;
 					}
 				} /* if question->notify */
+
+				/* set keepalive value that we advertise */
+				if (question->tcpkeepalive) {
+					tcpnp->ms_timeout = DDD_TCP_TIMEOUT;
+				}
 
 				if (question->tsig.have_tsig && question->tsig.tsigerrorcode != 0)  {
 					if (question->tsig.have_tsig &&
@@ -806,7 +813,7 @@ forwardtcp:
 						slen = 0;
 
 						if (lflag)
-							dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d, tta=NA) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (bytes=%d/%d, sum=NA)\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), (question->cookie.have_cookie ? "cookie, " : ""),  replystring, len, slen);
+							dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d, tta=NA) for \"%s\" type=%s class=%u, %s%s%s%s answering \"%s\" (bytes=%d/%d, sum=NA)\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), (question->cookie.have_cookie ? "cookie, " : ""),  (question->tcpkeepalive ? "keepalive, ": "" ), replystring, len, slen);
 
 						if (fakequestion != NULL) {
 							free_question(fakequestion);
@@ -997,7 +1004,7 @@ forwardtcp:
 			
 		tcpout:
 				if (lflag)
-					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d, tta=NA) for \"%s\" type=%s class=%u, %s%s%s answering \"%s\" (bytes=%d/%d, sum=NA)\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), replystring, len, slen);
+					dolog(LOG_INFO, "request on descriptor %u interface \"%s\" from %s (ttl=TCP, region=%d, tta=NA) for \"%s\" type=%s class=%u, %s%s%s%s answering \"%s\" (bytes=%d/%d, sum=NA)\n", so, cfg->ident[tcpnp->intidx], tcpnp->address, aregion, question->converted_name, get_dns_type(ntohs(question->hdr->qtype), 1), ntohs(question->hdr->qclass), (question->edns0len) ? "edns0, " : "", (question->dnssecok) ? "dnssecok, " : "", (question->tsig.tsigverified ? "tsig, " : ""), (question->tcpkeepalive ? "keepalive, " : ""), replystring, len, slen);
 
 
 				if (fakequestion != NULL) {
@@ -1053,7 +1060,10 @@ forwardtcp:
 		 */
 
 		TAILQ_FOREACH_SAFE(tcpnp, &tcphead, tcpentries, tcpn1) {
-			if ((tcpnp->last_used + 3) < time(NULL)) {
+			if (((tcpnp->ms_timeout == 0) && (tcpnp->last_used + 3) \
+				< time(NULL)) ||
+			(tcpnp->ms_timeout && (tcpnp->last_used + \
+				(tcpnp->ms_timeout / 10)) < time(NULL))) {
 					dolog(LOG_INFO, "tcp timeout on interface \"%s\" for address %s\n", cfg->ident[tcpnp->intidx], tcpnp->address);
 					TAILQ_REMOVE(&tcphead, tcpnp, tcpentries);
 					close(tcpnp->so);

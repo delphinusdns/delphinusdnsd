@@ -68,8 +68,11 @@ struct dns_optrr {
 	char rdata[0];				/* attribute, value pairs */
 }__attribute__((packed));
 
-#define DNS_OPT_CODE_COOKIE	10		/* RFC 7873 */
-#define DNS_OPT_CODE_PADDING	12		/* RFC 7830 */
+#define DNS_OPT_CODE_COOKIE		10		/* RFC 7873 */
+#define DNS_OPT_CODE_TCP_KEEPALIVE	11		/* RFC 7828 */
+#define DNS_OPT_CODE_PADDING		12		/* RFC 7830 */
+
+#define DDD_TCP_TIMEOUT			4200		/* TCP_KEEPALIVE */
 
 /*
  * TSIG RR, based on dns_rr 
@@ -306,6 +309,7 @@ struct question {
 	int notify;
 	struct tsig tsig;
 	struct dns_cookie cookie;
+	int tcpkeepalive;
 };
 
 struct parsequestion {
@@ -319,6 +323,7 @@ struct parsequestion {
 	uint8_t ednsversion;
 	int rd;
 	int dnssecok;
+	int tcpkeepalive;
 	int notify;
 	int badvers;
 	struct tsig tsig;

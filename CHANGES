@@ -22,6 +22,8 @@ Changes in RELEASE_1_7 from RELEASE_1_6
 - fixed delegation points according to RFC 4035 section 2.2 regarding NS RR's
   This was a long standing bug but noone noticed since we don't delegate much
   with delphinusdnsd.
+- a hardcoded TCP TIMEOUT of 420 seconds when EDNS option 11 was requested
+  this is experimental still...
 
 [2021] Changes in RELEASE_1_6 from RELEASE_1_5
 
