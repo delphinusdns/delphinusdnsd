@@ -290,6 +290,8 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				close(cfg->udp[i]);
 				if (axfrport && axfrport != port)
 					close(cfg->axfr[i]);
+				if (tls)
+					close(cfg->tls[i]);
 		}
 		tcp_ibuf = register_cortex(ibuf, MY_IMSG_TCP);
 		if (tcp_ibuf == NULL) {
@@ -354,7 +356,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 			exit(1);
 		default:
 			for (i = 0; i < cfg->sockcount; i++)  {
-					close(cfg->tls[i]);
+				close(cfg->tls[i]);
 			}
 
 			/* turn off tls */
