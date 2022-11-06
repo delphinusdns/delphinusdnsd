@@ -34,7 +34,7 @@ residing in Schweinfurt, Germany.
 
 Some contribution came from other people (worldwide) with minor patches.
 
-A IPv6-only Website exists, with blog concerning delphinusdnsd.  See
+A website exists, with blog concerning delphinusdnsd.  Please see
 https://delphinusdns.org.
 
 
@@ -153,9 +153,9 @@ $ make install
 ------------------+--------------------+---------------------+
 Operating System  | makes and compiles | responds to queries |
 ------------------+--------------------+---------------------+
-FreeBSD 13.0      |        yes         |       yes           |
+FreeBSD 13.1      |        	       |                     |
 ------------------+--------------------+---------------------+
-NetBSD 9.2        |        yes         |       yes           |
+NetBSD 9.3        |                    |                     |
 ------------------+--------------------+---------------------+
 OpenBSD 7.2       |        yes         |       yes           |
 ------------------+--------------------+---------------------+
