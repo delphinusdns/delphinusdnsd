@@ -2,19 +2,21 @@ The TODO's here are for delphinusdnsd which is the successor of wildcarddnsd.
 Please see https://delphinusdns.org for updates/news.
 
 For 1.9.0 release
+
 - This is Peter J. Philipp's last release, the 2.0.0 if that ever happens will
 be led by other people.  Peter will go on to do another project.
 
 For 1.8.0 release
+
+- Shape up the NSEC code as it seems NSEC is having a renaissance, at least
+  to have replicant compatibility for NSEC
+- filter input to dddctl query for escape codes.
 - make delphinusdnsd not restart the entire daemon upon axfr, just merge or
 internally build a new database and switch them.
 - DNS Update (RFC 2136 and 3007) must be Secure with TSIG, and do DNSSEC signing
 
 For 1.7.0 release
 
-- filter input to dddctl query for escape codes.
-- Shape up the NSEC code as it seems NSEC is having a renaissance, at least
-  to have replicant compatibility for NSEC
 - EUI48 and EUI64 support (RFC 7043)				[DONE]
 - HTTPS/SVCB support (draft will enter standard soon)		[DONE]
 - Add cookies to the forward mode, so that we can get rid of x20 entirely.
