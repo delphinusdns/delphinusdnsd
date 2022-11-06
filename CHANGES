@@ -1,4 +1,8 @@
-Changes in RELEASE_1_7 from RELEASE_1_6
+Changes in RELEASE_1_8 from RELEASE_1_7
+
+None yet.
+
+[2022] Changes in RELEASE_1_7 from RELEASE_1_6
 
 - a selectable forwarding strategy between "single" and "spray" pertaining
  to the entered forwarders.  (experimental).
