@@ -6,7 +6,7 @@ SRCS=dddctl.c parse.y base64.c dnssec.c util.c ent.c db.c raxfr.c tsig.c region.
 
 CFLAGS= -Wall -g  -I${.CURDIR}/.. -I/usr/local/include -L/usr/local/lib -DUSE_OPENSSL
 LDFLAGS= -Wall -g -L /usr/local/lib -DUSE_OPENSSL
-LDADD= -lcrypto -lssl 
+LDADD= -lcrypto -lssl -ltls
 
 OBJDIR=.
 BINDIR=/usr/local/bin

@@ -98,6 +98,8 @@ $ make install
 3.2 FreeBSD
 -----------
 
+# get the libressl package
+$ pkg install libressl
 ## configure the platform
 $ ./configure
 ## add a privsep user (_ddd) with a chroot directory (as root)
@@ -153,7 +155,7 @@ $ make install
 ------------------+--------------------+---------------------+
 Operating System  | makes and compiles | responds to queries |
 ------------------+--------------------+---------------------+
-FreeBSD 13.1      |        	       |                     |
+FreeBSD 13.1      |        yes	       |       yes           |
 ------------------+--------------------+---------------------+
 NetBSD 9.3        |                    |                     |
 ------------------+--------------------+---------------------+
