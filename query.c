@@ -970,6 +970,7 @@ configure_client(void)
 
 	/* thanks rpki-client.c */
 
+#ifndef __NetBSD__
 	tls_ca_mem = tls_load_file(tls_default_ca_cert_file(), &tls_ca_size,
 			NULL);
 	
@@ -978,8 +979,10 @@ configure_client(void)
 		exit(1);
 	}
 
+
 	tls_config_set_ca_mem(tls_config, tls_ca_mem, tls_ca_size);
 
+#endif
 
 	//tls_config_verify_client_optional(tls_config)I;
 

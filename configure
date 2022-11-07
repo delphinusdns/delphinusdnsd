@@ -73,6 +73,12 @@ netbsd() {
 	if [ ! -d /usr/local/man/man/man5 ] ; then
 		echo WARN: before installing make sure /usr/local/man/man/man5 exists!
 	fi
+	if [ ! -d /usr/local/man/man/html8 ] ; then
+		echo WARN: before installing make sure /usr/local/man/man/html8 exists!
+	fi
+	if [ ! -d /usr/local/man/man/html5 ] ; then
+		echo WARN: before installing make sure /usr/local/man/man/html5 exists!
+	fi
 }
 
 freebsd() {
