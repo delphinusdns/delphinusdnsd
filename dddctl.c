@@ -84,6 +84,7 @@ int	usage(int argc, char *argv[]);
 int	start(int argc, char *argv[]);
 int	restart(int argc, char *argv[]);
 int	stop(int argc, char *argv[]);
+int	coord(int argc, char *argv[]);
 int	configtest(int argc, char *argv[]);
 int	bindfile(int argc, char *argv[]);
 int	sshfp(int argc, char *argv[]);
@@ -171,6 +172,7 @@ struct _mycmdtab {
 } mycmdtab[] = {
 	{ "bindfile", bindfile },
 	{ "configtest", configtest },
+	{ "coord", coord },
 	{ "dumpcache", dumpcache },
 	{ "query", dig },
 	{ "help", usage },
@@ -318,6 +320,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "usage: command [arg ...]\n");
 		fprintf(stderr, "\tbindfile zonename zonefile\n");
 		fprintf(stderr, "\tconfigtest [-cn] [configfile]\n");
+		fprintf(stderr, "\tcoord [-c] [lat] [min] [sec] [N/S] [long] [min] [sec] [E/W]\n");
 		fprintf(stderr, "\tquery [-DITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tsign [-KMXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask]\n\t\t[-n zonename] [-o output] [-R keyword] [-S pid] [-s salt]\n\t\t[-t ttl] [-x serial] [-z ZSK]\n");
@@ -425,6 +428,132 @@ start(int argc, char *argv[])
 	}
 
 	return 0;
+}
+
+int
+coord(int argc, char *argv[])
+{
+	int cartesian = 0;
+	char *p, *latp;
+	double latitude, longitude;
+	double min, sec;
+	double latmin, latsec;
+	double longmin, longsec;
+	double latresult, longresult;
+	char latdir = 'N', longdir = 'E';
+	char tmpbuf[128];
+	char *Slat, *Slong;
+
+	if (argc < 2) {
+		usage(argc, argv);
+		exit(1);
+	}
+		
+	if (strcmp(argv[1], "-c") == 0) {
+		cartesian = 1;
+	}
+
+	if (cartesian) {
+
+		if (argc < 3) {
+			usage(argc, argv);
+			exit(1);
+		}
+
+		latp = argv[2];
+
+		p = strchr(latp, ',');
+		if (p == NULL) {
+			fprintf(stderr, "there is a comma required between latitude and longitude\n");
+			exit(1);
+		}
+		*p++ = '\0';
+		
+		latitude = atof(latp);
+		longitude = atof(p);
+
+		if (latitude < 0)
+			latdir = 'S';
+
+		if (longitude < 0)
+			longdir = 'W';
+
+		if (*latp == '-')
+			latp++;
+
+		Slat = strchr(latp, '.');
+		if (Slat == NULL) {
+			printf("%s 00 00 %c ", latp, latdir);	
+			goto skip;
+		}
+		min = atof(Slat) * 60;
+		*Slat = '\0';
+
+		printf("%s ", latp);
+		snprintf(tmpbuf, sizeof(tmpbuf), "%f", min);
+		
+		Slat = strchr(tmpbuf, '.');
+		if (Slat == NULL) {
+			printf("%s %s 00 %c ", latp, tmpbuf, latdir);
+			goto skip;
+		}
+		sec = atof(Slat) * 60;
+		*Slat = '\0';
+
+		printf("%s %f %c ", tmpbuf, sec, latdir);
+
+skip:
+		if (*p == '-')
+			p++;
+
+		Slong = strchr(p, '.');
+		if (Slong == NULL) {
+			printf("%s 00 00 %c\n", p, longdir);	
+			exit(0);
+		}
+		min = atof(Slong) * 60;
+		*Slong = '\0';
+
+		printf("%s ", p);
+		snprintf(tmpbuf, sizeof(tmpbuf), "%f", min);
+		
+		Slong = strchr(tmpbuf, '.');
+		if (Slong == NULL) {
+			printf("%s %s 00 %c\n", p, tmpbuf, longdir);
+			exit(0);
+		}
+		sec = atof(Slong) * 60;
+		*Slong = '\0';
+
+		printf("%s %f %c\n", tmpbuf, sec, longdir);
+		exit(0);	
+	}
+
+	if (argc != 9) {
+		usage(argc, argv);
+		exit(1);
+	}
+
+	latitude = atof(argv[1]);
+	latmin = atof(argv[2]) / 60;
+	latsec = atof(argv[3]) / 3600;
+
+	if (*argv[4] == 'S')
+		latresult = -1 * (latitude + latmin + latsec);
+	else
+		latresult = (latitude + latmin + latsec);
+
+	longitude = atof(argv[5]);
+	longmin = atof(argv[6]) / 60;
+	longsec = atof(argv[7]) / 3600;
+
+	if (*argv[8] == 'W')
+		longresult = -1 * (longitude + longmin + longsec);
+	else
+		longresult = (longitude + longmin + longsec);
+
+	printf("%f,%f\n", latresult, longresult);
+	exit(0);
 }
 
 int
