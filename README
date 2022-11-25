@@ -15,12 +15,14 @@
  6.4 How can I sub-delegate a zone with DNSSEC
  6.5 What algorithms are supported with dddctl sign
 7. WHAT IT CAN'T DO
+ 7.1 DNSSEC algorithm rollover  
+ 7.2 RR support missing
 
 1. README 
 ---------
 
 Delphinusdns is a small authoritative nameserver.  It does not recurse nor 
-search.  Since version 1.5.0 it does forward (with TSIG security even). 
+search.  Since version 1.5.0 it does forwarding (with TSIG security even). 
 This program is written to a BSD Style License.  BSD's tree(3) Red Black 
 btree macros are used for the main in-memory database.  
 
@@ -258,5 +260,32 @@ algorithm (alg 13) (is now default), is supported.
 7. WHAT IT CAN'T DO
 -------------------
 
-* DNSSEC algorithm rollover.  Maybe for version 1.5.0 or higher.  Please pick
-a good strong algorithm, it may take years until this is fixed.
+7.1  DNSSEC algorithm rollover  
+------------------------------
+
+This is undefined.  I don't know how well we could do this.  Do all recursors 
+support the methods described per RFC?
+
+7.2  RR support missing
+-----------------------
+
+In terms of RR support there is only a few missing by now from the generally
+acceptable list of RR's (as taken from
+https://en.wikipedia.org/wiki/List_of_DNS_record_types#/media/File:All_active_dns_record_types.png)
+
+a) AFSDB(18) - andrew file system db record
+b) APL(42) - Address prefix list record
+c) CERT(37) - certificate record
+d) CSYNC(62) - child to parent synchronization
+e) DHCID(49) - DHCP identifier
+f) DLV(32769) - DNSSEC Lookaside Validation record
+g) DNAME(39) - Delegation name record
+h) HIP(55) - Host Identity Protocol 
+i) NSEC(47) - has some support which is undefined, we use NSEC3 instead
+j) OPENPGPKEY(61) - OpenPGP public key record
+k) SMIMEA(53) - S/MIME cert association
+l) TA(32768) - DNSSEC trust authorities
+m) TKEY(249) - transaction key record
+n) URI(256) - Uniform Resource Identifier
+
+Perhaps at 1.8 time a few of these will be supported.
