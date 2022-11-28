@@ -70,22 +70,22 @@ Here is an attempt at a config file (in /etc/delphinusdns/delphinusdns.conf):
 ;
 version "1";
 
-options "sample config" {
+options  {
         ratelimit-pps 12;
         bind 127.0.0.1;
         bind ::1;
         port 53;
         log;
         dnssec;
+	axfrport 10053;
         versionstring "delphinusdnsd-sampleconfig 20171001";
 }
 
-axfr-for "these hosts" {
+axfr-for {
         ::1/128;
         127.0.0.1/32;
 }
 
-axfrport "10053";
 
 mzone "myzone.tld" {
 	zonename "myzone.tld";
@@ -481,7 +481,7 @@ nusecret must be configured (see <a href="https://delphinusdns.org/delphinusdns.
 </p><p>
 The unbound side forwarder has the following forward config:
 <b><pre>
-forward "to these hosts" {
+forward {
         incoming-tsig yes;
         destination 127.0.0.1 port 5353 key NOKEY;
         destination ::1 port 5353 key NOKEY;
