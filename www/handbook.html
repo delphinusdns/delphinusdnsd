@@ -468,7 +468,7 @@ is how my setup looks like.
 </pre></b>
 The unwind side forwarder has the following forward config:
 <b><pre>
-forward "to these hosts" {
+forward {
         incoming-tsig no;
         cache yes;
         destination 5.9.87.75 port 8053 key nusecret;
