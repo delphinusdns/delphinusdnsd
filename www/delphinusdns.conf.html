@@ -1,5 +1,21 @@
 <!DOCTYPE html>
 <html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    table.head, table.foot { width: 100%; }
+    td.head-rtitle, td.foot-os { text-align: right; }
+    td.head-vol { text-align: center; }
+    .Nd, .Bf, .Op { display: inline; }
+    .Pa, .Ad { font-style: italic; }
+    .Ms { font-weight: bold; }
+    .Bl-diag > dt { font-weight: bold; }
+    code.Nm, .Fl, .Cm, .Ic, code.In, .Fd, .Fn, .Cd { font-weight: bold;
+      font-family: inherit; }
+  </style>
+  <title>DELPHINUSDNS.CONF(5)</title>
+</head>
 <!-- This is an automatically generated file.  Do not edit.
    Copyright (c) 2014-2022 Peter J. Philipp
    All rights reserved.
@@ -26,44 +42,28 @@
    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
    THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    -->
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <style>
-    table.head, table.foot { width: 100%; }
-    td.head-rtitle, td.foot-os { text-align: right; }
-    td.head-vol { text-align: center; }
-    .Nd, .Bf, .Op { display: inline; }
-    .Pa, .Ad { font-style: italic; }
-    .Ms { font-weight: bold; }
-    .Bl-diag > dt { font-weight: bold; }
-    code.Nm, .Fl, .Cm, .Ic, code.In, .Fd, .Fn, .Cd { font-weight: bold;
-      font-family: inherit; }
-  </style>
-  <title>DELPHINUSDNS.CONF(5)</title>
-</head>
 <body>
-<table class="head">
-  <tr>
-    <td class="head-ltitle">DELPHINUSDNS.CONF(5)</td>
-    <td class="head-vol">File Formats Manual</td>
-    <td class="head-rtitle">DELPHINUSDNS.CONF(5)</td>
-  </tr>
-</table>
-<div class="manual-text">
+<div class="head" role="doc-pageheader" aria-label="Manual header
+  line"><span class="head-ltitle">DELPHINUSDNS.CONF(5)</span>
+  <span class="head-vol">File Formats Manual</span>
+  <span class="head-rtitle">DELPHINUSDNS.CONF(5)</span></div>
+<main class="manual-text">
 <section class="Sh">
-<h1 class="Sh" id="NAME"><a class="permalink" href="#NAME">NAME</a></h1>
+<h2 class="Sh" id="NAME"><a class="permalink" href="#NAME">NAME</a></h2>
 <p class="Pp"><code class="Nm">delphinusdns.conf</code> &#x2014;
-    <span class="Nd">the delphinus DNS daemon configuration file</span></p>
+    <span class="Nd" role="doc-subtitle">the delphinus DNS daemon configuration
+    file</span></p>
 </section>
 <section class="Sh">
-<h1 class="Sh" id="DESCRIPTION"><a class="permalink" href="#DESCRIPTION">DESCRIPTION</a></h1>
-<p class="Pp">The <a class="Xr">delphinusdnsd(8)</a> has a default configfile it
-    is called <code class="Nm">delphinusdns.conf</code> and it is found in
+<h2 class="Sh" id="DESCRIPTION"><a class="permalink" href="#DESCRIPTION">DESCRIPTION</a></h2>
+<p class="Pp">The <a class="Xr" aria-label="delphinusdnsd, section
+    8">delphinusdnsd(8)</a> has a default configfile it is called
+    <code class="Nm">delphinusdns.conf</code> and it is found in
     /var/delphinusdnsd/etc. You may wonder why there is a missing d, so I ask
-    you to look up <a class="Xr">syslogd(8)</a> and
-    <a class="Xr">syslog.conf(5)</a> which also drop the d in the config file.
-    This follows that name convention.</p>
+    you to look up <a class="Xr" aria-label="syslogd, section 8">syslogd(8)</a>
+    and <a class="Xr" aria-label="syslog.conf, section 5">syslog.conf(5)</a>
+    which also drop the d in the config file. This follows that name
+  convention.</p>
 <p class="Pp">Delphinusdnsd zonefiles can be packed into the configfile, but
     this is discouraged. It is encouraged to use zinclude's to include each
     logical zone separately. This also makes sense from a DNSSEC signing
@@ -89,12 +89,12 @@ Do note that it is a requirement that an SOA and NS records exist in the apex
   would use the dddctl tool to DNSSEC sign a zonefile.
 </section>
 <section class="Sh">
-<h1 class="Sh" id="EXAMPLES"><a class="permalink" href="#EXAMPLES">EXAMPLES</a></h1>
+<h2 class="Sh" id="EXAMPLES"><a class="permalink" href="#EXAMPLES">EXAMPLES</a></h2>
 <p class="Pp">Here is a sample <code class="Nm">delphinusdns.conf</code>
   file:</p>
 <div class="Bd Pp Li">
 <pre>version &quot;1&quot;;
-options &quot;cool stuff&quot; {
+options {
 	interface &quot;lo0&quot;;
 	interface &quot;em0&quot;;
 
@@ -112,7 +112,7 @@ options &quot;cool stuff&quot; {
 	axfrport 10053;
 }
 
-axfr-for &quot;these hosts&quot; {
+axfr-for {
 	127.0.0.1;
 	::1;
 	192.168.0.0/16;
@@ -137,7 +137,7 @@ Here is a sample <code class="Nm">delphinusdns.conf</code> file suited for
   DNSSEC:
 <div class="Bd Pp Li">
 <pre>version &quot;1&quot;;
-options &quot;some options&quot; {
+options {
         ratelimit-pps 12;
         bind 127.0.0.1;
         bind ::1;
@@ -148,7 +148,7 @@ options &quot;some options&quot; {
         versionstring &quot;delphinusdnsd 1.5.0&quot;;
 	axfrport 10053;
 }
-axfr-for &quot;these hosts&quot; {
+axfr-for {
         ::1/128;
         127.0.0.1/32;
         10.110.99.88/32;
@@ -166,12 +166,13 @@ zinclude &quot;/var/delphinusdnsd/primary/centroid.eu.signed&quot;;
 
 </pre>
 </div>
-Then the included files are output of <a class="Xr">dddctl(8)</a>
+Then the included files are output of <a class="Xr" aria-label="dddctl, section
+  8">dddctl(8)</a>
 <p class="Pp">A forwarding-only config may look like this:</p>
 <div class="Bd Pp Li">
 <pre>version &quot;1&quot;;
 
-options &quot;this mess&quot; {
+options {
         interface &quot;em0&quot;;
         interface &quot;lo0&quot;;
         port 8053;
@@ -180,11 +181,11 @@ options &quot;this mess&quot; {
 }
 
 tsig-auth secret &quot;9qD4Qi4ghqFR1xm0fIwGF9t0aLx+SZWVEPAqEvysZFg=&quot;;
-tsig &quot;these hosts&quot; {
+tsig {
         0.0.0.0/0;
 }
 
-forward &quot;to these hosts&quot; {
+forward {
         incoming-tsig yes;
         destination 127.0.0.1 port 5353 key NOKEY;
 	forwardstrategy spray;
@@ -196,7 +197,7 @@ forward &quot;to these hosts&quot; {
 <div class="Bd Pp Li">
 <pre>version &quot;1&quot;;
 
-options &quot;arrowhead&quot; {
+options {
         ratelimit-pps 12;
         interface &quot;lo0&quot;;
         interface &quot;vio0&quot;;
@@ -211,7 +212,7 @@ include &quot;/var/delphinusdnsd/etc/delphinusdns.tsig&quot;;
 rzone &quot;ip6.centroid.eu.&quot; {
 	constraints 600, 600, 600;
 	bytelimit 65536;
-	; do make sure you have a tsig &quot;&quot; {} for this
+	; do make sure you have a tsig {} for this
         tsigkey &quot;pass&quot;;
         primaryport 10053;
         primary 2a01:4f8:162:e700:881c:fe60:3582:f49c;
@@ -224,7 +225,7 @@ rzone &quot;ip6.centroid.eu.&quot; {
 Notice the /var/delphinusdnsd/replicant/ directory, this is a hardcoded path.
 </section>
 <section class="Sh">
-<h1 class="Sh" id="GRAMMAR"><a class="permalink" href="#GRAMMAR">GRAMMAR</a></h1>
+<h2 class="Sh" id="GRAMMAR"><a class="permalink" href="#GRAMMAR">GRAMMAR</a></h2>
 <p class="Pp">Syntax for <code class="Nm">delphinusdns.conf</code> in BNF:</p>
 <div class="Bd Pp Li">
 <pre>line = ( 	version | include | zinclude | zone | region |
@@ -240,10 +241,11 @@ zinclude = &quot;zinclude&quot; (&quot;filename&quot;) ;
 hostname = string
 zone = &quot;zone&quot; (&quot;hostname&quot;) [ &quot;{&quot; zonedata &quot;}&quot; ]
 zonedata = { [hostname] [ &quot;,&quot; dnstype] [ &quot;,&quot; ttl ] [&quot;,&quot; variablednsdata] }
-dnstype = ( 	&quot;a&quot; | &quot;aaaa&quot; | &quot;caa&quot; | &quot;cname&quot; | &quot;dnskey&quot; | &quot;ds&quot; | &quot;hinfo&quot; |
-		&quot;hint&quot; | &quot;mx&quot; | &quot;naptr&quot; | &quot;ns&quot; | &quot;nsec3&quot; | &quot;nsec3param&quot; |
-		&quot;ptr&quot; | &quot;rp&quot; | &quot;rrsig&quot; | &quot;soa&quot; | &quot;srv&quot; | &quot;sshfp&quot; | &quot;tlsa&quot; |
-		&quot;txt&quot; )
+dnstype = ( 	&quot;a&quot; | &quot;aaaa&quot; | &quot;caa&quot; | &quot;cname&quot; | &quot;dnskey&quot; | &quot;ds&quot; |
+		&quot;eui48&quot; | &quot;eui64&quot; | &quot;hinfo&quot; | &quot;hint&quot; | &quot;https&quot; | &quot;kx&quot; |
+		&quot;mx&quot; | &quot;naptr&quot; | &quot;ns&quot; | &quot;nsec3&quot; | &quot;nsec3param&quot; |
+		&quot;ptr&quot; | &quot;rp&quot; | &quot;rrsig&quot; | &quot;soa&quot; | &quot;srv&quot; | &quot;sshfp&quot; |
+		&quot;svcb&quot; | &quot;tlsa&quot; | &quot;txt&quot; )
 
 ttl = number
 
@@ -252,7 +254,7 @@ region = &quot;region&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;
 
 cidrlist = { [ cidr-address ] ; ... }
 
-axfr = &quot;axfr-for&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;}&quot; ]
+axfr = &quot;axfr-for&quot; [ &quot;{&quot; cidrlist &quot;}&quot; ]
 
 mzonelist = ( optzonename | optnotifydest | optnotifybind )
 optzonename = &quot;zonename&quot; (&quot;string&quot;) ;
@@ -261,9 +263,9 @@ optnotifybind = &quot;notifybind&quot; cidr-address ;
 
 mzone = &quot;mzone&quot; (&quot;string&quot;) [ &quot;{&quot; mzonelist &quot;}&quot; ]
 
-passlist = &quot;passlist&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;}&quot; ]
+passlist = &quot;passlist&quot; [ &quot;{&quot; cidrlist &quot;}&quot; ]
 
-filter = &quot;filter&quot; (&quot;string&quot;) [ &quot;{&quot; cidrlist &quot;}&quot; ]
+filter = &quot;filter&quot; [ &quot;{&quot; cidrlist &quot;}&quot; ]
 
 base64-string = (string)
 tsig-auth = &quot;tsig-auth&quot; (string) (&quot;base64-string&quot;) ;
@@ -283,7 +285,7 @@ optconstraints = &quot;constraints&quot; (number), (number), (number) ;
 optbytelimit = &quot;bytelimit&quot; (number) ;
 
 
-forward = &quot;forward&quot; (&quot;string&quot;) [ &quot;{&quot; forwardlist &quot;}&quot; ]
+forward = &quot;forward&quot;  [ &quot;{&quot; forwardlist &quot;}&quot; ]
 forwardlist = ( optdestination | optstrictx20 | optcache | optincomingtsig |
 			optfudge | optrdomain | optstrategy )
 
@@ -298,7 +300,7 @@ optstrategy = &quot;forwardstrategy&quot; (&quot;single&quot; | &quot;spray&quot
 
 comment = ( ; | pound ) line
 
-options = &quot;options&quot; (&quot;string&quot;) [ &quot;{&quot; optionlist &quot;}&quot; ]
+options = &quot;options&quot; [ &quot;{&quot; optionlist &quot;}&quot; ]
 optionlist = (  optinterface | optfork | optport | optratelimit |
 		optratelimit-cidr | optratelimit-cidr6 |
 		optbind | optdnssec | opttcponanyonly |
@@ -323,27 +325,26 @@ optstrictaxfr = &quot;strictaxfr&quot; ;
 </div>
 </section>
 <section class="Sh">
-<h1 class="Sh" id="FILES"><a class="permalink" href="#FILES">FILES</a></h1>
+<h2 class="Sh" id="FILES"><a class="permalink" href="#FILES">FILES</a></h2>
 <p class="Pp"><span class="Pa">/var/delphinusdnsd/etc/delphinusdns.conf</span></p>
 </section>
 <section class="Sh">
-<h1 class="Sh" id="SEE_ALSO"><a class="permalink" href="#SEE_ALSO">SEE
-  ALSO</a></h1>
-<p class="Pp"><a class="Xr">delphinusdns.zone(5)</a>,
-    <a class="Xr">dddctl(8)</a>, <a class="Xr">delphinusdnsd(8)</a></p>
+<h2 class="Sh" id="SEE_ALSO"><a class="permalink" href="#SEE_ALSO">SEE
+  ALSO</a></h2>
+<p class="Pp"><a class="Xr" aria-label="delphinusdns.zone, section
+    5">delphinusdns.zone(5)</a>, <a class="Xr" aria-label="dddctl, section
+    8">dddctl(8)</a>, <a class="Xr" aria-label="delphinusdnsd, section
+    8">delphinusdnsd(8)</a></p>
 </section>
 <section class="Sh">
-<h1 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h1>
-<p class="Pp">This software and manual was written by <span class="An">Peter J.
-    Philipp</span> &#x27E8;pbug44@delphinusdns.org&#x27E9;</p>
-<p class="Pp"></p>
+<h2 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h2>
+<p class="Pp">This software was written by <span class="An">Peter J.
+    Philipp</span> &#x27E8;pbug44@delphinusdns.org&#x27E9; and this manual was
+    written with the help of Francisco Gaitan.</p>
 </section>
-</div>
-<table class="foot">
-  <tr>
-    <td class="foot-date">August 13, 2022</td>
-    <td class="foot-os">OpenBSD 7.1</td>
-  </tr>
-</table>
+</main>
+<div class="foot" role="doc-pagefooter" aria-label="Manual footer
+  line"><span class="foot-left"></span><span class="foot-date">November 3,
+  2022</span> <span class="foot-os">OpenBSD 7.2</span></div>
 </body>
 </html>

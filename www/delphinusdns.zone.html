@@ -1,7 +1,23 @@
 <!DOCTYPE html>
 <html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    table.head, table.foot { width: 100%; }
+    td.head-rtitle, td.foot-os { text-align: right; }
+    td.head-vol { text-align: center; }
+    .Nd, .Bf, .Op { display: inline; }
+    .Pa, .Ad { font-style: italic; }
+    .Ms { font-weight: bold; }
+    .Bl-diag > dt { font-weight: bold; }
+    code.Nm, .Fl, .Cm, .Ic, code.In, .Fd, .Fn, .Cd { font-weight: bold;
+      font-family: inherit; }
+  </style>
+  <title>DELPHINUSDNS.ZONE(5)</title>
+</head>
 <!-- This is an automatically generated file.  Do not edit.
-   Copyright (c) 2021 Peter J. Philipp
+   Copyright (c) 2021,2022 Peter J. Philipp
    All rights reserved.
   
    Redistribution and use in source and binary forms, with or without
@@ -26,45 +42,28 @@
    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
    THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    -->
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <style>
-    table.head, table.foot { width: 100%; }
-    td.head-rtitle, td.foot-os { text-align: right; }
-    td.head-vol { text-align: center; }
-    .Nd, .Bf, .Op { display: inline; }
-    .Pa, .Ad { font-style: italic; }
-    .Ms { font-weight: bold; }
-    .Bl-diag > dt { font-weight: bold; }
-    code.Nm, .Fl, .Cm, .Ic, code.In, .Fd, .Fn, .Cd { font-weight: bold;
-      font-family: inherit; }
-  </style>
-  <title>DELPHINUSDNS.ZONE(5)</title>
-</head>
 <body>
-<table class="head">
-  <tr>
-    <td class="head-ltitle">DELPHINUSDNS.ZONE(5)</td>
-    <td class="head-vol">File Formats Manual</td>
-    <td class="head-rtitle">DELPHINUSDNS.ZONE(5)</td>
-  </tr>
-</table>
-<div class="manual-text">
+<div class="head" role="doc-pageheader" aria-label="Manual header
+  line"><span class="head-ltitle">DELPHINUSDNS.ZONE(5)</span>
+  <span class="head-vol">File Formats Manual</span>
+  <span class="head-rtitle">DELPHINUSDNS.ZONE(5)</span></div>
+<main class="manual-text">
 <section class="Sh">
-<h1 class="Sh" id="NAME"><a class="permalink" href="#NAME">NAME</a></h1>
+<h2 class="Sh" id="NAME"><a class="permalink" href="#NAME">NAME</a></h2>
 <p class="Pp"><code class="Nm">delphinusdns.zone</code> &#x2014;
-    <span class="Nd">the delphinus DNS daemon zone file</span></p>
+    <span class="Nd" role="doc-subtitle">the delphinus DNS daemon zone
+    file</span></p>
 </section>
 <section class="Sh">
-<h1 class="Sh" id="DESCRIPTION"><a class="permalink" href="#DESCRIPTION">DESCRIPTION</a></h1>
-<p class="Pp">The <a class="Xr">delphinusdns.conf(5)</a> usually has a zinclude
-    for a zonefile. Yet as functionality increases so does simple configs. This
-    manpage is supposed to address the format of Resource Records within a
-  zone.</p>
+<h2 class="Sh" id="DESCRIPTION"><a class="permalink" href="#DESCRIPTION">DESCRIPTION</a></h2>
+<p class="Pp">The <a class="Xr" aria-label="delphinusdns.conf, section
+    5">delphinusdns.conf(5)</a> usually has a zinclude for a zonefile. Yet as
+    functionality increases so does simple configs. This manpage is supposed to
+    address the format of Resource Records within a zone.</p>
 <p class="Pp">Delphinusdnsd zonefiles can be packed into the configfile, but
     this is discouraged. It is encouraged to use zinclude's to include each
-    logical zone from <a class="Xr">delphinusdns.conf(5)</a> separately.</p>
+    logical zone from <a class="Xr" aria-label="delphinusdns.conf, section
+    5">delphinusdns.conf(5)</a> separately.</p>
 <div class="Bd Pp Li">
 <pre>zone &quot;delphinusdns.org&quot; {
         delphinusdns.org,soa,86400,pod.delphinusdns.org.,dns-admin.delphinusdns.org.,2021040404,3600,1200,1209600,86400
@@ -80,7 +79,7 @@ Do note that it is a requirement that an SOA and NS records exist in the apex
   would use the dddctl tool to DNSSEC sign a zonefile.
 </section>
 <section class="Sh">
-<h1 class="Sh" id="EXAMPLES"><a class="permalink" href="#EXAMPLES">EXAMPLES</a></h1>
+<h2 class="Sh" id="EXAMPLES"><a class="permalink" href="#EXAMPLES">EXAMPLES</a></h2>
 <p class="Pp">The following Resource Records look like the following format:</p>
 <p class="Pp">A Resource Record</p>
 <div class="Bd Pp Li">
@@ -115,9 +114,29 @@ Do note that it is a requirement that an SOA and NS records exist in the apex
 <div class="Bd Pp Li">
 <pre>	subdomain.delphinusdns.org,ds,86400,59385,13,2,&quot;07B5A3F59E461A075FDA284D431F780909595A9&quot;</pre>
 </div>
+<p class="Pp">EUI48 Resource Record</p>
+<div class="Bd Pp Li">
+<pre>	subdomain.delphinusdns.org,eui48,86400,&quot;aa-bb-cc-dd-ee-ff&quot;</pre>
+</div>
+<p class="Pp">EUI64 Resource Record</p>
+<div class="Bd Pp Li">
+<pre>	subdomain.delphinusdns.org,eui64,86400,&quot;00-11-aa-bb-cc-dd-ee-ff&quot;</pre>
+</div>
 <p class="Pp">HINFO Resource Record</p>
 <div class="Bd Pp Li">
 <pre>	delphinusdns.org,hinfo,86400,&quot;arm64&quot;,&quot;OpenBSD&quot;</pre>
+</div>
+<p class="Pp">HTTPS Resource Record</p>
+<div class="Bd Pp Li">
+<pre>	delphinusdns.org,https,86400,0,example.delphinusdns.org.,&quot;&quot;</pre>
+</div>
+<p class="Pp">IPSECKEY Resource Record</p>
+<div class="Bd Pp Li">
+<pre>	delphinusdns.org,ipseckey,86400,10,0,2,&quot;.&quot;,&quot;AQNRU3mG7TVTO2BkR47usntb102uFJtugbo6BSGvgqt4AQ==&quot;</pre>
+</div>
+<p class="Pp">KX Resource Record</p>
+<div class="Bd Pp Li">
+<pre>	delphinusdns.org,kx,86400,1,kx1.delphinusdns.org</pre>
 </div>
 <p class="Pp">LOC Resource Record (units in centimeters)</p>
 <div class="Bd Pp Li">
@@ -170,6 +189,10 @@ Do note that it is a requirement that an SOA and NS records exist in the apex
 <div class="Bd Pp Li">
 <pre>	delphinusdns.org,sshfp,86400,4,2,&quot;1005202de476ab11946c0c10e3faf1b32f08b004f49a7945ef4451e5af07acc5&quot;</pre>
 </div>
+<p class="Pp">SVCB Resource Record</p>
+<div class="Bd Pp Li">
+<pre>	figure8.delphinusdns.org,svcb,86400,1,delphinusdns.org.,&quot;ipv6hint=2001:db8:122:344::192.0.2.33&quot;</pre>
+</div>
 <p class="Pp">TLSA Resource Record</p>
 <div class="Bd Pp Li">
 <pre>	delphinusdns.org,tlsa,86400,3,1,1,&quot;d147fc407c74e56fd379dfa39f4f595d5016985e4df4f3cecd0248c21a844bce&quot;</pre>
@@ -180,28 +203,27 @@ Do note that it is a requirement that an SOA and NS records exist in the apex
 </div>
 </section>
 <section class="Sh">
-<h1 class="Sh" id="FILES"><a class="permalink" href="#FILES">FILES</a></h1>
+<h2 class="Sh" id="FILES"><a class="permalink" href="#FILES">FILES</a></h2>
 <p class="Pp"><span class="Pa">/var/delphinusdnsd/primary/	The unofficial master
     zonefiles directory</span> <span class="Pa">/var/delphinusdnsd/replicant/
     The default replicant zonefiles directory</span></p>
 </section>
 <section class="Sh">
-<h1 class="Sh" id="SEE_ALSO"><a class="permalink" href="#SEE_ALSO">SEE
-  ALSO</a></h1>
-<p class="Pp"><a class="Xr">delphinusdns.conf(5)</a>,
-    <a class="Xr">dddctl(8)</a>, <a class="Xr">delphinusdnsd(8)</a></p>
+<h2 class="Sh" id="SEE_ALSO"><a class="permalink" href="#SEE_ALSO">SEE
+  ALSO</a></h2>
+<p class="Pp"><a class="Xr" aria-label="delphinusdns.conf, section
+    5">delphinusdns.conf(5)</a>, <a class="Xr" aria-label="dddctl, section
+    8">dddctl(8)</a>, <a class="Xr" aria-label="delphinusdnsd, section
+    8">delphinusdnsd(8)</a></p>
 </section>
 <section class="Sh">
-<h1 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h1>
+<h2 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h2>
 <p class="Pp">This software and manual was written by <span class="An">Peter J.
     Philipp</span> &#x27E8;pbug44@delphinusdns.org&#x27E9;</p>
 </section>
-</div>
-<table class="foot">
-  <tr>
-    <td class="foot-date">November 19, 2021</td>
-    <td class="foot-os">OpenBSD 7.1</td>
-  </tr>
-</table>
+</main>
+<div class="foot" role="doc-pagefooter" aria-label="Manual footer
+  line"><span class="foot-left"></span><span class="foot-date">September 21,
+  2022</span> <span class="foot-os">OpenBSD 7.2</span></div>
 </body>
 </html>
