@@ -19,6 +19,15 @@
 	News
 </h2>
 <ul>
+<li><b>Delphinusdnsd 1.7.0</b> has been released on December 2nd, 2022.
+Additions in RR's are EUI48, EUI64, HTTPS, SVCB, KX, and IPSECKEY Resource
+Records.  Other changes include: Some internal memory mapped regions were
+enlarged in order to allow    guard pages.  The RAM footprint of
+delphinusdnsd is quite a bit more now.  A strictaxfr option was added to
+only allow authenticated AXFR's before sending anything to replicants.  Other
+changes are documented in the CHANGES section and commit messages.</li>
+</ul>
+<ul>
 <li><b>Delphinusdnsd-1.6.2</b> has been released on May 17th, 2022.
 Changes are backpatches from -current as of this date.  In particular
 answers to SRV and NAPTR RR's and ANY answers that include these records,
