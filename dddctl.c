@@ -1218,8 +1218,12 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 					rrset->ttl);
 					
 			for (i = 0; i < ((struct txt *)rrp2->rdata)->txtlen; i++) {
-				if (i % 256 == 0)
+				if (i % 256 == 0) {
+					if (i)
+						printf("\" \"");
+
 					continue;
+				}
 
 				fprintf(of, "%c", ((struct txt *)rrp2->rdata)->txt[i]);
 			}
