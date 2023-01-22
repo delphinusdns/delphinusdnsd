@@ -862,6 +862,7 @@ refusedtime = time(NULL);
 					if (question->tsig.have_tsig &&
 						question->tsig.tsigerrorcode == DNS_BADTIME &&
 						tsigpassname &&
+							! (question->hdr->namelen <= 1) &&
 							tsigpassname_contains(question->hdr->name, question->hdr->namelen, &passnamewc)) {
 							dolog(LOG_INFO, "passing %s despite being a TSIG unauthenticated query\n", question->converted_name);
 					} else {

@@ -701,6 +701,7 @@ gawn:
 					if (question->tsig.have_tsig &&
 						question->tsig.tsigerrorcode == DNS_BADTIME &&
 						tsigpassname &&
+						! (question->hdr->namelen <= 1) &&
 						tsigpassname_contains(question->hdr->name, question->hdr->namelen, &passnamewc)) {
 							dolog(LOG_INFO, "passing on TLS name %s despite it not authenticating the TSIG\n", question->converted_name);
 					} else {
