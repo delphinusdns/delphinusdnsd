@@ -118,7 +118,7 @@ tsigpassname_contains(char *origname, int origlen, int *wildcard)
 {
 	char *p = origname;
 	int plen = origlen;
-	struct pnentry *res;
+	struct pnentry *res = NULL;
 
 	for (; *p; plen--, p++) {
 		if ((res = have_tsigpassname(p, plen)) != NULL)

@@ -306,8 +306,8 @@ char *bind_list[255];
 char *interface_list[255];
 char *identstring = NULL;
 #ifndef DD_VERSION
-char *versionstring = "delphinusdnsd-1.7";
-uint8_t vslen = 17;
+char *versionstring = "delphinusdnsd-1.7.1";
+uint8_t vslen = 19;
 #else
 char *versionstring = DD_VERSION;
 uint8_t vslen = DD_VERSION_LEN;
