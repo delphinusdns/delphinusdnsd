@@ -14,6 +14,7 @@ For 1.8.0 release
 - make delphinusdnsd not restart the entire daemon upon axfr, just merge or
 internally build a new database and switch them.
 - partially rewrite AXFR code.
+- fix the TXT RR problem (DNSSEC)
 
 For 1.7.0 release
 
