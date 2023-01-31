@@ -13,7 +13,7 @@ For 1.8.0 release
 - filter input to dddctl query for escape codes.
 - make delphinusdnsd not restart the entire daemon upon axfr, just merge or
 internally build a new database and switch them.
-- DNS Update (RFC 2136 and 3007) must be Secure with TSIG, and do DNSSEC signing
+- partially rewrite AXFR code.
 
 For 1.7.0 release
 
