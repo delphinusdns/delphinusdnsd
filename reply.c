@@ -10056,6 +10056,7 @@ reply_sendpacket(char *reply, uint16_t len, struct sreply *sreply, int *sretlen)
 		free(tmpbuf);
 	} else if (istcp == DDD_IS_TLS) {
 		char *pt;
+		int tlslen = len;
 
 		tmpbuf = malloc(len + 2);
 		if (tmpbuf == NULL) {
@@ -10065,20 +10066,20 @@ reply_sendpacket(char *reply, uint16_t len, struct sreply *sreply, int *sretlen)
 		pack16(tmpbuf, htons(len));
 		memcpy(&tmpbuf[2], reply, len);
 	
-		len += 2;
+		tlslen += 2;
 		pt = tmpbuf;
 
-		while (len > 0) {
+		while (tlslen > 0) {
 			ssize_t ret;
 
-			ret = tls_write(ctx, pt, len);
+			ret = tls_write(ctx, pt, tlslen);
 			if (ret == TLS_WANT_POLLIN || ret == TLS_WANT_POLLOUT)
 				continue;
 			if (ret == -1) {
 				dolog(LOG_INFO, "tls_write: %s\n", tls_error(ctx));
 			} else {
 				pt += (int)ret;
-				len -= (int)ret;
+				tlslen -= (int)ret;
 				retlen += (int)ret;
 			}
 		}
