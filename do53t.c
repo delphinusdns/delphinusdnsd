@@ -501,8 +501,8 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 						uint16_t u16tmp;
 
 						u16tmp = unpack16(&tcpnp->buf[0]);
-						tcpnp->bytes_expected = ntohs(u16tmp);
-						tcpnp->bytes_limit = tcpnp->bytes_expected;
+						tcpnp->bytes_expected = ntohs(u16tmp) - (tcpnp->bytes_read - 2);
+						tcpnp->bytes_limit = ntohs(u16tmp) + 2;
 						tcpnp->seen = 1;
 				} 
 
@@ -514,10 +514,10 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				if (tcpnp->bytes_read <= 2)
 					continue;
 
-				if ((tcpnp->bytes_read - 2) != tcpnp->bytes_limit) 
+				if ((tcpnp->bytes_read) < tcpnp->bytes_limit) 
 					continue;
 
-				len = tcpnp->bytes_read - 2;
+				len = tcpnp->bytes_limit - 2;
 				pbuf = &tcpnp->buf[2];
 				so = tcpnp->so;
 

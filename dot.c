@@ -574,9 +574,8 @@ restart:
 						uint16_t u16tmp;
 
 						u16tmp = unpack16(&tlsnp->buf[0]);
-						tlsnp->bytes_expected = ntohs(u16tmp);
-						//dolog(LOG_INFO, "bytes expected %d\n", tlsnp->bytes_expected);
-						tlsnp->bytes_limit = tlsnp->bytes_expected;
+						tlsnp->bytes_expected = ntohs(u16tmp) - (tlsnp->bytes_read - 2);
+						tlsnp->bytes_limit = ntohs(u16tmp) + 2;
 						tlsnp->seen = 1;
 				} 
 
@@ -593,10 +592,10 @@ restart:
 
 gawn:
 
-				if ((tlsnp->bytes_read - 2) != tlsnp->bytes_limit) 
+				if ((tlsnp->bytes_read) < tlsnp->bytes_limit) 
 					continue;
 
-				len = tlsnp->bytes_read - 2;
+				len = tlsnp->bytes_limit - 2;
 				pbuf = &tlsnp->buf[2];
 				so = tlsnp->so;
 
