@@ -820,7 +820,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 				}
 			}
 
-			odh = (struct dns_header *)&buf[fwq1->istcp ? 2 : 0];
+			odh = (struct dns_header *)&buf[(fwq1->istcp == DDD_IS_TCP) ? 2 : 0];
 			/* send a servfail and remove from list */
 			odh->id = fwq1->oldid;
 			odh->query = DNS_REPLY;
@@ -1400,12 +1400,12 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	if (tsigname) {
 		outlen = additional_tsig(q, packet, 0xffff, len, 1, 0, NULL, fudge_forward);
 		dh->additional = htons(2);	
+		len = outlen;
 	}
 
 	memcpy(&fwq->mac[fwq->tries++ * DNS_HMAC_SHA256_SIZE], &q->tsig.tsigmac, DNS_HMAC_SHA256_SIZE);
 
-	len = outlen;
-	p = packet + outlen;
+	p = packet + len;
 	
 	if (fwq->istcp == DDD_IS_TCP) {
 		pack16(buf, htons(len));
