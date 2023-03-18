@@ -117,6 +117,7 @@ struct forwardqueue {
 	char oldmac[DNS_HMAC_SHA256_SIZE];	/* old mac */
 	struct forwardentry *cur_forwardentry;	/* current forwardentry */
 	int dnssecok;				/* DNSSEC in anwers */
+	uint16_t edns0len;			/* EDNS0 length as negotiated */
 	SLIST_ENTRY(forwardqueue) entries;	/* next entry */
 } *fwq1, *fwq2, *fwq3, *fwqp;
 
@@ -489,7 +490,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					}
 				}
 
-				if (fwq1->istcp) {
+				if (fwq1->istcp == DDD_IS_TCP) {
 					tv.tv_sec = 2;
 					tv.tv_usec = 0;
 
@@ -777,7 +778,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	int len, slen;
 
 	int fromlen, returnval, lzerrno;
-	int istcp = (so == -1 ? 0 : 1);
+	int istcp = (so == -1 ? DDD_IS_UDP : DDD_IS_TCP);
 	int sretlen;
 
 	int on = 1;
@@ -839,7 +840,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 			p += 2;
 
 			if (fwq1->answered == 0) {
-				if (fwq1->istcp) {
+				if (fwq1->istcp == DDD_IS_TCP) {
 					pack16(&buf[0], htons(p - &buf[2]));
 					send(fwq1->returnso, buf, p - &buf[0], 0);
 				} else {
@@ -1005,7 +1006,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 
 			q->rawsocket = 1;
 			build_reply(&sreply, 
-				(istcp ? so : -1), buf, len, q, 
+				(istcp == DDD_IS_TCP ? so : -1), buf, len, q, 
 				(struct sockaddr *)from, fromlen, 
 				rbt, NULL, 0xff, istcp, 0, replybuf); 
 
@@ -1129,6 +1130,7 @@ newqueue:
 			fwq1->oldport = sforward->rport;
 			fwq1->oldid = sforward->header.id;
 			fwq1->type = sforward->type;
+			fwq1->edns0len = sforward->edns0len;
 
 			fwq1->port = fw2->destport;
 			fwq1->cur_forwardentry = fw2;
@@ -1138,9 +1140,9 @@ newqueue:
 			fwq1->time = now;
 			fwq1->tries = 1;
 			if (so == -1)
-				fwq1->istcp = 0;
+				fwq1->istcp = DDD_IS_UDP;
 			else
-				fwq1->istcp = 1;	
+				fwq1->istcp = DDD_IS_TCP;	
 
 
 			memcpy((char *)&fwq1->host, (char *)&fw2->host, sizeof(struct sockaddr_storage));
@@ -1158,7 +1160,7 @@ newqueue:
 
 			/* connect the UDP sockets */
 
-			fwq1->so = socket(fw2->family, (fwq1->istcp != 1) ? SOCK_DGRAM : SOCK_STREAM, 0);
+			fwq1->so = socket(fw2->family, (fwq1->istcp != DDD_IS_TCP) ? SOCK_DGRAM : SOCK_STREAM, 0);
 			if (fwq1->so < 0) {
 				int save_errno = errno;
 
@@ -1212,7 +1214,7 @@ newqueue:
 				return;
 			}
 
-			if (fwq1->istcp) {
+			if (fwq1->istcp == DDD_IS_TCP) {
 				if (! firstrun++)
 					fwq1->returnso = so;
 				else {
@@ -1242,7 +1244,7 @@ newqueue:
 
 			if (sendit(fwq1, sforward) < 0) {
 				if (forwardstrategy == STRATEGY_SPRAY) {
-					if (fwq1->istcp == 1)
+					if (fwq1->istcp == DDD_IS_TCP)
 						goto servfail;
 					else
 						continue;
@@ -1252,7 +1254,7 @@ newqueue:
 			}
 
 #if 0
-			if (fwq1->istcp == 1)
+			if (fwq1->istcp == DDD_IS_TCP)
 				break;
 #endif
 		}
@@ -1271,7 +1273,7 @@ newqueue:
 
 servfail:
 
-	odh = (struct dns_header *)&buf[fwq1->istcp ? 2 : 0];
+	odh = (struct dns_header *)&buf[fwq1->istcp == DDD_IS_TCP ? 2 : 0];
 	/* send a servfail and remove from list */
 	odh->id = fwq1->oldid;
 	odh->query = DNS_REPLY;
@@ -1290,7 +1292,7 @@ servfail:
 	pack16(p, fwq1->type);
 	p += 2;
 
-	if (fwq1->istcp) {
+	if (fwq1->istcp == DDD_IS_TCP) {
 		pack16(&buf[0], htons(p - &buf[2]));
 		send(fwq1->returnso, buf, p - &buf[0], 0);
 		close(fwq1->returnso);
@@ -1353,7 +1355,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	if (q->edns0len > 16384)
 		q->edns0len = 16384;
 	
-	if (fwq->istcp == 1) {
+	if (fwq->istcp == DDD_IS_TCP) {
 		p = &buf[2];
 	} else
 		p = &buf[0];
@@ -1405,7 +1407,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	len = outlen;
 	p = packet + outlen;
 	
-	if (fwq->istcp == 1) {
+	if (fwq->istcp == DDD_IS_TCP) {
 		pack16(buf, htons(len));
 		if (fwq->so != -1 && send(fwq->so, buf, len + 2, 0) < 0) {
 			dolog(LOG_INFO, "send() failed changing forwarder: %s\n", strerror(errno));
@@ -1463,7 +1465,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	} else
 		memset(buf, 0, 0xffff + 2);
 
-	if (fwq->istcp == 1) {
+	if (fwq->istcp == DDD_IS_TCP) {
 		p = &buf[2];
 		len = 2;
 	} else {
@@ -1522,7 +1524,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 
 	memcpy(&pi->pkt_s.mac, &fwq->mac, sizeof(pi->pkt_s.mac));
 
-	if (fwq->istcp) {
+	if (fwq->istcp == DDD_IS_TCP) {
 		pack32((char *)&pi->pkt_s.buflen, rlen);
 	} else {
 		if (rlen > (sizeof(struct pkt_imsg) - (sizeof(pi->pkt_s) + sysconf(_SC_PAGESIZE)))) {
@@ -1544,10 +1546,10 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	else
 		pack32((char *)&pi->pkt_s.cache, 0);
 
-	if (fwq->istcp)
-		pack32((char *)&pi->pkt_s.istcp, 1);
+	if (fwq->istcp == DDD_IS_TCP)
+		pack32((char *)&pi->pkt_s.istcp, DDD_IS_TCP);
 	else
-		pack32((char *)&pi->pkt_s.istcp, 0);
+		pack32((char *)&pi->pkt_s.istcp, DDD_IS_UDP);
 	
 	/* lock */
 	sm_lock(cfg->shm[SM_PACKET].shptr, cfg->shm[SM_PACKET].shptrsize);
@@ -1562,7 +1564,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 
 	sm_unlock(cfg->shm[SM_PACKET].shptr, cfg->shm[SM_PACKET].shptrsize);
 
-	if (imsg_compose(ibuf, IMSG_PARSE_MESSAGE, 0, 0, (fwq->istcp == 1) ? fwq->so : -1, &i, sizeof(i)) < 0) {
+	if (imsg_compose(ibuf, IMSG_PARSE_MESSAGE, 0, 0, (fwq->istcp == DDD_IS_TCP) ? fwq->so : -1, &i, sizeof(i)) < 0) {
 			dolog(LOG_INFO, "imsg_compose: %s\n", strerror(errno));
 			return;
 	}
@@ -1656,7 +1658,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 					sm_unlock(cfg->shm[SM_PACKET].shptr, 
 						cfg->shm[SM_PACKET].shptrsize);
 
-				if (fwq->istcp == 1) 
+				if (fwq->istcp == DDD_IS_TCP) 
 					fwq->so = imsg.fd;
 
 				imsg_free(&imsg);
@@ -1674,7 +1676,6 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	} /* for (;;) */
 
 endimsg:
-				
 	if (fwq->tsigkey && (unpack32((char *)&pi->pkt_s.tsig.have_tsig) == 0 \
 		|| unpack32((char *)&pi->pkt_s.tsig.tsigverified) == 0)) {
 		char ipdest[INET6_ADDRSTRLEN];
@@ -1721,7 +1722,18 @@ endimsg:
 
 	/* restore any possible 0x20 caseings, must be after TSIG checks  */
 	memcpy((char *)&dh[1], fwq->orig_dnsname, fwq->dnsnamelen);
-	
+
+	if (fwq->istcp == DDD_IS_UDP && rlen > fwq->edns0len) {
+		SET_DNS_TRUNCATION(dh);
+		dh->answer = 0;
+		dh->nsrr = 0;
+		dh->additional = 0;
+
+		/* shave off the rest */
+		rlen = (sizeof(struct dns_header) + fwq->dnsnamelen + \
+			(2 * sizeof(uint16_t)));
+	}
+
 	if (fwq->haveoldmac) {
 		q = build_fake_question(fwq->orig_dnsname, fwq->dnsnamelen, DNS_TYPE_A, fwq->oldkeyname, fwq->oldkeynamelen);
 
@@ -1754,7 +1766,7 @@ endimsg:
 
 	len += rlen;
 	
-	if (fwq->istcp == 1) {
+	if (fwq->istcp == DDD_IS_TCP) {
 		pack16(buf, htons(rlen));
 		if (send(fwq->returnso, buf, len, 0) != len)
 			dolog(LOG_INFO, "send(): %s\n", strerror(errno));
@@ -2218,7 +2230,7 @@ void
 fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 {
 	int fd = ibuf->fd;
-	int sel, istcp = 0;
+	int sel, istcp = DDD_IS_UDP;
 	int rlen, tmp, rc, i;
 
 	struct tsig *stsig = NULL;
@@ -2276,7 +2288,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 
 	for (;;) {
-		if (istcp && packet != NULL) {
+		if (istcp == DDD_IS_TCP && packet != NULL) {
 			free(packet);
 			packet = NULL;
 		}
@@ -2296,7 +2308,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 			}
 
 			for (;;) {
-				if (istcp && packet != NULL) {
+				if (istcp == DDD_IS_TCP && packet != NULL) {
 					free(packet);
 					packet = NULL;
 				}
@@ -2337,7 +2349,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 					istcp = unpack32((char *)&pi->pkt_s.istcp);
 
-					if (istcp) {
+					if (istcp == DDD_IS_TCP) {
 						packet = malloc(unpack32((char *)&pi->pkt_s.buflen));
 						if (packet == NULL) {
 							dolog(LOG_INFO, "malloc %s\n", strerror(errno));
@@ -2371,9 +2383,9 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					if (tmp < sizeof(struct dns_header)) {
 						/* SEND NAK */
 						rc = PARSE_RETURN_NAK;
-						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &rc, sizeof(int));
+						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp == DDD_IS_TCP) ? imsg.fd : -1, &rc, sizeof(int));
 						msgbuf_write(&ibuf->w);
-						if (istcp) {
+						if (istcp == DDD_IS_TCP) {
 							free(packet);
 							packet = NULL;
 						}
@@ -2383,9 +2395,9 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 					if (! (ntohs(dh->query) & DNS_REPLY)) {
 						rc = PARSE_RETURN_NOTAREPLY;
-						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &rc, sizeof(int));
+						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp == DDD_IS_TCP) ? imsg.fd : -1, &rc, sizeof(int));
 						msgbuf_write(&ibuf->w);
-						if (istcp) {
+						if (istcp == DDD_IS_TCP) {
 							free(packet);
 							packet = NULL;
 						}
@@ -2402,9 +2414,9 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 						 * question, so this is good
 						 */
 						rc = PARSE_RETURN_NOQUESTION;
-						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &rc, sizeof(int));
+						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp == DDD_IS_TCP) ? imsg.fd : -1, &rc, sizeof(int));
 						msgbuf_write(&ibuf->w);
-						if (istcp) {
+						if (istcp == DDD_IS_TCP) {
 							free(packet);
 							packet = NULL;
 						}
@@ -2420,10 +2432,10 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 								dolog(LOG_INFO, "FORWARD parser, malformed reply packet\n");
 								rc = PARSE_RETURN_MALFORMED;
 
-								imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &rc, sizeof(int));
+								imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, (istcp == DDD_IS_TCP) ? imsg.fd : -1, &rc, sizeof(int));
 								msgbuf_write(&ibuf->w);
 			
-								if (istcp) {
+								if (istcp == DDD_IS_TCP) {
 									free(packet);
 									packet = NULL;
 								}
@@ -2460,7 +2472,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					for (i = 0; i < SHAREDMEMSIZE3; i++, pi0++) {
 						if (unpack32((char *)&pi0->pkt_s.read) == 1) {
 							memcpy(pi0, pi, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
-							if (istcp) {
+							if (istcp == DDD_IS_TCP) {
 								memcpy(pi0->pkt_s.buf, packet, rlen);
 								pack32((char *)&pi0->pkt_s.buflen, rlen);
 							}
@@ -2469,7 +2481,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 						}
 					}
 
-					imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, (istcp) ? imsg.fd : -1, &i, sizeof(int));
+					imsg_compose(ibuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, (istcp == DDD_IS_TCP) ? imsg.fd : -1, &i, sizeof(int));
 					msgbuf_write(&ibuf->w);
 
 					sm_unlock(cfg->shm[SM_PACKET].shptr, 
@@ -2477,7 +2489,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 					free(stsig);
 
-					if (istcp) {
+					if (istcp == DDD_IS_TCP) {
 						free(packet);
 						packet = NULL;
 					}
