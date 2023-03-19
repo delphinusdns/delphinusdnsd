@@ -15,6 +15,14 @@ For 1.8.0 release
 internally build a new database and switch them.
 - partially rewrite AXFR code.
 - fix the TXT RR problem (DNSSEC)
+- make a forked tcp listener process for TCP engine and AXFR engine which
+should allow us to drop the "inet" pledge from these engines.  The descriptor
+is passed from a "stdio inet sendfd" listener process to these.  This should
+make better security preventing someone to overflow something to write a socket
+outwards.
+- change the paths for individual chroots for non-pledge systems (linux, freebsd
+and netbsd) which disallows using the filesystem being used as a buffer to
+store hacker code.
 
 For 1.7.0 release
 
