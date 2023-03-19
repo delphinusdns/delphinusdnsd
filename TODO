@@ -23,6 +23,7 @@ outwards.
 - change the paths for individual chroots for non-pledge systems (linux, freebsd
 and netbsd) which disallows using the filesystem being used as a buffer to
 store hacker code.
+- refactor the TLS code
 
 For 1.7.0 release
 
