@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005-2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2005-2023 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -602,13 +602,15 @@ struct pq_imsg {
 		struct {
 			int read;		/* 4 */
 			int len;		/* 8 */
-			char pad[10];		/* 18 */
+			int clen;		/* 12 */
+			char pad[6];		/* 18 */
 			struct parsequestion pq;
 		} s;
 
 		char pad[((1024 / PAGE_SIZE) + 1) * PAGE_SIZE];
 	} u;
-#define pqi_pq u.s.pq
+#define pqi_pq		u.s.pq
+#define	pqi_clen	u.s.clen
 	char guard[PAGE_SIZE];
 };
 
@@ -617,7 +619,8 @@ struct sf_imsg {
 		struct {
 			int read;		/* 4 */
 			int len;		/* 8 */
-			char pad[10];		/* 18 */
+			int clen;		/* 12 */
+			char pad[6];		/* 18 */
 			struct sforward sf;	/* 924 */
 		} s;
 
@@ -632,7 +635,8 @@ struct rr_imsg {
 		struct  {
 			int read;				/* 4 */
 			int len;				/* 8 */
-			char pad[12];				/* 20 */
+			int clen;				/* 12 */
+			char pad[8];				/* 20 */
 
 			struct {
 				char name[DNS_MAXNAME + 1];	/* 256 */
@@ -664,12 +668,14 @@ struct pkt_imsg {
 			struct tsig tsig;
 			char mac[5 * 32];
 			int buflen;
+			int bufclen;
 			char buf[0];			
 		} s;
 
 		struct {
 			int read;
 			int buflen;
+			int bufclen;
 			char buf[0];
 		} i;
 

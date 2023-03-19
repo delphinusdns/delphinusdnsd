@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2002-2023 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -337,6 +337,8 @@ struct parsequestion {
 #define PARSE_RETURN_NOTAUTH	5
 #define PARSE_RETURN_NOTAREPLY	6	/* fwdpq */
 	pid_t pid;	/* originating pid */
+#define PQ_PAD			16
+	char pad[PQ_PAD];
 };
 	
 struct sforward {
