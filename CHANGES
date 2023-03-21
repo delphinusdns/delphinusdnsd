@@ -1,6 +1,6 @@
-Changes in RELEASE_1_8 from RELEASE_1_7
+[2023] Changes in RELEASE_1_8 from RELEASE_1_7
 
-None yet.
+- make the forwarding process honor requested EDNS0 lengths in long replies.
 
 [2022] Changes in RELEASE_1_7 from RELEASE_1_6
 
