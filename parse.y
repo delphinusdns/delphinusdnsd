@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2022 Peter J. Philipp.  All rights reserved.
+ * Copyright (c) 2014-2023 Peter J. Philipp.  All rights reserved.
  * Copyright (c) 2008 Gilles Chehade <gilles@poolp.org>
  * Copyright (c) 2008 Pierre-Yves Ritschard <pyr@openbsd.org>
  * Copyright (c) 2002, 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -166,6 +166,13 @@ static struct file {
 #define DESCEND_YES		1
 } *file, *topfile, *rzonefile;
 
+TAILQ_HEAD(txtentries, txts)	 txtentries = TAILQ_HEAD_INITIALIZER(txtentries);
+
+static struct txts {
+	TAILQ_ENTRY(txts)	txt_entry;
+	char			*text;
+} *txt0;
+
 SLIST_HEAD(rzones, rzone)	rzones = SLIST_HEAD_INITIALIZER(rzones);
 SLIST_HEAD(mzones ,mzone)	mzones = SLIST_HEAD_INITIALIZER(mzones);
 
@@ -250,7 +257,7 @@ int		fill_loc(ddDB *, char *, char *, int, uint8_t, uint8_t, float, char *, uint
 int 		fill_sshfp(ddDB *, char *, char *, int, int, int, char *);
 int 		fill_srv(ddDB *, char *, char *, int, int, int, int, char *);
 int 		fill_tlsa(ddDB *, char *, char *,int, uint8_t, uint8_t, uint8_t, char *);
-int 		fill_txt(ddDB *, char *, char *, int, char *);
+int 		fill_txt(ddDB *, char *, char *, int);
 int 		fill_eui48(ddDB *, char *, char *, int, char *);
 int 		fill_eui64(ddDB *, char *, char *, int, char *);
 int		fill_dnskey(ddDB *, char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, char *, uint16_t);
@@ -289,6 +296,8 @@ static int	pull_remote_zone(struct rzone *);
 int		notifysource(struct question *, struct sockaddr_storage *);
 int 		drop_privs(char *, struct passwd *);
 int		dottedquad(char *);
+void		clean_txt(void);
+int		add_txt(char *);
 
 
 %}
@@ -301,7 +310,7 @@ int		dottedquad(char *);
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
 %token INCOMINGTSIG DESTINATION CACHE STRICTX20
 %token BYTELIMIT FUDGE TSIGPASSNAME RDOMAIN
-%token FORWARDSTRATEGY
+%token FORWARDSTRATEGY TXT
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -314,7 +323,8 @@ int		dottedquad(char *);
 %token <v.intval> NUMBER
 %token <v.floatval> FLOAT
 
-%type <v.string> quotednumber quotedfilename ipcidr
+%type <v.string> quotednumber quotedfilename ipcidr 
+%type <v.string> txtstatements
 
 %start cmd_list
 
@@ -905,6 +915,35 @@ zonestatement:
 			free ($9);
 		}
 		|
+		STRING COMMA TXT COMMA NUMBER COMMA txtstatements CRLF
+		{
+			if (fill_txt(mydb, $1, "txt", $5) < 0) {	
+				return -1;
+			}
+			clean_txt();
+		}
+		|
+		STRING COMMA STRING COMMA NUMBER COMMA QUOTEDSTRING CRLF
+		{
+			if (strcasecmp($3, "eui48") == 0) {
+				if (fill_eui48(mydb, $1, $3, $5, $7) < 0) {
+					return -1;
+				}
+			} else if (strcasecmp($3, "eui64") == 0) {
+				if (fill_eui64(mydb, $1, $3, $5, $7) < 0) {
+					return -1;
+				}
+			} else {
+				if (debug)
+					printf("another eui48 like record I don't know?\n");
+				return (-1);
+			}
+
+			free ($1);
+			free ($3);
+			free ($7);
+		}
+		|
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING COMMA QUOTEDSTRING CRLF
 		{
 			if (strcasecmp($3, "ipseckey") == 0) { 
@@ -1106,36 +1145,6 @@ zonestatement:
 			free ($1);
 			free ($3);
 			free ($9);
-		}
-		|
-		STRING COMMA STRING COMMA NUMBER COMMA QUOTEDSTRING CRLF
-		{
-			if (strcasecmp($3, "txt") == 0) {
-				if (fill_txt(mydb, $1, $3, $5, $7) < 0) {	
-					return -1;
-				}
-
-#if DEBUG
-				if (debug)
-					printf(" %s TXT -> %s\n", $1, $7);
-#endif
-			} else if (strcasecmp($3, "eui48") == 0) {
-				if (fill_eui48(mydb, $1, $3, $5, $7) < 0) {
-					return -1;
-				}
-			} else if (strcasecmp($3, "eui64") == 0) {
-				if (fill_eui64(mydb, $1, $3, $5, $7) < 0) {
-					return -1;
-				}
-			} else {
-				if (debug)
-					printf("another txt like record I don't know?\n");
-				return (-1);
-			}
-
-			free ($1);
-			free ($3);
-			free ($7);
 		}
 		|
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING COMMA QUOTEDSTRING COMMA QUOTEDSTRING COMMA STRING CRLF
@@ -1402,6 +1411,14 @@ zonestatement:
 		}
 		| comment CRLF
 		;
+
+
+txtstatements:		txt_l 	{ $$ = NULL; }
+			;	
+
+txt_l:			QUOTEDSTRING	{ if (add_txt($1) < 0) return -1; }
+			| QUOTEDSTRING COMMA txt_l { if (add_txt($1) < 0) return -1;}
+			;
 
 
 options:
@@ -2038,6 +2055,7 @@ struct tab cmdtab[] = {
 	{ "tsig", TSIG, 0 },
 	{ "tsig-auth", TSIGAUTH, 0 }, 
 	{ "tsigpassname", TSIGPASSNAME, 0 },
+	{ "txt", TXT, 0 },
 	{ "wildcard-only-for", WOF, STATE_IP },
 	{ "version", VERSION, 0 },
 	{ "zinclude", ZINCLUDE, 0 },
@@ -2049,7 +2067,11 @@ struct tab cmdtab[] = {
 void 
 yyerror(const char *str)
 {
+	int c;
+
 	dolog(LOG_ERR, "%s file: %s line: %d\n", str, file->name, file->lineno);
+	while ((c = lgetc(0)) != '\n') 
+		dolog(LOG_ERR, "next character is %d\n", c);
 	ddd_shutdown();
 	exit (1);
 }
@@ -2238,7 +2260,7 @@ yylex(void)
 
 			if ((cp = strrchr(buf, '"'))) {
 				cpos = cp - buf;
-				c = buf[cpos];
+				//c = buf[cpos];
 				buf[cpos] = '\0';
 			}
 
@@ -2250,8 +2272,10 @@ yylex(void)
 			}
 
 #ifdef LEXDEBUG
-			if (debug)
+			if (debug) {
 				printf("returning %s\n", "quotedstring");
+				printf("quotedstring is %s\n", buf);
+			}
 #endif
 			return QUOTEDSTRING;
 		}
@@ -2356,6 +2380,7 @@ yylex(void)
 		break;
 	}
 
+	printf("returning %c\n", c);
 	return (c);
 }	
 
@@ -3405,50 +3430,18 @@ fill_https(ddDB *db, char *name, char *type, int myttl, uint16_t priority, char 
 }
 
 int
-fill_txt(ddDB *db, char *name, char *type, int myttl, char *msg)
+fill_txt(ddDB *db, char *name, char *type, int myttl)
 {
+	char tmpoffset[5];
+	char assemble[2048];
 	struct rbtree *rbt;
 	struct txt *txt;
 	int converted_namelen;
 	char *converted_name;
-	int len, i, j, tmplen, origlen;
-	u_char *tmp;
-	int messages = 1;
+	int len, i, tmplen;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
-	}
-
-	origlen = tmplen = len = strlen(msg);
-	while (tmplen > 255) {
-		messages++;
-		tmplen -= 255;
-	}
-
-	len += messages;
-
-	if (len > 1024) {
-		dolog(LOG_ERR, "fill_txt: more than 1024 characters in TXT RR\n");
-		return -1;
-	}
-
-	tmp = malloc(len);
-	if (tmp == NULL) {
-		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
-		return -1;
-	}
-		
-	for (i = 0, j = 0, tmplen = origlen; tmplen > 0; tmplen -= 255) {
-		tmp[i] = ((tmplen >= 255) ? 255 : tmplen);
-		i++;
-		memcpy(&tmp[i], &msg[j], (tmplen >= 255) ? 255 : tmplen);
-		i += 255;
-		j += 255;
-	}
-
-	converted_name = check_rr(name, type, DNS_TYPE_TXT, &converted_namelen);
-	if (converted_name == NULL) {
-		return -1;
 	}
 
 	if ((txt = (struct txt *)calloc(1, sizeof(struct txt))) == NULL) {
@@ -3456,8 +3449,54 @@ fill_txt(ddDB *db, char *name, char *type, int myttl, char *msg)
 		return -1;
 	}
 
-	memcpy(&txt->txt, tmp, len);
-	txt->txtlen = len;
+	strlcpy(txt->offsets, "", sizeof(txt->offsets));
+	assemble[0] = '\0';
+
+	tmplen = 0;
+	TAILQ_FOREACH(txt0, &txtentries, txt_entry) {
+		int l2, l = strlen(txt0->text);
+
+		if (l > 255) {
+			dolog(LOG_INFO, "illegal txt sub-size\n");
+			return -1;
+		}
+
+		tmplen += l;
+		tmplen++;	/* for size indicator */
+		
+		snprintf(tmpoffset, sizeof(tmpoffset), "%d,", tmplen);
+		strlcat(txt->offsets, tmpoffset, sizeof(txt->offsets));
+
+		l2 = strlen(assemble);
+
+		assemble[l2] = l;
+		assemble[l2 + 1] = '\0';
+
+		if (strlcat(assemble, txt0->text, sizeof(assemble)) >= 1024) {
+			dolog(LOG_ERR, "fill_txt: more than 1024 characters in TXT RR\n");
+			return -1;
+		}
+	}
+
+	if (tmplen > 1024) {
+		dolog(LOG_ERR, "fill_txt: more than 1024 characters in TXT RR\n");
+		return -1;
+	}
+
+	len = strlen(txt->offsets);
+	if (txt->offsets[len - 1] == ',')
+		txt->offsets[(len--) - 1] = '\0';
+	if (txt->offsets[len - 1] == ',')
+		txt->offsets[(len--) - 1] = '\0';
+
+
+	converted_name = check_rr(name, type, DNS_TYPE_TXT, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	memcpy(&txt->txt, assemble, tmplen);
+	txt->txtlen = tmplen;
 
 	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_TXT, txt, myttl, 0);
 	if (rbt == NULL) {
@@ -3468,9 +3507,6 @@ fill_txt(ddDB *db, char *name, char *type, int myttl, char *msg)
 	if (converted_name)
 		free (converted_name);
 	
-	free (tmp);
-
-
 	return (0);
 
 }
@@ -4929,4 +4965,35 @@ dottedquad(char *buf)
 	}
 
 	return 1;
+}
+
+void
+clean_txt(void)
+{
+	while(! TAILQ_EMPTY(&txtentries)) {
+		txt0 = TAILQ_FIRST(&txtentries);
+		TAILQ_REMOVE(&txtentries, txt0, txt_entry);
+		free(txt0->text);	
+		free(txt0);
+	}
+}
+
+int
+add_txt(char *string)
+{
+	struct txts *txts;
+
+	txts = calloc(1, sizeof(struct txts));
+	if (txts == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		return (-1);
+	}
+	txts->text = strdup(string);
+	if (txts->text == NULL) {
+		dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+		return (-1);
+	}
+
+	TAILQ_INSERT_HEAD(&txtentries, txts, txt_entry);
+	return (0);
 }
