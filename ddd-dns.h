@@ -339,7 +339,7 @@ struct parsequestion {
 	pid_t pid;	/* originating pid */
 #define PQ_PAD			16
 	char pad[PQ_PAD];
-};
+} __packed;
 	
 struct sforward {
 	int family;			/* 4 */

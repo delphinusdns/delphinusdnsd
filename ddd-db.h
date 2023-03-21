@@ -608,7 +608,7 @@ struct pq_imsg {
 			struct parsequestion pq;
 		} s;
 
-		char pad[((1024 / PAGE_SIZE) + 1) * PAGE_SIZE];
+		char pad[((2048 / PAGE_SIZE) + 1) * PAGE_SIZE];
 	} u;
 #define pqi_pq		u.s.pq
 #define	pqi_clen	u.s.clen

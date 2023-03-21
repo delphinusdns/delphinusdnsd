@@ -326,8 +326,8 @@ char *tls_keyfile = NULL;
 char *tls_protocols = NULL;
 char *tls_ciphers = NULL;
 
-char iv[16];
-char encryptkey[16];
+static char iv[16];
+static char encryptkey[16];
 
 
 /* 
@@ -1893,6 +1893,8 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 					pack32((char *)&incoming0->u.i.read, 1);
 					sm_unlock(cfg->shm[SM_INCOMING].shptr, 
 						cfg->shm[SM_INCOMING].shptrsize);
+
+
 					arc4random_buf((char *)&key, sizeof(uint64_t));
 					key <<= 16;		/* XXX i cannot be bigger than 65535! */
 
@@ -1915,6 +1917,8 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 								cfg->shm[SM_PARSEQUESTION].shptrsize);
 						if (i == SHAREDMEMSIZE) {
 							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
+							break;
+
 						} else {
 							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&key, sizeof(key));
 							msgbuf_write(&mybuf->w);
@@ -1941,6 +1945,8 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 							cfg->shm[SM_PARSEQUESTION].shptrsize);
 						if (i == SHAREDMEMSIZE) {
 							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
+							break;
+
 						} else {
 							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&key, sizeof(key));
 							msgbuf_write(&mybuf->w);
@@ -1969,6 +1975,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 							cfg->shm[SM_PARSEQUESTION].shptrsize);
 						if (i == SHAREDMEMSIZE) {
 							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
+							break;
 						} else {
 							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&key, sizeof(key));
 							msgbuf_write(&mybuf->w);
@@ -2000,6 +2007,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 							cfg->shm[SM_PARSEQUESTION].shptrsize);
 						if (i == SHAREDMEMSIZE) {
 							dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
+							break;
 						} else {
 							imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&key, sizeof(key));
 							msgbuf_write(&mybuf->w);
@@ -2083,6 +2091,12 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 					}
 					if (i == SHAREDMEMSIZE) {
 						dolog(LOG_INFO, "increase SHAREDMEMSIZE for pq_imsg!!!\n");
+						sm_unlock(cfg->shm[SM_PARSEQUESTION].shptr, 
+							cfg->shm[SM_PARSEQUESTION].shptrsize);
+
+						free_question(question);
+						question = NULL;
+						break;
 					} else {
 						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&key, sizeof(key));
 						msgbuf_write(&mybuf->w);
@@ -2091,6 +2105,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 							cfg->shm[SM_PARSEQUESTION].shptrsize);
 					/* send it */
 					free_question(question);
+					question = NULL;
 					break;
 				}
 out:
@@ -3036,7 +3051,8 @@ send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struc
 		if (unpack32((char *)&incoming->u.i.read) == 1) {
 			key = ((key & 0xffffffffffff0000ULL) + i);
 			clen = enc_cpy((char *)&incoming->u.i.buf, (char *)buf, 
-					MIN(len, sizeof(struct pkt_imsg)),
+					MIN(len, (sizeof(incoming->u.buf) - \
+					sizeof(incoming->u.i) - 16)),
 					key);
 			if (clen == 0) {
 				sm_unlock(cfg->shm[SM_INCOMING].shptr, 
@@ -3058,7 +3074,7 @@ send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struc
 		return (-1);
 	} else {
 		imsg_type = IMSG_PARSE_MESSAGE;
-		if (imsg_compose(pibuf, imsg_type, 0, 0, -1, &key, sizeof(key)) < 0) {
+		if (imsg_compose(pibuf, imsg_type, 0, 0, -1, (char *)&key, sizeof(key)) < 0) {
 			dolog(LOG_INFO, "imsg_compose %s\n", strerror(errno));
 			return -1;
 		}
@@ -3161,21 +3177,36 @@ int
 enc_cpy(u_char *outbuf, u_char *inbuf, int len, uint64_t key)
 {
 	EVP_CIPHER_CTX *ctx = NULL;
+	char tiv[16];
 	uint64_t *mask = (uint64_t *)encryptkey;
 	int tmplen = 0, outlen = 0;
 	*mask = key;
+
+	memcpy(&tiv, iv, sizeof(tiv));
 
 	ctx = EVP_CIPHER_CTX_new();
 	if (ctx == NULL)
 		return 0;
 
-	EVP_CipherInit_ex(ctx, EVP_aes_128_cbc(), NULL, NULL, NULL, 1);
-	EVP_CipherInit_ex(ctx, NULL, NULL, encryptkey, iv, 1);
+	if (!EVP_CipherInit_ex(ctx, EVP_aes_128_ecb(), NULL, NULL, NULL, 1)) {
+		goto err;
+	}
+	//if (!EVP_CipherInit_ex(ctx, NULL, NULL, encryptkey, iv, 1)) {
+	if (!EVP_CipherInit_ex(ctx, NULL, NULL, encryptkey, NULL, 1)) {
+		goto err;
+	}
+#if 0
+	if (!EVP_CIPHER_CTX_set_iv(ctx, iv, sizeof(iv))) {
+		goto err;
+	}
+#endif
+	if (!EVP_CIPHER_CTX_set_key_length(ctx, sizeof(encryptkey))) {
+		goto err;
+	}
 
 	outlen = len;
 	if (!EVP_CipherUpdate(ctx, outbuf, &outlen, inbuf, len)) {
-		EVP_CIPHER_CTX_free(ctx);
-		return 0;
+		goto err;
 	}
 
 #if 0
@@ -3183,47 +3214,67 @@ enc_cpy(u_char *outbuf, u_char *inbuf, int len, uint64_t key)
 #endif
 
 	if (!EVP_CipherFinal_ex(ctx, outbuf + outlen, &tmplen)) {
-		EVP_CIPHER_CTX_free(ctx);
-		return 0;
+		goto err;
 	}
 
 	EVP_CIPHER_CTX_free(ctx);
-	
 	return (outlen + tmplen);
+
+err:
+	EVP_CIPHER_CTX_free(ctx);
+	return (0);
 }
 
 int
 dec_cpy(u_char *outbuf, u_char *inbuf, int len, uint64_t key)
 {
 	EVP_CIPHER_CTX *ctx = NULL;
+	char tiv[16];
 	uint64_t *mask = (uint64_t *)encryptkey;
 	int oldlen = len;
 	int outlen, tmplen;
 
 	*mask = key;
 
+	memcpy(&tiv, iv, sizeof(tiv));
+
 	ctx = EVP_CIPHER_CTX_new();
 	if (ctx == NULL)
 		return 0;
 
-	EVP_CipherInit_ex(ctx, EVP_aes_128_cbc(), NULL, NULL, NULL, 0);
-	EVP_CipherInit_ex(ctx, NULL, NULL, encryptkey, iv, 0);
+	if (!EVP_CipherInit_ex(ctx, EVP_aes_128_ecb(), NULL, NULL, NULL, 0)) {
+		goto err;
+	}
+	//if (!EVP_CipherInit_ex(ctx, NULL, NULL, encryptkey, iv, 0)) {
+	if (!EVP_CipherInit_ex(ctx, NULL, NULL, encryptkey, NULL, 0)) {
+		goto err;
+	}
+#if 0
+	if (!EVP_CIPHER_CTX_set_iv(ctx, iv, sizeof(iv))) {
+		goto err;
+	}
+#endif
+	if (!EVP_CIPHER_CTX_set_key_length(ctx, sizeof(encryptkey))) {
+		goto err;
+	}
 
 	outlen = len;
 	if (!EVP_CipherUpdate(ctx, outbuf, &outlen, inbuf, len)) {
-		EVP_CIPHER_CTX_free(ctx);
-		return 0;
+		goto err;
 	}
 
 #if 0
 	tmplen = len - outlen;
 #endif
 	if (!EVP_CipherFinal_ex(ctx, outbuf + outlen, &tmplen)) {
-		EVP_CIPHER_CTX_free(ctx);
-		return 0;
+		goto err;
 	}
 
 	EVP_CIPHER_CTX_free(ctx);
 
 	return (oldlen);
+
+err:
+	EVP_CIPHER_CTX_free(ctx);
+	return (0);	
 }
