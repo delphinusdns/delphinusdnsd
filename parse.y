@@ -171,7 +171,7 @@ TAILQ_HEAD(txtentries, txts)	 txtentries = TAILQ_HEAD_INITIALIZER(txtentries);
 static struct txts {
 	TAILQ_ENTRY(txts)	txt_entry;
 	char			*text;
-} *txt0;
+} *txt0, *txt1;
 
 SLIST_HEAD(rzones, rzone)	rzones = SLIST_HEAD_INITIALIZER(rzones);
 SLIST_HEAD(mzones ,mzone)	mzones = SLIST_HEAD_INITIALIZER(mzones);
@@ -297,7 +297,7 @@ int		notifysource(struct question *, struct sockaddr_storage *);
 int 		drop_privs(char *, struct passwd *);
 int		dottedquad(char *);
 void		clean_txt(void);
-int		add_txt(char *);
+int		add_txt(char *, int);
 
 
 %}
@@ -1416,8 +1416,8 @@ zonestatement:
 txtstatements:		txt_l 	{ $$ = NULL; }
 			;	
 
-txt_l:			QUOTEDSTRING	{ if (add_txt($1) < 0) return -1; }
-			| QUOTEDSTRING COMMA txt_l { if (add_txt($1) < 0) return -1;}
+txt_l:			QUOTEDSTRING	{ if (add_txt($1, 0) < 0) return -1; }
+			| QUOTEDSTRING COMMA txt_l { if (add_txt($1, 0) < 0) return -1;}
 			;
 
 
@@ -3452,12 +3452,42 @@ fill_txt(ddDB *db, char *name, char *type, int myttl)
 	strlcpy(txt->offsets, "", sizeof(txt->offsets));
 	assemble[0] = '\0';
 
+	TAILQ_FOREACH_SAFE(txt0, &txtentries, txt_entry, txt1) {
+		int j, origlen;
+		u_char tmp[1024];
+		u_char *cp;
+
+		origlen = strlen(txt0->text);
+		if (origlen > 255) {
+			cp = strdup(txt0->text);
+			if (cp == NULL) {
+				dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+				return -1;
+			}
+
+			for (i = 0, j = 0, tmplen = origlen; tmplen > 0; tmplen -= 255) {
+				tmp[i] = ((tmplen >= 255) ? 255 : tmplen);
+				i++;
+				memcpy(&tmp[i], &cp[j], (tmplen >= 255) ? 255 : tmplen);
+				tmp[i + ((tmplen >= 255) ? 255 : tmplen)] = '\0';
+				if (j == 0) {
+					strlcpy(txt0->text, &tmp[1], origlen);
+				} else {
+					add_txt((char *)&tmp[i], 1);
+				}
+				i += 255;
+				j += 255;
+			}
+			free(cp);
+		}
+	}
+
 	tmplen = 0;
 	TAILQ_FOREACH(txt0, &txtentries, txt_entry) {
 		int l2, l = strlen(txt0->text);
 
 		if (l > 255) {
-			dolog(LOG_INFO, "illegal txt sub-size\n");
+			dolog(LOG_INFO, "illegal txt sub-size %d\n", l);
 			return -1;
 		}
 
@@ -4979,7 +5009,7 @@ clean_txt(void)
 }
 
 int
-add_txt(char *string)
+add_txt(char *string, int fixup)
 {
 	struct txts *txts;
 
@@ -4994,6 +5024,9 @@ add_txt(char *string)
 		return (-1);
 	}
 
-	TAILQ_INSERT_HEAD(&txtentries, txts, txt_entry);
+	if (fixup)
+		TAILQ_INSERT_TAIL(&txtentries, txts, txt_entry);
+	else
+		TAILQ_INSERT_HEAD(&txtentries, txts, txt_entry);
 	return (0);
 }
