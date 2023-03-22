@@ -1788,6 +1788,7 @@ optskip:
 		free(q->hdr->name);
 		free(q->hdr->original_name);
 		free(q->hdr);
+		free(q->converted_name);
 		free(q);
 		return NULL;
 	}

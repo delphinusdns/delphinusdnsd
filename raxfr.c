@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2019-2023 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -1300,13 +1300,17 @@ raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 
 	BOUNDS_CHECK(p, q, rdlen, end);
 
-	if (f != NULL) 
+	if (f != NULL)
 		fprintf(f, "\"");
 
 	for (i = 0, j = 0; i < rdlen; i++, j++) {
 		if (j % segmentlen == 0) {
 			segmentlen = p[i] + 1;
 			j = 0;
+
+			if (i && f != NULL)
+				fprintf(f, "\",\"");
+
 			continue;
 		}
 
