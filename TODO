@@ -14,7 +14,7 @@ For 1.8.0 release
 - make delphinusdnsd not restart the entire daemon upon axfr, just merge or
 internally build a new database and switch them.
 - partially rewrite AXFR code.
-- fix the TXT RR problem (DNSSEC)
+- fix the TXT RR problem (DNSSEC) 			[DONE]
 - make a forked tcp listener process for TCP engine and AXFR engine which
 should allow us to drop the "inet" pledge from these engines.  The descriptor
 is passed from a "stdio inet sendfd" listener process to these.  This should
