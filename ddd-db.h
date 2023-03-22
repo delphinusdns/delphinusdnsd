@@ -611,6 +611,7 @@ struct pq_imsg {
 		char pad[((2048 / PAGE_SIZE) + 1) * PAGE_SIZE];
 	} u;
 #define pqi_pq		u.s.pq
+#define pqi_len		u.s.len
 #define	pqi_clen	u.s.clen
 	char guard[PAGE_SIZE];
 };

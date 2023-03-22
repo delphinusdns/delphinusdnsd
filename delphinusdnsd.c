@@ -184,8 +184,10 @@ void 			primary_reload(int);
 void 			primary_shutdown(int);
 void 			setup_primary(ddDB *, char **, char *, struct imsgbuf *);
 void 			setup_unixsocket(char *, struct imsgbuf *);
+#if notyet
 int			enc_cpy(u_char *, u_char *, int, uint64_t);
 int			dec_cpy(u_char *, u_char *, int, uint64_t);
+#endif
 
 /* aliases */
 
@@ -1810,7 +1812,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 	int fd = mybuf->fd;
 	ssize_t n, datalen;
 	struct pq_imsg *pq0;
-	int clen;
+	int clen = 0;
 #ifdef __FreeBSD__
         cap_rights_t rights;
 #endif
@@ -1879,12 +1881,14 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 					incoming_offset = (key & 0xffff);
 					incoming0 = (struct pkt_imsg *)&cfg->shm[SM_INCOMING].shptr[0];
 					incoming0 += incoming_offset;
-					datalen = unpack32((char *)&incoming0->u.i.bufclen);
-					if (dec_cpy((char *)packet,
-						(char *)&incoming0->u.i.buf, datalen, key) == 0) {
+					datalen = unpack32((char *)&incoming0->u.i.buflen);
+					memcpy((char *)packet,
+						(char *)&incoming0->u.i.buf, datalen);
+#if notyet
 						dolog(LOG_INFO, "internal SHAREDMEM3 decrypt failed\n");
 						goto out;
 					}
+#endif
 	
 					datalen = unpack32((char *)&incoming0->u.i.buflen);
 
@@ -1907,7 +1911,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
 							if (unpack32((char *)&pq0->u.s.read) == 1) {
 								key = ((key & 0xffffffffffff0000ULL) + i);
-								clen = enc_cpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD, key);
+								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD);
 								pack32((char *)&pq0->pqi_clen, clen);
 								pack32((char *)&pq0->u.s.read, 0);
 								break;
@@ -1935,7 +1939,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
 							if (unpack32((char *)&pq0->u.s.read) == 1) {
 								key = ((key & 0xffffffffffff0000ULL) + i);
-								clen = enc_cpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD, key);
+								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD);
 								pack32((char *)&pq0->pqi_clen, clen);
 								pack32((char *)&pq0->u.s.read, 0);
 								break;
@@ -1965,7 +1969,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
 							if (unpack32((char *)&pq0->u.s.read) == 1) {
 								key = ((key & 0xffffffffffff0000ULL) + i);
-								clen = enc_cpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD, key);
+								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD);
 								pack32((char *)&pq0->pqi_clen, clen);
 								pack32((char *)&pq0->u.s.read, 0);
 								break;
@@ -1997,7 +2001,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
 							if (unpack32((char *)&pq0->u.s.read) == 1) {
 								key = ((key & 0xffffffffffff0000ULL) + i);
-								clen = enc_cpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD, key);
+								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD);
 								pack32((char *)&pq0->pqi_clen, clen);
 								pack32((char *)&pq0->u.s.read, 0);
 								break;
@@ -2025,7 +2029,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
 							if (unpack32((char *)&pq0->u.s.read) == 1) {
 								key = ((key & 0xffffffffffff0000ULL) + i);
-								clen = enc_cpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD, key);
+								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD);
 								pack32((char *)&pq0->pqi_clen, clen);
 								pack32((char *)&pq0->u.s.read, 0);
 								break;
@@ -2083,7 +2087,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 					for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
 						if (unpack32((char *)&pq0->u.s.read) == 1) {
 							key = ((key & 0xffffffffffff0000ULL) + i);
-							clen = enc_cpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD, key);
+							memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD);
 							pack32((char *)&pq0->pqi_clen, clen);
 							pack32((char *)&pq0->u.s.read, 0);
 							break;
@@ -3038,7 +3042,7 @@ send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struc
 	uint32_t imsg_type;
 	int pq_offset;
 	int sel, i;
-	int clen;
+	int clen = 0;
 
 	arc4random_buf((char *)&key, sizeof(uint64_t));
 	key <<= 16;		/* XXX i cannot be bigger than 65535! */
@@ -3050,15 +3054,16 @@ send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struc
 	for (i = 0; i < SHAREDMEMSIZE3; i++, incoming++) {
 		if (unpack32((char *)&incoming->u.i.read) == 1) {
 			key = ((key & 0xffffffffffff0000ULL) + i);
-			clen = enc_cpy((char *)&incoming->u.i.buf, (char *)buf, 
+			memcpy((char *)&incoming->u.i.buf, (char *)buf, 
 					MIN(len, (sizeof(incoming->u.buf) - \
-					sizeof(incoming->u.i) - 16)),
-					key);
+					sizeof(incoming->u.i) - 16)));
+#if notyet
 			if (clen == 0) {
 				sm_unlock(cfg->shm[SM_INCOMING].shptr, 
 					cfg->shm[SM_INCOMING].shptrsize);
 				return (-1);
 			}
+#endif
 			pack32((char *)&incoming->u.i.buflen, len);
 			pack32((char *)&incoming->u.i.bufclen, clen);
 			pack32((char *)&incoming->u.i.read, 0);
@@ -3132,11 +3137,14 @@ send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struc
 				pq0 = (struct pq_imsg *)&cfg->shm[SM_PARSEQUESTION].shptr[0];
 				pq0 += pq_offset;
 
-				clen = unpack32((char *)&pq0->pqi_clen);
-				if (dec_cpy((char *)pq, (char *)&pq0->pqi_pq, clen, key) == 0) {
+				len = unpack32((char *)&pq0->pqi_len);
+				/* pjp */
+				memcpy((char *)pq, (char *)&pq0->pqi_pq, sizeof(struct parsequestion) - PQ_PAD);
+#if notyet
 					dolog(LOG_ERR, "decryption of parsequestion failed\n"); 
 					return (-1);
 				}
+#endif
 
 				sm_lock(cfg->shm[SM_PARSEQUESTION].shptr, 
 						cfg->shm[SM_PARSEQUESTION].shptrsize);
@@ -3172,6 +3180,8 @@ send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struc
 
 	return PARSE_RETURN_ACK;
 }
+
+#if notyet
 
 int
 enc_cpy(u_char *outbuf, u_char *inbuf, int len, uint64_t key)
@@ -3263,9 +3273,6 @@ dec_cpy(u_char *outbuf, u_char *inbuf, int len, uint64_t key)
 		goto err;
 	}
 
-#if 0
-	tmplen = len - outlen;
-#endif
 	if (!EVP_CipherFinal_ex(ctx, outbuf + outlen, &tmplen)) {
 		goto err;
 	}
@@ -3278,3 +3285,4 @@ err:
 	EVP_CIPHER_CTX_free(ctx);
 	return (0);	
 }
+#endif /* not yet */
