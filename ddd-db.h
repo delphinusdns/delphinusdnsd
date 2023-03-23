@@ -604,7 +604,7 @@ struct pq_imsg {
 			int read;		/* 4 */
 			int len;		/* 8 */
 			int clen;		/* 12 */
-			char pad[6];		/* 18 */
+			char pad[12];		/* 24 */
 			struct parsequestion pq;
 		} s;
 
@@ -678,6 +678,7 @@ struct pkt_imsg {
 			int read;
 			int buflen;
 			int bufclen;
+			int pad;
 			char buf[0];
 		} i;
 

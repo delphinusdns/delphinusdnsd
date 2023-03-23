@@ -1834,7 +1834,7 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 	}
 #endif
 
-	packet = calloc(1, ((65535 + 2) & 0xffff) + 32); /* round + add 16 */
+	packet = calloc(2, 65536); 
 	if (packet == NULL) {
 		dolog(LOG_ERR, "calloc: %m");
 		ddd_shutdown();
@@ -2099,7 +2099,6 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 							cfg->shm[SM_PARSEQUESTION].shptrsize);
 
 						free_question(question);
-						question = NULL;
 						break;
 					} else {
 						imsg_compose(mybuf, IMSG_PARSEREPLY_MESSAGE, 0, 0, -1, (char *)&key, sizeof(key));
@@ -2109,7 +2108,6 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 							cfg->shm[SM_PARSEQUESTION].shptrsize);
 					/* send it */
 					free_question(question);
-					question = NULL;
 					break;
 				}
 out:

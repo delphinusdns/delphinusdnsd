@@ -509,12 +509,13 @@ convert_name(char *name, int namelen)
 	}
 
 	/* short circuit root */
-	if (namelen == 1 && name[1] == '\0') {
+	if (namelen == 1 && name[0] == '\0') {
 		ret[0] = '.';
 		return (ret);
 	}
 
-	memcpy(ret, name + 1, namelen - 1);
+	/* XXX why is the below here? */
+	//memcpy(ret, name + 1, namelen - 1);
 	
 	p0 = ret;
 	p = name;
