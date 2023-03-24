@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2022-2023 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -468,12 +468,12 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					sin6 = (struct sockaddr_in6 *)from;
 				}
 
-				fromlen = acceptmsg.fromlen;
-				passlist = acceptmsg.passlist;
-				filter = acceptmsg.filter;
-				axfr_acl = acceptmsg.axfr_acl;
-				aregion = acceptmsg.aregion;
-				intidx = acceptmsg.intidx;
+				fromlen = unpack32((char *)&acceptmsg.fromlen);
+				passlist = unpack32((char *)&acceptmsg.passlist);
+				filter = unpack32((char *)&acceptmsg.filter);
+				axfr_acl = unpack32((char *)&acceptmsg.axfr_acl);
+				aregion = unpack32((char *)&acceptmsg.aregion);
+				intidx = unpack32((char *)&acceptmsg.intidx);
 
 				if (++conncnt >= 64) {
 					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, too many TCP connections", so
@@ -1246,15 +1246,15 @@ acceptloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				/* we are good, send to TCP process with imsg */
 				strlcpy(acceptmsg.address, address, sizeof(acceptmsg.address));
 				memcpy(&acceptmsg.from, from, sizeof(struct sockaddr_storage));
-				acceptmsg.passlist = passlist;
-				acceptmsg.blocklist = blocklist;
-				acceptmsg.filter = filter;
-				acceptmsg.require_tsig = require_tsig;
-				acceptmsg.axfr_acl = axfr_acl;
-				acceptmsg.aregion = aregion;
-				acceptmsg.fromlen = fromlen;
-				acceptmsg.intidx = i;
-				acceptmsg.af = from->sa_family;
+				pack32((char *)&acceptmsg.passlist,passlist);
+				pack32((char *)&acceptmsg.blocklist,blocklist);
+				pack32((char *)&acceptmsg.filter,filter);
+				pack32((char *)&acceptmsg.require_tsig,require_tsig);
+				pack32((char *)&acceptmsg.axfr_acl,axfr_acl);
+				pack32((char *)&acceptmsg.aregion,aregion);
+				pack32((char *)&acceptmsg.fromlen,fromlen);
+				pack32((char *)&acceptmsg.intidx,i);
+				pack32((char *)&acceptmsg.af,from->sa_family);
 
 				imsg_compose(ibuf, IMSG_NOTIFY_MESSAGE, 
 					0, 0, so, &acceptmsg, sizeof(acceptmsg));
