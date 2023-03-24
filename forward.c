@@ -2542,6 +2542,9 @@ stirforwarders(void)
 		count++;
 	}
 
+	if (count == 0)
+		return;
+
 	randomforwarder = arc4random() % count;	
 
 	count = 0;

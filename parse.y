@@ -2092,7 +2092,7 @@ parse_file(ddDB *db, char *filename, uint32_t flags)
 	if (flags & PARSEFILE_FLAG_NOSOCKET)
 		pullzone = 0;
 
-	cookiesecret_len = 128;
+	cookiesecret_len = 128;		/* XXX 16? aka SIPHASH_KEY_LENGTH? */
 	cookiesecret = malloc(cookiesecret_len);
 	if (cookiesecret == NULL) {
 		dolog(LOG_ERR, "malloc: %s\n", strerror(errno));

@@ -63,10 +63,10 @@ SipHash_Init(SIPHASH_CTX *ctx, const SIPHASH_KEY *key)
 	k0 = le64toh(key->k0);
 	k1 = le64toh(key->k1);
 
-	ctx->v[0] = 0x736f6d6570736575ULL ^ k0;
-	ctx->v[1] = 0x646f72616e646f6dULL ^ k1;
-	ctx->v[2] = 0x6c7967656e657261ULL ^ k0;
-	ctx->v[3] = 0x7465646279746573ULL ^ k1;
+	ctx->v[0] = 0x736f6d6570736575ULL ^ k0; /* somepseu */
+	ctx->v[1] = 0x646f72616e646f6dULL ^ k1;	/* dorandom */
+	ctx->v[2] = 0x6c7967656e657261ULL ^ k0;	/* lygenera */
+	ctx->v[3] = 0x7465646279746573ULL ^ k1; /* tedbytes */
 
 	memset(ctx->buf, 0, sizeof(ctx->buf));
 	ctx->bytes = 0;
