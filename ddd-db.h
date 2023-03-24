@@ -467,7 +467,8 @@ struct cfg {
 #define MY_IMSG_UDP		7
 #define MY_IMSG_FORWARD		8
 #define MY_IMSG_TLS		9
-#define MY_IMSG_MAX		10
+#define MY_IMSG_ACCEPT		10
+#define MY_IMSG_MAX		11
 	int raw[2];
 #define RAW_IPSOCKET 0
 #define RAW_IP6SOCKET 1

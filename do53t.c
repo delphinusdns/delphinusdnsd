@@ -126,6 +126,7 @@ extern void 		parseloop(struct cfg *, struct imsgbuf *, int);
 extern void 		unpack(char *, char *, int);
 
 void 			tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
+int			acceptloop(struct cfg *, struct imsgbuf *);
 
 extern struct reply_logic rlogic[];
 
@@ -141,9 +142,25 @@ struct tcpentry {
 	time_t last_used;
 	char buf[0xffff + 3];	
 	char *address;
+	int axfr_acl;
 	uint16_t ms_timeout;
 	TAILQ_ENTRY(tcpentry) tcpentries;
 } *tcpn1, *tcpn2, *tcpnp;
+
+struct acceptmsg {
+	char address[INET6_ADDRSTRLEN];
+	struct sockaddr_storage from;
+	int fromlen;
+	int passlist;
+	int blocklist;
+	int filter;
+	int require_tsig;
+	int axfr_acl;
+	int aregion;
+	int intidx;
+	int af;
+};
+
 
 /* global variables */
 
@@ -196,15 +213,13 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	int sel;
 	int ret;
 	int len, slen = 0;
-	int i;
+	int i = 0;
 	int istcp = 1;
 	int maxso;
 	int so;
 	int type0, type1;
 	int lzerrno;
 	int filter = 0;
-	int blocklist = 1;
-	int require_tsig = 0;
 	int axfr_acl = 0;
 	int passnamewc;
 	pid_t idata;
@@ -225,8 +240,8 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	socklen_t fromlen = sizeof(struct sockaddr_storage);
 
 	struct sockaddr *from = (void *)&ss;
-	struct sockaddr_in *sin;
-	struct sockaddr_in6 *sin6;
+	struct sockaddr_in *sin = NULL;
+	struct sockaddr_in6 *sin6 = NULL;
 
 	struct question *question = NULL, *fakequestion = NULL;
 	struct rbtree *rbt0 = NULL, *rbt1 = NULL;
@@ -237,13 +252,17 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	struct sreply sreply;
 	struct reply_logic *rl = NULL;
 	struct timeval tv = { 10, 0};
-	struct imsgbuf parse_ibuf;
+	struct imsgbuf parse_ibuf, accept_ibuf;
 	struct imsgbuf *pibuf;
+	struct imsg accept_imsg;
+
 	struct parsequestion pq;
+	struct acceptmsg acceptmsg;
 
 	struct sforward *sforward;
-	int ix;
+	int ix, intidx;
 	int sretlen;
+	size_t datalen;
 
 	TAILQ_INIT(&tcphead);
 
@@ -283,7 +302,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		close(cortex->fd);
 		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
 		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
-		setproctitle("tcp parse engine %d [%s]", cfg->pid,
+		setproctitle("TCP parse engine %d [%s]", cfg->pid,
 			(identstring != NULL ? identstring : ""));
 		parseloop(cfg, &parse_ibuf, DDD_IS_TCP);
 		/* NOTREACHED */
@@ -295,8 +314,69 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		break;
 	}
 	
+	/* set up acceptloop sandbox */
+
+	if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, PF_UNSPEC, &cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[0]) < 0) {
+		dolog(LOG_INFO, "socketpair() failed\n");
+		ddd_shutdown();
+		exit(1);
+	}
+
+	pid = fork();
+	switch (pid) {
+	case -1:
+		dolog(LOG_ERR, "fork(): %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	case 0:
+#ifndef __OpenBSD__
+		/* OpenBSD has minherit() */
+		if (munmap(cfg->shm[SM_FORWARD].shptr, 
+				cfg->shm[SM_FORWARD].shptrsize) == -1) {
+			dolog(LOG_INFO, "unmapping shptr failed: %s\n", \
+				strerror(errno));
+		}
+
+		if (munmap(cfg->shm[SM_PARSEQUESTION].shptr,
+				cfg->shm[SM_INCOMING].shptrsize) == -1) {
+			dolog(LOG_INFO, "unmapping shptr(1) failed: %s\n", \
+				strerror(errno));
+		}
+#endif
+		if (munmap(cfg->shm[SM_INCOMING].shptr,
+				cfg->shm[SM_INCOMING].shptrsize) == -1) {
+			dolog(LOG_INFO, "unmapping shptr(2) failed: %s\n", \
+				strerror(errno));
+		}
+
+
+		cfg->shm[SM_FORWARD].shptrsize = 0;
+		cfg->shm[SM_INCOMING].shptrsize = 0;
+		cfg->shm[SM_PARSEQUESTION].shptrsize = 0;
+
+		close(ibuf->fd);
+		close(cortex->fd);
+		close(pibuf->fd);
+		close(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1]);
+		imsg_init(&accept_ibuf, cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[0]);
+		setproctitle("TCP accept engine %d [%s]", cfg->pid,
+			(identstring != NULL ? identstring : ""));
+		acceptloop(cfg, &accept_ibuf);
+		/* NOTREACHED */
+		exit(1);
+	default:
+		/* close the tcp descriptors we don't need them anymore */
+		for (i = 0; i < cfg->sockcount; i++)  {
+				close(cfg->tcp[i]);
+		}
+
+		close(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[0]);
+		imsg_init(&accept_ibuf, cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1]);
+		break;
+	}
+	
 #if __OpenBSD__
-	if (pledge("stdio inet sendfd recvfd", NULL) < 0) {
+	if (pledge("stdio sendfd recvfd", NULL) < 0) {
 		perror("pledge");
 		ddd_shutdown();
 		exit(1);
@@ -311,30 +391,18 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	}
 
 
-	/* 
-	 * listen on descriptors
-	 */
-
-	for (i = 0; i < cfg->sockcount; i++) {
-		listen(cfg->tcp[i], 5);
-	}
-
 	for (;;) {
-		maxso = 0;
-
 		FD_ZERO(&rset);
-		for (i = 0; i < cfg->sockcount; i++)  {
-			if (maxso < cfg->tcp[i])
-				maxso = cfg->tcp[i];
-	
-			FD_SET(cfg->tcp[i], &rset);
-		}
+		FD_SET(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1], &rset);
+		maxso = cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1];
 
+		conncnt = 0;
 		TAILQ_FOREACH(tcpnp, &tcphead, tcpentries) {
 			if (maxso < tcpnp->so)
 				maxso = tcpnp->so;
 
 			FD_SET(tcpnp->so, &rset);
+			conncnt++;
 		}
 	
 		tv.tv_sec = 3;
@@ -355,80 +423,59 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					close(tcpnp->so);
 					free(tcpnp->address);
 					free(tcpnp);
-					if (conncnt > 0)
-						conncnt--;
 				}
 			}
 			continue;
 		}
 			
-		for (i = 0; i < cfg->sockcount; i++) {
-			if (FD_ISSET(cfg->tcp[i], &rset)) {
-				fromlen = sizeof(struct sockaddr_storage);
+		if (FD_ISSET(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1], &rset)) {
+			int n;
 
-				so = accept(cfg->tcp[i], (struct sockaddr*)from, &fromlen);
-		
-				if (so < 0) {
-					dolog(LOG_INFO, "tcp accept: %s\n", strerror(errno));
-					continue;
+			fromlen = sizeof(struct sockaddr_storage);
+
+			/* grab the fd from imsg (so) */
+			if (((n = imsg_read(&accept_ibuf)) == -1 && errno != EAGAIN) || n == 0) {
+				continue;
+			}
+
+			for (;;) {
+
+				if ((n = imsg_get(&accept_ibuf, &accept_imsg)) == -1) {
+					break;
 				}
 
-				if (from->sa_family == AF_INET6) {
+				if (n == 0) {
+					break;
+				}
 
-					fromlen = sizeof(struct sockaddr_in6);
-					sin6 = (struct sockaddr_in6 *)from;
-					inet_ntop(AF_INET6, (void *)&sin6->sin6_addr, (char *)&address, sizeof(address));
-					aregion = find_region((struct sockaddr_storage *)sin6, AF_INET6);
-					filter = find_filter((struct sockaddr_storage *)sin6, AF_INET6);
-					if (passlist) {
-						blocklist = find_passlist((struct sockaddr_storage *)sin6, AF_INET6);
-					}
-					axfr_acl = find_axfr((struct sockaddr_storage *)sin6, AF_INET6);
+				datalen = accept_imsg.hdr.len - IMSG_HEADER_SIZE;
+				if (datalen != sizeof(acceptmsg)) {
+					dolog(LOG_INFO, "wrong sized acceptmsg, continuing...\n");
+					break;
+				}
 
-					require_tsig = 0;
-					if (tsig) {
-						require_tsig = find_tsig((struct sockaddr_storage *)sin6, AF_INET6);
-					}
-				} else if (from->sa_family == AF_INET) {
-					
-					fromlen = sizeof(struct sockaddr_in);
+				so = accept_imsg.fd;
+
+
+				memcpy((char *)&acceptmsg, (char *)accept_imsg.data, sizeof(struct acceptmsg));
+
+				strlcpy(address, (char *)&acceptmsg.address, sizeof(address));
+				memcpy(from, (char *)&acceptmsg.from, sizeof(struct sockaddr_storage));
+
+				if (acceptmsg.af == AF_INET) {
 					sin = (struct sockaddr_in *)from;
-					inet_ntop(AF_INET, (void *)&sin->sin_addr, (char *)&address, sizeof(address));
-					aregion = find_region((struct sockaddr_storage *)sin, AF_INET);
-					filter = find_filter((struct sockaddr_storage *)sin, AF_INET);
-					if (passlist) {
-						blocklist = find_passlist((struct sockaddr_storage *)sin, AF_INET);
-					}
-					axfr_acl = find_axfr((struct sockaddr_storage *)sin, AF_INET);
-					
-					require_tsig = 0;
-					if (tsig) {
-						require_tsig = find_tsig((struct sockaddr_storage *)sin, AF_INET);
-					}
 				} else {
-					dolog(LOG_INFO, "TCP packet received on descriptor %u interface \"%s\" had weird address family (%u), drop\n", so, cfg->ident[i], from->sa_family);
-					close(so);
-					continue;
+					sin6 = (struct sockaddr_in6 *)from;
 				}
 
+				fromlen = acceptmsg.fromlen;
+				passlist = acceptmsg.passlist;
+				filter = acceptmsg.filter;
+				axfr_acl = acceptmsg.axfr_acl;
+				aregion = acceptmsg.aregion;
+				intidx = acceptmsg.intidx;
 
-				if (filter && require_tsig == 0) {
-					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, filter policy, drop\n", so, cfg->ident[i], address);
-#if 0
-					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf, NULL);
-					slen = reply_refused(&sreply, &sretlen, NULL, 0);
-#endif
-					close(so);
-					continue;
-				}
-
-				if (passlist && blocklist == 0) {
-					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, passlist policy\n", so, cfg->ident[i], address);
-					close(so);
-					continue;
-				}
-
-				if (conncnt >= 64) {
+				if (++conncnt >= 64) {
 					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, too many TCP connections", so
 						, cfg->ident[i], address);
 					close(so);
@@ -461,14 +508,22 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				tcpn1->so = so;
 				tcpn1->last_used = time(NULL);
 				tcpn1->ms_timeout = 0;
-				tcpn1->intidx = i;
+				tcpn1->intidx = intidx;
+				tcpn1->axfr_acl = axfr_acl;
 				tcpn1->address = strdup(address);
+				if (tcpn1->address == NULL) {
+					dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+					close(so);
+					free(tcpn1);
+					continue;
+				}
 				
 				TAILQ_INSERT_TAIL(&tcphead, tcpn1, tcpentries);
-				conncnt++;
+	
+				break;
+			} /* for(;;) */
+		} /* FD_ISSET */
 
-			} /* FD_ISSET */
-		}
 
 		TAILQ_FOREACH_SAFE(tcpnp, &tcphead, tcpentries, tcpn1) {
 			if (FD_ISSET(tcpnp->so, &rset)) {
@@ -643,7 +698,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				switch (ntohs(question->hdr->qtype)) {
 				case DNS_TYPE_AXFR:
 				case DNS_TYPE_IXFR:
-					if (! axfr_acl) {
+					if (! tcpnp->axfr_acl) {
 						dolog(LOG_INFO, "AXFR connection from %s on interface \"%s\" was not in our axfr acl, drop\n", tcpnp->address, cfg->ident[tcpnp->intidx]);
 							
 						snprintf(replystring, DNS_MAXNAME, "DROP");
@@ -1075,6 +1130,147 @@ forwardtcp:
 			}
 		}
 	}  /* for (;;) */
+
+	/* NOTREACHED */
+}
+
+int
+acceptloop(struct cfg *cfg, struct imsgbuf *ibuf)
+{
+	int maxso;
+	int i = 0, sel, so;
+	int passlist = 0, blocklist = 0;
+	int filter = 0, require_tsig = 0, axfr_acl = 0;
+	int aregion;
+	fd_set rset;
+	char address[INET6_ADDRSTRLEN];
+	struct acceptmsg acceptmsg;
+	struct sockaddr_storage ss;
+
+	socklen_t fromlen = sizeof(struct sockaddr_storage);
+
+	struct sockaddr *from = (void *)&ss;
+	struct sockaddr_in *sin;
+	struct sockaddr_in6 *sin6;
+
+#if __OpenBSD__
+	if (pledge("stdio inet sendfd", NULL) == -1) {
+		perror("pledge");
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
+	
+	
+	for (i = 0; i < cfg->sockcount; i++) {
+		listen(cfg->tcp[i], 5);
+	}
+
+	for (;;) {
+		maxso = 0;
+
+		FD_ZERO(&rset);
+		for (i = 0; i < cfg->sockcount; i++)  {
+			if (maxso < cfg->tcp[i])
+				maxso = cfg->tcp[i];
+	
+			FD_SET(cfg->tcp[i], &rset);
+		}
+
+		sel = select(maxso + 1, &rset, NULL, NULL, NULL);
+
+		if (sel <= 0) {
+			dolog(LOG_INFO, "select: %s\n", strerror(errno));
+			continue;
+		}
+
+		for (i = 0; i < cfg->sockcount; i++) {
+			if (FD_ISSET(cfg->tcp[i], &rset)) {
+				fromlen = sizeof(struct sockaddr_storage);
+				memset(&acceptmsg, 0, sizeof(struct acceptmsg));
+
+				so = accept(cfg->tcp[i], (struct sockaddr*)from, &fromlen);
+		
+				if (so < 0) {
+					dolog(LOG_INFO, "tcp accept: %s\n", strerror(errno));
+					continue;
+				}
+
+				if (from->sa_family == AF_INET6) {
+					fromlen = sizeof(struct sockaddr_in6);
+					sin6 = (struct sockaddr_in6 *)from;
+					inet_ntop(AF_INET6, (void *)&sin6->sin6_addr, (char *)&address, sizeof(address));
+					aregion = find_region((struct sockaddr_storage *)sin6, AF_INET6);
+					filter = find_filter((struct sockaddr_storage *)sin6, AF_INET6);
+					if (passlist) {
+						blocklist = find_passlist((struct sockaddr_storage *)sin6, AF_INET6);
+					}
+					axfr_acl = find_axfr((struct sockaddr_storage *)sin6, AF_INET6);
+					require_tsig = 0;
+					if (tsig) {
+						require_tsig = find_tsig((struct sockaddr_storage *)sin6, AF_INET6);
+					}
+				} else if (from->sa_family == AF_INET) {
+					fromlen = sizeof(struct sockaddr_in);
+					sin = (struct sockaddr_in *)from;
+					inet_ntop(AF_INET, (void *)&sin->sin_addr, (char *)&address, sizeof(address));
+					aregion = find_region((struct sockaddr_storage *)sin, AF_INET);
+					filter = find_filter((struct sockaddr_storage *)sin, AF_INET);
+					if (passlist) {
+						blocklist = find_passlist((struct sockaddr_storage *)sin, AF_INET);
+					}
+					axfr_acl = find_axfr((struct sockaddr_storage *)sin, AF_INET);
+					require_tsig = 0;
+					if (tsig) {
+						require_tsig = find_tsig((struct sockaddr_storage *)sin, AF_INET);
+					}
+				} else {
+					dolog(LOG_INFO, "TCP packet received on descriptor %u interface \"%s\" had weird address family (%u), drop\n", so, cfg->ident[i], from->sa_family);
+					close(so);
+					continue;
+				}
+
+
+				if (filter && require_tsig == 0) {
+					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, filter policy, drop\n", so, cfg->ident[i], address);
+					close(so);
+					continue;
+				}
+
+				if (passlist && blocklist == 0) {
+					dolog(LOG_INFO, "TCP connection refused on descriptor %u interface \"%s\" from %s, passlist policy\n", so, cfg->ident[i], address);
+					close(so);
+					continue;
+				}
+
+				/* we are good, send to TCP process with imsg */
+				strlcpy(acceptmsg.address, address, sizeof(acceptmsg.address));
+				memcpy(&acceptmsg.from, from, sizeof(struct sockaddr_storage));
+				acceptmsg.passlist = passlist;
+				acceptmsg.blocklist = blocklist;
+				acceptmsg.filter = filter;
+				acceptmsg.require_tsig = require_tsig;
+				acceptmsg.axfr_acl = axfr_acl;
+				acceptmsg.aregion = aregion;
+				acceptmsg.fromlen = fromlen;
+				acceptmsg.intidx = i;
+				acceptmsg.af = from->sa_family;
+
+				imsg_compose(ibuf, IMSG_NOTIFY_MESSAGE, 
+					0, 0, so, &acceptmsg, sizeof(acceptmsg));
+				msgbuf_write(&ibuf->w);
+
+				memset(&acceptmsg, 0, sizeof(acceptmsg));
+				fromlen = 0;
+				passlist = 0;
+				blocklist = 0;
+				filter = 0;
+				require_tsig = 0;
+				axfr_acl = 0;
+				aregion = 0;
+			}
+		}
+	}
 
 	/* NOTREACHED */
 }
