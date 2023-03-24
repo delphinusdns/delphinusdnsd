@@ -2716,8 +2716,8 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 	struct rr *rrp = NULL, *rrp2 = NULL;
 	struct keysentry **zsk_key;
 
-	char tmp[4096];
-	char signature[4096];
+	char tmp[8192];
+	char signature[8192];
 	char shabuf[64];
 	
 

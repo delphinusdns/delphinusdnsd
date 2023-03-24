@@ -7,6 +7,7 @@
   RR can also look like this:  hostname.tld,txt,3600,"some ","text" so the
   comma values will never stop.  This is important for replicant operation
   with other nameservers.
+- increase the txt size limit from 1024 bytes to 4096 bytes
 
 [2022] Changes in RELEASE_1_7 from RELEASE_1_6
 

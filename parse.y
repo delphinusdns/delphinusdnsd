@@ -3432,13 +3432,12 @@ fill_https(ddDB *db, char *name, char *type, int myttl, uint16_t priority, char 
 int
 fill_txt(ddDB *db, char *name, char *type, int myttl)
 {
-	char tmpoffset[5];
-	char assemble[2048];
+	char assemble[8192];
 	struct rbtree *rbt;
 	struct txt *txt;
 	int converted_namelen;
 	char *converted_name;
-	int len, i, tmplen;
+	int i, tmplen;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -3449,12 +3448,11 @@ fill_txt(ddDB *db, char *name, char *type, int myttl)
 		return -1;
 	}
 
-	strlcpy(txt->offsets, "", sizeof(txt->offsets));
 	assemble[0] = '\0';
 
 	TAILQ_FOREACH_SAFE(txt0, &txtentries, txt_entry, txt1) {
 		int j, origlen;
-		u_char tmp[1024];
+		u_char tmp[8192];
 		u_char *cp;
 
 		origlen = strlen(txt0->text);
@@ -3494,31 +3492,21 @@ fill_txt(ddDB *db, char *name, char *type, int myttl)
 		tmplen += l;
 		tmplen++;	/* for size indicator */
 		
-		snprintf(tmpoffset, sizeof(tmpoffset), "%d,", tmplen);
-		strlcat(txt->offsets, tmpoffset, sizeof(txt->offsets));
-
 		l2 = strlen(assemble);
 
 		assemble[l2] = l;
 		assemble[l2 + 1] = '\0';
 
-		if (strlcat(assemble, txt0->text, sizeof(assemble)) >= 1024) {
-			dolog(LOG_ERR, "fill_txt: more than 1024 characters in TXT RR\n");
+		if (strlcat(assemble, txt0->text, sizeof(assemble)) >= 4096) {
+			dolog(LOG_ERR, "fill_txt: more than 4096 characters in TXT RR\n");
 			return -1;
 		}
 	}
 
-	if (tmplen > 1024) {
-		dolog(LOG_ERR, "fill_txt: more than 1024 characters in TXT RR\n");
+	if (tmplen > 4096) {
+		dolog(LOG_ERR, "fill_txt: more than 4096 characters in TXT RR\n");
 		return -1;
 	}
-
-	len = strlen(txt->offsets);
-	if (txt->offsets[len - 1] == ',')
-		txt->offsets[(len--) - 1] = '\0';
-	if (txt->offsets[len - 1] == ',')
-		txt->offsets[(len--) - 1] = '\0';
-
 
 	converted_name = check_rr(name, type, DNS_TYPE_TXT, &converted_namelen);
 	if (converted_name == NULL) {

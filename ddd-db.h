@@ -238,9 +238,8 @@ struct ptr {
 };
 
 struct txt {
-        char txt[1024];                  	/* TXT string */
+        char txt[4096];                  	/* TXT string */
         int txtlen;                             /* len of TXT */
-	char offsets[2048];			/* offsets of RR */
 };
 
 struct eui48 {
