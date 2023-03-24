@@ -1,6 +1,12 @@
 [2023] Changes in RELEASE_1_8 from RELEASE_1_7
 
 - make the forwarding process honor requested EDNS0 lengths in long replies.
+- TXT RR's are the first RR that is recursive in parsing, due to the nature
+  of DNSSEC and TXT RR's this is unavoidable.  Before this change a TXT RR
+  look like so:  hostname.tld,txt,3600,"some text", after the change a TXT
+  RR can also look like this:  hostname.tld,txt,3600,"some ","text" so the
+  comma values will never stop.  This is important for replicant operation
+  with other nameservers.
 
 [2022] Changes in RELEASE_1_7 from RELEASE_1_6
 
