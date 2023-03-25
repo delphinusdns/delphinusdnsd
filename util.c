@@ -1131,7 +1131,6 @@ build_fake_question(char *name, int namelen, uint16_t type, char *tsigkey, int t
 	
 	q->hdr->qtype = type;
 	q->hdr->qclass = htons(DNS_CLASS_IN);
-	q->edns0len = 512;
 
 	if (tsig) {
 		char *alg;
@@ -1299,8 +1298,6 @@ build_question(char *buf, int len, uint16_t additional, char *mac)
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 		return NULL;
 	}
-	/* initialize default edns0 length to 512 */
-	q->edns0len = 512;
 	q->hdr = (void *)calloc(1, sizeof(struct dns_question_hdr));
 	if (q->hdr == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));

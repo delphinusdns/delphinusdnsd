@@ -137,7 +137,7 @@ int	insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
 void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
 void	forwardthis(ddDB *, struct cfg *, int, struct sforward *);
 int	sendit(struct forwardqueue *, struct sforward *);
-void	returnit(ddDB *, struct cfg *, struct forwardqueue *, char *, int, struct imsgbuf *);
+int	returnit(ddDB *, struct cfg *, struct forwardqueue *, char *, int, struct imsgbuf *);
 struct tsig * check_tsig(char *, int, char *);
 void	fwdparseloop(struct imsgbuf *, struct imsgbuf *, struct cfg *);
 void	changeforwarder(struct forwardqueue *);
@@ -330,6 +330,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 	int bipi[2];
 	int i, count, skip;
 	int econnreset = 0;
+	int returned = 0;
 	uint32_t sessid;
 	u_int packetcount = 0;
 
@@ -490,6 +491,8 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					}
 				}
 
+				returned = 0;
+
 				if (fwq1->istcp == DDD_IS_TCP) {
 					tv.tv_sec = 2;
 					tv.tv_usec = 0;
@@ -516,7 +519,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 #if DEBUG
 					dolog(LOG_INFO, "fwq1->so %d returnit\n", fwq1->so);
 #endif
-					returnit(db, cfg, fwq1, buf, len, pibuf);
+					returned = returnit(db, cfg, fwq1, buf, len, pibuf);
 				} else {
 					len = recv(fwq1->so, buf, 0xffff, 0);
 					if (len < 0) {
@@ -538,7 +541,7 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					dolog(LOG_INFO, "udp fwq1->so %d returnit\n", fwq1->so);
 #endif
 
-					returnit(db, cfg, fwq1, buf, len, pibuf);
+					returned = returnit(db, cfg, fwq1, buf, len, pibuf);
 				}
 
 
@@ -558,6 +561,10 @@ drop:
 					free(fwq1->tsigkey);
 
 				free(fwq1);
+
+				if (returned == -1) {
+					continue;
+				}
 
 				cq1 = calloc(1, sizeof(struct closequeue));
 				if (cq1 == NULL) {
@@ -980,6 +987,9 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 				dolog(LOG_INFO, "build_fake_question failed\n");
 				goto newqueue;
 			}
+
+			if (sforward->edns0len)
+				q->edns0len = sforward->edns0len;
 	
 			q->aa = 0;
 			q->rd = 1;
@@ -1351,7 +1361,9 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 		return (-1);
 	}
 
-	q->edns0len = sforward->edns0len;
+	if (sforward->edns0len)
+		q->edns0len = sforward->edns0len;
+
 	if (q->edns0len > 16384)
 		q->edns0len = 16384;
 	
@@ -1366,7 +1378,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 	memcpy((char *)dh, (char *)&sforward->header, sizeof(struct dns_header));
 	dh->id = htons(fwq->id);
 	dh->question = htons(1);	
-	dh->answer = 0; dh->nsrr = 0; dh->additional = htons(1);
+	dh->answer = 0; dh->nsrr = 0; dh->additional = 0;
 
 	memset((char *)&dh->query, 0, sizeof(dh->query));
 
@@ -1394,12 +1406,23 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 		q->dnssecok = 1;
 	}
 
-	outlen = additional_opt(q, packet, 0xffff, len, NULL, 0, 0);
-	len = outlen;
+	if (sforward->edns0len) {
+		outlen = additional_opt(q, packet, 0xffff, len, NULL, 0, 0);
+		if (outlen > len) {
+			NTOHS(dh->additional);
+			dh->additional++;
+			HTONS(dh->additional);
+		}
+		len = outlen;
+	}
 
 	if (tsigname) {
 		outlen = additional_tsig(q, packet, 0xffff, len, 1, 0, NULL, fudge_forward);
-		dh->additional = htons(2);	
+		if (outlen > len) {
+			NTOHS(dh->additional);
+			dh->additional++;
+			HTONS(dh->additional);
+		}
 		len = outlen;
 	}
 
@@ -1435,7 +1458,7 @@ fail:
 	return (-1);
 }
 
-void
+int
 returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rlen, struct imsgbuf *ibuf)
 {
 	struct timeval tv;
@@ -1460,7 +1483,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		buf = calloc(1, 0xffff + 2);
 		if (buf == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-			return;	
+			return (-1);	
 		}
 	} else
 		memset(buf, 0, 0xffff + 2);
@@ -1474,7 +1497,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		
 	if (rlen <= sizeof(struct dns_header)) {
 		dolog(LOG_INFO, "FORWARD returnit, returned packet is too small");	
-		return;
+		return (-1);
 	}
 
 	memcpy(p, rbuf, rlen);
@@ -1482,29 +1505,29 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	
 	if (! (ntohs(dh->query) & DNS_REPLY)) {
 		dolog(LOG_INFO, "FORWARD returnit, returned packet is not a reply\n");
-		return;
+		return (-1);
 	}
 
 	if (dh->id != htons(fwq->id)) {
 		/* returned packet ID does not match */
 		dolog(LOG_INFO, "FORWARD returnit, returned packet ID does not match %d vs %d\n", ntohs(dh->id), fwq->id);
-		return;
+		return (-1);
 	}
 
 	if (rlen < (sizeof(struct dns_header) + fwq->dnsnamelen)) {
 		/* the packet size can't fit the question name */
 		dolog(LOG_INFO, "FORWARD returnit, question name can't fit in packet thus it gets dropped\n");
-		return;
+		return (-1);
 	} else {
 		if (strictx20i) {
 			if (memcmp((char *)&dh[1], fwq->dnsname, fwq->dnsnamelen) != 0) {
 				dolog(LOG_INFO, "reply for a question we didn't send, drop\n");
-				return;
+				return (-1);
 			}
 		} else {
 			if (memcasecmp((u_char *)&dh[1], (u_char *)fwq->dnsname, fwq->dnsnamelen) != 0) {
 				dolog(LOG_INFO, "reply for a question we didn't send, drop\n");
-				return;
+				return (-1);
 			}
 
 		}
@@ -1516,7 +1539,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		pi = (struct pkt_imsg *)calloc(1, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
 		if (pi == NULL) {
 			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-			return;
+			return (-1);
 		}
 	} else {
 		memset(pi, 0, sizeof(struct pkt_imsg) - sysconf(_SC_PAGESIZE));
@@ -1529,7 +1552,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	} else {
 		if (rlen > (sizeof(struct pkt_imsg) - (sizeof(pi->pkt_s) + sysconf(_SC_PAGESIZE)))) {
 			dolog(LOG_INFO, "can't send UDP packet to parser, too big\n");
-			return;
+			return (-1);
 		}
 
 		memcpy(&pi->pkt_s.buf, p, rlen);
@@ -1566,7 +1589,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 
 	if (imsg_compose(ibuf, IMSG_PARSE_MESSAGE, 0, 0, (fwq->istcp == DDD_IS_TCP) ? fwq->so : -1, &i, sizeof(i)) < 0) {
 			dolog(LOG_INFO, "imsg_compose: %s\n", strerror(errno));
-			return;
+			return (-1);
 	}
 	msgbuf_write(&ibuf->w);
 	
@@ -1585,7 +1608,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 		}
 		if (sel == 0) {
 			dolog(LOG_ERR, "returnit internal error around select (timeout), drop\n");
-			return;
+			return (-1);
 		}
 
 		if (FD_ISSET(ibuf->fd, &rset)) {
@@ -1623,7 +1646,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 					if (datalen != sizeof(int)) {
 							dolog(LOG_ERR, "bad parsereply message, drop\n");
 							imsg_free(&imsg);
-							return;
+							return (-1);
 					}
 
 					memcpy(&rc, imsg.data, datalen);
@@ -1631,7 +1654,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 						if (rc != PARSE_RETURN_ACK) {
 							dolog(LOG_ERR, "returnit parser did not ACK this (%d), drop\n", rc);
 							imsg_free(&imsg);
-							return;
+							return (-1);
 						}
 
 						imsg_free(&imsg);
@@ -1641,7 +1664,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 					if (datalen != sizeof(int)) {
 							dolog(LOG_ERR, "bad parsereply message, drop\n");
 							imsg_free(&imsg);
-							return;
+							return (-1);
 					}
 
 					memcpy(&i, imsg.data, sizeof(int));
@@ -1690,7 +1713,7 @@ endimsg:
 		}
 
 		dolog(LOG_INFO, "FORWARD returnit, TSIG didn't check out error code = %d from %s port %u (ID: %x)\n", unpack32((char *)&pi->pkt_s.tsig.tsigerrorcode), ipdest, fwq->port, fwq->id);
-		return;
+		return (-1);
 	}
 
 	/* read back our, now modified packet */
@@ -1723,7 +1746,7 @@ endimsg:
 	/* restore any possible 0x20 caseings, must be after TSIG checks  */
 	memcpy((char *)&dh[1], fwq->orig_dnsname, fwq->dnsnamelen);
 
-	if (fwq->istcp == DDD_IS_UDP && rlen > fwq->edns0len) {
+	if (fwq->istcp == DDD_IS_UDP && rlen > (fwq->edns0len ? fwq->edns0len : 512)) {
 		SET_DNS_TRUNCATION(dh);
 		dh->answer = 0;
 		dh->nsrr = 0;
@@ -1739,8 +1762,11 @@ endimsg:
 
 		if (q == NULL) {
 			dolog(LOG_INFO, "build_fake_question failed\n");
-			return;
+			return (-1);
 		}
+		
+		if (fwq->edns0len)
+			q->edns0len = fwq->edns0len;
 
 		memcpy(&q->tsig.tsigmac, &fwq->oldmac, DNS_HMAC_SHA256_SIZE);
 		q->tsig.tsigmaclen = DNS_HMAC_SHA256_SIZE;
@@ -1787,7 +1813,7 @@ endimsg:
 
 	fwq->answered = 1;
 
-	return;
+	return (0);
 }
 
 struct tsig *

@@ -826,7 +826,11 @@ forwardtcp:
 						sforward->type = question->hdr->qtype;
 						sforward->class = question->hdr->qclass;
 
-						sforward->edns0len = question->edns0len;
+						if (question->edns0len)
+							sforward->edns0len = question->edns0len;
+						else
+							sforward->edns0len = 0;
+
 						sforward->dnssecok = question->dnssecok;
 
 						if (question->tsig.have_tsig && question->tsig.tsigverified) {

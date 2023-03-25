@@ -1038,7 +1038,11 @@ forwardudp:
 						memcpy((char *)&sforward->header, buf, sizeof(struct dns_header));
 						sforward->type = question->hdr->qtype;
 						sforward->class = question->hdr->qclass;
-						sforward->edns0len = MIN(question->edns0len, max_udp_payload);
+						if (question->edns0len)
+							sforward->edns0len = MIN(question->edns0len, max_udp_payload);
+						else
+							sforward->edns0len = 0;
+
 						sforward->dnssecok = question->dnssecok;
 
 						if (question->tsig.have_tsig && question->tsig.tsigverified) {
