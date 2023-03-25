@@ -199,6 +199,7 @@ extern int	randomize_dnsname(char *, int);
 extern int	lower_dnsname(char *buf, int len);
 extern void	sm_lock(char *, size_t);
 extern void	sm_unlock(char *, size_t);
+extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
 
 /*
  * XXX everything but txt and naptr, works...
@@ -861,7 +862,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 					}
 				}
 			}
-			
+
 			SLIST_REMOVE(&fwqhead, fwq1, forwardqueue, entries);
 			if (fwq1->returnso != -1) {
 				close(fwq1->returnso);
@@ -942,7 +943,9 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 		}
 		/* sforward->type is in netbyte order */
 		if (Lookup_zone(db, sforward->buf, sforward->buflen, 
-			ntohs(sforward->type), 0) != NULL) {
+			ntohs(sforward->type), 0) != NULL ||
+			Lookup_zone(db, sforward->buf, sforward->buflen,
+			DNS_TYPE_CNAME, 0) != NULL) {
 			/* we have a cache */
 			/* build a pseudo question packet */
 			dh = (struct dns_header *)&buf[0];
@@ -974,6 +977,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 				return;
 			}
 			
+			/* XXX no ntohs() for sforward->type here */
 			if (sforward->havemac)
 				q = build_fake_question(savednsname, sforward->buflen,
 					sforward->type, sforward->tsigname, 
@@ -1001,7 +1005,6 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 				goto newqueue;
 			}
 			
-			q->edns0len = sforward->edns0len;
 			if (dnssec && sforward->dnssecok)
 				q->dnssecok = 1;
 
@@ -1020,11 +1023,21 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 				(struct sockaddr *)from, fromlen, 
 				rbt, NULL, 0xff, istcp, 0, replybuf); 
 
+			/* are we a CNAME? if not then search our logic */
+			if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+				slen = reply_cname(&sreply, &sretlen, cfg->db);
+				if (slen < 0) {
+					/*
+					 * we may have a non-dnssec answer cached without RRSIG
+					 * at this point the rl->reply will fail.. expire it
+					 * and fill it with dnssec data if available
+					 */
+					expire_rr(db, q->hdr->name, q->hdr->namelen, 
+							q->hdr->qtype, highexpire);
+					free_question(q);
+					goto newqueue;
+				}
 
-			/* from delphinusdnsd.c */
-			for (rl = &rlogic[0]; rl->rrtype != 0; rl++) {
-			    if (rl->rrtype == ntohs(q->hdr->qtype)) {
-				slen = (*rl->reply)(&sreply, &sretlen, cfg->db);
 				switch (from->ss_family) {
 				case AF_INET:
 					rawsend(cfg->raw[0], sreply.replybuf, sretlen, &sforward->from4, sforward->oldsel, cfg);
@@ -1033,43 +1046,23 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 					rawsend6(cfg->raw[1], sreply.replybuf, sretlen, &sforward->from6, sforward->oldsel, cfg);
 					break;
 				}
-				if (slen < 0) {
-					/*
-					 * we may have a non-dnssec answer cached without RRSIG
-					 * at this point the rl->reply will fail.. expire it
-					 * and fill it with dnssec data if available
-					 */
-					expire_rr(db, q->hdr->name, q->hdr->namelen, 
-							ntohs(q->hdr->qtype), highexpire);
-					free_question(q);
-					goto newqueue;
-				}
-				break;
-			    } /* if rl->rrtype == */
-			}
+			} else {
 
-			if (rl->rrtype == 0) {
-				/* https://en.wikipedia.org/wiki/List_of_DNS_record_types */
-				switch (ntohs(q->hdr->qtype)) {
-					/* FALLTHROUGH for all listed */
-				case 18: /* AFSDB */ case 42: /* APL */ case 257: /* CAA */
-				case 60: /* CDNSKEY */ case 59: /* CDS */ case 37: /* CERT */
-				case 62: /* CSYNC */ case 49: /* DHCID */ case 39: /* DNAME */
-				case 108: /* EUI48 */ case 109: /* EUI64 */ case 13: /* HINFO */
-				case 55: /* HIP */ case 45: /* IPSECKEY */ case 25: /* KEY */
-				case 36: /* KX */ case 29: /* LOC */ case 61: /* OPENPGPKEY */
-				case 17: /* RP */ case 24: /* SIG */ case 53: /* SMIMEA */
-				case 249: /* TKEY */ case 256: /* URI */ 
-#if DEBUG
-					dolog(LOG_INFO, "replying generic RR %d\n", 
-						ntohs(q->hdr->qtype));
-#endif
-					if (reply_generic(&sreply, &sretlen, cfg->db) < 0) {
+				/* from delphinusdnsd.c */
+				for (rl = &rlogic[0]; rl->rrtype != 0; rl++) {
+				    if (rl->rrtype == q->hdr->qtype) {
+					slen = (*rl->reply)(&sreply, &sretlen, cfg->db);
+					if (slen < 0) {
+						/*
+						 * we may have a non-dnssec answer cached without RRSIG
+						 * at this point the rl->reply will fail.. expire it
+						 * and fill it with dnssec data if available
+						 */
 						expire_rr(db, q->hdr->name, q->hdr->namelen, 
-							ntohs(q->hdr->qtype), highexpire);
+								q->hdr->qtype, highexpire);
 						free_question(q);
 						goto newqueue;
-					} 
+					}
 					switch (from->ss_family) {
 					case AF_INET:
 						rawsend(cfg->raw[0], sreply.replybuf, sretlen, &sforward->from4, sforward->oldsel, cfg);
@@ -1078,24 +1071,57 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 						rawsend6(cfg->raw[1], sreply.replybuf, sretlen, &sforward->from6, sforward->oldsel, cfg);
 						break;
 					}
-					
-						
 					break;
-				default:
-						dolog(LOG_INFO, 
-							"no answer in our cache, skip to newqueue\n");
-						free_question(q);
-						goto newqueue;
-						break;
+				    }
 				}
 
-				/* NOTREACHED */
-			}
+				if (rl->rrtype == 0) {
+					/* https://en.wikipedia.org/wiki/List_of_DNS_record_types */
+					switch (q->hdr->qtype) {
+						/* FALLTHROUGH for all listed */
+					case 18: /* AFSDB */ case 42: /* APL */ case 257: /* CAA */
+					case 60: /* CDNSKEY */ case 59: /* CDS */ case 37: /* CERT */
+					case 62: /* CSYNC */ case 49: /* DHCID */ case 39: /* DNAME */
+					case 108: /* EUI48 */ case 109: /* EUI64 */ case 13: /* HINFO */
+					case 55: /* HIP */ case 45: /* IPSECKEY */ case 25: /* KEY */
+					case 36: /* KX */ case 29: /* LOC */ case 61: /* OPENPGPKEY */
+					case 17: /* RP */ case 24: /* SIG */ case 53: /* SMIMEA */
+					case 249: /* TKEY */ case 256: /* URI */ 
+#if DEBUG
+						dolog(LOG_INFO, "replying generic RR %d\n", 
+							q->hdr->qtype);
+#endif
+						if (reply_generic(&sreply, &sretlen, cfg->db) < 0) {
+							expire_rr(db, q->hdr->name, q->hdr->namelen, 
+								q->hdr->qtype, highexpire);
+							free_question(q);
+							goto newqueue;
+						} 
+						switch (from->ss_family) {
+						case AF_INET:
+							rawsend(cfg->raw[0], sreply.replybuf, sretlen, &sforward->from4, sforward->oldsel, cfg);
+							break;
+						case AF_INET6:
+							rawsend6(cfg->raw[1], sreply.replybuf, sretlen, &sforward->from6, sforward->oldsel, cfg);
+							break;
+						}
+						break;
+					default:
+							dolog(LOG_INFO, 
+								"no answer in our cache, skip to newqueue\n");
+							free_question(q);
+							goto newqueue;
+							break;
+					}
 
-			free_question(q);
-			/* at this point we return everythign is done */
-			return;
-		}
+					/* NOTREACHED */
+				}
+
+				free_question(q);
+				/* at this point we return everythign is done */
+				return;
+			}
+		} 
 
 		/* create a new queue and send it */
 newqueue:
@@ -1758,7 +1784,7 @@ endimsg:
 	}
 
 	if (fwq->haveoldmac) {
-		q = build_fake_question(fwq->orig_dnsname, fwq->dnsnamelen, DNS_TYPE_A, fwq->oldkeyname, fwq->oldkeynamelen);
+		q = build_fake_question(fwq->orig_dnsname, fwq->dnsnamelen, htons(DNS_TYPE_A), fwq->oldkeyname, fwq->oldkeynamelen);
 
 		if (q == NULL) {
 			dolog(LOG_INFO, "build_fake_question failed\n");
