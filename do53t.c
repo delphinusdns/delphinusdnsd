@@ -337,12 +337,13 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				strerror(errno));
 		}
 
+#endif
 		if (munmap(cfg->shm[SM_PARSEQUESTION].shptr,
-				cfg->shm[SM_INCOMING].shptrsize) == -1) {
+				cfg->shm[SM_PARSEQUESTION].shptrsize) == -1) {
 			dolog(LOG_INFO, "unmapping shptr(1) failed: %s\n", \
 				strerror(errno));
 		}
-#endif
+
 		if (munmap(cfg->shm[SM_INCOMING].shptr,
 				cfg->shm[SM_INCOMING].shptrsize) == -1) {
 			dolog(LOG_INFO, "unmapping shptr(2) failed: %s\n", \

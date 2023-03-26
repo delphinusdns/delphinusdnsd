@@ -818,7 +818,12 @@ main(int argc, char *argv[], char *environ[])
 				ddd_shutdown();
 				exit(1);
 			}
-       			if (setsockopt(tcp[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
+			if (setsockopt(tcp[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
+				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			} 
+			if (setsockopt(tcp[i], SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) < 0) {
 				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 				ddd_shutdown();
 				exit(1);
@@ -865,6 +870,11 @@ main(int argc, char *argv[], char *environ[])
 					exit(1);
 				}
 				if (setsockopt(tlss[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
+					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				} 
+				if (setsockopt(tlss[i], SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) < 0) {
 					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 					ddd_shutdown();
 					exit(1);
@@ -923,6 +933,11 @@ main(int argc, char *argv[], char *environ[])
 				}
 #endif
 				if (setsockopt(afd[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
+					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				} 
+				if (setsockopt(afd[i], SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) < 0) {
 					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 					ddd_shutdown();
 					exit(1);
@@ -1057,6 +1072,11 @@ main(int argc, char *argv[], char *environ[])
 				ddd_shutdown();
 				exit(1);
 			} 
+			if (setsockopt(tcp[i], SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) < 0) {
+				dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			} 
 			
 			if (bind(tcp[i], (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
 				dolog(LOG_INFO, "tcp bind: %s\n", strerror(errno));
@@ -1096,6 +1116,11 @@ main(int argc, char *argv[], char *environ[])
 					ddd_shutdown();
 					exit(1);
 				} 
+				if (setsockopt(tlss[i], SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) < 0) {
+					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				} 
 				
 				if (bind(tlss[i], (struct sockaddr *)pifap->ifa_addr, salen) < 0) {
 					dolog(LOG_INFO, "tcp bind: %s\n", strerror(errno));
@@ -1123,6 +1148,11 @@ main(int argc, char *argv[], char *environ[])
 				}
 #endif
 				if (setsockopt(afd[i], SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
+					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				} 
+				if (setsockopt(afd[i], SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) < 0) {
 					dolog(LOG_INFO, "setsockopt: %s\n", strerror(errno));
 					ddd_shutdown();
 					exit(1);
