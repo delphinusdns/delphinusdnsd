@@ -14,7 +14,7 @@ For 1.8.0 release
 
 - Shape up the NSEC code as it seems NSEC is having a renaissance, at least
   to have replicant compatibility for NSEC
-- filter input to dddctl query for escape codes.
+- filter input to dddctl query for escape codes.	[DONE]
 - make delphinusdnsd not restart the entire daemon upon axfr, just merge or
 internally build a new database and switch them.
 - partially rewrite AXFR code.
