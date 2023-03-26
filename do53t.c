@@ -436,7 +436,9 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 
 			/* grab the fd from imsg (so) */
 			if (((n = imsg_read(&accept_ibuf)) == -1 && errno != EAGAIN) || n == 0) {
-				continue;
+				dolog(LOG_INFO, "got error from TCP accept child, it likely died, exit\n");
+				ddd_shutdown();
+				exit(1);
 			}
 
 			for (;;) {
