@@ -174,6 +174,7 @@ extern void 	unpack(char *, char *, int);
 extern int		dn_contains(char *, int, char *, int);
 extern char *		param_tlv2human(char *, int, int);
 extern char * 		ipseckey_type(struct ipseckey *);
+extern void 		safe_fprintf(FILE *, char *, ...);
 
 
 /* The following alias helps with bounds checking all input, needed! */
@@ -239,7 +240,7 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 0\n");
+		safe_fprintf(stderr, "expanding compression failure 0\n");
 		return -1;
 	} else 
 		q = (u_char *)save;
@@ -309,20 +310,20 @@ raxfr_peek(FILE *f, u_char *p, u_char *estart, u_char *end, int *rrtype, int soa
 
 		if (soacount < 1) {
 			if ((format & INDENT_FORMAT))
-				fprintf(f, "  %s,%s,%d,",  (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
+				safe_fprintf(f, "  %s,%s,%d,",  (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
 			else if ((format & ZONE_FORMAT)) {
-				fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
+				safe_fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
 			} else
-				fprintf(f, "%s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
+				safe_fprintf(f, "%s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
 		} else {
 			if ((format & INDENT_FORMAT))
-				fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
+				safe_fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
 			else if ((format & ZONE_FORMAT)) {
 				if (*rrtype != DNS_TYPE_SOA) {
-					fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
+					safe_fprintf(f, "  %s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
 				}
 			} else {
-				fprintf(f, "%s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
+				safe_fprintf(f, "%s,%s,%d,", (*humanname == '\0' ? "." : humanname), hightype , ntohl(rttl));
 			}
 		}
 	}
@@ -364,7 +365,7 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 2\n");
+		safe_fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
 		q = (u_char *)save;
@@ -383,9 +384,9 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	if (soacount < soalimit) {
 		if (f != NULL) {
 			if (*humanname == '\0')	
-				fprintf(f, ".,");
+				safe_fprintf(f, ".,");
 			else
-				fprintf(f, "%s,", humanname);
+				safe_fprintf(f, "%s,", humanname);
 		}
 	}
 
@@ -395,7 +396,7 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 4\n");
+		safe_fprintf(stderr, "expanding compression failure 4\n");
 		return -1;
 	} else  {
 		q = (u_char *)save;
@@ -415,9 +416,9 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	if (soacount < soalimit) {
 		if (f != NULL) {
 			if (*humanname == '\0')
-				fprintf(f, ".,");
+				safe_fprintf(f, ".,");
 			else 
-				fprintf(f, "%s,", humanname);
+				safe_fprintf(f, "%s,", humanname);
 		}
 	}
 
@@ -450,7 +451,7 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 		dolog(LOG_INFO, "raxfr_soa:  refresh/retry/expire values were below SOA constraints %u/%u, %u/%u, %u/%u, bailing out!\n", constraints->refresh, ntohl(mysoa->refresh), constraints->retry, ntohl(mysoa->retry), constraints->expire, ntohl(mysoa->expire));
 		
 		if (f != NULL) {
-			fprintf(f, "constraints failure\n");
+			safe_fprintf(f, "constraints failure\n");
 			fflush(f);
 		}
 
@@ -459,7 +460,7 @@ raxfr_soa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, in
 	
 	if (soacount < soalimit) {
 		if (f != NULL) {
-			fprintf(f, "%d,%d,%d,%d,%d\n", ntohl(mysoa->serial),
+			safe_fprintf(f, "%d,%d,%d,%d,%d\n", ntohl(mysoa->serial),
 				ntohl(mysoa->refresh), ntohl(mysoa->retry),
 				ntohl(mysoa->expire), ntohl(mysoa->minttl));
 		}
@@ -513,7 +514,7 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 2\n");
+		safe_fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
 		q = (u_char *)save;
@@ -549,9 +550,9 @@ raxfr_rrsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 
 	if (f != NULL) {
 #if __FreeBSD__
-		fprintf(f, "%s,%u,%u,%u,%lu,%lu,%u,%s,\"%s\"\n", 
+		safe_fprintf(f, "%s,%u,%u,%u,%lu,%lu,%u,%s,\"%s\"\n", 
 #else
-		fprintf(f, "%s,%u,%u,%u,%llu,%llu,%u,%s,\"%s\"\n", 
+		safe_fprintf(f, "%s,%u,%u,%u,%llu,%llu,%u,%s,\"%s\"\n", 
 #endif
 			get_dns_type(rs.type_covered, 0),
 			rs.algorithm, rs.labels, rs.original_ttl, 
@@ -600,13 +601,13 @@ raxfr_zonemd(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 	p += zonemd.hashlen;
 
 	if (f != NULL) {
-		fprintf(f, "%u,", zonemd.serial);
-		fprintf(f, "%u,", zonemd.scheme);
-		fprintf(f, "%u,", zonemd.algorithm);
+		safe_fprintf(f, "%u,", zonemd.serial);
+		safe_fprintf(f, "%u,", zonemd.scheme);
+		safe_fprintf(f, "%u,", zonemd.algorithm);
 		for (i = 0; i < zonemd.hashlen; i++) {
-			fprintf(f, "%02x", zonemd.hash[i] & 0xff);
+			safe_fprintf(f, "%02x", zonemd.hash[i] & 0xff);
 		}
-		fprintf(f, "\n");
+		safe_fprintf(f, "\n");
 	}
 
 	if (ctx != NULL)
@@ -639,15 +640,15 @@ raxfr_caa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 	p += caa.valuelen;
 
 	if (f != NULL) {
-		fprintf(f, "%u,", caa.flags);
+		safe_fprintf(f, "%u,", caa.flags);
 		for (i = 0; i < caa.taglen; i++) {
-			fprintf(f, "%c", caa.tag[i]);
+			safe_fprintf(f, "%c", caa.tag[i]);
 		}
-		fprintf(f, ",\"");
+		safe_fprintf(f, ",\"");
 		for (i = 0; i < caa.valuelen; i++) {
-			fprintf(f, "%c", caa.value[i]);
+			safe_fprintf(f, "%c", caa.value[i]);
 		}
-		fprintf(f, "\"\n");
+		safe_fprintf(f, "\"\n");
 	}
 
 	if (ctx != NULL)
@@ -678,15 +679,15 @@ raxfr_hinfo(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	p += hinfo.oslen;
 
 	if (f != NULL) {
-		fprintf(f, "\"");
+		safe_fprintf(f, "\"");
 		for (i = 0; i < hinfo.cpulen; i++) {
-			fprintf(f, "%c", hinfo.cpu[i]);
+			safe_fprintf(f, "%c", hinfo.cpu[i]);
 		}
-		fprintf(f, "\",\"");
+		safe_fprintf(f, "\",\"");
 		for (i = 0; i < hinfo.oslen; i++) {
-			fprintf(f, "%c", hinfo.os[i]);
+			safe_fprintf(f, "%c", hinfo.os[i]);
 		}
-		fprintf(f, "\"\n");
+		safe_fprintf(f, "\"\n");
 	}
 
 	if (ctx != NULL)
@@ -721,7 +722,7 @@ raxfr_cds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 
 
 	if (f != NULL) {
-		fprintf(f, "%u,%u,%u,\"%s\"\n", d.key_tag, d.algorithm, 
+		safe_fprintf(f, "%u,%u,%u,\"%s\"\n", d.key_tag, d.algorithm, 
 			d.digest_type, bin2hex(d.digest, d.digestlen));
 	}
 
@@ -757,7 +758,7 @@ raxfr_ds(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 
 
 	if (f != NULL) {
-		fprintf(f, "%u,%u,%u,\"%s\"\n", d.key_tag, d.algorithm, 
+		safe_fprintf(f, "%u,%u,%u,\"%s\"\n", d.key_tag, d.algorithm, 
 			d.digest_type, bin2hex(d.digest, d.digestlen));
 	}
 
@@ -792,7 +793,7 @@ raxfr_sshfp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	hex = bin2hex(s.fingerprint, s.fplen);
 
 	if (f != NULL) {
-		fprintf(f, "%u,%u,\"%s\"\n", s.algorithm, s.fptype, hex);
+		safe_fprintf(f, "%u,%u,\"%s\"\n", s.algorithm, s.fptype, hex);
 	}
 
 	if (ctx != NULL)
@@ -842,7 +843,7 @@ raxfr_cdnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa
 	b[len] = '\0';
 
 	if (f != NULL) {
-		fprintf(f, "%u,%u,%u,\"%s\"\n", dk.flags, dk.protocol, 
+		safe_fprintf(f, "%u,%u,%u,\"%s\"\n", dk.flags, dk.protocol, 
 			dk.algorithm, b);
 	}
 
@@ -925,7 +926,7 @@ raxfr_ipseckey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *myso
 	b[len] = '\0';
 
 	if (f != NULL) {
-		fprintf(f, "%u,%u,%u,\"%s\",\"%s\"\n", ipk.precedence, ipk.gwtype,
+		safe_fprintf(f, "%u,%u,%u,\"%s\",\"%s\"\n", ipk.precedence, ipk.gwtype,
 			ipk.alg, ipseckey_type(&ipk), b);
 	}
 
@@ -978,7 +979,7 @@ raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 	b[len] = '\0';
 
 	if (f != NULL) {
-		fprintf(f, "%u,%u,%u,\"%s\"\n", dk.flags, dk.protocol, 
+		safe_fprintf(f, "%u,%u,%u,\"%s\"\n", dk.flags, dk.protocol, 
 			dk.algorithm, b);
 	}
 
@@ -1005,14 +1006,14 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 	mxpriority = unpack16((char *)q);
 
 	if (f != NULL)
-		fprintf(f, "%u,", ntohs(mxpriority));
+		safe_fprintf(f, "%u,", ntohs(mxpriority));
 
 	q += 2;
 
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 2\n");
+		safe_fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
 		q = (u_char *)save;
@@ -1025,9 +1026,9 @@ raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 
 	if (f != NULL) {
 		if (*humanname == '\0')
-			fprintf(f, ".\n");
+			safe_fprintf(f, ".\n");
 		else
-			fprintf(f, "%s\n", humanname);
+			safe_fprintf(f, "%s\n", humanname);
 	}
 
 	free(humanname);
@@ -1052,14 +1053,14 @@ raxfr_kx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 	kxpriority = unpack16((char *)q);
 
 	if (f != NULL)
-		fprintf(f, "%u,", ntohs(kxpriority));
+		safe_fprintf(f, "%u,", ntohs(kxpriority));
 
 	q += 2;
 
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 2\n");
+		safe_fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
 		q = (u_char *)save;
@@ -1072,9 +1073,9 @@ raxfr_kx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 
 	if (f != NULL) {
 		if (*humanname == '\0')
-			fprintf(f, ".\n");
+			safe_fprintf(f, ".\n");
 		else
-			fprintf(f, "%s\n", humanname);
+			safe_fprintf(f, "%s\n", humanname);
 	}
 
 	free(humanname);
@@ -1133,7 +1134,7 @@ raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	bitmap2human(n.bitmap, n.bitmap_len);
 
 	if (f != NULL) {
-		fprintf(f, "%u,%u,%u,\"%s\",\"%s\",\"%s\"\n", n.algorithm, 
+		safe_fprintf(f, "%u,%u,%u,\"%s\",\"%s\",\"%s\"\n", n.algorithm, 
 			n.flags, n.iterations, 
 			(n.saltlen == 0 ? "-" : 
 				bin2hex(n.salt, n.saltlen)), 
@@ -1171,7 +1172,7 @@ raxfr_nsec3param(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *my
 	bin2hex(np.salt, np.saltlen);
 
 	if (f != NULL) {
-		fprintf(f, "%u,%u,%u,\"%s\"\n", np.algorithm, np.flags, 
+		safe_fprintf(f, "%u,%u,%u,\"%s\"\n", np.algorithm, np.flags, 
 			np.iterations, 
 			(np.saltlen == 0 ? "-" : bin2hex(np.salt, np.saltlen)));
 	}
@@ -1200,7 +1201,7 @@ raxfr_https(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 2\n");
+		safe_fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
 		q = (u_char *)save;
@@ -1214,12 +1215,12 @@ raxfr_https(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	BOUNDS_CHECK(q, p, rdlen, end);
 
 	if (f != NULL) 
-		fprintf(f, "%u,%s,\"", ntohs(priority), (*humanname == '\0') ? "." : humanname);
+		safe_fprintf(f, "%u,%s,\"", ntohs(priority), (*humanname == '\0') ? "." : humanname);
 
 	if (f != NULL) {
 		tmp = param_tlv2human(q, (&p[rdlen] - q), 0);
 		if (tmp != NULL) {
-			fprintf(f, "%s", tmp);
+			safe_fprintf(f, "%s", tmp);
 			free(tmp);
 		} 
 	}
@@ -1227,7 +1228,7 @@ raxfr_https(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	q = &p[rdlen];
 
 	if (f != NULL)
-		fprintf(f, "\"\n");
+		safe_fprintf(f, "\"\n");
 
 
 	if (ctx != NULL)
@@ -1254,7 +1255,7 @@ raxfr_svcb(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 2\n");
+		safe_fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
 		q = (u_char *)save;
@@ -1269,12 +1270,12 @@ raxfr_svcb(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	BOUNDS_CHECK(q, p, rdlen, end);
 
 	if (f != NULL) 
-		fprintf(f, "%u,%s,\"", ntohs(priority), (*humanname == '\0') ? "." : humanname);
+		safe_fprintf(f, "%u,%s,\"", ntohs(priority), (*humanname == '\0') ? "." : humanname);
 
 	if (f != NULL) {
 		tmp = param_tlv2human(q, (&p[rdlen] - q), 0);
 		if (tmp != NULL) {
-			fprintf(f, "%s", tmp);
+			safe_fprintf(f, "%s", tmp);
 			free(tmp);
 		}
 	}
@@ -1282,7 +1283,7 @@ raxfr_svcb(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	q = &p[rdlen];
 
 	if (f != NULL)
-		fprintf(f, "\"\n");
+		safe_fprintf(f, "\"\n");
 
 	if (ctx != NULL)
 		delphinusdns_HMAC_Update(ctx, p, q - p);
@@ -1301,7 +1302,7 @@ raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 	BOUNDS_CHECK(p, q, rdlen, end);
 
 	if (f != NULL)
-		fprintf(f, "\"");
+		safe_fprintf(f, "\"");
 
 	for (i = 0, j = 0; i < rdlen; i++, j++) {
 		if (j % segmentlen == 0) {
@@ -1309,16 +1310,16 @@ raxfr_txt(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 			j = 0;
 
 			if (i && f != NULL)
-				fprintf(f, "\",\"");
+				safe_fprintf(f, "\",\"");
 
 			continue;
 		}
 
 		if (f != NULL) 
-			fprintf(f, "%c", p[i]);	
+			safe_fprintf(f, "%c", p[i]);	
 	}
 	if (f != NULL)
-		fprintf(f, "\"\n");
+		safe_fprintf(f, "\"\n");
 
 	p += i;
 	
@@ -1340,7 +1341,7 @@ raxfr_rp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 2\n");
+		safe_fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
 		q = (u_char *)save;
@@ -1352,7 +1353,7 @@ raxfr_rp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 	}
 
 	if (f != NULL) {
-		fprintf(f, "%s,", humanname);
+		safe_fprintf(f, "%s,", humanname);
 	}
 
 	free(humanname);
@@ -1361,7 +1362,7 @@ raxfr_rp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 	elen = 0;
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 2\n");
+		safe_fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
 		q = (u_char *)save;
@@ -1373,7 +1374,7 @@ raxfr_rp(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 	}
 
 	if (f != NULL) {
-		fprintf(f, "%s\n", humanname);
+		safe_fprintf(f, "%s\n", humanname);
 	}
 
 	free(humanname);
@@ -1401,7 +1402,7 @@ raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 2\n");
+		safe_fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
 		q = (u_char *)save;
@@ -1414,9 +1415,9 @@ raxfr_ns(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uin
 
 	if (f != NULL) {
 		if (*humanname == '\0')
-			fprintf(f, ".\n");
+			safe_fprintf(f, ".\n");
 		else
-			fprintf(f, "%s\n", humanname);
+			safe_fprintf(f, "%s\n", humanname);
 	}
 
 	free(humanname);
@@ -1447,7 +1448,7 @@ raxfr_aaaa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	inet_ntop(AF_INET6, &ia, buf, sizeof(buf));
 
 	if (f != NULL) 
-		fprintf(f, "%s\n", buf);
+		safe_fprintf(f, "%s\n", buf);
 
 	p += sizeof(ia);
 
@@ -1494,7 +1495,7 @@ raxfr_loc(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 	q += 4;
 
 	if (l.version != 0) {
-		fprintf(stderr, "wrong version\n");
+		safe_fprintf(stderr, "wrong version\n");
 		return -1;
 	}
 	
@@ -1546,7 +1547,7 @@ raxfr_loc(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 	valvprec = mantissa * poweroften[exponent];
 
 	if (f != NULL) {
-		fprintf(f, "%u,%u,%u.%.3u,%c,%u,%u,%u.%.3u,%c,%u,%u,%u,%u\n",
+		safe_fprintf(f, "%u,%u,%u.%.3u,%c,%u,%u,%u.%.3u,%c,%u,%u,%u,%u\n",
 			latdeg, latmin, latsec, latsecfrac, latitude,
 			longdeg, longmin, longsec, longsecfrac, longitude,
 			l.altitude, valsize, valhprec, valvprec);
@@ -1571,7 +1572,7 @@ raxfr_a(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint
 	inet_ntop(AF_INET, &ia, buf, sizeof(buf));
 	
 	if (f != NULL)
-		fprintf(f, "%s\n", buf);
+		safe_fprintf(f, "%s\n", buf);
 
 	p += sizeof(ia);
 
@@ -1591,7 +1592,7 @@ raxfr_eui48(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	memcpy(&e, p, 6);
 
 	if (f != NULL)
-		fprintf(f, "\"%02x-%02x-%02x-%02x-%02x-%02x\"\n", e[0]
+		safe_fprintf(f, "\"%02x-%02x-%02x-%02x-%02x-%02x\"\n", e[0]
 			, e[1], e[2], e[3], e[4], e[5]);
 
 	p += 6;
@@ -1612,7 +1613,7 @@ raxfr_eui64(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	memcpy(&e, p, 8);
 
 	if (f != NULL)
-		fprintf(f, "\"%02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x\"\n", e[0]
+		safe_fprintf(f, "\"%02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x\"\n", e[0]
 			, e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
 
 	p += 8;
@@ -1648,7 +1649,7 @@ raxfr_tlsa(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	p += t.datalen;
 
 	if (f != NULL) {
-		fprintf(f, "%u,%u,%u,\"%s\"\n", t.usage, t.selector, 
+		safe_fprintf(f, "%u,%u,%u,\"%s\"\n", t.usage, t.selector, 
 			t.matchtype, bin2hex(t.data, t.datalen));
 	}
 
@@ -1685,7 +1686,7 @@ raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 2\n");
+		safe_fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
 		q = (u_char *)save;
@@ -1698,9 +1699,9 @@ raxfr_srv(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, ui
 
 	if (f != NULL) {
 		if (*humanname == '\0')
-			fprintf(f, "%u,%u,%u,.\n", s.priority, s.weight, s.port);
+			safe_fprintf(f, "%u,%u,%u,.\n", s.priority, s.weight, s.port);
 		else
-			fprintf(f, "%u,%u,%u,%s\n", s.priority, s.weight,
+			safe_fprintf(f, "%u,%u,%u,%s\n", s.priority, s.weight,
 				s.port, humanname);
 	}
 
@@ -1734,7 +1735,7 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	q += 2;
 
 	if (f != NULL) {
-		fprintf(f, "%u,%u,", n.order, n.preference);
+		safe_fprintf(f, "%u,%u,", n.order, n.preference);
 	}
 
 	
@@ -1744,12 +1745,12 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	q++;
 
 	if (f != NULL) {
-		fprintf(f, "\"");
+		safe_fprintf(f, "\"");
 		for (i = 0; i < len; i++) {
 			BOUNDS_CHECK((q + 1), p, rdlen, end);
-			fprintf(f, "%c", *q++);
+			safe_fprintf(f, "%c", *q++);
 		}
-		fprintf(f, "\",");
+		safe_fprintf(f, "\",");
 	}
 	/* services */
 	BOUNDS_CHECK((q + 1), p, rdlen, end);
@@ -1757,12 +1758,12 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	q++;
 
 	if (f != NULL) {
-		fprintf(f, "\"");
+		safe_fprintf(f, "\"");
 		for (i = 0; i < len; i++) {
 			BOUNDS_CHECK((q + 1), p, rdlen, end);
-			fprintf(f, "%c", *q++);
+			safe_fprintf(f, "%c", *q++);
 		}
-		fprintf(f, "\",");
+		safe_fprintf(f, "\",");
 	}
 	/* regexp */
 	BOUNDS_CHECK((q + 1), p, rdlen, end);
@@ -1770,18 +1771,18 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	q++;
 
 	if (f != NULL) {
-		fprintf(f, "\"");
+		safe_fprintf(f, "\"");
 		for (i = 0; i < len; i++) {
 			BOUNDS_CHECK((q + 1), p, rdlen, end);
-			fprintf(f, "%c", *q++);
+			safe_fprintf(f, "%c", *q++);
 		}
-		fprintf(f, "\",");
+		safe_fprintf(f, "\",");
 	}
 
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 2\n");
+		safe_fprintf(stderr, "expanding compression failure 2\n");
 		return -1;
 	} else  {
 		q = (u_char *)save;
@@ -1794,9 +1795,9 @@ raxfr_naptr(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 
 	if (f != NULL) {
 		if (*humanname == '\0')
-			fprintf(f, ".\n");
+			safe_fprintf(f, ".\n");
 		else
-			fprintf(f, "%s\n", humanname);
+			safe_fprintf(f, "%s\n", humanname);
 	}
 
 	free(humanname);
@@ -1828,7 +1829,7 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	memset(&expand, 0, sizeof(expand));
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 0\n");
+		safe_fprintf(stderr, "expanding compression failure 0\n");
 		goto out;
 	} else 
 		q = (u_char *)save;
@@ -1883,7 +1884,7 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 	elen = 0;
 	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
 	if (save == NULL) {
-		fprintf(stderr, "expanding compression failure 0\n");
+		safe_fprintf(stderr, "expanding compression failure 0\n");
 		goto out;
 	} else 
 		q = (u_char *)save;
@@ -2512,7 +2513,7 @@ get_remote_soa(struct rzone *rzone)
 		ctx = delphinusdns_HMAC_CTX_new();
 		md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("sha256");
 		if (md == NULL) {
-			fprintf(stderr, "md failed\n");
+			safe_fprintf(stderr, "md failed\n");
 			return (MY_SOCK_TIMEOUT);
 		}
 		delphinusdns_HMAC_Init_ex(ctx, tsigpass, tsigpasslen, md, NULL);
@@ -2520,14 +2521,14 @@ get_remote_soa(struct rzone *rzone)
 
 		now = time(NULL);
 		if (tsig_pseudoheader(rzone->tsigkey, DEFAULT_TSIG_FUDGE, now, ctx) < 0) {
-			fprintf(stderr, "tsig_pseudoheader failed\n");
+			safe_fprintf(stderr, "tsig_pseudoheader failed\n");
 			return(MY_SOCK_TIMEOUT);
 		}
 
 		delphinusdns_HMAC_Final(ctx, (u_char *)shabuf, (u_int *) &len);
 
 		if (len != 32) {
-			fprintf(stderr, "not expected len != 32\n");
+			safe_fprintf(stderr, "not expected len != 32\n");
 			return(MY_SOCK_TIMEOUT);
 		}
 
@@ -2748,7 +2749,7 @@ get_remote_soa(struct rzone *rzone)
 		} else if (dotsig && (rrtype == DNS_TYPE_TSIG)) {
 			/* do tsig checks here */
 			if ((len = raxfr_tsig(f,p,estart,end,&mysoa,rdlen,ctx, (char *)&shabuf, (sacount++ == 0) ? 1 : 0)) < 0) {
-				fprintf(stderr, "error with TSIG record\n");
+				safe_fprintf(stderr, "error with TSIG record\n");
 				close(so);
 				free(reply);  free(dupreply);
 				return(MY_SOCK_TIMEOUT);
@@ -2884,12 +2885,12 @@ do_raxfr(FILE *f, struct rzone *rzone)
 	additionalcount = 0;
 
 	if ((format & ZONE_FORMAT) && f != NULL) 
-		fprintf(f, "zone \"%s\" {\n", rzone->zonename);
+		safe_fprintf(f, "zone \"%s\" {\n", rzone->zonename);
 
 	if (lookup_axfr(f, so, rzone->zonename, &mysoa, format, ((dotsig == 0) ? NULL : rzone->tsigkey), humanpass, &segment, &answers, &additionalcount, &rzone->constraints, rzone->bytelimit, replicant_axfr_old_behaviour) < 0) {
 		/* close the zone */
 		if ((format & ZONE_FORMAT) && f != NULL)
-			fprintf(f, "}\n");
+			safe_fprintf(f, "}\n");
 
 		dolog(LOG_ERR, "lookup_axfr() failed\n");
 		close(so);
@@ -2897,7 +2898,7 @@ do_raxfr(FILE *f, struct rzone *rzone)
 	}
 
 	if ((format & ZONE_FORMAT) && f != NULL)
-		fprintf(f, "}\n");
+		safe_fprintf(f, "}\n");
 				
 	close(so);
 	return (0);
@@ -2952,9 +2953,9 @@ pull_rzone(struct rzone *rzone, time_t now)
 	}
 
 #if __linux__ || __FreeBSD__
-	fprintf(f, "; REPLICANT file for zone %s gotten on %lu\n\n", rzone->zonename, now);
+	safe_fprintf(f, "; REPLICANT file for zone %s gotten on %lu\n\n", rzone->zonename, now);
 #else
-	fprintf(f, "; REPLICANT file for zone %s gotten on %lld\n\n", rzone->zonename, now);
+	safe_fprintf(f, "; REPLICANT file for zone %s gotten on %lld\n\n", rzone->zonename, now);
 #endif
 	
 	if (do_raxfr(f, rzone) < 0) {

@@ -449,7 +449,7 @@ quotedfilename:
 	QUOTEDSTRING
 	{
 		if (debug)
-			printf("quotedfilename is %s\n", $$);
+			printf("quotedfilename is %s\n", $1);
 	}
 	;
 

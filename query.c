@@ -173,6 +173,7 @@ extern int  			insert_tsig_key(char *, int, char *);
 extern int 			insert_region(char *, char *);
 
 extern int			add_cookie(char *, int, int, DDD_BIGNUM *, u_char *, int);
+extern char *			input_sanitize(char *);
 
 
 /* this struct must be under externs */

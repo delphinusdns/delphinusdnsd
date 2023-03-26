@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2011-2023 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,6 +28,7 @@
 #include <ctype.h>
 
 #include <syslog.h>
+#include <vis.h>
 
 #ifdef __linux__
 #include <grp.h>
@@ -52,64 +53,9 @@
 extern int debug;
 extern int verbose;
 
+extern char	*input_sanitize(char *);
+
 void	dolog(int pri, char *fmt, ...);
-char	*input_sanitize(char *);
-
-
-/*
- * INPUT_SANITIZE - syslogd does this sanitization, but in debug mode we want
- *			this sanitizer at least.
- */
-
-char *
-input_sanitize(char *fmt)
-{
-	char *buf;
-	char *p, *q;
-	char backslash = '\\';
-
-	buf = malloc((4 * strlen(fmt)) + 1);
-	if (buf == NULL)
-		return NULL;
-
-	q = buf;
-
-	for (p = fmt; *p; p++) {
-		if (*p == backslash) {
-			*q++ = *p++;	
-			if (*p == '\0')
-				break;
-			switch (*p) {
-			case 'n':
-			case 't':
-			case 'r':
-			case '\'':
-			case '\\':
-			case '"':
-				*q++ = *p;
-				break;
-			default:
-				*q++ = '\\';
-				*q++ = *p;
-				break;
-			}
-		} else {
-			if (isprint(*p) || *p == '\n') {
-				*q++ = *p;
-			} else {
-				*q++ = '\\';
-				*q++ = 'x'; 
-				snprintf(q, 3, "%02X", *p & 0xff);
-				q += 2;
-			}
-		}
-	}
-
-	*q = '\0';
-
-	return (buf);
-}
-
 
 /*
  * dolog() - is a wrapper to syslog and printf depending on debug flag

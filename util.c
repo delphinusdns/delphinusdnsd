@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2002-2023 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -33,6 +33,8 @@
 #include <syslog.h>
 #include <unistd.h>
 #include <ctype.h>
+
+#include <vis.h>
 
 #ifdef __linux__
 #include <grp.h>
@@ -146,6 +148,8 @@ int param_human2tlv(char *, char *, int *);
 static int param_cmp(const void *, const void *);
 static char * param_expand(char *, int, int);
 char * ipseckey_type(struct ipseckey *);
+char * input_sanitize(char *);
+void safe_fprintf(FILE *, char *, ...);
 
 int bytes_received;
 
@@ -6609,4 +6613,64 @@ ipseckey_type(struct ipseckey *ipseckey)
 	}
 
 	return (ret);
+}
+
+/*
+ * INPUT_SANITIZE - syslogd does this sanitization, but in debug mode we want
+ *			this sanitizer at least.
+ */
+
+char *
+input_sanitize(char *fmt)
+{
+	char *buf;
+	int len;
+
+	len = strlen(fmt);
+	len *= 5;
+
+	buf = malloc(len);
+	if (buf == NULL)
+		return NULL;
+
+	strnvis(buf, fmt, len, VIS_SAFE);
+	buf[len - 1] = '\0';
+
+	return (buf);
+}
+
+void
+safe_fprintf(FILE *f, char *fmt, ...)
+{
+	char *buf, *sanitize;
+	va_list ap;
+
+	if (f == stdout) {
+		buf = calloc(1, 65536);
+		if (buf == NULL) {
+			printf("calloc: %s\n", strerror(errno));
+			return;
+		}
+
+		va_start(ap, fmt);
+		vsnprintf(buf, 65536, fmt, ap);
+		va_end(ap);
+
+		sanitize = input_sanitize(buf);	
+		if (sanitize == NULL) {
+			printf("input_sanitize: %s\n", strerror(errno));
+			free(buf);
+			return;
+		}
+		
+		printf("%s", sanitize);
+		free(sanitize);
+		free(buf);
+
+		return;
+	}
+
+	va_start(ap, fmt);
+	vfprintf(f, fmt, ap);
+	va_end(ap);
 }
