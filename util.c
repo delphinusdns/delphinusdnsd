@@ -6633,7 +6633,7 @@ input_sanitize(char *fmt)
 	if (buf == NULL)
 		return NULL;
 
-	strnvis(buf, fmt, len, VIS_SAFE);
+	strnvis(buf, fmt, len, VIS_SAFE | VIS_OCTAL);
 	buf[len - 1] = '\0';
 
 	return (buf);

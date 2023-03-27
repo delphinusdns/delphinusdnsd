@@ -2070,8 +2070,6 @@ yyerror(const char *str)
 	int c;
 
 	dolog(LOG_ERR, "%s file: %s line: %d\n", str, file->name, file->lineno);
-	while ((c = lgetc(0)) != '\n') 
-		dolog(LOG_ERR, "next character is %d\n", c);
 	ddd_shutdown();
 	exit (1);
 }
