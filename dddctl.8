@@ -17,7 +17,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: August 20 2022 $
+.Dd $Mdocdate: March 27 2023 $
 .Dt DDDCTL 8
 .Os
 .Sh NAME
@@ -202,9 +202,15 @@ On Linux, with a replicant zone set up in the configfile, a
 .Nm
 configtest will error out (at least on the Raspberry Pi), the first time.
 Subsequent configtests should state OK, so check for this.  I haven't found
-the bug for this yet.  Another bug is that dddctl query will not sanitize
-input from the net.  This could be used to change characteristics of the
-terminal with means of escape codes.
+the bug for this yet.  
+.Pp
+dddctl query will output escaped characters (with VIS_OCTAL) which is not
+exactly the same as 
+.Xr dig 1 's
+which outputs in a format adhering to RFC 1035 section 5.1.  It's better than
+not escaping escape codes though.  So for reference
+.Xr dig 1
+is a decimal output, dddctl query is octal output escaping.
 .Sh AUTHORS
 .An -nosplit
 .An Peter J. Philipp Aq Mt pbug44@delphinusdns.org
