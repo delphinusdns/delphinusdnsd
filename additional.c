@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005-2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2005-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -160,11 +160,6 @@ additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int reply
 		else
 			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-		/* we won't answer with ttl 0 */
-		if (! aa && answer->ttl == 0) {
-			return (rroffset);
-		}
-
 		answer->rdlength = htons(sizeof(in_addr_t));
 
 		memcpy((char *)&answer->rdata, (char *)&((struct a *)rrp->rdata)->a, sizeof(in_addr_t));
@@ -174,9 +169,8 @@ additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int reply
 		a_count++;
 	}
 
-	pack32((char *)retcount, tmpcount);
-
 out:
+	pack32((char *)retcount, tmpcount);
 	return (offset);
 
 }
@@ -240,11 +234,6 @@ additional_aaaa(char *name, int namelen, struct rbtree *rbt, char *reply, int re
 		else
 			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-		/* we won't answer with ttl 0 */
-		if (! aa && answer->ttl == 0) {
-			return (rroffset);
-		}
-
 		answer->rdlength = htons(sizeof(struct in6_addr));
 
 		memcpy((char *)&answer->rdata, (char *)&((struct aaaa *)rrp->rdata)->aaaa, sizeof(struct in6_addr));
@@ -254,8 +243,8 @@ additional_aaaa(char *name, int namelen, struct rbtree *rbt, char *reply, int re
 		aaaa_count++;
 	}
 
-	pack32((char *)retcount, tmpcount);
 out:
+	pack32((char *)retcount, tmpcount);
 	return (offset);
 
 }
@@ -408,11 +397,6 @@ additional_ptr(char *name, int namelen, struct rbtree *rbt, char *reply, int rep
 	else
 		answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-	/* we won't answer with ttl 0 */
-	if (! aa && answer->ttl == 0) {
-		return (rroffset);
-	}
-
 	offset += sizeof(struct answer);
 
 	if ((offset + ((struct ptr *)rrp->rdata)->ptrlen) > replylen) {
@@ -433,9 +417,9 @@ additional_ptr(char *name, int namelen, struct rbtree *rbt, char *reply, int rep
 
 
 	tmpcount++;
-	pack32((char *)retcount, tmpcount);
 
 out:
+	pack32((char *)retcount, tmpcount);
 	return (offset);
 
 }
