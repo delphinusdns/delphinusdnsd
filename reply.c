@@ -4417,7 +4417,7 @@ again:
 	}
 
 	if (i >= replysize) 
-		return (retlen);
+		return (-1);
 
 	outlen = i;
 
@@ -4461,14 +4461,16 @@ again:
 			break;	
 		}
 
-		/*
-		 * outlen is the same as i, which means an error occurred in
-		 * the additional RR's return -1 here and let the cache expire
-		 * anything it needs and restart the queue.
-		 */
-
-		if (i == outlen)
-			return (-1);
+		if (i == outlen) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
+			goto out;
+		}
 
 		outlen = i;
 
