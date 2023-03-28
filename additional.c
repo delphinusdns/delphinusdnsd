@@ -160,6 +160,11 @@ additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int reply
 		else
 			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
+		/* we won't answer with ttl 0 */
+		if (! aa && answer->ttl == 0) {
+			return (rroffset);
+		}
+
 		answer->rdlength = htons(sizeof(in_addr_t));
 
 		memcpy((char *)&answer->rdata, (char *)&((struct a *)rrp->rdata)->a, sizeof(in_addr_t));
@@ -234,6 +239,11 @@ additional_aaaa(char *name, int namelen, struct rbtree *rbt, char *reply, int re
 			answer->ttl = htonl(rrset->ttl);
 		else
 			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
+		/* we won't answer with ttl 0 */
+		if (! aa && answer->ttl == 0) {
+			return (rroffset);
+		}
 
 		answer->rdlength = htons(sizeof(struct in6_addr));
 
@@ -397,6 +407,11 @@ additional_ptr(char *name, int namelen, struct rbtree *rbt, char *reply, int rep
 		answer->ttl = htonl(rrset->ttl);
 	else
 		answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
+	/* we won't answer with ttl 0 */
+	if (! aa && answer->ttl == 0) {
+		return (rroffset);
+	}
 
 	offset += sizeof(struct answer);
 

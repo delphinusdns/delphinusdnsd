@@ -4326,23 +4326,12 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	struct dns_header *odh;
 	uint16_t outlen;
 	int i, tmplen;
-	int labellen;
-	char *label, *plabel;
-
-	struct answer {
-		char name[2];
-		uint16_t type;
-		uint16_t class;
-		uint32_t ttl;
-		uint16_t rdlength;	 /* 12 */
-		char rdata;		
-	} __attribute__((packed));
-
-	struct answer *answer;
+	struct question *q = sreply->q;
+	int labellen = q->hdr->namelen;
+	char *label = q->hdr->name, *plabel;
 
 	char *buf = sreply->buf;
 	int len = sreply->len;
-	struct question *q = sreply->q;
 	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
@@ -4390,27 +4379,32 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	odh->nsrr = 0;
 	odh->additional = 0;
 	
+again:
+
 	rrp = TAILQ_FIRST(&rrset->rr_head);
 	if (rrp == NULL)
 		return -1;
 
-	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
-		q->hdr->namelen + 4);
-
-	answer->name[0] = 0xc0;
-	answer->name[1] = 0x0c;
-	answer->type = htons(DNS_TYPE_CNAME);
-	answer->class = q->hdr->qclass;
+	pack(&reply[outlen], label, labellen);
+	outlen += labellen;
+	pack16(&reply[outlen], htons(DNS_TYPE_CNAME));
+	outlen += 2;
+	pack16(&reply[outlen], q->hdr->qclass);
+	outlen += 2;
 
 	if (q->aa)
-		answer->ttl = htonl(rrset->ttl);
+		pack32(&reply[outlen], htonl(rrset->ttl));
 	else
-		answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+		pack32(&reply[outlen], htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created)))));
+		
 
-	outlen += 12;			/* up to rdata length */
+	outlen += 4;			/* up to rdata length */
 
 	label = (char *)&((struct cname *)rrp->rdata)->cname;
 	labellen = ((struct cname *)rrp->rdata)->cnamelen;
+
+	pack16(&reply[outlen], htons(labellen));
+	outlen += 2;
 
 	plabel = label;
 
@@ -4427,14 +4421,32 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	outlen = i;
 
-	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
-
 	/* we are a cache, be nice and tag on the pointed to data */
 	while (rbt->flags & RBT_CACHE) {
-		rbt = find_rrset(db, label, labellen);
+
+		/* the records expired let the cache renew them */
+		if (rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))) == 0) 
+			return (-1);
+
+		/* recursive cnames grrr */
+		for (;;) {
+			rbt = find_rrset(db, label, labellen);
+			if (rbt == NULL)
+				break;
+			
+			if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) == NULL)
+				break;
+
+			NTOHS(odh->answer);
+			odh->answer++;
+			HTONS(odh->answer);
+
+			goto again;	/* I know wheee jump all over */
+		};
+
 		if (rbt == NULL)
 			break;
-
+		
 		if (ntohs(origtype) == DNS_TYPE_A) {
 			i = additional_a(label, labellen, rbt, reply, \
 				replysize, outlen, &retcount);
@@ -4449,8 +4461,14 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 			break;	
 		}
 
+		/*
+		 * outlen is the same as i, which means an error occurred in
+		 * the additional RR's return -1 here and let the cache expire
+		 * anything it needs and restart the queue.
+		 */
+
 		if (i == outlen)
-			break;
+			return (-1);
 
 		outlen = i;
 

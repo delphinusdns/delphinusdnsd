@@ -1042,8 +1042,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 					 * at this point the rl->reply will fail.. expire it
 					 * and fill it with dnssec data if available
 					 */
-					expire_rr(db, q->hdr->name, q->hdr->namelen, 
-							q->hdr->qtype, highexpire);
+					expire_db(db, TTL_EXPIRE_RR);
 					free_question(q);
 					goto newqueue;
 				}
