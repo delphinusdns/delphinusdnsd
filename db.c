@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2017-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -59,6 +59,7 @@ int expire_rr(ddDB *, char *, int, uint16_t, time_t);
 int expire_db(ddDB *, int);
 void remove_rbt(struct rbtree *);
 uint32_t match_zoneglue(struct rbtree *rbt);
+int rr_duplicate(ddDB *, char *, int, uint16_t, char *);
 
 extern void      dolog(int, char *, ...);
 
@@ -655,4 +656,28 @@ match_zoneglue(struct rbtree *rbt)
 	}
 
 	return 0;
+}
+
+
+int
+rr_duplicate(ddDB *db, char *name, int len, uint16_t type, char *data)
+{
+	struct rrset *rrset = NULL;
+	struct rr *rt1 = NULL;
+	struct rbtree *rbt = NULL;
+
+	rbt = find_rrset(db, name, len);
+	if (rbt == NULL)
+		return (0);
+
+	rrset = find_rr(rbt, type);
+	if (rrset == NULL)
+		return (0);
+
+	TAILQ_FOREACH(rt1, &rrset->rr_head, entries) {
+		if (memcmp(rt1->rdata, data, rt1->rdlen) == 0)
+			return(1);
+	}
+
+	return (0);
 }

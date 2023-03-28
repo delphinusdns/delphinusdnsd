@@ -4352,13 +4352,15 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	uint16_t rollback;
 	time_t now;
+	int origtype = q->hdr->qtype;
+	int retcount;
 
 	now = time(NULL);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) == NULL)
 		return -1;
 
-	if (istcp) {
+	if (istcp != DDD_IS_UDP) {
 		replysize = 65535;
 	}
 
@@ -4424,19 +4426,42 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 		return (retlen);
 
 	outlen = i;
-	
-#if 0
-	/* compress the label if possible */
-	if ((tmplen = compress_label((u_char*)reply, outlen, labellen)) > 0) {
-		/* XXX */
-		outlen = tmplen;
-	}
-#endif
 
 	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
 
+	/* we are a cache, be nice and tag on the pointed to data */
+	while (rbt->flags & RBT_CACHE) {
+		rbt = find_rrset(db, label, labellen);
+		if (rbt == NULL)
+			break;
+
+		if (ntohs(origtype) == DNS_TYPE_A) {
+			i = additional_a(label, labellen, rbt, reply, \
+				replysize, outlen, &retcount);
+		} else if (ntohs(origtype) == DNS_TYPE_AAAA) {
+			i = additional_aaaa(label, labellen, rbt, reply, \
+				replysize, outlen, &retcount);
+		} else if (ntohs(origtype) == DNS_TYPE_PTR) {
+			i = additional_ptr(label, labellen, rbt, reply, \
+				replysize, outlen, &retcount);
+		} else {
+			dolog(LOG_INFO, "peter has not added this type, bug peter!\n");
+			break;	
+		}
+
+		if (i == outlen)
+			break;
+
+		outlen = i;
+
+		NTOHS(odh->answer);
+		odh->answer += retcount;
+		HTONS(odh->answer);
+		/* we never loop */
+		break;
+	}
+
 	if (dnssec && q->dnssecok && (rbt->flags & RBT_DNSSEC)) {
-		int retcount;
 
 		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_CNAME, rbt, reply, replysize, outlen, &retcount, q->aa);
 	

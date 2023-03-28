@@ -200,6 +200,7 @@ extern int	lower_dnsname(char *buf, int len);
 extern void	sm_lock(char *, size_t);
 extern void	sm_unlock(char *, size_t);
 extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
+extern int rr_duplicate(ddDB *, char *, int, uint16_t, char *);
 
 /*
  * XXX everything but txt and naptr, works...
@@ -732,6 +733,15 @@ drop:
 									pack32((char *)&ri->u.s.read, 1);
 									continue;
 								}
+
+
+								if (rr_duplicate(db, ri->rri_rr.name, \
+									ri->rri_rr.namelen, ri->rri_rr.rrtype, \
+									rdata)) {
+										free(rdata);
+										pack32((char *)&ri->u.s.read, 1);
+										continue;
+								}	
 
 								if ((rbt = create_rr(db, ri->rri_rr.name, 
 										ri->rri_rr.namelen, ri->rri_rr.rrtype, 

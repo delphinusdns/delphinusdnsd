@@ -2067,8 +2067,6 @@ struct tab cmdtab[] = {
 void 
 yyerror(const char *str)
 {
-	int c;
-
 	dolog(LOG_ERR, "%s file: %s line: %d\n", str, file->name, file->lineno);
 	ddd_shutdown();
 	exit (1);

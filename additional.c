@@ -124,7 +124,11 @@ additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int reply
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int tmpcount = 0;
+	int aa = (rbt->flags & RBT_CACHE) ? 0 : 1;
+	time_t now = 0;
 
+
+	now = time(NULL);
 	pack32((char *)retcount, 0);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == NULL)
@@ -151,7 +155,10 @@ additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int reply
 		
 		answer->type = htons(DNS_TYPE_A);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(rrset->ttl);
+		if (aa) 
+			answer->ttl = htonl(rrset->ttl);
+		else
+			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
 		answer->rdlength = htons(sizeof(in_addr_t));
 
@@ -192,7 +199,10 @@ additional_aaaa(char *name, int namelen, struct rbtree *rbt, char *reply, int re
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int tmpcount = 0;
+	int aa = (rbt->flags & RBT_CACHE) ? 0 : 1;
+	time_t now = 0;
 
+	now = time(NULL);
 	pack32((char *)retcount, 0);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) == NULL)
@@ -220,7 +230,10 @@ additional_aaaa(char *name, int namelen, struct rbtree *rbt, char *reply, int re
 		
 		answer->type = htons(DNS_TYPE_AAAA);
 		answer->class = htons(DNS_CLASS_IN);
-		answer->ttl = htonl(rrset->ttl);
+		if (aa) 
+			answer->ttl = htonl(rrset->ttl);
+		else
+			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
 		answer->rdlength = htons(sizeof(struct in6_addr));
 
@@ -347,7 +360,10 @@ additional_ptr(char *name, int namelen, struct rbtree *rbt, char *reply, int rep
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	int tmpcount = 0;
+	int aa = (rbt->flags & RBT_CACHE) ? 0 : 1;
+	time_t now = 0;
 
+	now = time(NULL);
 	pack32((char *)retcount, 0);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) == NULL)
@@ -377,7 +393,10 @@ additional_ptr(char *name, int namelen, struct rbtree *rbt, char *reply, int rep
 	
 	answer->type = htons(DNS_TYPE_PTR);
 	answer->class = htons(DNS_CLASS_IN);
-	answer->ttl = htonl(rrset->ttl);
+	if (aa) 
+		answer->ttl = htonl(rrset->ttl);
+	else
+		answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
 	offset += sizeof(struct answer);
 
