@@ -465,8 +465,7 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 	}
 
 #if __OpenBSD__
-        if (pledge("stdio proc sendfd recvfd", NULL) < 0)
- {
+        if (pledge("stdio proc sendfd recvfd", NULL) == -1) {
                 dolog(LOG_ERR, "pledge %s", strerror(errno));
                 exit(1);
         }
@@ -544,6 +543,18 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 					close(notifyfd[1]);
 
 				close(notify_ibuf.fd);
+
+				/*
+				 * we are done sending descriptors so update
+				 * the pledge losing "sendfd"
+				 */
+#if __OpenBSD__
+				if (pledge("stdio proc recvfd", NULL) == -1) {
+					dolog(LOG_ERR, "pledge %s", strerror(errno));
+					ddd_shutdown();
+					exit(1);
+				}
+#endif
 
 				notifyfd[0] = -1;	
 				notifyfd[1] = -1;	
