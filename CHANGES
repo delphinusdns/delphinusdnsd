@@ -11,6 +11,9 @@
 - losing the "inet" pledge in a lot of network facing processes.  We made
 helper processes that passed the descriptor to the helper allowing us to
 keep a minimal pledge of "stdio recvfd ..."
+- lose the "inet" pledge in AXFR, TCP.
+- adjust ratelimit for the ttl that hits us, in order to evade DoS attacks
+  on valid nameservers.
 
 
 [2022] Changes in RELEASE_1_7 from RELEASE_1_6
