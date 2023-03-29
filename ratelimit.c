@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2014-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -47,15 +47,18 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-void 			add_rrlimit(int, uint16_t *, int, char *);
-int 			check_rrlimit(int, uint16_t *, int, char *);
+void 			add_rrlimit(int, uint16_t *, int, char *, uint8_t);
+int 			check_rrlimit(int, uint16_t *, int, char *, uint8_t);
 extern void 		dolog(int, char *, ...);
 static uint16_t 	hash_rrlimit(uint16_t *, int);
 char 			*rrlimit_setup(int);
 
 struct rrlimit {
 	uint8_t pointer;
-	time_t times[256];
+	struct {
+		uint8_t ttl;
+		time_t times;
+	} ttl_times[256];
 } __attribute__((packed));
 
 int ratelimit = 0;
@@ -72,7 +75,7 @@ rrlimit_setup(int size)
 	if (size > 255)
 		return NULL;	
 
-	size = 65536 * ((size * sizeof(time_t)) + sizeof(uint8_t));
+	size = 65536 * ((size * (sizeof(time_t) + sizeof(uint8_t))) + sizeof(uint8_t));
 
 	ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED |\
 		MAP_ANON, -1, 0);
@@ -88,7 +91,7 @@ rrlimit_setup(int size)
 }
 
 int
-check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
+check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr, uint8_t ttl)
 {
 	struct rrlimit *rl;
 	struct in6_addr ia6;
@@ -145,7 +148,7 @@ check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
 		hash = hash_rrlimit((uint16_t *)&ia6, sizeip);
 	}
 		
-	tmp = rrlimit_ptr + (hash * ((size * sizeof(time_t)) + sizeof(uint8_t)));
+	tmp = rrlimit_ptr + (hash * ((size * (sizeof(time_t) + sizeof(uint8_t))) + sizeof(uint8_t)));
 	rl = (struct rrlimit *)tmp;
 	
 	offset = rl->pointer;
@@ -153,7 +156,14 @@ check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
 	now = time(NULL);
 
 	for (i = 0; i < size; i++) {
-		if (difftime(now, rl->times[(offset + i) % size]) <= 1)
+
+		/*
+		 * if the times (to the second) match and the ttl (to prevent
+		 * spoofing) add the count.
+		 */
+
+		if (difftime(now, rl->ttl_times[(offset + i) % size].times) \
+			<= 1 && ttl == rl->ttl_times[(offset + i) % size].ttl)
 			count++;
 		else
 			break;
@@ -167,7 +177,7 @@ check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
 
 
 void
-add_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
+add_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr, uint8_t ttl)
 {
 	struct rrlimit *rl;
 	struct in6_addr ia6;
@@ -224,7 +234,7 @@ add_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
 		hash = hash_rrlimit((uint16_t *)&ia6, sizeip);
 	}
 
-	tmp = rrlimit_ptr + (hash * ((size * sizeof(time_t)) + sizeof(uint8_t)));
+	tmp = rrlimit_ptr + (hash * ((size * (sizeof(time_t) + sizeof(uint8_t))) + sizeof(uint8_t)));
 	rl = (struct rrlimit *)tmp;
 	
 	offset = rl->pointer;
@@ -235,7 +245,8 @@ add_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr)
 
 	now = time(NULL);
 
-	rl->times[offset] = now;
+	rl->ttl_times[offset].times = now;
+	rl->ttl_times[offset].ttl = ttl;
 	rl->pointer = offset;	/* XXX race */
 	
 }

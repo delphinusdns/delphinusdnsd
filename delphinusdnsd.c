@@ -105,7 +105,6 @@ extern int		reply_nsec3param(struct sreply *, int *, ddDB *);
 extern int		reply_rp(struct sreply *, int *, ddDB *);
 extern int		reply_svcb(struct sreply *, int *, ddDB *);
 extern int 		check_ent(char *, int);
-extern int 		check_rrlimit(int, uint16_t *, int, char *);
 extern int 		display_rr(struct rrset *rrset);
 extern int 		drop_privs(char *, struct passwd *);
 extern int 		find_filter(struct sockaddr_storage *, int);

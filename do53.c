@@ -87,7 +87,7 @@ extern char *		get_dns_type(int, int);
 extern int		free_question(struct question *);
 extern int		reply_nodata(struct sreply *, int *, ddDB *);
 extern int		reply_notify(struct sreply *, int *, ddDB *);
-extern int 		check_rrlimit(int, uint16_t *, int, char *);
+extern int 		check_rrlimit(int, uint16_t *, int, char *, uint8_t);
 extern int 		find_filter(struct sockaddr_storage *, int);
 extern int 		find_passlist(struct sockaddr_storage *, int);
 extern int 		notifysource(struct question *, struct sockaddr_storage *);
@@ -116,7 +116,7 @@ extern uint32_t 	unpack32(char *);
 extern uint8_t 		find_region(struct sockaddr_storage *, int);
 extern void		sm_lock(char *, size_t);
 extern void		sm_unlock(char *, size_t);
-extern void 		add_rrlimit(int, uint16_t *, int, char *);
+extern void 		add_rrlimit(int, uint16_t *, int, char *, uint8_t);
 extern void 		build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, uint8_t, int, int, char *, struct tls *);
 extern void 		ddd_shutdown(void);
 extern void 		dolog(int, char *, ...);
@@ -629,9 +629,9 @@ axfrentry:
 					inet_ntop(AF_INET6, (void *)&sin6->sin6_addr, (char *)&address, sizeof(address));
 					addrlen = strlen(address);
 					if (ratelimit) {
-						add_rrlimit(ratelimit_backlog, (uint16_t *)&sin6->sin6_addr, sizeof(sin6->sin6_addr), rptr);
+						add_rrlimit(ratelimit_backlog, (uint16_t *)&sin6->sin6_addr, sizeof(sin6->sin6_addr), rptr, (uint8_t)received_ttl);
 
-						rcheck = check_rrlimit(ratelimit_backlog, (uint16_t *)&sin6->sin6_addr, sizeof(sin6->sin6_addr), rptr);
+						rcheck = check_rrlimit(ratelimit_backlog, (uint16_t *)&sin6->sin6_addr, sizeof(sin6->sin6_addr), rptr, (uint8_t)received_ttl);
 					}
 
 					aregion = find_region((struct sockaddr_storage *)sin6, AF_INET6);
@@ -653,9 +653,9 @@ axfrentry:
 					inet_ntop(AF_INET, (void *)&sin->sin_addr, (char *)&address, sizeof(address));
 					addrlen = strlen(address);
 					if (ratelimit) {
-						add_rrlimit(ratelimit_backlog, (uint16_t *)&sin->sin_addr.s_addr, sizeof(sin->sin_addr.s_addr), rptr);
+						add_rrlimit(ratelimit_backlog, (uint16_t *)&sin->sin_addr.s_addr, sizeof(sin->sin_addr.s_addr), rptr, (uint8_t)received_ttl);
 
-						rcheck = check_rrlimit(ratelimit_backlog, (uint16_t *)&sin->sin_addr.s_addr, sizeof(sin->sin_addr.s_addr), rptr);
+						rcheck = check_rrlimit(ratelimit_backlog, (uint16_t *)&sin->sin_addr.s_addr, sizeof(sin->sin_addr.s_addr), rptr, (uint8_t)received_ttl);
 					}
 
 					aregion = find_region((struct sockaddr_storage *)sin, AF_INET);
