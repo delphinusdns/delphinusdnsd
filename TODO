@@ -24,8 +24,8 @@ to drop the "inet" pledge from this.  The descriptor is passed
 from a "stdio inet sendfd" listener process to these.  This should make 
 better security preventing someone to overflow something to write a socket
 outwards.						[DONE]
-- much like on the TCP engine make a tcp accept process allowing us to 
-drop the "inet" pledge.
+- much like on the TCP engine make an AXFR accept process allowing us to 
+drop the "inet" pledge.					[DONE]
 - give the raxfr (replicant engine) a forked helper that opens sockets for it
 and once open passes them back to replicant engine.  This allows us to drop
 the "inet" pledge.
