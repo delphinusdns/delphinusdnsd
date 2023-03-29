@@ -508,6 +508,7 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 		FD_SET(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1], &rset);
 
 #if 0
+		/* this is the cortex descriptor */
 		FD_SET(ibuf->fd, &rset);
 		if (ibuf->fd > maxso)
 			maxso = ibuf->fd;
@@ -541,6 +542,8 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 
 				if (notifyfd[1] > -1)
 					close(notifyfd[1]);
+
+				close(notify_ibuf.fd);
 
 				notifyfd[0] = -1;	
 				notifyfd[1] = -1;	
@@ -1560,37 +1563,6 @@ notifypacket(struct imsgbuf *ibuf, int so, void *vnotnp, void *vmd, int packetco
 	int af = md->notifydest.ss_family;
 	
 	memcpy(&newsin, (char *)&mz->notifybind, sizeof(struct sockaddr_storage));
-#if 0
-	if (getsockname(so, (struct sockaddr *)&savesin, &sinlen) < 0) {
-		dolog(LOG_INFO, "getsockname error\n");
-		return;
-	}
-
-	if (mz->notifybind.ss_family == AF_INET) {
-		struct sockaddr_in *tmpsin = (struct sockaddr_in *)&newsin;
-
-
-		tmpsin->sin_port = ((struct sockaddr_in *)&savesin)->sin_port;
-
-		if (bind(so, (struct sockaddr *)tmpsin, sizeof(struct sockaddr_in)) < 0) {
-			dolog(LOG_INFO, "can't bind to bind address found in mzone for zone \"%s\"", mz->humanname);
-			return;
-		}
-	} else if (mz->notifybind.ss_family == AF_INET6) {
-		struct sockaddr_in6 *tmpsin = (struct sockaddr_in6 *)&newsin;
-
-		tmpsin->sin6_port = ((struct sockaddr_in6 *)&savesin)->sin6_port;
-#ifndef __linux__
-		tmpsin->sin6_len = sizeof(struct sockaddr_in6);	
-#endif
-
-		if (bind(so, (struct sockaddr *)tmpsin, sizeof(struct sockaddr_in6)) < 0) {
-			dolog(LOG_INFO, "can't bind to v6 bind address found in mzone for zone \"%s\"", mz->humanname);
-			return;
-		}
-	}
-#endif
-
 	memset(&packet, 0, sizeof(packet));
 	dnh = (struct dns_header *)&packet[0];
 
@@ -1652,6 +1624,9 @@ notifypacket(struct imsgbuf *ibuf, int so, void *vnotnp, void *vmd, int packetco
 		bsin.sin_addr.s_addr = tmpsin->sin_addr.s_addr;
 
 		so = sendforme(ibuf, so, packet, outlen, (struct sockaddr *)&bsin, slen);
+		if (so == -1) {
+			dolog(LOG_INFO, "sendforme failed, we seem to have lost our descriptor!\n");
+		}
 	} else {
 		struct sockaddr_in6 *tmpsin = (struct sockaddr_in6 *)&md->notifydest;
 
@@ -1665,32 +1640,11 @@ notifypacket(struct imsgbuf *ibuf, int so, void *vnotnp, void *vmd, int packetco
 		memcpy(&bsin6.sin6_addr, &tmpsin->sin6_addr, 16);
 
 		so = sendforme(ibuf, so, packet, outlen, (struct sockaddr *)&bsin6, slen);
-	}
-
-#if 0
-	if (ret < 0) {
-		dolog(LOG_INFO, "sendto: %s\n", strerror(errno));
-	}
-
-
-	/* as soon as the sendto is done we want to bind back to 0.0.0.0 */
-	if (mz->notifybind.ss_family == AF_INET) {
-		struct sockaddr_in *tmpsin = (struct sockaddr_in *)&savesin;
-
-		if (bind(so, (struct sockaddr *)tmpsin, sizeof(struct sockaddr_in)) < 0) {
-			dolog(LOG_INFO, "can't unbind from bind address found in mzone for zone \"%s\"", mz->humanname);
-			return;
-		}
-	} else if (mz->notifybind.ss_family == AF_INET6) {
-		struct sockaddr_in6 *tmpsin = (struct sockaddr_in6 *)&savesin;
-
-		if (bind(so, (struct sockaddr *)tmpsin, sizeof(struct sockaddr_in6)) < 0) {
-			dolog(LOG_INFO, "can't unbind from bind address found in mzone for zone \"%s\"", mz->humanname);
-			return;
+		if (so == -1) {
+			dolog(LOG_INFO, "sendforme failed, we seem to have lost our descriptor!\n");
 		}
 	}
-#endif
-	
+
 	return;
 }
 
@@ -1845,6 +1799,7 @@ axfr_acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *notify_ib
 	int packetlen;
 	int tcpflags;
 	int dummy = 42;
+	int nomore_notifies = 0;
 
 	size_t n;
 
@@ -1889,9 +1844,11 @@ axfr_acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *notify_ib
 		if (maxso < cortex->fd)
 			maxso = cortex->fd;
 
-		FD_SET(notify_ibuf->fd, &rset);
-		if (maxso < notify_ibuf->fd)
-			maxso = notify_ibuf->fd;
+		if (nomore_notifies == 0) {
+			FD_SET(notify_ibuf->fd, &rset);
+			if (maxso < notify_ibuf->fd)
+				maxso = notify_ibuf->fd;
+		}
 
 		sel = select(maxso + 1, &rset, NULL, NULL, NULL);
 
@@ -1998,8 +1955,10 @@ axfr_acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *notify_ib
 
 			if (n == 0) {
 				/* child died? */
-				dolog(LOG_INFO, "sigpipe on child? AXFR process exiting.\n");
-				exit(1);
+				dolog(LOG_INFO, "NOTIFY imsg descriptor closing\n");
+				close(notify_ibuf->fd);
+				nomore_notifies = 1;
+				continue;
 			}
 
 			for(;;) {
@@ -2013,6 +1972,9 @@ axfr_acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *notify_ib
 					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
 					switch (imsg.hdr.type) {
 					case IMSG_NOTIFY4_MESSAGE:
+						if (nomore_notifies == 1)
+							break;
+
 						so = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 						if (so == -1) {
 							dolog(LOG_INFO, "socket: %s\n", strerror(errno));
@@ -2029,6 +1991,9 @@ axfr_acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *notify_ib
 						break;
 
 					case IMSG_NOTIFY6_MESSAGE:
+						if (nomore_notifies == 1)
+							break;
+
 						so = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 						if (so == -1) {
 							dolog(LOG_INFO, "socket: %s\n", strerror(errno));
@@ -2048,6 +2013,9 @@ axfr_acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *notify_ib
 						msgbuf_write(&notify_ibuf->w);
 						break;
 					case IMSG_SENDFORME_MESSAGE:
+						if (nomore_notifies == 1)
+							break;
+
 						if (datalen != sizeof(struct axfr_acceptmsg)) {
 							dolog(LOG_INFO, "datalen does not equal sizeof(struct axfr_acceptmsg)\n");
 							break;
