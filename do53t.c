@@ -126,7 +126,7 @@ extern void 		parseloop(struct cfg *, struct imsgbuf *, int);
 extern void 		unpack(char *, char *, int);
 
 void 			tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
-int			acceptloop(struct cfg *, struct imsgbuf *);
+int			acceptloop(struct cfg *, struct imsgbuf *, int *);
 
 extern struct reply_logic rlogic[];
 
@@ -362,7 +362,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		imsg_init(&accept_ibuf, cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[0]);
 		setproctitle("TCP accept engine %d [%s]", cfg->pid,
 			(identstring != NULL ? identstring : ""));
-		acceptloop(cfg, &accept_ibuf);
+		acceptloop(cfg, &accept_ibuf, cfg->tcp);
 		/* NOTREACHED */
 		exit(1);
 	default:
@@ -1142,7 +1142,7 @@ forwardtcp:
 }
 
 int
-acceptloop(struct cfg *cfg, struct imsgbuf *ibuf)
+acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, int *fd)
 {
 	int maxso;
 	int i = 0, sel, so;
@@ -1170,7 +1170,7 @@ acceptloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	
 	
 	for (i = 0; i < cfg->sockcount; i++) {
-		listen(cfg->tcp[i], 5);
+		listen(fd[i], 5);
 	}
 
 	for (;;) {
@@ -1178,10 +1178,10 @@ acceptloop(struct cfg *cfg, struct imsgbuf *ibuf)
 
 		FD_ZERO(&rset);
 		for (i = 0; i < cfg->sockcount; i++)  {
-			if (maxso < cfg->tcp[i])
-				maxso = cfg->tcp[i];
+			if (maxso < fd[i])
+				maxso = fd[i];
 	
-			FD_SET(cfg->tcp[i], &rset);
+			FD_SET(fd[i], &rset);
 		}
 
 		sel = select(maxso + 1, &rset, NULL, NULL, NULL);
@@ -1192,11 +1192,11 @@ acceptloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		}
 
 		for (i = 0; i < cfg->sockcount; i++) {
-			if (FD_ISSET(cfg->tcp[i], &rset)) {
+			if (FD_ISSET(fd[i], &rset)) {
 				fromlen = sizeof(struct sockaddr_storage);
 				memset(&acceptmsg, 0, sizeof(struct acceptmsg));
 
-				so = accept(cfg->tcp[i], (struct sockaddr*)from, &fromlen);
+				so = accept(fd[i], (struct sockaddr*)from, &fromlen);
 		
 				if (so < 0) {
 					dolog(LOG_INFO, "tcp accept: %s\n", strerror(errno));

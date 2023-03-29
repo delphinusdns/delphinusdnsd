@@ -152,7 +152,7 @@ extern void	 	init_filter(void);
 extern void	 	init_notifyddd(void);
 extern void	 	init_passlist(void);
 extern void	 	init_tsig(void);
-extern void 		axfrloop(int *, int, char **, ddDB *, struct imsgbuf *);
+extern void 		axfrloop(struct cfg *, char **, ddDB *, struct imsgbuf *, struct imsgbuf *);
 extern void 		ddd_shutdown(void);
 extern void 		dolog(int, char *, ...);
 extern void 		init_dnssec(void);
@@ -1298,13 +1298,21 @@ main(int argc, char *argv[], char *environ[])
 					close(tlss[j]);
 				if (axfrport && axfrport != port)
 					close(uafd[j]);
-			
+				else
+					cfg->axfr[j] = uafd[j];
+
+				if (axfrport && axfrport != port)
+					cfg->axfrt[j] = afd[j];
+
 			}
+
+			cfg->sockcount = i;
+
 			close(cfg->raw[0]);
 			close(cfg->raw[1]);
 
-			setproctitle("AXFR engine on port %d [%s]", axfrport, (identstring != NULL ? identstring : ""));
-			axfrloop(afd, (axfrport == port) ? 0 : i, ident, db, ibuf);
+			setproctitle("AXFR engine [%s]", (identstring != NULL ? identstring : ""));
+			axfrloop(cfg, ident, db, ibuf, &cortex_ibuf);
 			/* NOTREACHED */
 			exit(1);
 		default:
@@ -2727,7 +2735,7 @@ setup_cortex(struct imsgbuf *ibuf)
 							break;
 						case IMSG_XFR_MESSAGE:
 							SLIST_FOREACH(neup2, &neuronhead, entries) {
-								if (neup2->desc == MY_IMSG_AXFR)
+								if (neup2->desc == MY_IMSG_AXFR_ACCEPT)
 									break;
 							}
 							/* didn't find it?  skip */

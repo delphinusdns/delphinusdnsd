@@ -61,6 +61,9 @@
 #define IMSG_DUMP_CACHEREPLY	17	/* reply the dump of forward cache */
 #define IMSG_DUMP_CACHEREPLYEOF	18	/* end of messages */
 #define IMSG_FORWARD_TLS	19	/* forward a TLS packet XXX */
+#define IMSG_NOTIFY4_MESSAGE	20	/* request v4 descriptor */
+#define IMSG_NOTIFY6_MESSAGE	21	/* request v6 descriptor */
+#define IMSG_SENDFORME_MESSAGE	22	/* notify send for me */
 
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2
@@ -451,6 +454,7 @@ struct cfg {
 	int tcp[DEFAULT_SOCKET];	/* tcp socket */
 	int tls[DEFAULT_SOCKET];	/* tls socket */
 	int axfr[DEFAULT_SOCKET];	/* axfr udp socket */
+	int axfrt[DEFAULT_SOCKET];	/* axfr tcp socket */
 	char *ident[DEFAULT_SOCKET];	/* identification of interface */
 	struct sockaddr_storage ss[DEFAULT_SOCKET];	/* some addr storage */
 	struct tls *ctx;		/* the TLS context */
@@ -468,7 +472,9 @@ struct cfg {
 #define MY_IMSG_FORWARD		8
 #define MY_IMSG_TLS		9
 #define MY_IMSG_ACCEPT		10
-#define MY_IMSG_MAX		11
+#define MY_IMSG_AXFR_ACCEPT	11
+#define MY_IMSG_NOTIFY		12
+#define MY_IMSG_MAX		13
 	int raw[2];
 #define RAW_IPSOCKET 0
 #define RAW_IP6SOCKET 1
