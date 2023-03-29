@@ -2220,6 +2220,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 	name = (u_char *)dns_label(zonename, &len);
 	if (name == NULL) {
+		dolog(LOG_INFO, "%s: dns_label failed\n", __FILE__);
 		return -1;
 	}
 
@@ -2243,7 +2244,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	if (tsigkey) {
 
 		if ((len = mybase64_decode(tsigpass, (u_char *)&pseudo_packet, sizeof(pseudo_packet))) < 0) {
-			fprintf(stderr, "bad base64 password\n");
+			dolog(LOG_INFO, "%s: bad base64 password\n", __FILE__);
 			return -1;
 		}
 		
@@ -2253,14 +2254,14 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 		now = time(NULL);
 		if (tsig_pseudoheader(tsigkey, DEFAULT_TSIG_FUDGE, now, ctx) < 0) {
-			fprintf(stderr, "tsig_pseudoheader failed\n");
+			dolog(LOG_INFO, "%s: tsig_pseudoheader failed\n", __FILE__);
 			return -1;
 		}
 
 		delphinusdns_HMAC_Final(ctx, (u_char *)shabuf, (u_int *)&len);
 
 		if (len != DNS_HMAC_SHA256_SIZE) {
-			fprintf(stderr, "not expected len != 32\n");
+			dolog(LOG_INFO, "%s: not expected HMAC len != 32\n", __FILE__);
 			return -1;
 		}
 
@@ -2268,6 +2269,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 		keyname = (u_char *)dns_label(tsigkey, &len);
 		if (keyname == NULL) {
+			dolog(LOG_INFO, "%s: dns_label() failed 2\n", __FILE__);
 			return -1;
 		}
 
@@ -2289,6 +2291,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 		keyname = (u_char *)dns_label("hmac-sha256", &len);
 		if (keyname == NULL) {
+			dolog(LOG_INFO, "%s: dns_label() failed 3\n", __FILE__);
 			return -1;
 		}
 
@@ -2369,7 +2372,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 		uint16_t maclen;
 	
 		if ((len = mybase64_decode(tsigpass, (u_char *)&pseudo_packet, sizeof(pseudo_packet))) < 0) {
-			fprintf(stderr, "bad base64 password\n");
+			dolog(LOG_INFO, "%s: bad base64 password\n", __FILE__);
 			return -1;
 		}
 		
@@ -2383,45 +2386,47 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 	q = build_question((char *)&wh->dh, wh->len, wh->dh.additional, (tsigkey == NULL) ? NULL : shabuf);
 	if (q == NULL) {
-		fprintf(stderr, "failed to build_question\n");
+		dolog(LOG_INFO, "%s: failed build_question()\n", __FILE__);
 		return -1;
 	}
 
 	for (;;) {
 		sizetv = sizeof(struct timeval);
 		if (getsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &savetv, &sizetv) < 0) {	
-			perror("getsockopt");
+			dolog(LOG_INFO, "%s: getsockopt() %s\n", __FILE__, strerror(errno));
 		}
 
 		tv.tv_sec = 1;
 		tv.tv_usec = 0;
 
 		if (setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
-			dolog(LOG_DEBUG, "setsockopt failed with sec 1, usec 0: %s\n", strerror(errno));
+			dolog(LOG_INFO, "setsockopt failed with sec 1, usec 0: %s\n", strerror(errno));
 		}
 
 		len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL);
-		if (len <= 0)	
+		if (len <= 0) {	
+			dolog(LOG_INFO, "recv failed peeking: %s\n", strerror(errno));
 			break;
+		}
 
 		plen = (uint16_t *)reply;
 		tcplen = ntohs(*plen) + 2;
 		
 		/* restore original timeout values */
 		if (setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &savetv, sizeof(savetv)) < 0) {
-			perror("setsockopt");
+			dolog(LOG_INFO, "setsockopt failed: %s\n", strerror(errno));
 		}
 
 		len = recv(so, reply, tcplen, MSG_WAITALL);
 		if (len < 0) {
-			perror("recv");
+			dolog(LOG_INFO, "recv failed: %s\n", strerror(errno));
 			return -1;
 		}
 
 		totallen += len;
 
 		if (totallen >= bytelimit) {
-			fprintf(stderr, "download exceeded byte limit\n");
+			dolog(LOG_INFO, "download exceeded byte limit\n");
 			return -1;
 		}
 
@@ -2432,17 +2437,17 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 		len = rwh->len;
 
 		if (rwh->dh.id != wh->dh.id) {
-			fprintf(stderr, "DNS ID mismatch\n");
+			dolog(LOG_INFO, "DNS ID mismatch\n");
 			return -1;
 		}
 
 		if (!(htons(rwh->dh.query) & DNS_REPLY)) {
-			fprintf(stderr, "NOT a DNS reply\n");
+			dolog(LOG_INFO, "not a DNS reply\n");
 			return -1;
 		}
 		
 		if (ntohs(rwh->dh.answer) < 1) {	
-			fprintf(stderr, "NO ANSWER provided\n");
+			dolog(LOG_INFO, "NO ANSWER provided\n");
 			return -1;
 		}
 
@@ -2455,12 +2460,12 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 			
 		if (memcmp(q->hdr->name, name, q->hdr->namelen) != 0) {
-			fprintf(stderr, "question name not for what we asked\n");
+			dolog(LOG_INFO, "question name not for what we asked\n");
 			return -1;
 		}
 
 		if (q->hdr->qclass != htons(DNS_CLASS_IN) || q->hdr->qtype != htons(DNS_TYPE_AXFR)) {
-			fprintf(stderr, "wrong class or type\n");
+			dolog(LOG_INFO, "wrong class or type\n");
 			return -1;
 		}
 		
@@ -2496,7 +2501,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 			char mac[DNS_HMAC_SHA256_SIZE];
 
 			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format, ctx, (char *)name, zonelen, 1)) < 0) {
-				fprintf(stderr, "raxfr_peek() ERROR\n");
+				dolog(LOG_INFO, "raxfr_peek() ERROR\n");
 				return -1;
 			}
 
@@ -2505,25 +2510,25 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 				/* do tsig checks here */
 				if ((len = raxfr_tsig(f,p,estart,end,mysoa,rdlen,ctx, (char *)&mac, (sacount++ == 0) ? 1 : 0)) < 0) {
-					fprintf(stderr, "error with TSIG record\n");
+					dolog(LOG_INFO, "ERROR with TSIG record\n");
 					return -1;
 				}
 		
 				p = (estart + len);
 
 				if ((len = mybase64_decode(tsigpass, (u_char *)&pseudo_packet, sizeof(pseudo_packet))) < 0) {
-					fprintf(stderr, "bad base64 password\n");
+					dolog(LOG_INFO, "bad base64 password\n");
 					return -1;
 				}
 
 			 	if (delphinusdns_HMAC_CTX_reset(ctx) != 1) {
-					fprintf(stderr, "HMAC_CTX_reset failed!\n");
+					dolog(LOG_INFO, "HMAC_CTX_reset failed!\n");
 					return -1;
 				}
 				
 					
 				if (delphinusdns_HMAC_Init_ex(ctx, pseudo_packet, len, md, NULL) != 1) {
-					fprintf(stderr, "HMAC_Init_ex failed!\n");
+					dolog(LOG_INFO, "HMAC_Init_ex failed!\n");
 					return -1;
 				}
 				maclen = htons(DNS_HMAC_SHA256_SIZE);
@@ -2541,20 +2546,20 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 				if (! ob) {
 					len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL);
 					if (len <= 0) {
-						fprintf(stderr, "mangled AXFR\n");
+						dolog(LOG_INFO, "mangled AXFR\n");
 						return -1;
 					}
 
 					tcplen = ntohs(unpack16(reply));
 
 					if (tcplen < sizeof(struct whole_header)) {
-						fprintf(stderr, "parsing header after TSIG failed, boundary problem\n");
+						dolog(LOG_INFO, "parsing header after TSIG failed, boundary problem\n");
 						return -1;
 					}
 						
 					len = recv(so, reply, sizeof(struct whole_header), MSG_PEEK | MSG_WAITALL);
 					if (len < 0) {
-						perror("recv");
+						dolog(LOG_INFO, "recv(): %s\n", strerror(errno));
 						return -1;
 					}
 
@@ -2571,7 +2576,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 			if (rrtype == DNS_TYPE_SOA) {
 				if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen, ctx, constraints)) < 0) {
-					fprintf(stderr, "raxfr_soa failed\n");
+					dolog(LOG_INFO, "raxfr_soa failed\n");
 					return -1;
 				}
 				p = (estart + len);
@@ -2588,7 +2593,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 				for (sr = supported; sr->rrtype != 0; sr++) {
 					if (rrtype == sr->rrtype) {
 						if ((len = (*sr->raxfr)(f, p, estart, end, mysoa, rdlen, ctx)) < 0) {
-							fprintf(stderr, "error with rrtype %d\n", sr->rrtype);
+							dolog(LOG_INFO, "error with rrtype %d\n", sr->rrtype);
 							return -1;
 						}
 						p = (estart + len);
@@ -2598,7 +2603,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 				if (sr->rrtype == 0) {
 					if (rrtype != DNS_TYPE_TSIG) {
-						fprintf(stderr, "unsupported RRTYPE %d\n", rrtype);
+						dolog(LOG_INFO, "unsupported RRTYPE %d\n", rrtype);
 						return -1;
 					} 
 				} 
