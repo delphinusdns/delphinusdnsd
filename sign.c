@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2020-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -270,6 +270,7 @@ extern struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
 extern char *		canonical_sort(char **, int, int *);
 extern char * 		param_tlv2human(char *, int, int);
 extern char * 		ipseckey_type(struct ipseckey *);
+extern size_t		plength(void *, void *);
 
 extern int dnssec;
 extern int tsig;
@@ -1476,7 +1477,7 @@ create_key_ec_getpid(DDD_EC_KEY *eckey, DDD_EC_GROUP *ecgroup, DDD_EC_POINT *ecp
 	p += binlen;
 
 	free(tmp);
-	binlen = (p - &bin[0]);
+	binlen = (plength(p, &bin[0]));
 
 	return (keytag((u_char *)bin, binlen));
 }
@@ -1591,7 +1592,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	binlen = delphinusdns_BN_bn2bin(rsan, (u_char *)tmp);
 	pack(p, tmp, binlen);
 	p += binlen;
-	rlen = (p - &bin[0]);
+	rlen = (plength(p, &bin[0]));
 	*pid = keytag((u_char *)bin, rlen);
 
 	/* check for collisions, XXX should be rare */
@@ -1746,7 +1747,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	binlen = delphinusdns_BN_bn2bin(rsan, (u_char *)tmp);
 	pack(p, tmp, binlen);
 	p += binlen; 
-	binlen = (p - &bin[0]);
+	binlen = (plength(p, &bin[0]));
 	mybase64_encode((const u_char *)bin, binlen, b64, sizeof(b64));
 	fprintf(f, "%s%s %d IN DNSKEY %d 3 %d %s\n", zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".", ttl, flags, algorithm, b64);
 
@@ -2122,7 +2123,7 @@ sign_soa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -2213,7 +2214,7 @@ sign_soa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		pack32(p, htonl(((struct soa *)rrp->rdata)->minttl));
 		p += sizeof(uint32_t);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 	#if 0
 		debug_bindump(key, keylen);
@@ -2325,7 +2326,7 @@ sign_https(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -2430,7 +2431,7 @@ sign_https(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -2454,7 +2455,7 @@ sign_https(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -2561,7 +2562,7 @@ sign_svcb(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -2662,7 +2663,7 @@ sign_svcb(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -2686,7 +2687,7 @@ sign_svcb(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -2793,7 +2794,7 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -2887,7 +2888,7 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -2911,7 +2912,7 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -3017,7 +3018,7 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -3112,7 +3113,7 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -3136,7 +3137,7 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 	#if 0
 		debug_bindump(key, keylen);
@@ -3240,7 +3241,7 @@ sign_nsec3(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -3341,7 +3342,7 @@ sign_nsec3(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 			p += ((struct nsec3 *)rrp->rdata)->bitmap_len;
 		}
 		
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -3441,7 +3442,7 @@ sign_nsec3param(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int ro
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -3531,7 +3532,7 @@ sign_nsec3param(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int ro
 			p += ((struct nsec3param *)rrp->rdata)->saltlen;
 		} 
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -3630,7 +3631,7 @@ sign_cname(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -3710,7 +3711,7 @@ sign_cname(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		pack(p, ((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen);
 		p += ((struct cname *)rrp->rdata)->cnamelen;
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -3809,7 +3810,7 @@ sign_ptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -3888,7 +3889,7 @@ sign_ptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		pack(p, ((struct ptr *)rrp->rdata)->ptr, ((struct ptr *)rrp->rdata)->ptrlen);
 		p += ((struct ptr *)rrp->rdata)->ptrlen;
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -3995,7 +3996,7 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -4110,7 +4111,7 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -4134,7 +4135,7 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 	#if 0
 		debug_bindump(key, keylen);
@@ -4245,7 +4246,7 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -4346,7 +4347,7 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -4370,7 +4371,7 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 	#if 0
 		debug_bindump(key, keylen);
@@ -4481,7 +4482,7 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -4580,7 +4581,7 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -4604,7 +4605,7 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 	#if 0
 		debug_bindump(key, keylen);
@@ -4714,7 +4715,7 @@ sign_loc(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -4823,7 +4824,7 @@ sign_loc(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -4847,7 +4848,7 @@ sign_loc(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 	#if 0
 		debug_bindump(key, keylen);
@@ -4958,7 +4959,7 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -5061,7 +5062,7 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -5085,7 +5086,7 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 	#if 0
 		debug_bindump(key, keylen);
@@ -5192,7 +5193,7 @@ sign_rp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -5292,7 +5293,7 @@ sign_rp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -5316,7 +5317,7 @@ sign_rp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -5420,7 +5421,7 @@ sign_zonemd(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -5523,7 +5524,7 @@ sign_zonemd(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -5547,7 +5548,7 @@ sign_zonemd(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -5651,7 +5652,7 @@ sign_hinfo(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -5754,7 +5755,7 @@ sign_hinfo(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -5778,7 +5779,7 @@ sign_hinfo(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -5886,7 +5887,7 @@ sign_caa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -5987,7 +5988,7 @@ sign_caa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -6010,7 +6011,7 @@ sign_caa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		}
 		free(canonsort);
 
-		keylen = (p - key);
+		keylen = (plength(p, key));
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -6109,7 +6110,7 @@ sign_cds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 			pack(p, signature, keylen);
 			p += keylen;
-			keylen = (p - key);
+			keylen = (plength(p, key));
 			if (keyid != keytag((u_char *)key, keylen)) {
 				dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 				return -1;
@@ -6210,7 +6211,7 @@ sign_cds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 					return -1;
 				}
 
-				clen = (q - tmpkey);
+				clen = (plength(q, tmpkey));
 				pack16(r, clen);
 				r += 2;
 				pack(r, tmpkey, clen);
@@ -6234,7 +6235,7 @@ sign_cds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			}
 			free(canonsort);
 
-			keylen = (p - key);	
+			keylen = (plength(p, key));	
 
 			if (sign(algorithm, key, keylen, knp, (char *)&signature, &siglen) < 0) {
 				dolog(LOG_INFO, "signing failed\n");
@@ -6343,7 +6344,7 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -6444,7 +6445,7 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -6466,7 +6467,7 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -6573,7 +6574,7 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -6669,7 +6670,7 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -6692,11 +6693,11 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
-	#if 0
+#if 0
 		debug_bindump(key, keylen);
-	#endif
+#endif
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
 			return -1;
@@ -6802,7 +6803,7 @@ sign_kx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -6899,7 +6900,7 @@ sign_kx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -6922,7 +6923,7 @@ sign_kx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 	#if 0
 		debug_bindump(key, keylen);
@@ -7033,7 +7034,7 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -7130,7 +7131,7 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -7153,7 +7154,7 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 	#if 0
 		debug_bindump(key, keylen);
@@ -7267,7 +7268,7 @@ sign_ipseckey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int roll
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -7390,7 +7391,7 @@ sign_ipseckey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int roll
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -7413,7 +7414,7 @@ sign_ipseckey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int roll
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -7523,7 +7524,7 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -7617,7 +7618,7 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -7640,7 +7641,7 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -7749,7 +7750,7 @@ sign_eui48(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -7843,7 +7844,7 @@ sign_eui48(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -7866,7 +7867,7 @@ sign_eui48(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -7975,7 +7976,7 @@ sign_eui64(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -8069,7 +8070,7 @@ sign_eui64(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -8092,7 +8093,7 @@ sign_eui64(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
 			dolog(LOG_INFO, "signing failed\n");
@@ -8191,7 +8192,7 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 	keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 	pack(p, signature, keylen);
 	p += keylen;
-	keylen = (p - key);
+	keylen = (plength(p, key));
 	if (keyid != keytag((u_char *)key, keylen)) {
 		dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 		return -1;
@@ -8215,7 +8216,7 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 		}
 	} 
 	
-	keylen = (p - key);	
+	keylen = (plength(p, key));	
 
 	/* work out the digest */
 
@@ -8232,7 +8233,7 @@ create_ds(ddDB *db, char *zonename, struct keysentry *ksk_key)
 	pack(p, signature, keylen);
 	p += keylen;
 	
-	keylen = (p - key);
+	keylen = (plength(p, key));
 
 	SHA1_Init(&sha1);
 	SHA1_Update(&sha1, key, keylen);
@@ -8378,7 +8379,7 @@ sign_cdnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollm
 			keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 			pack(p, signature, keylen);
 			p += keylen;
-			keylen = (p - key);
+			keylen = (plength(p, key));
 			if (keyid != keytag((u_char *)key, keylen)) {
 				dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 				return -1;
@@ -8479,7 +8480,7 @@ sign_cdnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollm
 					return -1;
 				}
 
-				clen = (q - tmpkey);
+				clen = (plength(q, tmpkey));
 				pack16(r, clen);
 				r += 2;
 				pack(r, tmpkey, clen);
@@ -8503,7 +8504,7 @@ sign_cdnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollm
 			}
 			free(canonsort);
 
-			keylen = (p - key);	
+			keylen = (plength(p, key));	
 
 			if (sign(algorithm, key, keylen, knp, (char *)&signature, &siglen) < 0) {
 				dolog(LOG_INFO, "signing failed\n");
@@ -8603,7 +8604,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 			keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 			pack(p, signature, keylen);
 			p += keylen;
-			keylen = (p - key);
+			keylen = (plength(p, key));
 			if (keyid != keytag((u_char *)key, keylen)) {
 				dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 				return -1;
@@ -8704,7 +8705,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 					return -1;
 				}
 
-				clen = (q - tmpkey);
+				clen = (plength(q, tmpkey));
 				pack16(r, clen);
 				r += 2;
 				pack(r, tmpkey, clen);
@@ -8728,7 +8729,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 			}
 			free(canonsort);
 
-			keylen = (p - key);	
+			keylen = (plength(p, key));	
 
 			if (sign(algorithm, key, keylen, knp, (char *)&signature, &siglen) < 0) {
 				dolog(LOG_INFO, "signing failed\n");
@@ -8773,7 +8774,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
 		pack(p, signature, keylen);
 		p += keylen;
-		keylen = (p - key);
+		keylen = (plength(p, key));
 		if (keyid != keytag((u_char *)key, keylen)) {
 			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
 			return -1;
@@ -8883,7 +8884,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 				return -1;
 			}
 
-			clen = (q - tmpkey);
+			clen = (plength(q, tmpkey));
 			pack16(r, clen);
 			r += 2;
 			pack(r, tmpkey, clen);
@@ -8906,7 +8907,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 		}
 		free(canonsort);
 
-		keylen = (p - key);	
+		keylen = (plength(p, key));	
 
 		siglen = sizeof(signature);
 		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
@@ -8966,7 +8967,7 @@ dnskey_keytag(struct dnskey *dnskey)
 	p++;
 	pack(p, dnskey->public_key, dnskey->publickey_len);
 	p += dnskey->publickey_len;
-	keylen = (p - key);
+	keylen = (plength(p, key));
 
 	ret = keytag((u_char *)key, keylen);
 	free(key);

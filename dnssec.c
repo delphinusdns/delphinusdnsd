@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2015-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -94,6 +94,7 @@ extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
 extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern int add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata);
+extern size_t plength(void *, void *);
 
 extern int debug;
 
@@ -787,7 +788,7 @@ base32hex_decode(u_char *input, u_char *output)
 		if (*p == '\0')
 			return 0;
 		
-		tmp = (p - start);
+		tmp = (plength(p, start));
 		tmp <<= 3;
 
 		for (j = 0; j < 5; j++) {

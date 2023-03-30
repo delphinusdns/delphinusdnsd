@@ -201,6 +201,7 @@ extern void	sm_lock(char *, size_t);
 extern void	sm_unlock(char *, size_t);
 extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern int rr_duplicate(ddDB *, char *, int, uint16_t, char *);
+extern size_t plength(void *, void *);
 
 /*
  * XXX everything but txt and naptr, works...
@@ -859,15 +860,15 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 
 			if (fwq1->answered == 0) {
 				if (fwq1->istcp == DDD_IS_TCP) {
-					pack16(&buf[0], htons(p - &buf[2]));
-					send(fwq1->returnso, buf, p - &buf[0], 0);
+					pack16(&buf[0], htons(plength(p, &buf[2])));
+					send(fwq1->returnso, buf, plength(p, &buf[0]), 0);
 				} else {
 					switch (fwq1->oldfamily) {
 					case AF_INET:
-						rawsend(cfg->raw[0], buf, p - &buf[0], &fwq1->oldhost4, fwq1->oldsel, cfg);
+						rawsend(cfg->raw[0], buf, plength(p, &buf[0]), &fwq1->oldhost4, fwq1->oldsel, cfg);
 						break;
 					case AF_INET6:
-						rawsend6(cfg->raw[1], buf, p - &buf[0], &fwq1->oldhost6, fwq1->oldsel, cfg);
+						rawsend6(cfg->raw[1], buf, plength(p, &buf[0]), &fwq1->oldhost6, fwq1->oldsel, cfg);
 						break;
 					}
 				}
@@ -970,7 +971,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 			pack16(p, htons(DNS_CLASS_IN));
 			p += sizeof(uint16_t);
 
-			len = (p - buf);
+			len = (plength(p, buf));
 			/* pseudo question packet done */
 
 			switch (sforward->family) {
@@ -1338,17 +1339,17 @@ servfail:
 	p += 2;
 
 	if (fwq1->istcp == DDD_IS_TCP) {
-		pack16(&buf[0], htons(p - &buf[2]));
-		send(fwq1->returnso, buf, p - &buf[0], 0);
+		pack16(&buf[0], htons(plength(p, &buf[2])));
+		send(fwq1->returnso, buf, plength(p, &buf[0]), 0);
 		close(fwq1->returnso);
 		fwq1->returnso = -1;
 	} else {
 		switch (fwq1->oldfamily) {
 		case AF_INET:
-			rawsend(cfg->raw[0], buf, p - &buf[0], &fwq1->oldhost4, fwq1->oldsel, cfg);
+			rawsend(cfg->raw[0], buf, plength(p, &buf[0]), &fwq1->oldhost4, fwq1->oldsel, cfg);
 			break;
 		case AF_INET6:
-			rawsend6(cfg->raw[1], buf, p - &buf[0], &fwq1->oldhost6, fwq1->oldsel, cfg);
+			rawsend6(cfg->raw[1], buf, plength(p, &buf[0]), &fwq1->oldhost6, fwq1->oldsel, cfg);
 			break;
 		}
 	}

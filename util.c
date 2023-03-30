@@ -150,6 +150,8 @@ static char * param_expand(char *, int, int);
 char * ipseckey_type(struct ipseckey *);
 char * input_sanitize(char *);
 void safe_fprintf(FILE *, char *, ...);
+size_t plength(void *, void *);
+size_t plenmax(void *, void *, size_t);
 
 int bytes_received;
 
@@ -409,7 +411,7 @@ dns_label(char *name, int *returnlen)
 	for (i = 0, p = dnslabel; i < lc; i++) {
 		len = strlen(labels[i]);
 		*p++ = len;
-		strlcpy(p, labels[i], newlen - (p - dnslabel) + 1);
+		strlcpy(p, labels[i], newlen - (plength(p,dnslabel)) + 1);
 		p += len;
 	}
 
@@ -1889,7 +1891,7 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 				return NULL;
 
 			/* do not allow forwards jumping */
-			if ((p - estart) <= (ntohs(offset) & (~0xc000))) {
+			if ((plenmax(p, estart, max)) <= (ntohs(offset) & (~0xc000))) {
 				return NULL;
 			}
 
@@ -2491,7 +2493,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 			if (rwh->dh.additional)
 				rwh->dh.additional--;
 			HTONS(rwh->dh.additional);
-			delphinusdns_HMAC_Update(ctx, estart, (p - estart));
+			delphinusdns_HMAC_Update(ctx, estart, plength(p,estart));
 			rwh->dh.additional = saveadd;
 		}
 
@@ -3323,7 +3325,7 @@ zonemd_hash_a(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -3398,7 +3400,7 @@ zonemd_hash_eui48(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -3473,7 +3475,7 @@ zonemd_hash_eui64(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -3548,7 +3550,7 @@ zonemd_hash_aaaa(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -3625,7 +3627,7 @@ zonemd_hash_soa(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt, ui
 	pack32(p, htonl(((struct soa *)rrp->rdata)->minttl));
 	p += sizeof(uint32_t);
 
-	keylen = (p - tmpkey);
+	keylen = (plength(p, tmpkey));
 
 	delphinusdns_SHA384_Update(ctx, tmpkey, keylen);
 
@@ -3680,7 +3682,7 @@ zonemd_hash_ns(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -3743,7 +3745,7 @@ zonemd_hash_cname(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 	pack(p, ((struct cname *)rrp->rdata)->cname, ((struct cname *)rrp->rdata)->cnamelen);
 	p += ((struct cname *)rrp->rdata)->cnamelen;
 
-	keylen = (p - tmpkey);     
+	keylen = (plength(p, tmpkey));     
 
 	delphinusdns_SHA384_Update(ctx, tmpkey, keylen);
 
@@ -3789,7 +3791,7 @@ zonemd_hash_ptr(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 	pack(p, ((struct ptr *)rrp->rdata)->ptr, ((struct ptr *)rrp->rdata)->ptrlen);
 	p += ((struct ptr *)rrp->rdata)->ptrlen;
 	
-	keylen = (p - tmpkey);     
+	keylen = (plength(p, tmpkey));     
 
 	delphinusdns_SHA384_Update(ctx, tmpkey, keylen);
 
@@ -3853,7 +3855,7 @@ zonemd_hash_https(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			dolog(LOG_INFO, "c1 out of memory\n");
 			return;
 		}
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -3936,7 +3938,7 @@ zonemd_hash_svcb(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			dolog(LOG_INFO, "c1 out of memory\n");
 			return;
 		}
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -4011,7 +4013,7 @@ zonemd_hash_txt(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			dolog(LOG_INFO, "c1 out of memory\n");
 			return;
 		}
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -4090,7 +4092,7 @@ zonemd_hash_rp(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
         		return;
 		}
 
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -4176,7 +4178,7 @@ zonemd_hash_hinfo(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		        return;
 		}
 		
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -4257,7 +4259,7 @@ zonemd_hash_srv(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		        return;
 		}
 
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -4355,7 +4357,7 @@ zonemd_hash_naptr(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		        return;
 		}
 		
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -4437,7 +4439,7 @@ zonemd_hash_caa(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 		        return;
 		}
 
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -4541,7 +4543,7 @@ zonemd_hash_ipseckey(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rb
 			return;
 		}
 
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -4618,7 +4620,7 @@ zonemd_hash_kx(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -4695,7 +4697,7 @@ zonemd_hash_mx(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -4780,7 +4782,7 @@ zonemd_hash_loc(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 		
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -4859,7 +4861,7 @@ zonemd_hash_tlsa(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 		
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -4938,7 +4940,7 @@ zonemd_hash_sshfp(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 		
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -5150,7 +5152,7 @@ zonemd_hash_cds(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 		
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -5231,7 +5233,7 @@ zonemd_hash_ds(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 		
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -5312,7 +5314,7 @@ zonemd_hash_dnskey(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 		
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -5393,7 +5395,7 @@ zonemd_hash_cdnskey(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt
 			return;
 		}
 		
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -5489,7 +5491,7 @@ zonemd_hash_rrsig(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt, 
 			return;
 		}
 		
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -5578,7 +5580,7 @@ zonemd_hash_nsec3(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 			return;
 		}
 		
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -5660,7 +5662,7 @@ zonemd_hash_nsec3param(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *
 			return;
 		}
 		
-		clen = (q - tmpkey);
+		clen = (plength(q, tmpkey));
 		pack16(r, clen);
 		r += 2;
 		pack(r, tmpkey, clen);
@@ -5822,7 +5824,7 @@ param_human2tlv(char *input, char *output_sorted, int *len)
 		return -1;
 	}
 
-	for (p = input; (p - input) < ilen ; p = o) {
+	for (p = input; (plength(p, input)) < ilen ; p = o) {
 		q = strchr(p, '=');
 		if (q == NULL) {
 			dolog(LOG_INFO, "q == NULL\n");
@@ -6231,7 +6233,7 @@ param_expand(char *input, int len, int bindfile)
 		} else if (input[i] < 0x20 || input[i] > 0x7f) {
 			*p = '\\'; p++;
 			if (! bindfile) { *p = '\\'; p++; }
-			snprintf(p, (65535 - (p - ret)), "%03u", input[i] & 0xff);
+			snprintf(p, (65535 - (plength(p, ret))), "%03u", input[i] & 0xff);
 			p += 3;
 		} else {
 			*p = input[i];
@@ -6678,4 +6680,27 @@ safe_fprintf(FILE *f, char *fmt, ...)
 	va_start(ap, fmt);
 	vfprintf(f, fmt, ap);
 	va_end(ap);
+}
+
+/*
+ * PLENMAX - nth is the nth element of an array starting at zeroth, only allow
+ *		max size, if it's above that log the error...
+ */
+
+size_t
+plenmax(void *nth, void *zeroth, size_t max)
+{
+	size_t len = (nth - zeroth);
+
+	if (len > max) {
+		dolog(LOG_ERR, "IMPORTANT: nth(%p) - zeroth(%p) is bigger than max, did you switch them accidentally?\n", nth, zeroth);
+	}
+
+	return (len);
+}	
+
+size_t
+plength(void *nth, void *zeroth)
+{
+	return (plenmax(nth, zeroth, 65536));	/* a sizeable DNS max? */
 }

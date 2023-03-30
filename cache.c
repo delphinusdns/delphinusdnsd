@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2020-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -75,6 +75,7 @@ extern uint32_t unpack32(char *);
 extern int lower_dnsname(char *, int);
 extern void	sm_lock(char *, size_t);
 extern void	sm_unlock(char *, size_t);
+extern size_t	plength(void *, void *);
 
 
 extern int debug, verbose;
@@ -375,7 +376,7 @@ cache_rrsig(struct scache *scache)
 	memcpy(&rs.signers_name, expand, elen);
 	rs.signame_len = elen;
 
-	rs.signature_len = (rdlen - (q - p));
+	rs.signature_len = (rdlen - (plength(q, p)));
 
 	if (rs.signature_len > sizeof(rs.signature)) 
 		return -1;
@@ -384,7 +385,7 @@ cache_rrsig(struct scache *scache)
 
 	transmit_rr(scache, (void *)&rs, sizeof(rs));
 
-	return (q - scache->estart);
+	return (plength(q, scache->estart));
 }
 
 int 
@@ -418,7 +419,7 @@ cache_ds(struct scache *scache)
 
 	transmit_rr(scache, &d, sizeof(d));
 
-	return (p - scache->estart);
+	return (plength(p, scache->estart));
 }
 
 int 
@@ -448,7 +449,7 @@ cache_sshfp(struct scache *scache)
 
 	transmit_rr(scache, &s, sizeof(s));
 
-	return (p - scache->estart);
+	return (plength(p, scache->estart));
 }
 
 int 
@@ -483,7 +484,7 @@ cache_dnskey(struct scache *scache)
 
 	transmit_rr(scache, &dk, sizeof(dk));
 
-	return (p - scache->estart);
+	return (plength(p, scache->estart));
 }
 
 
@@ -526,7 +527,7 @@ cache_mx(struct scache *scache)
 
 	transmit_rr(scache, &mx, sizeof(mx));
 
-	return (q - scache->estart);
+	return (plength(q, scache->estart));
 }
 
 int 
@@ -567,11 +568,11 @@ cache_nsec3(struct scache *scache)
 	p += n.nextlen;
 	
 	
-	if (((rdlen - (p - brr)) + 1) < 0)
+	if (((rdlen - (plength(p, brr))) + 1) < 0)
 		return -1;
 
 	/* XXX */
-	n.bitmap_len = 	(rdlen - (p - brr));
+	n.bitmap_len = 	(rdlen - (plength(p, brr)));
 	if (n.bitmap_len > sizeof(n.bitmap))
 		return -1;
 
@@ -580,7 +581,7 @@ cache_nsec3(struct scache *scache)
 	
 	transmit_rr(scache, &n, sizeof(n));
 
-	return (p - scache->estart);
+	return (plength(p, scache->estart));
 }
 
 int
@@ -610,7 +611,7 @@ cache_nsec3param(struct scache *scache)
 	
 	transmit_rr(scache, &np, sizeof(np));
 
-	return (p - scache->estart);
+	return (plength(p, scache->estart));
 }
 
 
@@ -635,7 +636,7 @@ cache_txt(struct scache *scache)
 
 	p += i;
 	
-	return (p - scache->estart);
+	return (plength(p, scache->estart));
 }
 
 int
@@ -664,7 +665,7 @@ cache_ns(struct scache *scache)
 
 	transmit_rr(scache, &nsi, sizeof(nsi));
 
-	return (q - scache->estart);
+	return (plength(q, scache->estart));
 }
 
 int 
@@ -692,7 +693,7 @@ cache_aaaa(struct scache *scache)
 	memcpy(&aaaa.aaaa, &ia, sizeof(aaaa.aaaa));
 	transmit_rr(scache, &aaaa, sizeof(aaaa));
 
-	return (p - scache->estart);
+	return (plength(p, scache->estart));
 }
 
 int
@@ -711,7 +712,7 @@ cache_a(struct scache *scache)
 
 	transmit_rr(scache, &ar, sizeof(ar));
 
-	return (p - scache->estart);
+	return (plength(p, scache->estart));
 }
 
 int 
@@ -745,7 +746,7 @@ cache_tlsa(struct scache *scache)
 
 	transmit_rr(scache, &t, sizeof(t));
 
-	return (p - scache->estart);
+	return (plength(p, scache->estart));
 }
 
 int 
@@ -789,7 +790,7 @@ cache_srv(struct scache *scache)
 		
 	transmit_rr(scache, (void*)&s, sizeof(s));
 
-	return (q - scache->estart);
+	return (plength(q, scache->estart));
 }
 
 int 
@@ -847,7 +848,7 @@ cache_naptr(struct scache *scache)
 		q = (u_char *)save;
 	}
 
-	return (q - scache->estart);
+	return (plength(q, scache->estart));
 }
 
 int 
@@ -874,5 +875,5 @@ cache_generic(struct scache *scache)
 	transmit_rr(scache, (void*)scache->payload, scache->rdlen);
 
 	q += scache->rdlen;
-	return (q - scache->estart);
+	return (plength(q, scache->estart));
 }
