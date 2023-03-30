@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2023 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2002-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -3041,7 +3041,7 @@ sm_lock(char *shm, size_t end)
 
 	for (;;) {
 		while (unpack32(lock) != SM_NOLOCK) {
-			usleep(arc4random() % 300);
+			usleep(arc4random_uniform(300));
 		}
 		pack32(lock, value);		/* race here */
 		if (unpack32(lock) == value) 	/* check for race here */

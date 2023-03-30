@@ -1533,7 +1533,7 @@ notifyddds(struct imsgbuf *ibuf, int *notifyfd)
 			else
 				so = notifyfd[1];
 
-			notnp->ids[i] = arc4random() & 0xffff;
+			notnp->ids[i] = arc4random_uniform(0xffff);
 			notnp->attempts[i]++;
 			if (notnp->attempts[i] > 10) {
 				dolog(LOG_INFO, "notify entry removed due to timeout\n");

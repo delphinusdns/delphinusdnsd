@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2019-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -2474,7 +2474,7 @@ get_remote_soa(struct rzone *rzone)
 	tcpsize = (uint16_t *)&query[0];
 	wh = (struct whole_header *)&query[2];
 
-	wh->dh.id = htons(arc4random() & 0xffff);
+	wh->dh.id = htons(arc4random_uniform(0xffff));
 	wh->dh.query = 0;
 	wh->dh.question = htons(1);
 	wh->dh.answer = 0;
@@ -2984,5 +2984,5 @@ pull_rzone(struct rzone *rzone, time_t now)
 static int
 rand_restarttime(void)
 {
-	return (80 + (arc4random() % 40));
+	return (80 + arc4random_uniform(40));
 }

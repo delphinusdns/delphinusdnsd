@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2020-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -2606,7 +2606,7 @@ stirforwarders(void)
 	if (count == 0)
 		return;
 
-	randomforwarder = arc4random() % count;	
+	randomforwarder = arc4random_uniform(count);
 
 	count = 0;
 	TAILQ_FOREACH(fwp, &forwardhead, forward_entry) {

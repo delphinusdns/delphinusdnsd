@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2023 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2002-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -2204,7 +2204,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	
 	wh = (struct whole_header *)&query[0];
 	
-	wh->dh.id = htons(arc4random() & 0xffff);
+	wh->dh.id = htons(arc4random_uniform(0xffff));
 	wh->dh.query = 0;
 	wh->dh.question = htons(1);
 	wh->dh.answer = 0;
