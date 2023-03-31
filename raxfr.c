@@ -181,7 +181,7 @@ extern size_t		plength(void *, void *);
 /* The following alias helps with bounds checking all input, needed! */
 
 #define BOUNDS_CHECK(cur, begin, rdlen, end) 		do {	\
-	if ((cur - begin) > rdlen) {				\
+	if ((plength(cur, begin)) > rdlen) {			\
 		return -1;					\
 	}							\
 	if (cur > end)						\
@@ -895,8 +895,8 @@ raxfr_ipseckey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *myso
 			dolog(LOG_ERR, "expanding compression failure\n");
 			return -1;
 		} else  {
-			memcpy(ipk.gateway.dnsname, p, (save - p));
-			ipk.dnsnamelen = (save - p);
+			memcpy(ipk.gateway.dnsname, p, (plength(save, p)));
+			ipk.dnsnamelen = (plength(save, p));
 			p = (u_char *)save;
 		}
 
@@ -1219,7 +1219,7 @@ raxfr_https(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 		safe_fprintf(f, "%u,%s,\"", ntohs(priority), (*humanname == '\0') ? "." : humanname);
 
 	if (f != NULL) {
-		tmp = param_tlv2human(q, (&p[rdlen] - q), 0);
+		tmp = param_tlv2human(q, plength(&p[rdlen], q), 0);
 		if (tmp != NULL) {
 			safe_fprintf(f, "%s", tmp);
 			free(tmp);
@@ -1274,7 +1274,7 @@ raxfr_svcb(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 		safe_fprintf(f, "%u,%s,\"", ntohs(priority), (*humanname == '\0') ? "." : humanname);
 
 	if (f != NULL) {
-		tmp = param_tlv2human(q, (&p[rdlen] - q), 0);
+		tmp = param_tlv2human(q, plength(&p[rdlen], q), 0);
 		if (tmp != NULL) {
 			safe_fprintf(f, "%s", tmp);
 			free(tmp);

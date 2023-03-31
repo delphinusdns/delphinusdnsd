@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005-2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2005-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -101,6 +101,7 @@ extern struct rbtree *		Lookup_zone(ddDB *, char *, uint16_t, uint16_t, int);
 extern int 			dn_contains(char *, int, char *, int);
 extern struct zoneentry *	zone_findzone(struct rbtree *);
 extern struct rbtree * find_closest_encloser_nsec3(char *, int, struct rbtree *, ddDB *);
+extern size_t plength(void *, void *);
 
 
 uint16_t 	create_anyreply(struct sreply *, char *, int, int, int, uint32_t, uint);
@@ -4046,7 +4047,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 			outlen = tmplen;
 		}
 
-		answer->rdlength = htons(&reply[outlen] - &answer->ns);
+		answer->rdlength = htons(plength(&reply[outlen], &answer->ns));
 		ns_count++;
 	} 
 
@@ -4667,7 +4668,7 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 		outlen = tmplen;
 	}
 
-	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
+	answer->rdlength = htons(plength(&reply[outlen], &answer->rdata));
 
 	if (dnssec && q->dnssecok && (rbt->flags & RBT_DNSSEC)) {
 		int retcount;
@@ -4912,7 +4913,7 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->minttl));
 	outlen += sizeof(uint32_t);
 
-	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
+	answer->rdlength = htons(plength(&reply[outlen], &answer->rdata));
 
 	/* RRSIG reply_soa */
 	if (dnssec && q->dnssecok && (rbt->flags & RBT_DNSSEC)) {
@@ -6970,7 +6971,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->minttl));
 	outlen += sizeof(uint32_t);
 
-	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
+	answer->rdlength = htons(plength(&reply[outlen], &answer->rdata));
 
 	/* RRSIG reply_nxdomain */
 	if (dnssec && q->dnssecok && (rbt->flags & RBT_DNSSEC)) {
@@ -7548,7 +7549,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 	pack32(&reply[outlen], htonl(((struct soa *)rrp->rdata)->minttl));
 	outlen += sizeof(uint32_t);
 
-	answer->rdlength = htons(&reply[outlen] - &answer->rdata);
+	answer->rdlength = htons(plength(&reply[outlen], &answer->rdata));
 	/* RRSIG reply_nxdomain */
 	if (dnssec && q->dnssecok && (rbt->flags & RBT_DNSSEC)) {
 		int tmplen = 0;
@@ -7998,7 +7999,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->minttl));
 		offset += sizeof(uint32_t);
 
-		answer->rdlength = htons(&reply[offset] - answer->rdata);
+		answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) != 0) {
@@ -8084,7 +8085,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy(&reply[offset], ((struct ipseckey *)rrp->rdata)->key, ((struct ipseckey *)rrp->rdata)->keylen);
 			offset += ((struct ipseckey *)rrp->rdata)->keylen;
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 			ipseckey_count++;
 
@@ -8149,7 +8150,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct cdnskey *)rrp->rdata)->publickey_len;
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 			cdnskey_count++;
 
@@ -8212,7 +8213,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct dnskey *)rrp->rdata)->publickey_len;
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 			dnskey_count++;
 
@@ -8269,7 +8270,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			offset += ((struct hinfo *)rrp->rdata)->oslen;
 
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 			hinfo_count++;
 
@@ -8332,7 +8333,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			offset += 4;
 			
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 			loc_count++;
 
@@ -8386,7 +8387,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			offset += ((struct rp *)rrp->rdata)->txtlen;
 
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 			rp_count++;
 
@@ -8442,7 +8443,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			offset += ((struct caa *)rrp->rdata)->valuelen;
 
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 			caa_count++;
 
@@ -8504,7 +8505,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct ds *)rrp->rdata)->digestlen;
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 			cds_count++;
 
@@ -8566,7 +8567,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct ds *)rrp->rdata)->digestlen;
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 			ds_count++;
 
@@ -8653,7 +8654,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		offset += ((struct nsec3 *)rrp->rdata)->bitmap_len;
 
-		answer->rdlength = htons(&reply[offset] - answer->rdata);
+		answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 		NTOHS(odh->answer);
 		odh->answer += 1;
@@ -8720,7 +8721,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		
 		offset += ((struct nsec3param *)rrp->rdata)->saltlen;
 
-		answer->rdlength = htons(&reply[offset] - answer->rdata);
+		answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 
 		NTOHS(odh->answer);
@@ -8773,7 +8774,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		offset += ((struct nsec *)rrp->rdata)->bitmap_len;
 		
-		answer->rdlength = htons(&reply[offset] - answer->rdata);
+		answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 
 		NTOHS(odh->answer);
@@ -8830,7 +8831,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 				}
 			}
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 			ns_count++;
 		}
@@ -8901,7 +8902,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			}
 		}
 
-		answer->rdlength = htons(&reply[offset] - answer->rdata);
+		answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_KX)) != 0) {
 
@@ -8956,7 +8957,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 				} 
 			}
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 			kx_count++;
 		}
 
@@ -9018,7 +9019,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 				} 
 			}
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 			mx_count++;
 		}
 
@@ -9252,7 +9253,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct zonemd *)rrp->rdata)->hashlen;
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 			zonemd_count++;
 		}
 
@@ -9322,7 +9323,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct tlsa *)rrp->rdata)->datalen;
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 			tlsa_count++;
 		}
 
@@ -9384,7 +9385,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct sshfp *)rrp->rdata)->fplen;
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 			sshfp_count++;
 		}
 
@@ -9472,7 +9473,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			offset += ((struct naptr *)rrp->rdata)->replacementlen;
 
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 			naptr_count++;
 		}
 
@@ -9531,7 +9532,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			memcpy((char *)&reply[offset], (char *)((struct srv *)rrp->rdata)->target, ((struct srv *)rrp->rdata)->targetlen);
 
 			offset += ((struct srv *)rrp->rdata)->targetlen;
-			answer->rdlength = htons(&reply[offset] - answer->rdata);
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 			srv_count++;
 		}
 
@@ -9601,7 +9602,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
         		}
 		}
 
-		answer->rdlength = htons(&reply[offset] - answer->rdata);
+		answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_EUI48)) != 0) {
 		eui48_count = 0;

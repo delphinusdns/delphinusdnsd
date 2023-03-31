@@ -1268,16 +1268,16 @@ build_question(char *buf, int len, uint16_t additional, char *mac)
 		return NULL;
 	}
 
-	if ((end_name - &buf[sizeof(struct dns_header)]) < elen) {
+	if ((plength(end_name, &buf[sizeof(struct dns_header)])) < elen) {
 		dolog(LOG_ERR, "compression in question #1\n");
 		return NULL;
 	}
 
-	i = (end_name - &buf[0]);
+	i = (plength(end_name, &buf[0]));
 
 	
 	/* check if there is space for qtype and qclass */
-	if (len < ((end_name - &buf[0]) + (2 * sizeof(uint16_t)))) {
+	if (len < ((plength(end_name, &buf[0])) + (2 * sizeof(uint16_t)))) {
 		dolog(LOG_INFO, "question rr is truncated\n");
 		return NULL;
 	}
@@ -1310,7 +1310,7 @@ build_question(char *buf, int len, uint16_t additional, char *mac)
 		free(q);
 		return NULL;
 	}
-	q->hdr->namelen = (end_name - &buf[sizeof(struct dns_header)]);
+	q->hdr->namelen = (plength(end_name, &buf[sizeof(struct dns_header)]));
 	q->hdr->name = (void *) calloc(1, q->hdr->namelen);
 	if (q->hdr->name == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
@@ -1354,7 +1354,7 @@ build_question(char *buf, int len, uint16_t additional, char *mac)
 			i = rollback;
 			break;
 		}
-		i = (pb - buf);
+		i = (plength(pb, buf));
 
 		if (i + 10 > len) {	/* type + class + ttl + rdlen == 10 */
 			i = rollback;
@@ -1542,7 +1542,7 @@ optskip:
 			dolog(LOG_INFO, "expand_compression() failed, tsig keyname\n");
 			return NULL;
 		}
-		i = (pb - buf);
+		i = (plength(pb, buf));
 		pseudolen1 = i;
 
 		memcpy(q->tsig.tsigkey, expand, elen);
@@ -1615,7 +1615,7 @@ optskip:
 			dolog(LOG_INFO, "expand_compression() failed, tsig algorithm name\n");
 			return NULL;
 		}
-		i = (pb - buf);
+		i = (plength(pb, buf));
 		pseudolen4 = i;
 
 		memcpy(q->tsig.tsigalg, expand, elen);
@@ -2853,7 +2853,7 @@ compress_label(u_char *buf, uint16_t offset, int labellen)
 		return(0);
 	}
 
-	if (((char *)end_name - (char *)buf) < elen) {
+	if ((plength(end_name, (void *)buf)) < elen) {
 		dolog(LOG_ERR, "compression in question compress_label #1\n");
 		return(0);
 	}
@@ -6693,7 +6693,8 @@ plenmax(void *nth, void *zeroth, size_t max)
 	size_t len = (nth - zeroth);
 
 	if (len > max) {
-		dolog(LOG_ERR, "IMPORTANT: nth(%p) - zeroth(%p) is bigger than max, did you switch them accidentally?\n", nth, zeroth);
+		dolog(LOG_ERR, "IMPORTANT: nth(%p) - zeroth(%p) is bigger than max, did you switch their order accidentally?\n", nth, zeroth);
+		abort();
 	}
 
 	return (len);

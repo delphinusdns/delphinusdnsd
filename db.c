@@ -60,12 +60,13 @@ int expire_db(ddDB *, int);
 void remove_rbt(struct rbtree *);
 uint32_t match_zoneglue(struct rbtree *rbt);
 int rr_duplicate(ddDB *, char *, int, uint16_t, char *);
+int domaincmp(struct node *e1, struct node *e2);
 
-extern void      dolog(int, char *, ...);
+extern void	dolog(int, char *, ...);
+extern char *	convert_name(char *, int);
+extern size_t	plength(void *, void *);
 
 extern uint32_t zonenumber;
-extern char * convert_name(char *, int);
-int domaincmp(struct node *e1, struct node *e2);
 
 
 
@@ -331,7 +332,7 @@ find_rrsetwild(ddDB *db, char *name, int len)
 		fake = p;
 
 		fake = fake + (*fake - 1);
-		len -= (fake - save);
+		len -= (plength(fake, save));
 		save = fake;
 		*fake = '\001';
 		fake++;

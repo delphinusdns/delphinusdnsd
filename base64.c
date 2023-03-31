@@ -59,6 +59,8 @@ static const char Base64[] =
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 static const char Pad64 = '=';
 
+extern size_t plength(void *, void *);
+
 /* these prototype names shouldn't collide with anything */
 int mybase64_encode(u_char const *, size_t, char *, size_t);
 int mybase64_decode(char const *, u_char *, size_t);
@@ -211,7 +213,7 @@ mybase64_decode(src, target, targsize)
 			break;
 
 		pos = strchr(Base64, ch);
-		if (pos == 0) 		/* A non-base64 character. */
+		if (pos == NULL) 		/* A non-base64 character. */
 			return (-1);
 
 		switch (state) {
@@ -219,7 +221,7 @@ mybase64_decode(src, target, targsize)
 			if (target) {
 				if (tarindex >= targsize)
 					return (-1);
-				target[tarindex] = (pos - Base64) << 2;
+				target[tarindex] = (plength(pos, (void *)&Base64)) << 2;
 			}
 			state = 1;
 			break;
@@ -227,8 +229,8 @@ mybase64_decode(src, target, targsize)
 			if (target) {
 				if (tarindex >= targsize)
 					return (-1);
-				target[tarindex]   |=  (pos - Base64) >> 4;
-				nextbyte = ((pos - Base64) & 0x0f) << 4;
+				target[tarindex]   |=  (plength(pos, (void *)&Base64)) >> 4;
+				nextbyte = ((plength(pos, (void *)&Base64)) & 0x0f) << 4;
 				if (tarindex + 1 < targsize)
 					target[tarindex+1] = nextbyte;
 				else if (nextbyte)
@@ -241,8 +243,8 @@ mybase64_decode(src, target, targsize)
 			if (target) {
 				if (tarindex >= targsize)
 					return (-1);
-				target[tarindex]   |=  (pos - Base64) >> 2;
-				nextbyte = ((pos - Base64) & 0x03) << 6;
+				target[tarindex]   |=  (plength(pos, (void *)&Base64)) >> 2;
+				nextbyte = ((plength(pos, (void *)&Base64)) & 0x03) << 6;
 				if (tarindex + 1 < targsize)
 					target[tarindex+1] = nextbyte;
 				else if (nextbyte)
@@ -255,7 +257,7 @@ mybase64_decode(src, target, targsize)
 			if (target) {
 				if (tarindex >= targsize)
 					return (-1);
-				target[tarindex] |= (pos - Base64);
+				target[tarindex] |= (plength(pos, (void *)&Base64));
 			}
 			tarindex++;
 			state = 0;
@@ -303,7 +305,7 @@ mybase64_decode(src, target, targsize)
 			 * subliminal channel.
 			 */
 			if (target && tarindex < targsize &&
-			    target[tarindex] != 0)
+			    target[tarindex] != '\0')
 				return (-1);
 		}
 	} else {

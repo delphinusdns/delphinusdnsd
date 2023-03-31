@@ -39,6 +39,8 @@ static int	ibuf_realloc(struct ibuf *, size_t);
 static void	ibuf_enqueue(struct msgbuf *, struct ibuf *);
 static void	ibuf_dequeue(struct msgbuf *, struct ibuf *);
 
+extern size_t	plength(void *, void *);
+
 struct ibuf *
 ibuf_open(size_t len)
 {
@@ -138,7 +140,7 @@ ibuf_size(struct ibuf *buf)
 size_t
 ibuf_left(struct ibuf *buf)
 {
-	return (buf->max - buf->wpos);
+	return (plength(buf->max, buf->wpos));
 }
 
 void

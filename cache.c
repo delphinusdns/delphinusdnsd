@@ -111,7 +111,7 @@ int cache_generic(struct scache *);
 /* The following alias helps with bounds checking all input, needed! */
 
 #define BOUNDS_CHECK(cur, begin, rdlen, end) 		do {	\
-	if ((cur - begin) > rdlen) {				\
+	if ((plength(cur, begin)) > rdlen) {			\
 		return -1;					\
 	}							\
 	if (cur > end)						\
@@ -219,7 +219,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 	struct scache *scache;
 	char expand[DNS_MAXNAME + 1];
 	int elen, i, x;
-	int rlen = (end - estart);
+	int rlen = 0;
 	u_char *pb, *p = payload;
 	
 	uint16_t rrtype;
@@ -228,6 +228,8 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 	
 	struct cache_logic *cr;
 	int authentic = 0;
+
+	rlen = (plength(end, estart));
 
 	dh = (struct dns_header *)payload;
 	p += sizeof(struct dns_header);	/* skip dns_header */
@@ -246,7 +248,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 		return (-1);
 	}
 
-	i = (pb - estart);	
+	i = (plength(pb, estart));	
 	
 	if (i > rlen) {	
 		dolog(LOG_INFO, "expand_compression() failed in cacheit 2");
@@ -273,7 +275,7 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 			return (-1);
 		}
 
-		i = (pb - estart);
+		i = (plength(pb, estart));
 		
 		if (i > rlen) {
 			dolog(LOG_INFO, "expand_compression() failed in cacheit 4");

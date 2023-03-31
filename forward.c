@@ -1898,7 +1898,7 @@ check_tsig(char *buf, int len, char *mac)
 		free(rtsig);
 		return NULL;
 	}
-	i = (pb - buf);
+	i = (plength(pb, buf));
 	if (i > len) {
 		free(rtsig);
 		return NULL;
@@ -1922,7 +1922,7 @@ check_tsig(char *buf, int len, char *mac)
 			free(rtsig);
 			return NULL;
 		}
-		i = (pb - buf);
+		i = (plength(pb, buf));
 		if (i > len) {
 			free(rtsig);
 			return NULL;
@@ -2029,7 +2029,7 @@ check_tsig(char *buf, int len, char *mac)
 			free(rtsig);
 			return NULL;
 		}
-		i = (pb - buf);
+		i = (plength(pb, buf));
 		pseudolen1 = i;
 
 		memcpy(rtsig->tsigkey, expand, elen);
@@ -2108,7 +2108,7 @@ check_tsig(char *buf, int len, char *mac)
 			free(rtsig);
 			return NULL;
 		}
-		i = (pb - buf);
+		i = (plength(pb, buf));
 		pseudolen4 = i;
 
 		memcpy(rtsig->tsigalg, expand, elen);
@@ -2732,7 +2732,7 @@ parse_lowercase(char *packet, int len)
                 return;
         }
 
-	rlen = (end_name - (char *)&packet[i]);
+	rlen = (plength(end_name, (void *)&packet[i]));
         if (rlen == elen) {
 		lower_dnsname((char *)&packet[i], rlen);
 	}
@@ -2751,7 +2751,7 @@ parse_lowercase(char *packet, int len)
                 	dolog(LOG_ERR, "expand_compression() failed 2, bad formatted name\n");
                 	return;
         	}
-		rlen = (end_name - (char *)&packet[i]);
+		rlen = (plength(end_name, (void *)&packet[i]));
 		lower_dnsname((char *)&packet[i], rlen);
 
 		i += rlen;
@@ -2778,7 +2778,7 @@ parse_lowercase(char *packet, int len)
 				dolog(LOG_ERR, "expand_compression() failed 3, bad formatted name\n");
 				return;
 			}
-			rlen = (end_name - (char *)&packet[i]);
+			rlen = (plength(end_name, (void *)&packet[i]));
 			if (rlen == ntohs(val16))
 				lower_dnsname(&packet[i], rlen);
 

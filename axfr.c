@@ -119,6 +119,7 @@ extern int              find_tsig(struct sockaddr_storage *, int);
 extern struct rrset *   find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern uint8_t          find_region(struct sockaddr_storage *, int);
 extern struct imsgbuf *        register_cortex(struct imsgbuf *, int);
+extern size_t		plength(void *, void *);
 
 
 
@@ -1392,7 +1393,7 @@ build_soa(ddDB *db, char *reply, int offset, struct rbtree *rbt, struct question
 	pack32(&reply[offset], htonl(((struct soa *)rrp->rdata)->minttl));
 	offset += sizeof(uint32_t);
 
-	answer->rdlength = htons(&reply[offset] - &answer->rdata);
+	answer->rdlength = htons(plength(&reply[offset], &answer->rdata));
 	
 	return (offset);
 }
