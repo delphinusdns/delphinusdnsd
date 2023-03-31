@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2019-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -108,7 +108,12 @@ insert_tsig(char *address, char *prefixlen)
 	int ret;
 
 	pnum = atoi(prefixlen);
+#if __OpenBSD__
+	tsign2 = malloc_conceal(sizeof(struct tsigentry));
+#else
 	tsign2 = malloc(sizeof(struct tsigentry));      /* Insert after. */
+#endif
+
 
 	if (strchr(address, ':') != NULL) {
 		tsign2->family = AF_INET6;
@@ -237,18 +242,31 @@ init_tsig_key(void)
 int
 insert_tsig_key(char *key, int keylen, char *keyname, int keynamelen)
 {
+#if __OpenBSD__
+	tk2 = malloc_conceal(sizeof(struct tsigkeyentry));
+#else
 	tk2 = malloc(sizeof(struct tsigkeyentry));      /* Insert after. */
+#endif
 	if (tk2 == NULL)
 		return -1;
 
+#if __OpenBSD__
+	tk2->key = malloc_conceal(keylen);
+#else
 	tk2->key = malloc(keylen);
+#endif
 	if (tk2->key == NULL)
 		return -1;
 
 	memcpy(tk2->key, key, keylen);
 	tk2->keylen = keylen;
 
+#if __OpenBSD__
+	tk2->keyname = malloc_conceal(keynamelen);
+#else
 	tk2->keyname = malloc(keynamelen);
+#endif
+
 	if (tk2->keyname == NULL) {
 		return -1;
 	}

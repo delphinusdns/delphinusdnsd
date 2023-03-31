@@ -474,7 +474,11 @@ tsigauth:
 		insert_tsig_key(key, keylen, keyname, keynamelen);
 
 		free($2);
+#if __OpenBSD__
+		free_zero($3, strlen($3));
+#else
 		free($3);
+#endif
 		free(keyname);
 	}
 	;
@@ -2252,6 +2256,8 @@ yylex(void)
 		}
 
 		if (c == '"') {
+			int len;
+
 			get_quotedstring(buf, sizeof(buf) - 1);
 
 			if ((cp = strrchr(buf, '"'))) {
@@ -2260,12 +2266,19 @@ yylex(void)
 				buf[cpos] = '\0';
 			}
 
-			yylval.v.string = strdup(buf);
+			len = strlen(buf) + 1;	
+#if __OpenBSD__
+			yylval.v.string = calloc_conceal(1, len);
+#else
+			yylval.v.string = calloc(1, len);
+#endif
 			if (yylval.v.string == NULL) {
 				dolog(LOG_ERR, "yylex: %s\n", strerror(errno));
 				ddd_shutdown();
 				exit(1);
 			}
+
+			strlcpy(yylval.v.string, buf, len);
 
 #ifdef LEXDEBUG
 			if (debug) {
@@ -2273,6 +2286,8 @@ yylex(void)
 				printf("quotedstring is %s\n", buf);
 			}
 #endif
+			explicit_bzero(&buf, len);
+
 			return QUOTEDSTRING;
 		}
 
@@ -2387,6 +2402,7 @@ get_quotedstring(char *buf, int n)
 	int stack = 0;
 	char *cs;
 
+	explicit_bzero(buf, n);
 	cs = buf;
 
 	for (i = 0; --n > 0; ++i) {
