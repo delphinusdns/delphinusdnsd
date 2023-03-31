@@ -475,7 +475,7 @@ tsigauth:
 
 		free($2);
 #if __OpenBSD__
-		free_zero($3, strlen($3));
+		freezero($3, strlen($3));
 #else
 		free($3);
 #endif
