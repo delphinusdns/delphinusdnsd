@@ -39,7 +39,8 @@
 
 #define DEFAULT_SOCKET 64
 
-#define PARSEFILE_FLAG_NOSOCKET 0x1
+#define PARSEFILE_FLAG_NOSOCKET 	0x1
+#define PARSEFILE_FLAG_NOTSIGKEYS	0x2
 
 
 #define IMSG_HELLO_MESSAGE  0		/* hello the primary process a few */

@@ -797,7 +797,7 @@ configtest(int argc, char *argv[])
 	ddDB *db;
 	char *zonefile = CONFFILE;
 	int ch, count = 0;
-	uint32_t flags = 0;
+	uint32_t flags = PARSEFILE_FLAG_NOTSIGKEYS;
 
 	
 	while ((ch = getopt(argc, argv, "cn")) != -1) {
@@ -806,7 +806,7 @@ configtest(int argc, char *argv[])
 			count = 1;
 			break;
 		case 'n':
-			flags = PARSEFILE_FLAG_NOSOCKET;
+			flags |= PARSEFILE_FLAG_NOSOCKET;
 			break;
 		default:
 			fprintf(stderr, "usage: dddctl configtest [-c] [input]\n");

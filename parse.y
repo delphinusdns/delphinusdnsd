@@ -216,6 +216,7 @@ static uint64_t confstatus = 0;
 static ddDB *mydb;
 static char *current_zone = NULL;
 static int pullzone = 1;
+static int notsigs = 0;
 
 
 YYSTYPE yylval;
@@ -457,24 +458,26 @@ quotedfilename:
 tsigauth:
 	TSIGAUTH STRING QUOTEDSTRING SEMICOLON CRLF {
 		char key[512];
-		char *keyname;
-		int keylen, keynamelen;
+		char *keyname = NULL;
+		int keylen = 0, keynamelen = 0;
 	
-		if ((keylen = mybase64_decode($3, (u_char *)key, sizeof(key))) < 0) {
-			dolog(LOG_ERR, "can't decode tsig base64\n");
-			return -1;
+		if (! notsigs) {
+			if ((keylen = mybase64_decode($3, (u_char *)key, sizeof(key))) < 0) {
+				dolog(LOG_ERR, "can't decode tsig base64\n");
+				return -1;
+			}
+
+			keyname = dns_label($2, &keynamelen);
+			if (keyname == NULL) {
+				dolog(LOG_ERR, "dns_label: %s\n", strerror(errno));
+				return -1;
+			}
+
+			insert_tsig_key(key, keylen, keyname, keynamelen);
+
+			explicit_bzero(&key, sizeof(key));
+			keylen = 0;
 		}
-
-		keyname = dns_label($2, &keynamelen);
-		if (keyname == NULL) {
-			dolog(LOG_ERR, "dns_label: %s\n", strerror(errno));
-			return -1;
-		}
-
-		insert_tsig_key(key, keylen, keyname, keynamelen);
-
-		explicit_bzero(&key, sizeof(key));
-		keylen = 0;
 
 		free($2);
 #if __OpenBSD__
@@ -2095,6 +2098,9 @@ parse_file(ddDB *db, char *filename, uint32_t flags)
 
 	if (flags & PARSEFILE_FLAG_NOSOCKET)
 		pullzone = 0;
+
+	if (flags & PARSEFILE_FLAG_NOTSIGKEYS)
+		notsigs = 1;
 
 	cookiesecret_len = 128;		/* XXX 16? aka SIPHASH_KEY_LENGTH? */
 	cookiesecret = malloc(cookiesecret_len);
