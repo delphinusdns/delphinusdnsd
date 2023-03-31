@@ -202,6 +202,7 @@ extern void	sm_unlock(char *, size_t);
 extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern int rr_duplicate(ddDB *, char *, int, uint16_t, char *);
 extern size_t plength(void *, void *);
+extern u_int nowrap_dec(u_int, u_int);
 
 /*
  * XXX everything but txt and naptr, works...
@@ -1761,7 +1762,7 @@ endimsg:
 	if (unpack32((char *)&pi->pkt_s.tsig.have_tsig) == 1) {
 		NTOHS(dh->additional);
 		if (dh->additional > 0)
-			dh->additional = dec_nowrap(dh->additional, 1);
+			dh->additional = nowrap_dec(dh->additional, 1);
 		HTONS(dh->additional);
 	}
 #endif
@@ -1923,7 +1924,7 @@ check_tsig(char *buf, int len, char *mac)
 	additional = ntohs(hdr->additional);
 	j = ntohs(hdr->answer) + ntohs(hdr->nsrr) + ntohs(hdr->additional);
 
-	for (;j > 0; j = dec_nowrap(j, 1)) {
+	for (;j > 0; j = nowrap_dec(j, 1)) {
 		rollback = i;
 		/* the name is parsed here */
 		elen = 0;
@@ -2218,7 +2219,7 @@ check_tsig(char *buf, int len, char *mac)
 
 		/* now get the MAC from packet with length rollback */
 		NTOHS(hdr->additional);
-		hdr->additional = dec_nowrap(hdr->additional, 1);
+		hdr->additional = nowrap_dec(hdr->additional, 1);
 		HTONS(hdr->additional);
 
 		/* origid */
