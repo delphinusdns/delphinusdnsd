@@ -178,6 +178,9 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, ui
 	char *humanname = NULL;
 	int wildcard = 0;
 
+	if (len <= 0)
+		return (NULL);
+
 	rbt = find_rrset(db, name, len);
 	if (rbt == NULL) {
 		rbt = (struct rbtree *) calloc(1, sizeof(struct rbtree));
@@ -283,7 +286,7 @@ find_rrset(ddDB *db, char *name, int len)
 {
 	static ddDBT key, data;
 
-	if (name == NULL || len == 0)
+	if (name == NULL || len <= 0)
 		return NULL;
 
 	memset(&key, 0, sizeof(key));
@@ -306,7 +309,7 @@ find_rrsetwild(ddDB *db, char *name, int len)
 	char *p = NULL, *fake = NULL;
 	char *save = NULL;
 
-	if (name == NULL || len == 0)
+	if (name == NULL || len <= 0)
 		return NULL;
 
 	if (len <= *name)
@@ -362,6 +365,10 @@ add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata)
 {
 	struct rrset *rp0, *rp;
 	struct rr *rt;
+
+	if (len <= 0) {
+		return -1;
+	}
 
 	TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
 		if (rrtype == rp->rrtype)
