@@ -1880,7 +1880,11 @@ check_tsig(char *buf, int len, char *mac)
 		
 	hdr = (struct dns_header *)&buf[0];
 	
+#if __OpenBSD__
+	rtsig = (void *)calloc_conceal(1, sizeof(struct tsig));
+#else
 	rtsig = (void *)calloc(1, sizeof(struct tsig));
+#endif
 	if (rtsig == NULL) {
 		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
 		return NULL;
@@ -1895,12 +1899,20 @@ check_tsig(char *buf, int len, char *mac)
 	pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
 	if (pb == NULL) {
 		dolog(LOG_INFO, "expand_compression() failed -2\n");
+#if __OpenBSD__
+		freezero(rtsig, sizeof(struct tsig));
+#else
 		free(rtsig);
+#endif
 		return NULL;
 	}
 	i = (plength(pb, buf));
 	if (i > len) {
+#if __OpenBSD__
+		freezero(rtsig, sizeof(struct tsig));
+#else
 		free(rtsig);
+#endif
 		return NULL;
 	}
 
@@ -1919,12 +1931,20 @@ check_tsig(char *buf, int len, char *mac)
 		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
 		if (pb == NULL) {
 			dolog(LOG_INFO, "expand_compression() failed -1\n");
+#if __OpenBSD__
+			freezero(rtsig, sizeof(struct tsig));
+#else
 			free(rtsig);
+#endif
 			return NULL;
 		}
 		i = (plength(pb, buf));
 		if (i > len) {
+#if __OpenBSD__
+			freezero(rtsig, sizeof(struct tsig));
+#else
 			free(rtsig);
+#endif
 			return NULL;
 		}
 
@@ -1936,7 +1956,11 @@ check_tsig(char *buf, int len, char *mac)
 			
 		i += 8;		/* skip type, class, ttl */
 		if (i > len) {
+#if __OpenBSD__
+			freezero(rtsig, sizeof(struct tsig));
+#else
 			free(rtsig);
+#endif
 			return NULL;
 		}
 		
@@ -1945,7 +1969,11 @@ check_tsig(char *buf, int len, char *mac)
 		i += ntohs(rdlen);	/* skip rdata, next */
 
 		if (i > len) {
+#if __OpenBSD__
+			freezero(rtsig, sizeof(struct tsig));
+#else
 			free(rtsig);
+#endif
 			return NULL;
 		}
 	}
@@ -1984,7 +2012,11 @@ check_tsig(char *buf, int len, char *mac)
 
 		i += 11 + ntohs(opt->rdlen);
 		if (i > len) {
+#if __OpenBSD__
+			freezero(rtsig, sizeof(struct tsig));
+#else
 			free(rtsig);
+#endif
 			return NULL;
 		}
 		additional--;
@@ -2026,7 +2058,11 @@ check_tsig(char *buf, int len, char *mac)
 		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
 		if (pb == NULL) {
 			dolog(LOG_INFO, "expand_compression() failed\n");
+#if __OpenBSD__
+			freezero(rtsig, sizeof(struct tsig));
+#else
 			free(rtsig);
+#endif
 			return NULL;
 		}
 		i = (plength(pb, buf));
@@ -2105,7 +2141,11 @@ check_tsig(char *buf, int len, char *mac)
 		pb = expand_compression((u_char *)&buf[i], (u_char *)buf, (u_char *)&buf[len], (u_char *)&expand, &elen, sizeof(expand));
 		if (pb == NULL) {
 			dolog(LOG_INFO, "expand_compression() failed 2\n");
+#if __OpenBSD__
+			freezero(rtsig, sizeof(struct tsig));
+#else
 			free(rtsig);
+#endif
 			return NULL;
 		}
 		i = (plength(pb, buf));
