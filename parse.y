@@ -473,13 +473,17 @@ tsigauth:
 
 		insert_tsig_key(key, keylen, keyname, keynamelen);
 
+		explicit_bzero(&key, sizeof(key));
+		keylen = 0;
+
 		free($2);
 #if __OpenBSD__
 		freezero($3, strlen($3));
+		freezero(keyname, keynamelen);
 #else
 		free($3);
-#endif
 		free(keyname);
+#endif
 	}
 	;
 mzone:
