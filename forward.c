@@ -1761,7 +1761,7 @@ endimsg:
 	if (unpack32((char *)&pi->pkt_s.tsig.have_tsig) == 1) {
 		NTOHS(dh->additional);
 		if (dh->additional > 0)
-			dh->additional--;
+			dh->additional = dec_nowrap(dh->additional, 1);
 		HTONS(dh->additional);
 	}
 #endif
@@ -1923,7 +1923,7 @@ check_tsig(char *buf, int len, char *mac)
 	additional = ntohs(hdr->additional);
 	j = ntohs(hdr->answer) + ntohs(hdr->nsrr) + ntohs(hdr->additional);
 
-	for (;j > 0; j--) {
+	for (;j > 0; j = dec_nowrap(j, 1)) {
 		rollback = i;
 		/* the name is parsed here */
 		elen = 0;
@@ -2218,7 +2218,7 @@ check_tsig(char *buf, int len, char *mac)
 
 		/* now get the MAC from packet with length rollback */
 		NTOHS(hdr->additional);
-		hdr->additional--;
+		hdr->additional = dec_nowrap(hdr->additional, 1);
 		HTONS(hdr->additional);
 
 		/* origid */

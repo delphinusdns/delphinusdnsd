@@ -152,6 +152,7 @@ char * input_sanitize(char *);
 void safe_fprintf(FILE *, char *, ...);
 size_t plength(void *, void *);
 size_t plenmax(void *, void *, size_t);
+u_int nowrap_dec(u_int, u_int);
 
 int bytes_received;
 
@@ -1502,7 +1503,7 @@ build_question(char *buf, int len, uint16_t additional, char *mac)
 optskip:
 
 		i += 11 + ntohs(opt->rdlen);
-		additional--;
+		additional = nowrap_dec(additional, 1);
 	} while (0);
 	/* check for TSIG rr */
 	do {
@@ -1682,7 +1683,7 @@ optskip:
 
 		/* now get the MAC from packet with length rollback */
 		NTOHS(hdr->additional);
-		hdr->additional--;
+		hdr->additional = nowrap_dec(hdr->additional, 1);
 		HTONS(hdr->additional);
 
 		/* origid */
@@ -2491,7 +2492,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 			saveadd = rwh->dh.additional;
 			NTOHS(rwh->dh.additional);
 			if (rwh->dh.additional)
-				rwh->dh.additional--;
+				rwh->dh.additional = 
+					nowrap_dec(rwh->dh.additional, 1);
 			HTONS(rwh->dh.additional);
 			delphinusdns_HMAC_Update(ctx, estart, plength(p,estart));
 			rwh->dh.additional = saveadd;
@@ -3097,7 +3099,7 @@ end:
 	p = &buf[offset - labellen];
 	checklen = labellen;
 
-	for (;*p != 0;) {
+	for (;*p != 0 && checklen > 0;) {
 		for (j = 0; j < i; j++) {
 			for (e = label[j]; *e; e += *e, e++) {
 				if ((*e & 0xc0) == 0xc0) 
@@ -3115,9 +3117,9 @@ end:
 		if (*p > DNS_MAXLABEL)
 			return 0;		/* totally bogus label */
 
-		checklen -= *p;
+		checklen = nowrap_dec(checklen, *p);
 		p += *p;
-		checklen--;
+		checklen = nowrap_dec(checklen, 1);
 		p++;
 	}
 
@@ -3125,7 +3127,7 @@ end:
 
 out:
 	/* take off our compress length */
-	offset -= checklen;
+	offset = nowrap_dec(offset, checklen);
 	/* write compressed label */
 	pack16((char *)&buf[offset], htons((compressmark - &buf[0]) | 0xc000));
 
@@ -6704,4 +6706,22 @@ size_t
 plength(void *nth, void *zeroth)
 {
 	return (plenmax(nth, zeroth, 65536));	/* a sizeable DNS max? */
+}
+
+
+/*
+ * NOWRAP_DEC - I proposed this for tcpdump in OpenBSD because of underwraps
+ *		never go below 0 which wraps around on unsigned integers...
+ */
+
+u_int
+nowrap_dec(u_int val, u_int dec)
+{
+	u_int ret = val;
+
+	ret -= dec;
+	if (ret > val)
+		return 0;
+	else 
+		return (ret);
 }

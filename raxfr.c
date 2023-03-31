@@ -176,6 +176,7 @@ extern char *		param_tlv2human(char *, int, int);
 extern char * 		ipseckey_type(struct ipseckey *);
 extern void 		safe_fprintf(FILE *, char *, ...);
 extern size_t		plength(void *, void *);
+extern u_int		nowrap_dec(u_int, u_int);
 
 
 /* The following alias helps with bounds checking all input, needed! */
@@ -2720,7 +2721,7 @@ get_remote_soa(struct rzone *rzone)
 		hmaclen = rwh->dh.additional;		/* save additional */
 		NTOHS(rwh->dh.additional);
 		if (rwh->dh.additional)
-			rwh->dh.additional--;
+			rwh->dh.additional = nowrap_dec(rwh->dh.additional, 1);
 		HTONS(rwh->dh.additional);
 		delphinusdns_HMAC_Update(ctx, estart, (plength(p, estart)));
 		rwh->dh.additional = hmaclen;		/* restore additional */

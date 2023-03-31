@@ -157,7 +157,7 @@ SipHash(const SIPHASH_KEY *key, int rc, int rf, const void *src, size_t len)
 static void
 SipHash_Rounds(SIPHASH_CTX *ctx, int rounds)
 {
-	while (rounds--) {
+	while (rounds-- > 0) {
 		ctx->v[0] += ctx->v[1];
 		ctx->v[2] += ctx->v[3];
 		ctx->v[1] = SIP_ROTL(ctx->v[1], 13);
