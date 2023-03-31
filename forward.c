@@ -1037,7 +1037,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 			/* are we a CNAME? if not then search our logic */
 			if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
 				slen = reply_cname(&sreply, &sretlen, cfg->db);
-				if (slen < 0) {
+				if (slen <= 0) {
 					/*
 					 * we may have a non-dnssec answer cached without RRSIG
 					 * at this point the rl->reply will fail.. expire it
@@ -2628,6 +2628,11 @@ rawsend(int so, char *buf, uint16_t len, struct sockaddr_in *sin, int oldsel, st
 	struct msghdr msg;
 	struct iovec iov[2];
 
+	if (len == 0) {
+		dolog(LOG_INFO, "rawsend:  not sending with len == 0\n");
+		return 0;
+	}
+
 	memcpy(&ip.ip_src.s_addr, (void*)&(((struct sockaddr_in *)&cfg->ss[oldsel])->sin_addr.s_addr), sizeof(in_addr_t));
 	memcpy(&ip.ip_dst.s_addr, (void*)&sin->sin_addr, sizeof(in_addr_t));
 	ip.ip_p = IPPROTO_UDP;
@@ -2659,6 +2664,11 @@ rawsend6(int so, char *buf, uint16_t len, struct sockaddr_in6 *sin6, int oldsel,
 	struct ip6_hdr ip6;
 	struct msghdr msg;
 	struct iovec iov[2];
+
+	if (len == 0) {
+		dolog(LOG_INFO, "rawsend:  not sending with len == 0\n");
+		return 0;
+	}
 
 	memcpy(&ip6.ip6_src, (void*)&(((struct sockaddr_in6 *)&cfg->ss[oldsel])->sin6_addr), sizeof(struct in6_addr));
 	memcpy(&ip6.ip6_dst, (void*)&sin6->sin6_addr, sizeof(struct in6_addr));

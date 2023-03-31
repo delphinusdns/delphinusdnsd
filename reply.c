@@ -4462,6 +4462,10 @@ again:
 			break;	
 		}
 
+		if (i == 0) {
+			return (-1);
+		}
+
 		if (i == outlen) {
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
