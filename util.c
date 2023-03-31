@@ -1891,7 +1891,7 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 				return NULL;
 
 			/* do not allow forwards jumping */
-			if ((plenmax(p, estart, max)) <= (ntohs(offset) & (~0xc000))) {
+			if ((plenmax(p, estart, plength(end, estart))) <= (ntohs(offset) & (~0xc000))) {
 				return NULL;
 			}
 
@@ -6693,7 +6693,7 @@ plenmax(void *nth, void *zeroth, size_t max)
 	size_t len = (nth - zeroth);
 
 	if (len > max) {
-		dolog(LOG_ERR, "IMPORTANT: nth(%p) - zeroth(%p) is bigger than max, did you switch their order accidentally?\n", nth, zeroth);
+		dolog(LOG_ERR, "IMPORTANT: nth(%p) - zeroth(%p) is bigger than max (%u), did you switch their order accidentally?\n", nth, zeroth, max);
 		abort();
 	}
 
