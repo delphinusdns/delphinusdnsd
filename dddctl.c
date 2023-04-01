@@ -82,6 +82,7 @@ int	dump_db_bind(ddDB*, FILE *, char *);
 int 	print_rbt_bind(FILE *, struct rbtree *);
 int	usage(int argc, char *argv[]);
 int	start(int argc, char *argv[]);
+int	tsigf(int argc, char *argv[]);
 int	restart(int argc, char *argv[]);
 int	stop(int argc, char *argv[]);
 int	coord(int argc, char *argv[]);
@@ -174,13 +175,14 @@ struct _mycmdtab {
 	{ "configtest", configtest },
 	{ "coord", coord },
 	{ "dumpcache", dumpcache },
-	{ "query", dig },
 	{ "help", usage },
+	{ "query", dig },
+	{ "restart", restart },
 	{ "sign", signmain },
 	{ "sshfp", sshfp },
 	{ "start", start },
 	{ "stop", stop },
-	{ "restart", restart },
+	{ "tsig", tsigf },
 	{ "zonemd", zonemd },
 	{ NULL, NULL }
 };
@@ -321,13 +323,14 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\tbindfile zonename zonefile\n");
 		fprintf(stderr, "\tconfigtest [-cn] [configfile]\n");
 		fprintf(stderr, "\tcoord [-c] [lat] [min] [sec] [N/S] [long] [min] [sec] [E/W]\n");
-		fprintf(stderr, "\tquery [-DITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
 		fprintf(stderr, "\thelp [command]\n");
+		fprintf(stderr, "\tquery [-DITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
+		fprintf(stderr, "\trestart [-I ident] [-s socket]\n");
 		fprintf(stderr, "\tsign [-KMXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask]\n\t\t[-n zonename] [-o output] [-R keyword] [-S pid] [-s salt]\n\t\t[-t ttl] [-x serial] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
 		fprintf(stderr, "\tstart [-f configfile] [-I ident] [-s socket]\n");
 		fprintf(stderr, "\tstop [-I ident] [-s socket]\n");
-		fprintf(stderr, "\trestart [-I ident] [-s socket]\n");
+		fprintf(stderr, "\ttsig\n");
 		fprintf(stderr, "\tzonemd [-c] [-n zonename] [-o outfile] file\n");
 		retval = 0;
 	}
@@ -429,6 +432,22 @@ start(int argc, char *argv[])
 
 	return 0;
 }
+
+int
+tsigf(int argc, char *argv[])
+{
+	char buf[512];
+	char b64buf[1024];
+	int len;
+
+	arc4random_buf(&buf, 32);
+	len = mybase64_encode(buf, 32, b64buf, sizeof(b64buf));
+	b64buf[len] = '\0';
+	printf("%s\n", b64buf);
+
+	return 0;
+}
+
 
 int
 coord(int argc, char *argv[])
@@ -797,7 +816,7 @@ configtest(int argc, char *argv[])
 	ddDB *db;
 	char *zonefile = CONFFILE;
 	int ch, count = 0;
-	uint32_t flags = PARSEFILE_FLAG_NOTSIGKEYS;
+	uint32_t flags = 0;
 
 	
 	while ((ch = getopt(argc, argv, "cn")) != -1) {
@@ -807,6 +826,7 @@ configtest(int argc, char *argv[])
 			break;
 		case 'n':
 			flags |= PARSEFILE_FLAG_NOSOCKET;
+			flags |= PARSEFILE_FLAG_NOTSIGKEYS;
 			break;
 		default:
 			fprintf(stderr, "usage: dddctl configtest [-c] [input]\n");
