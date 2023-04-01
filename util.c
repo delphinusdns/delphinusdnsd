@@ -2166,7 +2166,8 @@ int
 lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format, char *tsigkey, char *tsigpass, int *segment, int *answers, int *additionalcount, struct soa_constraints *constraints, uint32_t bytelimit, int ob)
 {
 	char query[512];
-	char pseudo_packet[512];
+#define SECRET_PSEUDO_PACKET_SIZE	512
+	char *pseudo_packet;
 	char shabuf[DNS_HMAC_SHA256_SIZE];
 	char *reply;
 	struct timeval tv, savetv;
@@ -2195,13 +2196,23 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	socklen_t sizetv;
 	int sacount = 0;
 	
+#if __OpenBSD__
+	pseudo_packet = calloc_conceal(1, SECRET_PSEUDO_PACKET_SIZE);
+#else
+	pseudo_packet = calloc(1, SECRET_PSEUDO_PACKET_SIZE);
+#endif
+	if (pseudo_packet == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
 	md = (DDD_EVP_MD *)delphinusdns_EVP_get_digestbyname("sha256");
 	if (md == NULL) {
 		fprintf(stderr, "md failed!\n");
-		return -1;
+		goto cleanup;
 	}
 	if (!(format & TCP_FORMAT))
-		return -1;
+		goto cleanup;
 
 	memset(&query, 0, sizeof(query));
 	
@@ -2224,7 +2235,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	name = (u_char *)dns_label(zonename, &len);
 	if (name == NULL) {
 		dolog(LOG_INFO, "%s: dns_label failed\n", __FILE__);
-		return -1;
+		goto cleanup;
 	}
 
 	zonelen = len;
@@ -2246,9 +2257,9 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	/* we have a key, attach a TSIG payload */
 	if (tsigkey) {
 
-		if ((len = mybase64_decode(tsigpass, (u_char *)&pseudo_packet, sizeof(pseudo_packet))) < 0) {
+		if ((len = mybase64_decode(tsigpass, (u_char *)pseudo_packet, SECRET_PSEUDO_PACKET_SIZE)) < 0) {
 			dolog(LOG_INFO, "%s: bad base64 password\n", __FILE__);
-			return -1;
+			goto cleanup;
 		}
 		
 		ctx = delphinusdns_HMAC_CTX_new();
@@ -2258,14 +2269,14 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 		now = time(NULL);
 		if (tsig_pseudoheader(tsigkey, DEFAULT_TSIG_FUDGE, now, ctx) < 0) {
 			dolog(LOG_INFO, "%s: tsig_pseudoheader failed\n", __FILE__);
-			return -1;
+			goto cleanup;
 		}
 
 		delphinusdns_HMAC_Final(ctx, (u_char *)shabuf, (u_int *)&len);
 
 		if (len != DNS_HMAC_SHA256_SIZE) {
 			dolog(LOG_INFO, "%s: not expected HMAC len != 32\n", __FILE__);
-			return -1;
+			goto cleanup;
 		}
 
 		delphinusdns_HMAC_CTX_free(ctx);
@@ -2273,7 +2284,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 		keyname = (u_char *)dns_label(tsigkey, &len);
 		if (keyname == NULL) {
 			dolog(LOG_INFO, "%s: dns_label() failed 2\n", __FILE__);
-			return -1;
+			goto cleanup;
 		}
 
 		memcpy(&query[totallen], keyname, len);
@@ -2295,11 +2306,15 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 		keyname = (u_char *)dns_label("hmac-sha256", &len);
 		if (keyname == NULL) {
 			dolog(LOG_INFO, "%s: dns_label() failed 3\n", __FILE__);
-			return -1;
+			goto cleanup;
 		}
 
-		/* rdlen */
-		pack16((char *)p, htons(len + 2 + 4 + 2 + 2 + DNS_HMAC_SHA256_SIZE + 2 + 2 + 2));
+		/* 
+		 * XXX rdlen was:
+		 * len + 2 + 4 + 2 + 2 + DNS_HMAC_SHA256_SIZE + 2 + 2 + 2 
+		 */
+
+		pack16((char *)p, htons(len + 10 + DNS_HMAC_SHA256_SIZE + 6)); 
 		totallen += 2;
 		p += 2;
 
@@ -2359,7 +2374,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 	if (send(so, query, totallen, 0) < 0) {
 		perror("send");
-		return -1;
+		goto cleanup;
 	}
 
 	/* catch reply, totallen is reused here */
@@ -2368,15 +2383,15 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	reply = calloc(1, 0xffff + 2);
 	if (reply == NULL) {
 		perror("calloc");
-		return -1;
+		goto cleanup;
 	}
 
 	if (tsigkey) {
 		uint16_t maclen;
 	
-		if ((len = mybase64_decode(tsigpass, (u_char *)&pseudo_packet, sizeof(pseudo_packet))) < 0) {
+		if ((len = mybase64_decode(tsigpass, (u_char *)pseudo_packet, SECRET_PSEUDO_PACKET_SIZE)) < 0) {
 			dolog(LOG_INFO, "%s: bad base64 password\n", __FILE__);
-			return -1;
+			goto cleanup;
 		}
 		
 		ctx = delphinusdns_HMAC_CTX_new();
@@ -2390,7 +2405,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	q = build_question((char *)&wh->dh, wh->len, wh->dh.additional, (tsigkey == NULL) ? NULL : shabuf);
 	if (q == NULL) {
 		dolog(LOG_INFO, "%s: failed build_question()\n", __FILE__);
-		return -1;
+		goto cleanup;
 	}
 
 	for (;;) {
@@ -2423,14 +2438,14 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 		len = recv(so, reply, tcplen, MSG_WAITALL);
 		if (len < 0) {
 			dolog(LOG_INFO, "recv failed: %s\n", strerror(errno));
-			return -1;
+			goto cleanup;
 		}
 
 		totallen += len;
 
 		if (totallen >= bytelimit) {
 			dolog(LOG_INFO, "download exceeded byte limit\n");
-			return -1;
+			goto cleanup;
 		}
 
 		rwh = (struct whole_header *)&reply[0];
@@ -2441,17 +2456,17 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 		if (rwh->dh.id != wh->dh.id) {
 			dolog(LOG_INFO, "DNS ID mismatch\n");
-			return -1;
+			goto cleanup;
 		}
 
 		if (!(htons(rwh->dh.query) & DNS_REPLY)) {
 			dolog(LOG_INFO, "not a DNS reply\n");
-			return -1;
+			goto cleanup;
 		}
 		
 		if (ntohs(rwh->dh.answer) < 1) {	
 			dolog(LOG_INFO, "NO ANSWER provided\n");
-			return -1;
+			goto cleanup;
 		}
 
 		segmentcount = ntohs(rwh->dh.answer);
@@ -2464,12 +2479,12 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 			
 		if (memcmp(q->hdr->name, name, q->hdr->namelen) != 0) {
 			dolog(LOG_INFO, "question name not for what we asked\n");
-			return -1;
+			goto cleanup;
 		}
 
 		if (q->hdr->qclass != htons(DNS_CLASS_IN) || q->hdr->qtype != htons(DNS_TYPE_AXFR)) {
 			dolog(LOG_INFO, "wrong class or type\n");
-			return -1;
+			goto cleanup;
 		}
 		
 		p = (u_char *)&rwh[1];		
@@ -2506,7 +2521,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 			if ((rrlen = raxfr_peek(f, p, estart, end, &rrtype, soacount, &rdlen, format, ctx, (char *)name, zonelen, 1)) < 0) {
 				dolog(LOG_INFO, "raxfr_peek() ERROR\n");
-				return -1;
+				goto cleanup;
 			}
 
 			if (tsigkey && (rrtype == DNS_TYPE_TSIG)) {
@@ -2515,25 +2530,25 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 				/* do tsig checks here */
 				if ((len = raxfr_tsig(f,p,estart,end,mysoa,rdlen,ctx, (char *)&mac, (sacount++ == 0) ? 1 : 0)) < 0) {
 					dolog(LOG_INFO, "ERROR with TSIG record\n");
-					return -1;
+					goto cleanup;
 				}
 		
 				p = (estart + len);
 
-				if ((len = mybase64_decode(tsigpass, (u_char *)&pseudo_packet, sizeof(pseudo_packet))) < 0) {
+				if ((len = mybase64_decode(tsigpass, (u_char *)pseudo_packet, SECRET_PSEUDO_PACKET_SIZE)) < 0) {
 					dolog(LOG_INFO, "bad base64 password\n");
-					return -1;
+					goto cleanup;
 				}
 
 			 	if (delphinusdns_HMAC_CTX_reset(ctx) != 1) {
 					dolog(LOG_INFO, "HMAC_CTX_reset failed!\n");
-					return -1;
+					goto cleanup;
 				}
 				
 					
 				if (delphinusdns_HMAC_Init_ex(ctx, pseudo_packet, len, md, NULL) != 1) {
 					dolog(LOG_INFO, "HMAC_Init_ex failed!\n");
-					return -1;
+					goto cleanup;
 				}
 				maclen = htons(DNS_HMAC_SHA256_SIZE);
 				delphinusdns_HMAC_Update(ctx, (u_char *)&maclen, sizeof(maclen));
@@ -2551,20 +2566,20 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 					len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL);
 					if (len <= 0) {
 						dolog(LOG_INFO, "mangled AXFR\n");
-						return -1;
+						goto cleanup;
 					}
 
 					tcplen = ntohs(unpack16(reply));
 
 					if (tcplen < sizeof(struct whole_header)) {
 						dolog(LOG_INFO, "parsing header after TSIG failed, boundary problem\n");
-						return -1;
+						goto cleanup;
 					}
 						
 					len = recv(so, reply, sizeof(struct whole_header), MSG_PEEK | MSG_WAITALL);
 					if (len < 0) {
 						dolog(LOG_INFO, "recv(): %s\n", strerror(errno));
-						return -1;
+						goto cleanup;
 					}
 
 					rwh = (struct whole_header *)&reply[0];
@@ -2581,7 +2596,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 			if (rrtype == DNS_TYPE_SOA) {
 				if ((len = raxfr_soa(f, p, estart, end, mysoa, soacount, format, rdlen, ctx, constraints)) < 0) {
 					dolog(LOG_INFO, "raxfr_soa failed\n");
-					return -1;
+					goto cleanup;
 				}
 				p = (estart + len);
 				soacount++;
@@ -2598,7 +2613,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 					if (rrtype == sr->rrtype) {
 						if ((len = (*sr->raxfr)(f, p, estart, end, mysoa, rdlen, ctx)) < 0) {
 							dolog(LOG_INFO, "error with rrtype %d\n", sr->rrtype);
-							return -1;
+							goto cleanup;
 						}
 						p = (estart + len);
 						break;
@@ -2608,7 +2623,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 				if (sr->rrtype == 0) {
 					if (rrtype != DNS_TYPE_TSIG) {
 						dolog(LOG_INFO, "unsupported RRTYPE %d\n", rrtype);
-						return -1;
+						goto cleanup;
 					} 
 				} 
 			}
@@ -2616,26 +2631,34 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	}
 
 	if ((len = recv(so, reply, 0xffff, 0)) > 0) {	
-		fprintf(stderr, ";; WARN: received %d more bytes.\n", len);
+		dolog(LOG_INFO, "RAXFR WARN: received %d more bytes.\n", len);
 	}
 
 out:
+
+#if __OpenBSD__
+	freezero(pseudo_packet, SECRET_PSEUDO_PACKET_SIZE);
+#else
+	explicit_bzero(pseudo_packet, SECRET_PSEUDO_PACKET_SIZE);
+	free(pseudo_packet);
+#endif
 
 	if (tsigkey) {
 		delphinusdns_HMAC_CTX_free(ctx);	
 	}
 
-#if 0
-	if (f != NULL) {
-		if ((format & ZONE_FORMAT))
-			fprintf(f, "}\n");
-	}
-#endif
-
 	free_question(q);
 
 	return 0;
 
+cleanup:
+#if __OpenBSD__
+	freezero(pseudo_packet, SECRET_PSEUDO_PACKET_SIZE);
+#else
+	explicit_bzero(pseudo_packet, SECRET_PSEUDO_PACKET_SIZE);
+	free(pseudo_packet);
+#endif
+	return -1;
 }
 
 /* 

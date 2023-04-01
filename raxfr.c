@@ -2806,8 +2806,12 @@ do_raxfr(FILE *f, struct rzone *rzone)
 	socklen_t slen = sizeof(struct sockaddr_in);
 	
 	u_int window = 32768;
-	char tsigpass[512];
-	char humanpass[1024];
+
+#define TSIGPASS_SIZE	512
+#define HUMANPASS_SIZE  1024
+
+	char *tsigpass;
+	char *humanpass;
 	char *keyname;
 	int tsigpasslen, keynamelen;
 	uint32_t format = (TCP_FORMAT | ZONE_FORMAT);
@@ -2818,6 +2822,28 @@ do_raxfr(FILE *f, struct rzone *rzone)
 
 	struct soa mysoa;
 
+#if __OpenBSD__
+	if ((tsigpass = calloc_conceal(1, TSIGPASS_SIZE)) == NULL) { 
+#else
+	if ((tsigpass = calloc(1, TSIGPASS_SIZE)) == NULL) {
+#endif
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+#if __OpenBSD__
+	if ((humanpass = calloc_conceal(1, HUMANPASS_SIZE)) == NULL) { 
+#else
+	if ((humanpass = calloc(1, HUMANPASS_SIZE)) == NULL) {
+#endif
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+#if __OpenBSD__
+		freezero(tsigpass, TSIGPASS_SIZE);
+#else
+		explicit_bzero(tsigpass, TSIGPASS_SIZE);
+		free(tsigpass);
+#endif
+	}
 
 	if ((so = socket(rzone->storage.ss_family, SOCK_STREAM, 0)) < 0) {
 		dolog(LOG_INFO, "get_remote_soa: %s\n", strerror(errno));
@@ -2860,21 +2886,21 @@ do_raxfr(FILE *f, struct rzone *rzone)
 		if (keyname == NULL) {
 			dolog(LOG_ERR, "dns_label failed\n");
 			close(so);
-			return -1;
+			goto cleanup;
 		}
 
-		if ((tsigpasslen = find_tsig_key(keyname, keynamelen, (char *)&tsigpass, sizeof(tsigpass))) < 0) {
+		if ((tsigpasslen = find_tsig_key(keyname, keynamelen, (char *)tsigpass, TSIGPASS_SIZE)) < 0) {
 			dolog(LOG_ERR, "do not have a record of TSIG key %s\n", rzone->tsigkey);
 			close(so);
-			return -1;
+			goto cleanup;
 		}
 
 		free(keyname);
 
-		if ((len = mybase64_encode((const u_char *)tsigpass, tsigpasslen, humanpass, sizeof(humanpass))) < 0) {
+		if ((len = mybase64_encode((const u_char *)tsigpass, tsigpasslen, humanpass, HUMANPASS_SIZE)) < 0) {
 			dolog(LOG_ERR, "base64_encode() failed\n");
 			close(so);
-			return -1;
+			goto cleanup;
 		}
 
 		humanpass[len] = '\0';
@@ -2896,14 +2922,38 @@ do_raxfr(FILE *f, struct rzone *rzone)
 
 		dolog(LOG_ERR, "lookup_axfr() failed\n");
 		close(so);
-		return -1;
+		goto cleanup;
 	}
 
 	if ((format & ZONE_FORMAT) && f != NULL)
 		safe_fprintf(f, "}\n");
 				
 	close(so);
+
+#if __OpenBSD__
+	freezero(tsigpass, TSIGPASS_SIZE);
+	freezero(humanpass, HUMANPASS_SIZE);
+#else
+	explicit_bzero(tsigpass, TSIGPASS_SIZE);
+	free(tsigpass);
+	explicit_bzero(humanpass, HUMANPASS_SIZE);
+	free(humanpass);
+#endif
+
 	return (0);
+
+cleanup:
+#if __OpenBSD__
+	freezero(tsigpass, TSIGPASS_SIZE);
+	freezero(humanpass, HUMANPASS_SIZE);
+#else
+	explicit_bzero(tsigpass, TSIGPASS_SIZE);
+	free(tsigpass);
+	explicit_bzero(humanpass, HUMANPASS_SIZE);
+	free(humanpass);
+#endif
+
+	return -1;
 }
 
 

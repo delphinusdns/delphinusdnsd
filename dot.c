@@ -682,7 +682,10 @@ gawn:
 						goto tlsout;
 					} else {
 						/* RFC 1996 - 3.10 is probably broken, replying REFUSED */
-						dolog(LOG_INFO, "on TLS descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of PRIMARY servers replying REFUSED\n", so, cfg->ident[tlsnp->intidx], tlsnp->address);
+						if (errno == ENOENT)
+							dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT using the right keyname, replying REFUSED\n", so, cfg->ident[tlsnp->intidx], tlsnp->address);
+						else
+							dolog(LOG_INFO, "on TLS descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of PRIMARY servers replying REFUSED\n", so, cfg->ident[tlsnp->intidx], tlsnp->address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, pbuf, len, question, from, fromlen, NULL, NULL, aregion, istls, 0, replybuf, tlsnp->ctx);
 						slen = reply_refused(&sreply, &sretlen, NULL, 1);

@@ -4921,6 +4921,8 @@ notifysource(struct question *q, struct sockaddr_storage *from)
 	
 	} /* SLIST_FOREACH */
 
+	errno = ENOENT;
+
 	return 0;
 }
 

@@ -842,7 +842,10 @@ refusedtime = time(NULL);
 						goto udpout;
 					} else {
 						/* RFC 1996 - 3.10 is probably broken reply REFUSED */
-						dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of PRIMARY servers replying REFUSED\n", so, cfg->ident[i], address);
+						if (errno == ENOENT)
+							dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT using the right keyname, replying REFUSED\n", so, cfg->ident[i], address);
+						else
+							dolog(LOG_INFO, "on descriptor %u interface \"%s\" dns NOTIFY packet from %s, NOT in our list of PRIMARY servers replying REFUSED\n", so, cfg->ident[i], address);
 						snprintf(replystring, DNS_MAXNAME, "REFUSED");
 						build_reply(&sreply, so, buf, len, question, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf, NULL);
 						delphinusdns_EVP_DigestInit_ex(rctx, md, NULL);
