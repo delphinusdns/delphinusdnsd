@@ -14,6 +14,8 @@ keep a minimal pledge of "stdio recvfd ..."
 - lose the "inet" pledge in AXFR, TCP.
 - adjust ratelimit for the ttl that hits us, in order to evade DoS attacks
   on valid nameservers.
+- add a version output in dddctl, also add a tsig output for creating 32 byte
+  random tsig keys.
 
 
 [2022] Changes in RELEASE_1_7 from RELEASE_1_6

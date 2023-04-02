@@ -442,7 +442,7 @@ main(int argc, char *argv[], char *environ[])
 			verbose++;
 			break;
 		default:
-			fprintf(stderr, "usage: delphinusdnsd [-i interface] [-b bindaddress] [-f configfile] [-p portnumber] [-drv]\n");
+			fprintf(stderr, "usage: delphinusdnsd [-I identstring] [-i interface] [-b bindaddress] [-f configfile] [-n numinstance] [-p portnumber] -s [socketpath] [-dlv]\n");
 			exit (1);
 		}
 	}

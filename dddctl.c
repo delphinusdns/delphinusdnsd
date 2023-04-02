@@ -72,6 +72,8 @@ int forwardstrategy = STRATEGY_SPRAY;
 int zonecount = 0;
 int cache = 0;
 int tsigpassname = 0;
+char *versionstring = DD_VERSION;
+
 extern int dnssec;
 extern int bytes_received;
 
@@ -91,6 +93,7 @@ int	bindfile(int argc, char *argv[]);
 int	sshfp(int argc, char *argv[]);
 int	count_db(ddDB *);
 int 	dumpcache(int argc, char *argv[]);
+int 	versionf(int argc, char *argv[]);
 
 
 /* glue */
@@ -120,7 +123,6 @@ int iflag = 0;
 int lflag = 0;
 int icount = 0;
 int vslen = 0;
-char *versionstring = NULL;
 uint64_t expiredon, signedon;
 
 int tls = 0;
@@ -183,6 +185,7 @@ struct _mycmdtab {
 	{ "start", start },
 	{ "stop", stop },
 	{ "tsig", tsigf },
+	{ "version", versionf },
 	{ "zonemd", zonemd },
 	{ NULL, NULL }
 };
@@ -331,6 +334,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\tstart [-f configfile] [-I ident] [-s socket]\n");
 		fprintf(stderr, "\tstop [-I ident] [-s socket]\n");
 		fprintf(stderr, "\ttsig\n");
+		fprintf(stderr, "\tversion\n");
 		fprintf(stderr, "\tzonemd [-c] [-n zonename] [-o outfile] file\n");
 		retval = 0;
 	}
@@ -448,6 +452,12 @@ tsigf(int argc, char *argv[])
 	return 0;
 }
 
+int
+versionf(int argc, char *argv[])
+{
+	printf("%s\n", versionstring);
+	return 0;
+}
 
 int
 coord(int argc, char *argv[])

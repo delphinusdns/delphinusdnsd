@@ -17,7 +17,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: March 27 2023 $
+.Dd $Mdocdate: April 2 2023 $
 .Dt DDDCTL 8
 .Os
 .Sh NAME
@@ -165,6 +165,10 @@ with an optional configfile and control socket path.
 stops delphinusdnsd with optional control socket path.
 .It Cm restart Ar [-I identstring] [-s path]
 restarts delphinusdnsd with optional control socket path.
+.It Cm tsig
+prints a random tsig key and exits.
+.It Cm version
+prints a version and exits.
 .It Cm zonemd Ar [-c] [-n zonename] [-o outfile] file
 .Bl -tag -width "zonemd"
 message digests (SIMPLE scheme, algorithm SHA386) a non-DNSSEC zonefile.
