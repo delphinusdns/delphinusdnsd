@@ -66,14 +66,26 @@ Really a domain name has a trailing dot, like "www.centroid.eu." this
 indicates that there is a root.  The root looks sort of like this...
 <pre>
 
-                                .  root     
-                               / \
-                              /   \
-                             /     \
-                          org       eu
-                         /   \     /  \
-                        /              \
-                    delphinusdns      centroid
+
+
+
+                        . (root)
+                        |
+                        |--  com
+                        |     `--  example
+                        |             `--  www
+                        |--  org
+                        |     |--  delphinusdns
+                        |     |          `--  pod
+                        |     `--  example
+                        |             `--  www
+                        |--  eu
+                        |     |--  centroid
+                        |     `--  dtschland
+                        `--  de
+                             |--  denic
+                             `--  mainrechner
+                                       `--  www
 
              [1] The (partial) DNS tree showing the root at top.
 
@@ -84,6 +96,25 @@ centroid.eu. domain name.  It is a distributed database in other words, because
 the nameservers along the way can belong to different organizations and 
 networks.  Please see <a href="https://iana.org">iana.org</a> for different
 TLD's.
+</p>
+<p>
+Similarily in DNSSEC (DNS Security) in order to get the cryptographically 
+authentic answer to "www.centroid.eu." in simplified terms (pretend there
+is only KSK's) the centroid.eu nameservers are asked 
+for the DNSKEY RR which is a public cryptography key.  The www label has
+an RRSIG RR with the signature of the A RR (for www).  If this checks out
+the DNSKEY of centroid.eu is crosschecked with the DS RR hash at .eu, which 
+also has an RRSIG RR and is verified against the DNSKEY for .eu (here a 
+validation for the DS RRSIG is performed through public key cryptography) 
+and crosschecks that with the DS RR hash at the root (again this DS's RRSIG 
+is validated against the root's DNSKEY RR).  Finally at the root it is the 
+end of a long chain, so we call this an anchor.
+The anchor has to be well known in DNSSEC validation implementations.  When
+the anchor (root) changes its DNSKEY, validation software must update this
+(it's usually hardcoded).  Root (KSK) key changes happen infrequently.
+This way a domainname is deemed as authentic when all checks out (and validates
+along the way) in this anchored chain.  DNS caching servers can cache the 
+RR's for this process speeding it up on subsequent validations.
 </p>
 <h3><a name="terminology">Terminology</a></h3>
 
@@ -107,10 +138,13 @@ TLD's.
 <h2><a name="recursive">Recursive and Authoritative Nameservers</a></h2>
 <p>
 A nameserver that looks up entire domain names from the root, is said to be
-a recursive nameserver.  A nameserver that only answers the domain that it
+a recursive nameserver.  If it checks the DNSSEC signatures of the answers
+it is a validating (and recursive) nameserver.  A nameserver that only 
+answers for the domain that it
 is authoritative for is an authoritative nameserver.  Both types have a 
 place on the Internet with recursive nameservers being BIND, Unbound, 
-djbdns, etc.  All these can serve as authoritative nameservers as well.
+PowerDNS etc.  Others serve as authoritative nameservers such as BIND, nsd,
+djbdns, PowerDNS authoritative and many more.
 </p>
 <h3><a name="turnkey">Turnkey vs. General Purpose DNS Server</a></h3>
 <p>
