@@ -769,5 +769,12 @@ struct querycache {
 
 #define QC_REQUESTSIZE	384
 #define QC_REPLYSIZE	65536
+
+struct nb {
+	int af;
+	in_addr_t addr;
+	struct in6_addr addr6;
+};
+
 	
 #endif /* _DB_H */

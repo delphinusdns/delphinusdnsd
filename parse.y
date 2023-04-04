@@ -176,6 +176,8 @@ static struct txts {
 SLIST_HEAD(rzones, rzone)	rzones = SLIST_HEAD_INITIALIZER(rzones);
 SLIST_HEAD(mzones ,mzone)	mzones = SLIST_HEAD_INITIALIZER(mzones);
 
+struct nb notifybind;
+
 #define STATE_IP 1
 #define STATE_ZONE 2
 
@@ -1605,7 +1607,28 @@ optionsstatement:
 				}
 				dolog(LOG_DEBUG, "binding to %s\n", $2);
 				bind_list[bcount++] = $2;
+			} else if (strcasecmp($1, "notifybind") == 0) {
+				dolog(LOG_DEBUG, "notifies binding to %s\n", $2);
+				if (strchr($2, ':') == NULL) {
+					inet_pton(AF_INET, $2, &notifybind.addr);
+					notifybind.af = AF_INET;
+				} else {
+					inet_pton(AF_INET6, $2, &notifybind.addr6);
+					notifybind.af = AF_INET6;
+				}
 			}
+		}
+	}
+	|
+	NOTIFYBIND ipcidr SEMICOLON CRLF
+	{
+		dolog(LOG_DEBUG, "notifies binding to %s\n", $2);
+		if (strchr($2, ':') == NULL) {
+			inet_pton(AF_INET, $2, &notifybind.addr);
+			notifybind.af = AF_INET;
+		} else {
+			inet_pton(AF_INET6, $2, &notifybind.addr6);
+			notifybind.af = AF_INET6;
 		}
 	}
 	|
@@ -2095,6 +2118,7 @@ parse_file(ddDB *db, char *filename, uint32_t flags)
 	int errors = 0;
 
 	mydb = db;
+	memset(&notifybind, 0, sizeof(struct nb));
 
 	if (flags & PARSEFILE_FLAG_NOSOCKET)
 		pullzone = 0;

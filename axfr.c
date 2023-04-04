@@ -136,6 +136,7 @@ extern int primary_axfr_old_behaviour;
 extern int strictaxfr;
 extern char *identstring;
 extern uint16_t axfrport;
+extern struct nb notifybind;
 
 SLIST_HEAD(, axfrentry) axfrhead;
 
@@ -1995,6 +1996,9 @@ axfr_acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *notify_ib
 						sin = (struct sockaddr_in *)from;
 						sin->sin_family = AF_INET;
 						sin->sin_port = htons(0);
+						memcpy(&sin->sin_addr.s_addr,
+							&notifybind.addr,
+							sizeof(in_addr_t));
 						if (bind(so, (struct sockaddr *)sin, sizeof(*sin)) < 0) {
 							dolog(LOG_INFO, "bind notify: %s\n", strerror(errno));
 						}
@@ -2017,6 +2021,9 @@ axfr_acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *notify_ib
 #ifndef __linux__
 						sin6->sin6_len = sizeof(struct sockaddr_in6);
 #endif
+						memcpy(&sin6->sin6_addr,
+							&notifybind.addr6,
+							sizeof(struct in6_addr));
 						if (bind(so, (struct sockaddr *)sin6, sizeof(*sin6)) < 0) {
 							dolog(LOG_INFO, "bind notify6: %s\n", strerror(errno));
 						}
