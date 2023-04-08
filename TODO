@@ -33,6 +33,7 @@ the "inet" pledge.
 and netbsd) which disallows using the filesystem being used as a buffer to
 store hacker code.
 - refactor the TLS code
+- implement algorithm 15 (Ed25519) now that it's in LibreSSL (awesome!)
 
 For 1.7.0 release
 
