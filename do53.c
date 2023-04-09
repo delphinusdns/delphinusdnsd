@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2022-2023 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -1535,8 +1535,8 @@ ddd_read_manna(struct imsgbuf *ibuf)
 	struct imsg imsg;
 	size_t n;
 	struct iwantmanna {
-		char zone[DNS_MAXNAME + 1];
 		pid_t pid;
+		char zone[DNS_MAXNAME + 1];
 	} iw;
 
 	/* grab the fd from imsg (so) */
@@ -1564,6 +1564,13 @@ ddd_read_manna(struct imsgbuf *ibuf)
 				0, 0, -1, &iw, sizeof(iw));
 
 			msgbuf_write(&ibuf->w);
+			break;
+	
+		case IMSG_HEREISMANNA_MESSAGE:
+			/* XXX no length checks? */
+			memcpy(&iw, imsg.data, sizeof(iw));
+			dolog(LOG_INFO, "got fd for zone \"%s\", closing it now...\n", iw.zone);
+			close(imsg.fd);
 			break;
 		default:
 			dolog(LOG_INFO, "unknown imsg hdr type %d received, but we wanted MANNA!\n", imsg.hdr.type);

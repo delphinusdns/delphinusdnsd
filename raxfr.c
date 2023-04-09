@@ -32,6 +32,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <syslog.h>
+#include <fcntl.h>
 
 #ifdef __linux__
 #include <grp.h>
@@ -2007,6 +2008,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 	struct timeval tv;
 	fd_set rset;
 	int max = 0;
+	int fd;
 
 	struct imsg imsg;
 	ssize_t         n, datalen;
@@ -2017,8 +2019,8 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 	int add_period = 0;
 
 	struct iwantmanna {
-		char zone[DNS_MAXNAME + 1];
 		pid_t pid;
+		char zone[DNS_MAXNAME + 1];
 	} iw;
 
 
@@ -2166,6 +2168,35 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 							 * filedescriptor
 							 */
 							dolog(LOG_INFO, "ok one manna for zone \"%s\" going to pid %d!\n", iw.zone, iw.pid);
+
+							SLIST_FOREACH(lrz, &rzones, rzone_entry) {
+								if (lrz->zonename == NULL)
+									continue;
+
+								if (strcmp(lrz->zonename, iw.zone) == 0) {
+									char *p;
+
+									p = strrchr(lrz->filename, '/');
+									if (p == NULL)
+										p = lrz->filename;
+									else
+										p++;
+
+									fd = open(p, O_RDONLY, 0);
+									if (fd == -1) {
+										dolog(LOG_INFO, "%s: %s\n", 
+											lrz->filename, strerror(errno));
+										break;
+									}
+								}
+							}
+							
+							imsg_compose(ibuf, IMSG_HEREISMANNA_MESSAGE,
+									0, 0, fd, &iw, sizeof(iw));
+
+							msgbuf_write(&ibuf->w);
+
+							
 							break;
 					case IMSG_NOTIFY_MESSAGE:
 						dn = malloc(datalen);
@@ -2200,7 +2231,6 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 												endspurt = 1;
 										}
 
-										idata = 1;
 										imsg_compose(ibuf, IMSG_IHAVEMANNA_MESSAGE,
 											0, 0, -1, lrz->zonename, 
 											strlen(lrz->zonename) + 1);

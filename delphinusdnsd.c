@@ -2561,6 +2561,7 @@ setup_cortex(struct imsgbuf *ibuf)
 {
 	int max = 0, sel;
 	int datalen, nomore = 0;
+	pid_t pid;
 
 	ssize_t n;
 	fd_set rset;
@@ -2700,6 +2701,19 @@ setup_cortex(struct imsgbuf *ibuf)
 								}
 							}
 							break;
+						case IMSG_HEREISMANNA_MESSAGE:
+
+							pid = unpack32((char *)&imsg.data);
+
+							SLIST_FOREACH(neup2, &neuronhead, entries) {
+								if (neup2->pid == pid) {
+									imsg_compose(&neup2->ibuf, IMSG_HEREISMANNA_MESSAGE, 0, 0, imsg.fd, imsg.data, datalen);
+									msgbuf_write(&neup2->ibuf.w);
+									break;
+								}
+							}
+							break;
+
 						case IMSG_FORWARD_TCP:
 							SLIST_FOREACH(neup2, &neuronhead, entries) {
 								if (neup2->desc == MY_IMSG_FORWARD)
