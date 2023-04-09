@@ -2682,16 +2682,14 @@ setup_cortex(struct imsgbuf *ibuf)
 						switch(imsg.hdr.type) {
 						case IMSG_IHAVEMANNA_MESSAGE:
 							SLIST_FOREACH(neup2, &neuronhead, entries) {
-								if (neup2->desc == MY_IMSG_UDP)
-									break;
+								if ((neup2->desc == MY_IMSG_UDP) ||
+									(neup2->desc == MY_IMSG_TCP) ||
+									(neup2->desc == MY_IMSG_TLS) ||
+									(neup2->desc == MY_IMSG_AXFR)) {
+									imsg_compose(&neup2->ibuf, IMSG_IHAVEMANNA_MESSAGE, 0, 0, -1, imsg.data, datalen);
+									msgbuf_write(&neup2->ibuf.w);
+								}
 							}
-							if (neup2 == NULL) {
-								dolog(LOG_INFO, "couldn't find UDP ibuf in cortex\n");
-								break;
-							}
-
-							imsg_compose(&neup2->ibuf, IMSG_IHAVEMANNA_MESSAGE, 0, 0, -1, imsg.data, datalen);
-							msgbuf_write(&neup2->ibuf.w);
 							break;
 						/* forward duplicated sockets to forward process */ 	
 						case IMSG_FORWARD_TCP:
