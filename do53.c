@@ -1533,7 +1533,11 @@ void
 ddd_read_manna(struct imsgbuf *ibuf)
 {
 	struct imsg imsg;
-	size_t n, datalen;
+	size_t n;
+	struct iwantmanna {
+		char zone[DNS_MAXNAME + 1];
+		pid_t pid;
+	} iw;
 
 	/* grab the fd from imsg (so) */
 	if (((n = imsg_read(ibuf)) == -1 && errno != EAGAIN) || n == 0) {
@@ -1550,15 +1554,16 @@ ddd_read_manna(struct imsgbuf *ibuf)
 			break;
 		}
 
-		datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
-		if (datalen != sizeof(int)) {
-			dolog(LOG_INFO, "wrong sized acceptmsg, continuing...\n");
-			return;
-		}
-
 		switch(imsg.hdr.type) {
 		case IMSG_IHAVEMANNA_MESSAGE:
-			dolog(LOG_INFO, "I have heard that replicant has manna (easter eggs?)!\n");
+			dolog(LOG_INFO, "asking for the zonefile \"%s\" via cortex\n", imsg.data);
+			strlcpy(iw.zone, imsg.data, sizeof(iw.zone));
+			iw.pid = getpid();
+
+			imsg_compose(ibuf, IMSG_IWANTMANNA_MESSAGE,
+				0, 0, -1, &iw, sizeof(iw));
+
+			msgbuf_write(&ibuf->w);
 			break;
 		default:
 			dolog(LOG_INFO, "unknown imsg hdr type %d received, but we wanted MANNA!\n", imsg.hdr.type);

@@ -2016,6 +2016,11 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 	int period, tot_refresh = 0, zonecount = 1;
 	int add_period = 0;
 
+	struct iwantmanna {
+		char zone[DNS_MAXNAME + 1];
+		pid_t pid;
+	} iw;
+
 
 #if __OpenBSD__
 	if (pledge("stdio wpath rpath cpath inet", NULL) < 0) {
@@ -2149,6 +2154,19 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 					datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
 
 					switch(imsg.hdr.type) {
+					case IMSG_IWANTMANNA_MESSAGE:
+							if (datalen != sizeof(iw)) {
+								dolog(LOG_INFO, "invalid IWANTMANNA request\n");
+								break;
+							}
+
+							memcpy(&iw, imsg.data, datalen);
+							/*
+							 * grab the pid of the process and give them the
+							 * filedescriptor
+							 */
+							dolog(LOG_INFO, "ok one manna for zone \"%s\" going to pid %d!\n", iw.zone, iw.pid);
+							break;
 					case IMSG_NOTIFY_MESSAGE:
 						dn = malloc(datalen);
 						if (dn == NULL) {
@@ -2184,7 +2202,9 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 
 										idata = 1;
 										imsg_compose(ibuf, IMSG_IHAVEMANNA_MESSAGE,
-											0, 0, -1, &idata, sizeof(idata));
+											0, 0, -1, lrz->zonename, 
+											strlen(lrz->zonename) + 1);
+
 										msgbuf_write(&ibuf->w);
 									} /* else serial ... */
 							} else {
