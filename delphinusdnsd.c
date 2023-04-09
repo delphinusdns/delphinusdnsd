@@ -2578,6 +2578,11 @@ setup_cortex(struct imsgbuf *ibuf)
 		SLIST_ENTRY(neuron) entries;
 	} *neup, *neup2, *neup3;
 
+	struct iwantmanna {
+		pid_t pid;
+		char zone[DNS_MAXNAME + 1];
+	};
+
 	SLIST_INIT(&neuronhead);
 
 	setproctitle("cortex [%s]", (identstring != NULL ? identstring : ""));
@@ -2703,7 +2708,10 @@ setup_cortex(struct imsgbuf *ibuf)
 							break;
 						case IMSG_HEREISMANNA_MESSAGE:
 
-							pid = unpack32((char *)&imsg.data);
+							if (datalen != sizeof(struct iwantmanna))
+								break;
+
+							pid = unpack32((char *)imsg.data);
 
 							SLIST_FOREACH(neup2, &neuronhead, entries) {
 								if (neup2->pid == pid) {
