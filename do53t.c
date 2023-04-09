@@ -398,7 +398,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		FD_SET(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1], &rset);
 		maxso = cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1];
 
-		if (ibuf->fd < maxso)
+		if (ibuf->fd > maxso)
 			maxso = ibuf->fd;
 
 		FD_SET(ibuf->fd, &rset);
