@@ -517,11 +517,12 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 			if (axfrport && axfrport != port)
 				FD_SET(cfg->axfr[i], &rset);
 
-			if (maxso < udp_ibuf->fd)
-				maxso = udp_ibuf->fd;
-
-			FD_SET(udp_ibuf->fd, &rset);
 		}
+
+		if (maxso < udp_ibuf->fd)
+			maxso = udp_ibuf->fd;
+
+		FD_SET(udp_ibuf->fd, &rset);
 	
 		tv.tv_sec = 10;
 		tv.tv_usec = 0;
