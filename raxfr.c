@@ -2235,6 +2235,11 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 							/* schedule restart */
 							schedule_restart(lrz->zonename, now + rand_restarttime());
 							endspurt = 1;
+
+							idata = 1;
+							imsg_compose(ibuf, IMSG_IHAVEMANNA_MESSAGE,
+								0, 0, -1, &idata, sizeof(idata));
+							msgbuf_write(&ibuf->w);
 						} else {
 							schedule_refresh(lrz->zonename, now + lrz->soa.refresh);
 						}
