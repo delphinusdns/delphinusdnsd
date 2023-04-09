@@ -2639,7 +2639,7 @@ setup_cortex(struct imsgbuf *ibuf)
 		if (sel <= 0)
 			continue;
 
-		SLIST_FOREACH(neup, &neuronhead, entries) {
+		SLIST_FOREACH_SAFE(neup, &neuronhead, entries, neup3) {
 			if (FD_ISSET(neup->ibuf.fd, &rset)) {
 				if ((n = imsg_read(&neup->ibuf)) < 0 && errno != EAGAIN) {
 					dolog(LOG_ERR, "imsg read failure %s\n", strerror(errno));
@@ -2876,7 +2876,7 @@ setup_cortex(struct imsgbuf *ibuf)
 						
 						memcpy((char *)&neup3->desc, (char *)imsg.data, sizeof(int));
 						neup3->pid = (pid_t)imsg.hdr.pid;
-#if DEBUG
+#if 1
 						dolog(LOG_INFO, "registered pid %u with description %d\n", neup3->pid, neup3->desc);
 #endif
 						imsg_init(&neup3->ibuf, imsg.fd);
