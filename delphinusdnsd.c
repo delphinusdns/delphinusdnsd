@@ -2674,7 +2674,7 @@ setup_cortex(struct imsgbuf *ibuf)
 						if (n == 0)
 							break;
 
-#if DEBUG
+#if 1 
 						dolog(LOG_INFO, "received imsg type %d from %d\n", imsg.hdr.type, imsg.hdr.pid);
 #endif
 						datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
@@ -2685,10 +2685,8 @@ setup_cortex(struct imsgbuf *ibuf)
 								if (neup2->desc == MY_IMSG_UDP)
 									break;
 							}
-							/* didn't find it?  skip */
 							if (neup2 == NULL) {
-								/* XXX this can't fail but if it does, throw so out */
-								close(imsg.fd);
+								dolog(LOG_INFO, "couldn't find UDP ibuf in cortex\n");
 								break;
 							}
 
