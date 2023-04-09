@@ -2694,7 +2694,7 @@ setup_cortex(struct imsgbuf *ibuf)
 						/* forward duplicated sockets to forward process */ 	
 						case IMSG_IWANTMANNA_MESSAGE:
 							SLIST_FOREACH(neup2, &neuronhead, entries) {
-								if ((neup2->desc == MY_IMSG_RAXFR)) {
+								if (neup2->desc == MY_IMSG_RAXFR) {
 									imsg_compose(&neup2->ibuf, IMSG_IWANTMANNA_MESSAGE, 0, 0, -1, imsg.data, datalen);
 									msgbuf_write(&neup2->ibuf.w);
 								}
