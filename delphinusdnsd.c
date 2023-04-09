@@ -622,7 +622,7 @@ main(int argc, char *argv[], char *environ[])
 	init_dnssec();
 	init_tsig();
 
-	if (parse_file(db, conffile, 0) < 0) {
+	if (parse_file(db, conffile, 0, -1) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
 		ddd_shutdown();
 		exit(1);

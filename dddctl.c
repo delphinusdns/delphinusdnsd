@@ -862,7 +862,7 @@ configtest(int argc, char *argv[])
 
 	/* now we start reading our configfile */
 		
-	if (parse_file(db, zonefile, flags) < 0) {
+	if (parse_file(db, zonefile, flags, -1) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
 		return 1;
 	}
@@ -1675,7 +1675,7 @@ bindfile(int argc, char *argv[])
 
 	/* now we start reading our configfile */
 		
-	if (parse_file(db, zonefile, flags) < 0) {
+	if (parse_file(db, zonefile, flags, -1) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
 		return 1;
 	}

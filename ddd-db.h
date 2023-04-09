@@ -41,7 +41,7 @@
 
 #define PARSEFILE_FLAG_NOSOCKET 	0x1
 #define PARSEFILE_FLAG_NOTSIGKEYS	0x2
-
+#define PARSEFILE_FLAG_ZONEFD		0x4
 
 #define IMSG_HELLO_MESSAGE  0		/* hello the primary process a few */
 #define IMSG_SPREAD_MESSAGE 1		/* spread a record to all childs */
@@ -504,7 +504,7 @@ int dddbclose(ddDB *);
 
 #define DDDB_NOTFOUND 	(-1)
 
-int parse_file(ddDB *db, char *, uint32_t);
+int parse_file(ddDB *db, char *, uint32_t, int);
 ddDB * opendatabase(ddDB *);
 
 /* dig stuff */

@@ -288,8 +288,8 @@ int		hex2bin(char *, int, char *);
 int             lgetc(int);
 struct tab * 	lookup(struct tab *, char *);
 int             lungetc(int);
-int 		parse_file(ddDB *, char *, uint32_t);
-struct file     *pushfile(const char *, int, int, int);
+int 		parse_file(ddDB *, char *, uint32_t, int);
+struct file     *pushfile(const char *, int, int, int, int);
 int             popfile(void);
 static int 	temp_inet_net_pton_ipv6(const char *, void *, size_t);
 int 		yyparse(void);
@@ -406,7 +406,7 @@ includes:
 		}
 
 		if (file->descend == DESCEND_YES) {
-			if ((nfile = pushfile($2, 0, DESCEND_YES, NO_RZONEFILE)) == NULL) {
+			if ((nfile = pushfile($2, 0, DESCEND_YES, NO_RZONEFILE, -1)) == NULL) {
 				fprintf(stderr, "failed to include file %s\n", $2);
 				free($2);
 				return (-1);
@@ -434,7 +434,7 @@ zincludes:
 		}
 
 		if (file->descend == DESCEND_YES) {
-			if ((nfile = pushfile($2, 0, DESCEND_NO, NO_RZONEFILE)) == NULL) {
+			if ((nfile = pushfile($2, 0, DESCEND_NO, NO_RZONEFILE, -1)) == NULL) {
 				fprintf(stderr, "failed to include file %s\n", $2);
 				free($2);
 				return (-1);
@@ -717,7 +717,7 @@ rzone:
 		}
 
 		if (file->descend == DESCEND_YES) {
-			if ((nfile = pushfile(lrz->filename, 0, DESCEND_NO, RZONEFILE)) == NULL) {
+			if ((nfile = pushfile(lrz->filename, 0, DESCEND_NO, RZONEFILE, -1)) == NULL) {
 				fprintf(stderr, "failed to include rzone file %s\n", lrz->filename);
 				return (-1);
 			}
@@ -2113,7 +2113,7 @@ yywrap()
 }
 
 int
-parse_file(ddDB *db, char *filename, uint32_t flags)
+parse_file(ddDB *db, char *filename, uint32_t flags, int fd)
 {
 	int errors = 0;
 
@@ -2126,17 +2126,20 @@ parse_file(ddDB *db, char *filename, uint32_t flags)
 	if (flags & PARSEFILE_FLAG_NOTSIGKEYS)
 		notsigs = 1;
 
-	cookiesecret_len = 128;		/* XXX 16? aka SIPHASH_KEY_LENGTH? */
-	cookiesecret = malloc(cookiesecret_len);
-	if (cookiesecret == NULL) {
-		dolog(LOG_ERR, "malloc: %s\n", strerror(errno));
-		return (-1);
-	}
-	arc4random_buf(cookiesecret, cookiesecret_len);
+	if ((flags & PARSEFILE_FLAG_ZONEFD) != PARSEFILE_FLAG_ZONEFD) {
+		cookiesecret_len = 128;		/* XXX 16 */
+		cookiesecret = malloc(cookiesecret_len);
+		if (cookiesecret == NULL) {
+			dolog(LOG_ERR, "malloc: %s\n", strerror(errno));
+			return (-1);
+		}
+		arc4random_buf(cookiesecret, cookiesecret_len);
 
-	(void)add_rzone();
+		(void)add_rzone();
+	} else
+		filename = NULL;
 
-        if ((file = pushfile(filename, 0, DESCEND_YES, NO_RZONEFILE)) == NULL) {
+        if ((file = pushfile(filename, 0, DESCEND_YES, NO_RZONEFILE, fd)) == NULL) {
                 return (-1);
         }
 
@@ -2151,18 +2154,22 @@ parse_file(ddDB *db, char *filename, uint32_t flags)
         popfile();
 
 
-	while (!TAILQ_EMPTY(&rzonefiles)) {
-		/* handle the rzone files */
-		topfile = file = TAILQ_FIRST(&rzonefiles);
+	if ((flags & PARSEFILE_FLAG_ZONEFD) != PARSEFILE_FLAG_ZONEFD) {
+		while (!TAILQ_EMPTY(&rzonefiles)) {
+			/* handle the rzone files */
+			topfile = file = TAILQ_FIRST(&rzonefiles);
 
-		if (yyparse() < 0) {
-			dolog(LOG_ERR, "error: %s line: %d\n", file->name, file->lineno);
-			return (-1);
+			if (yyparse() < 0) {
+				dolog(LOG_ERR, "error: %s line: %d\n", \
+					file->name, file->lineno);
+				return (-1);
+			}
+
+			errors = file->errors;
+			popfile();
 		}
-
-		errors = file->errors;
-		popfile();
-	}
+	} else
+		close(fd);
 
 	if (dnssec)
 		finalize_nsec3();
@@ -4429,29 +4436,31 @@ fill_zonemd(ddDB *db, char *name, char *type, int myttl, uint32_t serial, uint8_
 
 }
 struct file *
-pushfile(const char *name, int secret, int descend, int rzone)
+pushfile(const char *name, int secret, int descend, int rzone, int fd)
 {
 	struct stat sb;
         struct file     *nfile;
-	int fd;
 
         if ((nfile = calloc(1, sizeof(struct file))) == NULL) {
                 dolog(LOG_INFO, "warn: malloc\n");
                 return (NULL);
         }
-        if ((nfile->name = strdup(name)) == NULL) {
-                dolog(LOG_INFO, "warn: malloc\n");
-                free(nfile);
-                return (NULL);
-        }
-        if ((nfile->stream = fopen(nfile->name, "r")) == NULL) {
-                dolog(LOG_INFO, "warn: %s\n", nfile->name);
-                free(nfile->name);
-                free(nfile);
-		return (NULL);
-        }
+	if (name != NULL) {
+		if ((nfile->name = strdup(name)) == NULL) {
+			dolog(LOG_INFO, "warn: malloc\n");
+			free(nfile);
+			return (NULL);
+		}
+		if ((nfile->stream = fopen(nfile->name, "r")) == NULL) {
+			dolog(LOG_INFO, "warn: %s\n", nfile->name);
+			free(nfile->name);
+			free(nfile);
+			return (NULL);
+		}
 
-	fd = fileno(nfile->stream);
+		fd = fileno(nfile->stream);
+	}
+
 	if (fstat(fd, &sb) < 0) {
 		dolog(LOG_INFO, "warn: %s\n", strerror(errno));
 	}
