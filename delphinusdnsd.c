@@ -2559,7 +2559,7 @@ determine_glue(ddDB *db)
 void
 setup_cortex(struct imsgbuf *ibuf)
 {
-	int max = 0;
+	int max = 0, sel;
 	int datalen, nomore = 0;
 
 	ssize_t n;
@@ -2567,6 +2567,7 @@ setup_cortex(struct imsgbuf *ibuf)
 
 	struct imsg imsg;
 	struct passwd *pw;
+	struct timeval tv;
 
 	SLIST_HEAD(, neuron) neuronhead;
 	struct neuron {
@@ -2629,8 +2630,14 @@ setup_cortex(struct imsgbuf *ibuf)
 
 			FD_SET(neup->ibuf.fd, &rset);
 		}
+
+		tv.tv_sec = 1;
+		tv.tv_usec = 0;
 	
-		select(max + 1, &rset, NULL, NULL, NULL);
+		sel = select(max + 1, &rset, NULL, NULL, &tv);
+
+		if (sel <= 0)
+			continue;
 
 		SLIST_FOREACH(neup, &neuronhead, entries) {
 			if (FD_ISSET(neup->ibuf.fd, &rset)) {
