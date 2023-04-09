@@ -2674,7 +2674,7 @@ setup_cortex(struct imsgbuf *ibuf)
 						if (n == 0)
 							break;
 
-#if 1 
+#if DEBUG
 						dolog(LOG_INFO, "received imsg type %d from %d\n", imsg.hdr.type, imsg.hdr.pid);
 #endif
 						datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
@@ -2876,7 +2876,7 @@ setup_cortex(struct imsgbuf *ibuf)
 						
 						memcpy((char *)&neup3->desc, (char *)imsg.data, sizeof(int));
 						neup3->pid = (pid_t)imsg.hdr.pid;
-#if 1
+#if DEBUG
 						dolog(LOG_INFO, "registered pid %u with description %d\n", neup3->pid, neup3->desc);
 #endif
 						imsg_init(&neup3->ibuf, imsg.fd);

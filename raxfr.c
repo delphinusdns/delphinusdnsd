@@ -2181,6 +2181,11 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 												schedule_restart(lrz->zonename, now + rand_restarttime());
 												endspurt = 1;
 										}
+
+										idata = 1;
+										imsg_compose(ibuf, IMSG_IHAVEMANNA_MESSAGE,
+											0, 0, -1, &idata, sizeof(idata));
+										msgbuf_write(&ibuf->w);
 									} /* else serial ... */
 							} else {
 								humanconv = convert_name(dn, datalen);
