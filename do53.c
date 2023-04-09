@@ -136,6 +136,7 @@ int			intcmp(struct csnode *, struct csnode *);
 int			same_refused(u_char *, void *, int, void *, int);
 
 void			mainloop(struct cfg *, struct imsgbuf *);
+void			ddd_read_manna(struct imsgbuf *);
 
 extern struct reply_logic rlogic[];
 
@@ -515,6 +516,11 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 
 			if (axfrport && axfrport != port)
 				FD_SET(cfg->axfr[i], &rset);
+
+			if (maxso < udp_ibuf->fd)
+				maxso = udp_ibuf->fd;
+
+			FD_SET(udp_ibuf->fd, &rset);
 		}
 	
 		tv.tv_sec = 10;
@@ -539,6 +545,10 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 			nomore = 1;
 
 			continue;
+		}
+
+		if (FD_ISSET(udp_ibuf->fd, &rset)) {
+			ddd_read_manna(udp_ibuf);
 		}
 			
 		for (i = 0; i < cfg->sockcount; i++) {
@@ -1516,4 +1526,44 @@ same_refused(u_char *old_digest, void *buf, int len, void *address, int addrlen)
 		return (1);
 
 	return (0);
+}
+
+void
+ddd_read_manna(struct imsgbuf *ibuf)
+{
+	struct imsg imsg;
+	size_t n, datalen;
+
+	/* grab the fd from imsg (so) */
+	if (((n = imsg_read(ibuf)) == -1 && errno != EAGAIN) || n == 0) {
+		dolog(LOG_INFO, "got error from TCP accept child, it likely died, exit\n");
+		ddd_shutdown();
+		exit(1);
+	}
+
+	for (;;) {
+		if ((n = imsg_get(ibuf, &imsg)) == -1) {
+			break;
+		}
+		if (n == 0) {
+			break;
+		}
+
+		datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
+		if (datalen != sizeof(int)) {
+			dolog(LOG_INFO, "wrong sized acceptmsg, continuing...\n");
+			return;
+		}
+
+		switch(imsg.hdr.type) {
+		case IMSG_IHAVEMANNA_MESSAGE:
+			dolog(LOG_INFO, "I have heard that replicant has manna (easter eggs?)!\n");
+			break;
+		default:
+			dolog(LOG_INFO, "unknown imsg hdr type %d received, but we wanted MANNA!\n", imsg.hdr.type);
+			break;
+		}
+
+		imsg_free(&imsg);
+	}
 }

@@ -43,28 +43,31 @@
 #define PARSEFILE_FLAG_NOTSIGKEYS	0x2
 #define PARSEFILE_FLAG_ZONEFD		0x4
 
-#define IMSG_HELLO_MESSAGE  0		/* hello the primary process a few */
-#define IMSG_SPREAD_MESSAGE 1		/* spread a record to all childs */
-#define IMSG_XFR_MESSAGE    2		/* forward message to axfr proc */
-#define IMSG_PARSE_MESSAGE  4		/* pass message to pledge parser */
-#define IMSG_PARSEREPLY_MESSAGE 5	/* return message from pledge parser */
-#define IMSG_SHUTDOWN_MESSAGE 6		/* shut the server down */
-#define IMSG_RELOAD_MESSAGE 7		/* reload/restart the server */
-#define IMSG_PARSEAUTH_MESSAGE	8	/* parse message with auth required */
-#define	IMSG_NOTIFY_MESSAGE	9	/* notify our replicant engine */
-#define IMSG_SETUP_NEURON	10	/* set up a new imsg via fd passing */
-#define IMSG_CRIPPLE_NEURON	11	/* no new neurons are needed */
-#define IMSG_FORWARD_UDP	12	/* forward a UDP packet */
-#define IMSG_FORWARD_TCP	13	/* forward a TCP packet (with fd) */
-#define IMSG_RR_ATTACHED	14	/* an RR is sent through imsg */
-#define IMSG_PARSEERROR_MESSAGE 15	/* return error message from pledge parser */
-#define IMSG_DUMP_CACHE		16	/* dump the forward cache */
-#define IMSG_DUMP_CACHEREPLY	17	/* reply the dump of forward cache */
-#define IMSG_DUMP_CACHEREPLYEOF	18	/* end of messages */
-#define IMSG_FORWARD_TLS	19	/* forward a TLS packet XXX */
-#define IMSG_NOTIFY4_MESSAGE	20	/* request v4 descriptor */
-#define IMSG_NOTIFY6_MESSAGE	21	/* request v6 descriptor */
-#define IMSG_SENDFORME_MESSAGE	22	/* notify send for me */
+#define IMSG_HELLO_MESSAGE  		0 /* hello primary process a few */
+#define IMSG_SPREAD_MESSAGE 		1 /* spread a record to all childs */
+#define IMSG_XFR_MESSAGE    		2 /* forward message to axfr proc */
+#define IMSG_PARSE_MESSAGE  		4 /* pass message to pledge parser */
+#define IMSG_PARSEREPLY_MESSAGE 	5 /* return msg from pledge parser */
+#define IMSG_SHUTDOWN_MESSAGE 		6 /* shut the server down */
+#define IMSG_RELOAD_MESSAGE 		7 /* reload/restart the server */
+#define IMSG_PARSEAUTH_MESSAGE		8 /* parse message with auth required */
+#define	IMSG_NOTIFY_MESSAGE		9 /* notify our replicant engine */
+#define IMSG_SETUP_NEURON		10 /* set up new imsg via fd passing */
+#define IMSG_CRIPPLE_NEURON		11 /* no new neurons are needed */
+#define IMSG_FORWARD_UDP		12 /* forward a UDP packet */
+#define IMSG_FORWARD_TCP		13 /* forward a TCP packet (with fd) */
+#define IMSG_RR_ATTACHED		14 /* an RR is sent through imsg */
+#define IMSG_PARSEERROR_MESSAGE 	15 /* return error from pledge parser */
+#define IMSG_DUMP_CACHE			16 /* dump the forward cache */
+#define IMSG_DUMP_CACHEREPLY		17 /* reply the dump of forward cache */
+#define IMSG_DUMP_CACHEREPLYEOF		18 /* end of messages */
+#define IMSG_FORWARD_TLS		19 /* forward a TLS packet XXX */
+#define IMSG_NOTIFY4_MESSAGE		20 /* request v4 descriptor */
+#define IMSG_NOTIFY6_MESSAGE		21 /* request v6 descriptor */
+#define IMSG_SENDFORME_MESSAGE		22 /* notify send for me */
+#define IMSG_IHAVEMANNA_MESSAGE		23 /* notify a new zone is updated */
+#define IMSG_IWANTMANNA_MESSAGE 	24 /* request a new zone file */
+#define IMSG_HEREISMANNA_MESSAGE 	25 /* send the zone update descriptor */
 
 #define ERR_DROP	0x1
 #define ERR_NXDOMAIN	0x2

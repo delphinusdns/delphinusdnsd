@@ -2673,6 +2673,21 @@ setup_cortex(struct imsgbuf *ibuf)
 						datalen = imsg.hdr.len - IMSG_HEADER_SIZE;
 
 						switch(imsg.hdr.type) {
+						case IMSG_IHAVEMANNA_MESSAGE:
+							SLIST_FOREACH(neup2, &neuronhead, entries) {
+								if (neup2->desc == MY_IMSG_UDP)
+									break;
+							}
+							/* didn't find it?  skip */
+							if (neup2 == NULL) {
+								/* XXX this can't fail but if it does, throw so out */
+								close(imsg.fd);
+								break;
+							}
+
+							imsg_compose(&neup2->ibuf, IMSG_IHAVEMANNA_MESSAGE, 0, 0, -1, imsg.data, datalen);
+							msgbuf_write(&neup2->ibuf.w);
+							break;
 						/* forward duplicated sockets to forward process */ 	
 						case IMSG_FORWARD_TCP:
 							SLIST_FOREACH(neup2, &neuronhead, entries) {
