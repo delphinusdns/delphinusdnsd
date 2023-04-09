@@ -126,6 +126,7 @@ extern void 		pack32(char *, uint32_t);
 extern void 		pack8(char *, uint8_t);
 extern void 		parseloop(struct cfg *, struct imsgbuf *, int);
 extern void 		unpack(char *, char *, int);
+extern void		ddd_read_manna(struct imsgbuf *);
 
 void 			tlsloop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 
@@ -328,6 +329,11 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 			FD_SET(cfg->tls[i], &rset);
 		}
 
+		if (ibuf->fd > maxso)
+			maxso = ibuf->fd;
+	
+		FD_SET(ibuf->fd, &rset);
+
 		TAILQ_FOREACH(tlsnp, &tlshead, tlsentries) {
 			if (maxso < tlsnp->so)
 				maxso = tlsnp->so;
@@ -363,6 +369,10 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				}
 			}
 			continue;
+		}
+
+		if (FD_ISSET(ibuf->fd, &rset)) {
+			ddd_read_manna(ibuf);
 		}
 			
 		for (i = 0; i < cfg->sockcount; i++) {

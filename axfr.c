@@ -120,6 +120,7 @@ extern struct rrset *   find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern uint8_t          find_region(struct sockaddr_storage *, int);
 extern struct imsgbuf *        register_cortex(struct imsgbuf *, int);
 extern size_t		plength(void *, void *);
+extern void		ddd_read_manna(struct imsgbuf *);
 
 
 
@@ -508,12 +509,10 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 
 		FD_SET(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1], &rset);
 
-#if 0
 		/* this is the cortex descriptor */
 		FD_SET(ibuf->fd, &rset);
 		if (ibuf->fd > maxso)
 			maxso = ibuf->fd;
-#endif
 		
 		if (notify) {
 			/*
@@ -596,6 +595,10 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 			if (errno != EINTR)
 				dolog(LOG_INFO, "select: %s\n", strerror(errno));
 			continue;
+		}
+
+		if (FD_ISSET(ibuf->fd, &rset)) {
+			ddd_read_manna(ibuf);
 		}
 
 		if (FD_ISSET(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1], &rset)) {

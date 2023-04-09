@@ -124,6 +124,7 @@ extern void 		pack32(char *, uint32_t);
 extern void 		pack8(char *, uint8_t);
 extern void 		parseloop(struct cfg *, struct imsgbuf *, int);
 extern void 		unpack(char *, char *, int);
+extern void		ddd_read_manna(struct imsgbuf *);
 
 void 			tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 int			acceptloop(struct cfg *, struct imsgbuf *, int *);
@@ -397,6 +398,11 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		FD_SET(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1], &rset);
 		maxso = cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1];
 
+		if (ibuf->fd < maxso)
+			maxso = ibuf->fd;
+
+		FD_SET(ibuf->fd, &rset);
+
 		conncnt = 0;
 		TAILQ_FOREACH(tcpnp, &tcphead, tcpentries) {
 			if (maxso < tcpnp->so)
@@ -427,6 +433,10 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				}
 			}
 			continue;
+		}
+
+		if (FD_ISSET(ibuf->fd, &rset)) {
+			ddd_read_manna(ibuf);
 		}
 			
 		if (FD_ISSET(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1], &rset)) {
