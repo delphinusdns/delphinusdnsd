@@ -4458,6 +4458,13 @@ pushfile(const char *name, int secret, int descend, int rzone, int fd)
 		}
 
 		fd = fileno(nfile->stream);
+	} else {
+		nfile->stream = fdopen(fd, "r");
+		if (nfile->stream == NULL) {
+			dolog(LOG_INFO, "warn: fdopen() %s\n", strerror(errno));
+			free(nfile);
+			return (NULL);
+		}
 	}
 
 	if (fstat(fd, &sb) < 0) {
