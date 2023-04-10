@@ -4009,8 +4009,9 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 	ns_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-		if (rrp->zonenumber != zonenumberx)
+		if (rrp->zonenumber != zonenumberx) {
 			continue;
+		}
 		memcpy(&reply[outlen], rbt1->zone, rbt1->zonelen);
 		answer = (struct answer *)(&reply[outlen] + rbt1->zonelen);
 		answer->type = htons(DNS_TYPE_NS);
@@ -5509,8 +5510,9 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 	txt_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-		if (rrp->zonenumber != zonenumberx)
+		if (rrp->zonenumber != zonenumberx) {
 			continue;
+		}
 		/*
 		 * answer->name is a pointer to the request (0xc00c) 
 		 */
@@ -8167,8 +8169,10 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	if ((rrset = find_rr(rbt, DNS_TYPE_DNSKEY)) != 0) {
 		dnskey_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-			if (rrp->zonenumber != zonenumberx)
+			if (rrp->zonenumber != zonenumberx) {
+				dolog(LOG_INFO, "rrp zonenumber %lu vs. %lu\n", rrp->zonenumber, zonenumberx);
 				continue;
+			}
 			if (offset + q->hdr->namelen > rlen)
 				goto truncate;
 

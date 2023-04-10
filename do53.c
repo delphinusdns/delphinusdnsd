@@ -131,9 +131,14 @@ extern void		tlsloop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 extern void 		unpack(char *, char *, int);
 extern int 		merge_db(ddDB *, ddDB *, char *, int);
 extern int		dddbclose(ddDB *db);
+extern void 		delete_zone(char *name, int len, uint32_t);
+extern int		init_entlist(ddDB *);
+extern int		determine_glue(ddDB *db);
+
 
 int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, char *, uint16_t *, uint16_t *, uint16_t *);
 int			add_cache(struct querycache *, char *, int, struct question *,  char *, int, uint16_t);
+void			invalidate_cache(void);
 uint16_t		crc16(uint8_t *, int);
 int			intcmp(struct csnode *, struct csnode *);
 int			same_refused(u_char *, void *, int, void *, int);
@@ -189,6 +194,7 @@ extern char *identstring;
 extern pid_t *ptr;
 extern long glob_time_offset;
 extern int tls;
+extern uint32_t zonenumber;
 
 
 /*
@@ -559,6 +565,19 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				dddbclose(cfg->db);
 				cfg->db = newdb;
 				dolog(LOG_INFO, "a new database was merged\n");
+				invalidate_cache();
+				dolog(LOG_INFO, "cache is invalidated\n");
+				if (zonecount && determine_glue(cfg->db) < 0) {
+					dolog(LOG_INFO, "determine_glue() failed\n");
+					ddd_shutdown();
+					exit(1);
+				}
+
+				if (zonecount && init_entlist(cfg->db) < 0) {
+					dolog(LOG_INFO, "creating entlist failed\n");
+					ddd_shutdown();
+					exit(1);
+				}
 			}
 		}
 			
@@ -1410,6 +1429,24 @@ next:
 	return 0;
 }
 
+/*
+ * INVALIDATE_CACHE - break the cache when we need to
+ */
+
+void
+invalidate_cache(void)
+{
+	struct csnode *n;
+	struct csentry *np;
+
+	RB_FOREACH(n, qctree, &qchead) {
+		TAILQ_FOREACH(np, &n->head, entries) {
+			np->cs->crc = 0xffff;
+			np->cs->replylen = 0xffff;
+		}
+	}
+}
+
 int
 reply_cache(int so, struct sockaddr *sa, int salen, struct querycache *qc, char *buf, int len, char *dn, uint16_t *class, uint16_t *type, uint16_t *crc)
 {
@@ -1589,12 +1626,6 @@ ddd_read_manna(ddDB *db, struct imsgbuf *ibuf)
 				return NULL;
 			}
 
-			if (parse_file(newdb, NULL, PARSEFILE_FLAG_ZONEFD, imsg.fd) < 0) {
-				close(imsg.fd);
-				dddbclose(newdb);
-				dolog(LOG_INFO, "parsing the new zonefile failed\n");
-				return NULL;
-			}
 			zonename = dns_label(iw.zone, &zonenamelen);
 			if (zonename == NULL) {
 				close(imsg.fd);
@@ -1602,13 +1633,18 @@ ddd_read_manna(ddDB *db, struct imsgbuf *ibuf)
 				dolog(LOG_INFO, "dns_label in zonefile failed\n");
 				return NULL;
 			}
-				
-			if (merge_db(db, newdb, zonename, zonenamelen) < 0) {
+
+			delete_zone(zonename, zonenamelen, zonenumber - 1);
+
+			if (parse_file(newdb, NULL, PARSEFILE_FLAG_ZONEFD, imsg.fd) < 0) {
 				close(imsg.fd);
 				dddbclose(newdb);
-				dolog(LOG_INFO, "merge_db() failed\n");
+				dolog(LOG_INFO, "parsing the new zonefile failed\n");
 				return NULL;
 			}
+
+
+			(void)merge_db(db, newdb, zonename, zonenamelen);
 				
 			close(imsg.fd);
 			imsg_free(&imsg);

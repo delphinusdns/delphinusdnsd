@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2020-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -54,6 +54,7 @@ int have_zone(char *zonename, int zonelen);
 void populate_zone(ddDB *db);
 int zonecmp(struct zoneentry *, struct zoneentry *);
 struct zoneentry * zone_findzone(struct rbtree *);
+void delete_zone(char *name, int len, uint32_t);
 
 extern void 		dolog(int, char *, ...);
 extern char * dns_label(char *, int *);
@@ -69,10 +70,33 @@ RB_GENERATE(zonetree, zoneentry, zone_entry, zonecmp);
 
 struct walkentry *we1, *wep;
 
+
+void
+delete_zone(char *name, int len, uint32_t zonenumber)
+{
+	struct zoneentry *res, find;
+
+	memcpy(find.name, name, len);
+	find.namelen = len;
+
+	if ((res = RB_FIND(zonetree, &zonehead, &find)) == NULL) {
+		return;
+	}
+
+	TAILQ_FOREACH_SAFE(wep, &res->walkhead, walk_entry, we1) {
+		TAILQ_REMOVE(&res->walkhead, wep, walk_entry);
+		free(wep);
+	}
+	RB_REMOVE(zonetree, &zonehead, res);
+	free (res);
+
+	return;
+}
+
 int
 insert_zone(char *zonename)
 {
-	struct zoneentry *zep;
+	struct zoneentry *zep, *res, find;
 	int len;
 	char *tmp;
 
@@ -81,13 +105,27 @@ insert_zone(char *zonename)
 		return -1;
 	}	
 
+	tmp = dns_label(zonename, &len);
+	if (tmp == NULL) {
+		return -1;
+	}
+
+	memcpy(find.name, tmp, len);
+	find.namelen = len;
+
+	if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
+		res->zonenumber = zonenumber;	/* recalc zonenumber */
+		return 0;
+	}
+
+	/* we didn't already find a zone entry, make a new one */
+
 	zep = malloc(sizeof(struct zoneentry));
 	if (zep == NULL) {
 		dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
 		return -1;
 	}
 
-	tmp = dns_label(zonename, &len);
 	zep->namelen = len;
 	memcpy(zep->name, tmp, len);
 	free(tmp);

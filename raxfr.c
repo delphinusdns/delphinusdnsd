@@ -1997,20 +1997,20 @@ out:
 void
 replicantloop(ddDB *db, struct imsgbuf *ibuf)
 {
-	struct rzone *lrz, *lrz0;
 	time_t now, lastnow;
 	int sel, endspurt = 0;
-	int idata;
 	int64_t serial;
 	struct rbtree *rbt;
 	struct rrset *rrset;
 	struct rr *rrp;
 	struct timeval tv;
+	struct rzone *lrz, *lrz0;
+	struct stat sb;
+	struct imsg imsg;
 	fd_set rset;
 	int max = 0;
 	int fd;
 
-	struct imsg imsg;
 	ssize_t         n, datalen;
 	char *dn = NULL;	
 	char *humanconv = NULL;
@@ -2190,6 +2190,9 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 									}
 								}
 							}
+
+							fstat(fd, &sb);
+							dolog(LOG_INFO, "inode == %lu\n", sb.st_ino);
 							
 							imsg_compose(ibuf, IMSG_HEREISMANNA_MESSAGE,
 									0, 0, fd, &iw, sizeof(iw));
@@ -2229,13 +2232,13 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 										} else {
 												schedule_restart(lrz->zonename, now + rand_restarttime());
 												endspurt = 1;
+												imsg_compose(ibuf, IMSG_IHAVEMANNA_MESSAGE,
+													0, 0, -1, lrz->zonename, 
+													strlen(lrz->zonename) + 1);
+
+												msgbuf_write(&ibuf->w);
 										}
 
-										imsg_compose(ibuf, IMSG_IHAVEMANNA_MESSAGE,
-											0, 0, -1, lrz->zonename, 
-											strlen(lrz->zonename) + 1);
-
-										msgbuf_write(&ibuf->w);
 									} /* else serial ... */
 							} else {
 								humanconv = convert_name(dn, datalen);
@@ -2291,9 +2294,10 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 							schedule_restart(lrz->zonename, now + rand_restarttime());
 							endspurt = 1;
 
-							idata = 1;
 							imsg_compose(ibuf, IMSG_IHAVEMANNA_MESSAGE,
-								0, 0, -1, &idata, sizeof(idata));
+								0, 0, -1, lrz->zonename, 
+								strlen(lrz->zonename) + 1);
+
 							msgbuf_write(&ibuf->w);
 						} else {
 							schedule_refresh(lrz->zonename, now + lrz->soa.refresh);
@@ -2336,9 +2340,10 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 							schedule_restart(lrz->zonename, now + rand_restarttime());
 							endspurt = 1;
 
-							idata = 1;
 							imsg_compose(ibuf, IMSG_IHAVEMANNA_MESSAGE,
-								0, 0, -1, &idata, sizeof(idata));
+								0, 0, -1, lrz->zonename, 
+								strlen(lrz->zonename) + 1);
+
 							msgbuf_write(&ibuf->w);
 
 					  } else {
@@ -2351,12 +2356,14 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 					/* we hit a scheduling on restarting, nothing can save you now! */
 					dolog(LOG_INFO, "I'm supposed to restart now, RESTART\n");
 
+#if 0
 					idata = 1;
 					imsg_compose(ibuf, IMSG_RELOAD_MESSAGE, 
 						0, 0, -1, &idata, sizeof(idata));
 					msgbuf_write(&ibuf->w);
 					for (;;)
 						sleep(1);
+#endif
 				}
 		
 			} 
@@ -2400,6 +2407,8 @@ schedule_retry(char *zonename, time_t seconds)
 static void
 schedule_restart(char *zonename, time_t seconds)
 {
+
+	return; /* XXX turned off for now */
 
 	LIST_FOREACH(sp0, &myschedules, myschedule_entry) {
 		if (sp0->action == SCHEDULE_ACTION_RESTART)

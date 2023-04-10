@@ -62,6 +62,7 @@ uint32_t match_zoneglue(struct rbtree *);
 int rr_duplicate(ddDB *, char *, int, uint16_t, char *);
 int domaincmp(struct node *, struct node *);
 int merge_db(ddDB *, ddDB *, char *, int);
+struct rbtree * create_rr_ex(ddDB *, char *, int, int, void *, uint32_t, uint16_t, int);
 
 extern void	dolog(int, char *, ...);
 extern char *	convert_name(char *, int);
@@ -172,6 +173,12 @@ dddbclose(ddDB *db)
 struct rbtree *
 create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, uint16_t rdlen)
 {
+	return (create_rr_ex(db, name, len, type, rdata, ttl, rdlen, -1));
+}
+
+struct rbtree *
+create_rr_ex(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, uint16_t rdlen, int zoneno)
+{
 	ddDBT key, data;
 	struct rbtree *rbt = NULL;
 	struct rrset *rrset = NULL;
@@ -266,7 +273,10 @@ create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, ui
 	}
 	myrr->changed = time(NULL);
 	myrr->rdlen = rdlen;
-	myrr->zonenumber = zonenumber - 1;          /* needed for glued ns */
+	if (zoneno == (uint32_t)-1)
+		myrr->zonenumber = zonenumber - 1; /* needed for glued ns */
+	else
+		myrr->zonenumber = zoneno;
 
 	rrset->ttl = ttl;
 
@@ -703,25 +713,24 @@ merge_db(ddDB *db, ddDB *db_dest, char *name, int len)
 	struct rrset *rp, *rp0, *rp2;
 	struct rr *rt1 = NULL, *rt2 = NULL;
 	struct node *walk, *walk0;
-	uint32_t zonenumber;
+	uint32_t zoneno;
 
 	rbt = find_rrset(db, name, len);
 	if (rbt == NULL) {
-		return 0;	
+		return -1;	
 	}
 
 	rp = find_rr(rbt, DNS_TYPE_SOA);
 	if (rp == NULL) {
-		return 0;
+		return -1;
 	}
 
 	rt1 = TAILQ_FIRST(&rp->rr_head);
 	if (rt1 == NULL)
-		return 0;
+		return -1;
 
-	zonenumber = rt1->zonenumber;
+	zoneno = rt1->zonenumber;
 
-	/* expire these */
 	RB_FOREACH_SAFE(walk, domaintree, &db->head, walk0) {
 		rbt = (struct rbtree *)walk->data;
 		if (rbt == NULL)
@@ -733,16 +742,17 @@ merge_db(ddDB *db, ddDB *db_dest, char *name, int len)
 				goto nextrbt;
 			}
 			TAILQ_FOREACH_SAFE(rt1, &rp2->rr_head, entries, rt2) {
-				if (rt1->zonenumber == zonenumber)
+				if (rt1->zonenumber == zoneno)
 					goto nextrbt;
 				create_rr(db_dest, rbt->zone, rbt->zonelen, rp->rrtype, rt1->rdata, rp->ttl, rt1->rdlen);
 			}
+
 		}
 
 nextrbt:
 		continue;
 	}
 
-	return 0;
+	return zonenumber;
 }
 

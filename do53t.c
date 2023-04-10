@@ -126,6 +126,9 @@ extern void 		parseloop(struct cfg *, struct imsgbuf *, int);
 extern void 		unpack(char *, char *, int);
 extern ddDB *		ddd_read_manna(ddDB *, struct imsgbuf *);
 extern int		dddbclose(ddDB *);
+extern int              init_entlist(ddDB *);
+extern int              determine_glue(ddDB *db);
+
 
 void 			tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 int			acceptloop(struct cfg *, struct imsgbuf *, int *);
@@ -444,6 +447,17 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				dddbclose(cfg->db);
 				cfg->db = newdb;
 				dolog(LOG_INFO, "a new TCP database was merged\n");
+				if (zonecount && determine_glue(cfg->db) < 0) {
+					dolog(LOG_INFO, "determine_glue() failed\n");
+					ddd_shutdown();
+					exit(1);
+				}
+
+				if (zonecount && init_entlist(cfg->db) < 0) {
+					dolog(LOG_INFO, "creating entlist failed\n");
+					ddd_shutdown();
+					exit(1);
+				}
 			}
 		}
 			

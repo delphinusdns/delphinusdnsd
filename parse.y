@@ -291,7 +291,7 @@ int             lungetc(int);
 int 		parse_file(ddDB *, char *, uint32_t, int);
 struct file     *pushfile(const char *, int, int, int, int);
 void		cleanup_files(void);
-int             popfile(void);
+int             popfile(int);
 static int 	temp_inet_net_pton_ipv6(const char *, void *, size_t);
 int 		yyparse(void);
 static struct rzone * add_rzone(void);
@@ -2153,7 +2153,7 @@ parse_file(ddDB *db, char *filename, uint32_t flags, int fd)
 		return (-1);
 	}
         errors = file->errors;
-        popfile();
+        popfile(0);
 
 
 	if ((flags & PARSEFILE_FLAG_ZONEFD) != PARSEFILE_FLAG_ZONEFD) {
@@ -2168,13 +2168,14 @@ parse_file(ddDB *db, char *filename, uint32_t flags, int fd)
 			}
 
 			errors = file->errors;
-			popfile();
+			popfile(1);
 		}
 	} 
 
 	if (dnssec)
 		finalize_nsec3();
 
+	dolog(LOG_INFO, "cleaning files\n");
 	cleanup_files();
 
 #if DEBUG
@@ -4525,7 +4526,7 @@ lgetc(int quotec)
                 if ((c = getc(file->stream)) == EOF) {
                         yyerror("reached end of file while parsing "
                             "quoted string");
-                       if (file == topfile || popfile() == EOF)
+                       if (file == topfile || popfile(0) == EOF)
                                 return (EOF);
                         return (quotec);
                 }
@@ -4533,21 +4534,27 @@ lgetc(int quotec)
         }
 
         while ((c = getc(file->stream)) == EOF) {
-                if (file == topfile || popfile() == EOF)
+                if (file == topfile || popfile(0) == EOF)
                         return (EOF);
         }
         return (c);
 }
 
 int
-popfile(void)
+popfile(int rzone)
 {
-        struct file     *prev;
+        struct file     *prev = NULL;
 
-        if ((prev = TAILQ_PREV(file, files, file_entry)) != NULL)
-                prev->errors += file->errors;
+	if (rzone) {
+		if ((prev = TAILQ_PREV(file, rzonefiles, file_entry)) != NULL)
+			prev->errors += file->errors;
+        	TAILQ_REMOVE(&rzonefiles, file, file_entry);
+	} else {
+		if ((prev = TAILQ_PREV(file, files, file_entry)) != NULL)
+			prev->errors += file->errors;
+        	TAILQ_REMOVE(&files, file, file_entry);
+	}
 
-        TAILQ_REMOVE(&files, file, file_entry);
         fclose(file->stream);
         free(file->name);
         free(file);
@@ -4560,6 +4567,11 @@ cleanup_files(void)
 {
 	while ((file = TAILQ_FIRST(&files))) {
         	TAILQ_REMOVE(&files, file, file_entry);
+		free(file->name);
+		free(file);
+	}
+	while ((file = TAILQ_FIRST(&rzonefiles))) {
+        	TAILQ_REMOVE(&rzonefiles, file, file_entry);
 		free(file->name);
 		free(file);
 	}
