@@ -2005,7 +2005,9 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 	struct rr *rrp;
 	struct timeval tv;
 	struct rzone *lrz, *lrz0;
+#if DEBUG
 	struct stat sb;
+#endif
 	struct imsg imsg;
 	fd_set rset;
 	int max = 0;
@@ -2191,8 +2193,10 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 								}
 							}
 
+#if DEBUG
 							fstat(fd, &sb);
 							dolog(LOG_INFO, "inode == %lu\n", sb.st_ino);
+#endif
 							
 							imsg_compose(ibuf, IMSG_HEREISMANNA_MESSAGE,
 									0, 0, fd, &iw, sizeof(iw));
