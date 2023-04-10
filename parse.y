@@ -2168,8 +2168,7 @@ parse_file(ddDB *db, char *filename, uint32_t flags, int fd)
 			errors = file->errors;
 			popfile();
 		}
-	} else
-		close(fd);
+	} 
 
 	if (dnssec)
 		finalize_nsec3();

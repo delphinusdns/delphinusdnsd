@@ -83,6 +83,7 @@
 /* prototypes */
 
 extern char 		*convert_name(char *, int);
+extern char     	*dns_label(char *, int *);
 extern char *		get_dns_type(int, int);
 extern int		free_question(struct question *);
 extern int		reply_nodata(struct sreply *, int *, ddDB *);
@@ -128,6 +129,8 @@ extern void 		parseloop(struct cfg *, struct imsgbuf *, int);
 extern void 		tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 extern void		tlsloop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 extern void 		unpack(char *, char *, int);
+extern int 		merge_db(ddDB *, ddDB *, char *, int);
+extern int		dddbclose(ddDB *db);
 
 int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, char *, uint16_t *, uint16_t *, uint16_t *);
 int			add_cache(struct querycache *, char *, int, struct question *,  char *, int, uint16_t);
@@ -136,7 +139,7 @@ int			intcmp(struct csnode *, struct csnode *);
 int			same_refused(u_char *, void *, int, void *, int);
 
 void			mainloop(struct cfg *, struct imsgbuf *);
-void			ddd_read_manna(struct imsgbuf *);
+ddDB *			ddd_read_manna(ddDB *, struct imsgbuf *);
 
 extern struct reply_logic rlogic[];
 
@@ -549,7 +552,14 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		}
 
 		if (FD_ISSET(udp_ibuf->fd, &rset)) {
-			ddd_read_manna(udp_ibuf);
+			ddDB *newdb;
+
+			newdb = ddd_read_manna(cfg->db, udp_ibuf);
+			if (newdb != NULL) {
+				dddbclose(cfg->db);
+				cfg->db = newdb;
+				dolog(LOG_INFO, "a new database was merged\n");
+			}
 		}
 			
 		for (i = 0; i < cfg->sockcount; i++) {
@@ -1529,15 +1539,18 @@ same_refused(u_char *old_digest, void *buf, int len, void *address, int addrlen)
 	return (0);
 }
 
-void
-ddd_read_manna(struct imsgbuf *ibuf)
+ddDB *
+ddd_read_manna(ddDB *db, struct imsgbuf *ibuf)
 {
+	ddDB *newdb;
 	struct imsg imsg;
 	size_t n;
 	struct iwantmanna {
 		pid_t pid;
 		char zone[DNS_MAXNAME + 1];
 	} iw;
+	char *zonename = NULL;
+	int zonenamelen;
 
 	/* grab the fd from imsg (so) */
 	if (((n = imsg_read(ibuf)) == -1 && errno != EAGAIN) || n == 0) {
@@ -1570,7 +1583,37 @@ ddd_read_manna(struct imsgbuf *ibuf)
 			/* XXX no length checks? */
 			memcpy(&iw, imsg.data, sizeof(iw));
 			dolog(LOG_INFO, "got fd for zone \"%s\", closing it now...\n", iw.zone);
+			newdb = dddbopen();
+			if (newdb == NULL) {
+				close(imsg.fd);
+				return NULL;
+			}
+
+			if (parse_file(newdb, NULL, PARSEFILE_FLAG_ZONEFD, imsg.fd) < 0) {
+				close(imsg.fd);
+				dddbclose(newdb);
+				dolog(LOG_INFO, "parsing the new zonefile failed\n");
+				return NULL;
+			}
+			zonename = dns_label(iw.zone, &zonenamelen);
+			if (zonename == NULL) {
+				close(imsg.fd);
+				dddbclose(newdb);
+				dolog(LOG_INFO, "dns_label in zonefile failed\n");
+				return NULL;
+			}
+				
+			if (merge_db(db, newdb, zonename, zonenamelen) < 0) {
+				close(imsg.fd);
+				dddbclose(newdb);
+				dolog(LOG_INFO, "merge_db() failed\n");
+				return NULL;
+			}
+				
 			close(imsg.fd);
+			imsg_free(&imsg);
+			free(zonename);
+			return (newdb);
 			break;
 		default:
 			dolog(LOG_INFO, "unknown imsg hdr type %d received, but we wanted MANNA!\n", imsg.hdr.type);
@@ -1579,4 +1622,6 @@ ddd_read_manna(struct imsgbuf *ibuf)
 
 		imsg_free(&imsg);
 	}
+
+	return (NULL);
 }

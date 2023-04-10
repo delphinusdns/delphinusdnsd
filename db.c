@@ -48,19 +48,20 @@
 #include "ddd-db.h"
 
 struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
-struct rbtree * find_rrset(ddDB *db, char *name, int len);
-struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
-struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
-int add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata);
-int display_rr(struct rrset *rrset);
-int rotate_rr(struct rrset *rrset);
-void flag_rr(struct rbtree *rbt, uint32_t flag);
+struct rbtree * find_rrset(ddDB *, char *, int);
+struct rbtree * find_rrsetwild(ddDB *, char *, int);
+struct rrset * find_rr(struct rbtree *, uint16_t);
+int add_rr(struct rbtree *, char *, int, uint16_t, void *);
+int display_rr(struct rrset *);
+int rotate_rr(struct rrset *);
+void flag_rr(struct rbtree *, uint32_t);
 int expire_rr(ddDB *, char *, int, uint16_t, time_t);
 int expire_db(ddDB *, int);
 void remove_rbt(struct rbtree *);
-uint32_t match_zoneglue(struct rbtree *rbt);
+uint32_t match_zoneglue(struct rbtree *);
 int rr_duplicate(ddDB *, char *, int, uint16_t, char *);
-int domaincmp(struct node *e1, struct node *e2);
+int domaincmp(struct node *, struct node *);
+int merge_db(ddDB *, ddDB *, char *, int);
 
 extern void	dolog(int, char *, ...);
 extern char *	convert_name(char *, int);
@@ -689,3 +690,59 @@ rr_duplicate(ddDB *db, char *name, int len, uint16_t type, char *data)
 
 	return (0);
 }
+
+/*
+ * MERGE_DB - merge a database except for zone indicated by name
+ *
+ */
+
+int
+merge_db(ddDB *db, ddDB *db_dest, char *name, int len)
+{
+	struct rbtree *rbt = NULL;
+	struct rrset *rp, *rp0, *rp2;
+	struct rr *rt1 = NULL, *rt2 = NULL;
+	struct node *walk, *walk0;
+	uint32_t zonenumber;
+
+	rbt = find_rrset(db, name, len);
+	if (rbt == NULL) {
+		return 0;	
+	}
+
+	rp = find_rr(rbt, DNS_TYPE_SOA);
+	if (rp == NULL) {
+		return 0;
+	}
+
+	rt1 = TAILQ_FIRST(&rp->rr_head);
+	if (rt1 == NULL)
+		return 0;
+
+	zonenumber = rt1->zonenumber;
+
+	/* expire these */
+	RB_FOREACH_SAFE(walk, domaintree, &db->head, walk0) {
+		rbt = (struct rbtree *)walk->data;
+		if (rbt == NULL)
+			continue;
+
+		TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
+			rp2 = find_rr(rbt, rp->rrtype);
+			if (rp2 == NULL) {
+				goto nextrbt;
+			}
+			TAILQ_FOREACH_SAFE(rt1, &rp2->rr_head, entries, rt2) {
+				if (rt1->zonenumber == zonenumber)
+					goto nextrbt;
+				create_rr(db_dest, rbt->zone, rbt->zonelen, rp->rrtype, rt1->rdata, rp->ttl, rt1->rdlen);
+			}
+		}
+
+nextrbt:
+		continue;
+	}
+
+	return 0;
+}
+
