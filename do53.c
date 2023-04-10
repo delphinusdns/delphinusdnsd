@@ -150,8 +150,7 @@ int			same_refused(u_char *, void *, int, void *, int);
 void			mainloop(struct cfg *, struct imsgbuf *);
 
 
-struct iwqueue *iwq, *iwq0, *iwq1;
-
+extern struct iwqueue *iwq, *iwq0, *iwq1;
 extern struct reply_logic rlogic[];
 
 /* trees */

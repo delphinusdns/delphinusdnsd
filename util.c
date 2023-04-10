@@ -346,8 +346,8 @@ RB_HEAD(mandatorytree, mandatorynode) mandatoryhead = RB_INITIALIZER(&mandatoryh
 RB_PROTOTYPE(mandatorytree, mandatorynode, entry, param_mcmp)
 RB_GENERATE(mandatorytree, mandatorynode, entry, param_mcmp)
 
-extern TAILQ_HEAD(, iwqueue) iwqhead;
-extern struct iwqueue *iwq, *iwq0, *iwq1;
+TAILQ_HEAD(, iwqueue) iwqhead;
+struct iwqueue *iwq, *iwq0, *iwq1;
 
 
 /*

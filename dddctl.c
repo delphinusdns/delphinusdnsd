@@ -133,8 +133,8 @@ char *tls_keyfile = NULL;
 char *tls_protocols = NULL;
 char *tls_ciphers = NULL;
 
-TAILQ_HEAD(, iwqueue) iwqhead;
-struct iwqueue *iwq, *iwq0, *iwq1;
+extern TAILQ_HEAD(, iwqueue) iwqhead;
+extern struct iwqueue *iwq, *iwq0, *iwq1;
 
 
 /* externs */

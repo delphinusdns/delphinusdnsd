@@ -331,7 +331,7 @@ static char iv[16];
 static char encryptkey[16];
 
 
-TAILQ_HEAD(, iwqueue) iwqhead;
+extern TAILQ_HEAD(, iwqueue) iwqhead;
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
@@ -623,6 +623,7 @@ main(int argc, char *argv[], char *environ[])
 	init_passlist();
 	init_dnssec();
 	init_tsig();
+	TAILQ_INIT(&iwqhead);
 
 	if (parse_file(db, conffile, 0, -1) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
@@ -2590,7 +2591,6 @@ setup_cortex(struct imsgbuf *ibuf)
 	} rc;
 
 	SLIST_INIT(&neuronhead);
-	TAILQ_INIT(&iwqhead);
 
 	setproctitle("cortex [%s]", (identstring != NULL ? identstring : ""));
 
