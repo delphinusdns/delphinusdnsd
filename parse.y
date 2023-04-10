@@ -2134,12 +2134,13 @@ parse_file(ddDB *db, char *filename, uint32_t flags, int fd)
 			return (-1);
 		}
 		arc4random_buf(cookiesecret, cookiesecret_len);
-
 		(void)add_rzone();
+
 	} else
 		filename = NULL;
 
-        if ((file = pushfile(filename, 0, DESCEND_YES, NO_RZONEFILE, fd)) == NULL) {
+
+        if ((file = pushfile(filename, 0, (filename == NULL) ? DESCEND_NO : DESCEND_YES, NO_RZONEFILE, fd)) == NULL) {
                 return (-1);
         }
 
