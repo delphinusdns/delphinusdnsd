@@ -4459,6 +4459,11 @@ pushfile(const char *name, int secret, int descend, int rzone, int fd)
 
 		fd = fileno(nfile->stream);
 	} else {
+		if ((nfile->name = strdup("[passed descriptor]")) == NULL) {
+			dolog(LOG_INFO, "warn: malloc\n");
+			free(nfile);
+			return (NULL);
+		}
 		nfile->stream = fdopen(fd, "r");
 		if (nfile->stream == NULL) {
 			dolog(LOG_INFO, "warn: fdopen() %s\n", strerror(errno));
