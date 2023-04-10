@@ -2903,7 +2903,7 @@ setup_cortex(struct imsgbuf *ibuf)
 						
 						memcpy((char *)&neup3->desc, (char *)imsg.data, sizeof(int));
 						neup3->pid = (pid_t)imsg.hdr.pid;
-#if DEBUG
+#if 1
 						dolog(LOG_INFO, "registered pid %u with description %d\n", neup3->pid, neup3->desc);
 #endif
 						imsg_init(&neup3->ibuf, imsg.fd);
