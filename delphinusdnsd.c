@@ -2581,6 +2581,11 @@ setup_cortex(struct imsgbuf *ibuf)
 		pid_t pid;
 		char zone[DNS_MAXNAME + 1];
 	} iw;
+	
+	struct register_cortex {
+		int type;
+		pid_t pid;
+	} rc;
 
 	SLIST_INIT(&neuronhead);
 
@@ -2893,16 +2898,17 @@ setup_cortex(struct imsgbuf *ibuf)
 						nomore = 1;
 						break;
 					case IMSG_SETUP_NEURON:
-						if (datalen != sizeof(int))
+						if (datalen != sizeof(rc))
 							break;
 
+						memcpy(&rc, imsg.data, sizeof(rc));
 						neup3 = calloc(sizeof(struct neuron), 1);
 						if (neup3 == NULL) {
 							break;
 						}
 						
-						memcpy((char *)&neup3->desc, (char *)imsg.data, sizeof(int));
-						neup3->pid = (pid_t)imsg.hdr.pid;
+						memcpy((char *)&neup3->desc, (char *)&rc.type, sizeof(int));
+						neup3->pid = rc.pid;
 #if 1
 						dolog(LOG_INFO, "registered pid %u with description %d\n", neup3->pid, neup3->desc);
 #endif
@@ -2932,8 +2938,13 @@ register_cortex(struct imsgbuf *cortex, int type)
 {
 	int fd[2];
 	struct imsgbuf *ibuf;
-	int desc = type;
+	struct register_cortex {
+		int type;
+		pid_t pid;
+	} rc;
 
+	rc.type = type;
+	rc.pid = getpid();
 
 	ibuf = calloc(sizeof(struct imsgbuf), 1);
 	if (ibuf == NULL)
@@ -2946,7 +2957,7 @@ register_cortex(struct imsgbuf *cortex, int type)
 	imsg_init(ibuf, fd[0]);
 		
 	/* send the cortex a setup neuron */
-	imsg_compose(cortex, IMSG_SETUP_NEURON, 0, 0, fd[1], &desc, sizeof(int));
+	imsg_compose(cortex, IMSG_SETUP_NEURON, 0, 0, fd[1], &rc, sizeof(rc));
 	msgbuf_write(&cortex->w);
 		
 	return (ibuf);
