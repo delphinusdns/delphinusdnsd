@@ -290,6 +290,7 @@ struct tab * 	lookup(struct tab *, char *);
 int             lungetc(int);
 int 		parse_file(ddDB *, char *, uint32_t, int);
 struct file     *pushfile(const char *, int, int, int, int);
+void		cleanup_files(void);
 int             popfile(void);
 static int 	temp_inet_net_pton_ipv6(const char *, void *, size_t);
 int 		yyparse(void);
@@ -2173,6 +2174,8 @@ parse_file(ddDB *db, char *filename, uint32_t flags, int fd)
 
 	if (dnssec)
 		finalize_nsec3();
+
+	cleanup_files();
 
 #if DEBUG
 	dolog(LOG_INFO, "configuration file read\n");
@@ -4551,6 +4554,17 @@ popfile(void)
         file = prev;
         return (file ? 0 : EOF);
 }
+
+void
+cleanup_files(void)
+{
+	while ((file = TAILQ_FIRST(&files))) {
+        	TAILQ_REMOVE(&files, file, file_entry);
+		free(file->name);
+		free(file);
+	}
+}
+			
 
 int
 lungetc(int c)
