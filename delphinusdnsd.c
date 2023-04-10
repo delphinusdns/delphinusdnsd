@@ -331,6 +331,8 @@ static char iv[16];
 static char encryptkey[16];
 
 
+TAILQ_HEAD(, iwqueue) iwqhead;
+
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
  *
@@ -2588,6 +2590,7 @@ setup_cortex(struct imsgbuf *ibuf)
 	} rc;
 
 	SLIST_INIT(&neuronhead);
+	TAILQ_INIT(&iwqhead);
 
 	setproctitle("cortex [%s]", (identstring != NULL ? identstring : ""));
 

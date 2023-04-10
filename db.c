@@ -61,15 +61,20 @@ void remove_rbt(struct rbtree *);
 uint32_t match_zoneglue(struct rbtree *);
 int rr_duplicate(ddDB *, char *, int, uint16_t, char *);
 int domaincmp(struct node *, struct node *);
-int merge_db(ddDB *, ddDB *, char *, int);
+int merge_db(ddDB *, ddDB *);
 struct rbtree * create_rr_ex(ddDB *, char *, int, int, void *, uint32_t, uint16_t, int);
 
 extern void	dolog(int, char *, ...);
 extern char *	convert_name(char *, int);
 extern size_t	plength(void *, void *);
+extern int	iwqueue_count(void);
 
 extern uint32_t zonenumber;
+extern struct iwqueue *iwq, *iwq0, *iwq1;
 
+
+/* queues */
+extern TAILQ_HEAD(, iwqueue) iwqhead;
 
 
 int
@@ -707,29 +712,37 @@ rr_duplicate(ddDB *db, char *name, int len, uint16_t type, char *data)
  */
 
 int
-merge_db(ddDB *db, ddDB *db_dest, char *name, int len)
+merge_db(ddDB *db, ddDB *db_dest)
 {
 	struct rbtree *rbt = NULL;
 	struct rrset *rp, *rp0, *rp2;
 	struct rr *rt1 = NULL, *rt2 = NULL;
 	struct node *walk, *walk0;
-	uint32_t zoneno;
+	int count, i = 0;
+	uint32_t *zones;
 
-	rbt = find_rrset(db, name, len);
-	if (rbt == NULL) {
-		return -1;	
-	}
-
-	rp = find_rr(rbt, DNS_TYPE_SOA);
-	if (rp == NULL) {
+	count = iwqueue_count();
+	zones = (uint32_t *)calloc(sizeof(uint32_t), count);	
+	if (zones == NULL)
 		return -1;
+	
+	TAILQ_FOREACH(iwq, &iwqhead, entries) {
+		rbt = find_rrset(db, iwq->zonename, iwq->zonenamelen);
+		if (rbt == NULL) {
+			return -1;	
+		}
+
+		rp = find_rr(rbt, DNS_TYPE_SOA);
+		if (rp == NULL) {
+			return -1;
+		}
+
+		rt1 = TAILQ_FIRST(&rp->rr_head);
+		if (rt1 == NULL)
+			return -1;
+
+		zones[i++] = rt1->zonenumber;
 	}
-
-	rt1 = TAILQ_FIRST(&rp->rr_head);
-	if (rt1 == NULL)
-		return -1;
-
-	zoneno = rt1->zonenumber;
 
 	RB_FOREACH_SAFE(walk, domaintree, &db->head, walk0) {
 		rbt = (struct rbtree *)walk->data;
@@ -742,8 +755,10 @@ merge_db(ddDB *db, ddDB *db_dest, char *name, int len)
 				goto nextrbt;
 			}
 			TAILQ_FOREACH_SAFE(rt1, &rp2->rr_head, entries, rt2) {
-				if (rt1->zonenumber == zoneno)
-					goto nextrbt;
+				for (i = 0; i < count; i++) {
+					if (rt1->zonenumber == zones[i])
+						goto nextrbt;
+				}
 				create_rr(db_dest, rbt->zone, rbt->zonelen, rp->rrtype, rt1->rdata, rp->ttl, rt1->rdlen);
 			}
 
@@ -753,6 +768,5 @@ nextrbt:
 		continue;
 	}
 
-	return zonenumber;
+	return 0;
 }
-

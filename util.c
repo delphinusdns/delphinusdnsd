@@ -79,6 +79,10 @@ uint16_t unpack16(char *);
 void 	unpack(char *, char *, int);
 int lower_dnsname(char *, int); 
 int randomize_dnsname(char *, int);
+ddDB *			ddd_read_manna(ddDB *, struct imsgbuf *, struct cfg *);
+int			iwqueue_count(void);
+ddDB *			rebuild_db(struct cfg *);
+void			iwqueue_add(struct iwantmanna *, int);
 
 int label_count(char *);
 char * dns_label(char *, int *);
@@ -153,6 +157,8 @@ void safe_fprintf(FILE *, char *, ...);
 size_t plength(void *, void *);
 size_t plenmax(void *, void *, size_t);
 u_int nowrap_dec(u_int, u_int);
+int 		merge_db(ddDB *, ddDB *);
+void 		delete_zone(char *name, int len);
 
 int bytes_received;
 
@@ -209,6 +215,7 @@ extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, ui
 extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, uint16_t *, uint32_t, DDD_HMAC_CTX *, char *, int, int);
 extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *, char *, int);
 extern char *convert_name(char *, int);
+extern int	dddbclose(ddDB *db);
 
 
 /* internals */
@@ -338,6 +345,10 @@ param_mcmp(struct mandatorynode *e1, struct mandatorynode *e2)
 RB_HEAD(mandatorytree, mandatorynode) mandatoryhead = RB_INITIALIZER(&mandatoryhead);
 RB_PROTOTYPE(mandatorytree, mandatorynode, entry, param_mcmp)
 RB_GENERATE(mandatorytree, mandatorynode, entry, param_mcmp)
+
+extern TAILQ_HEAD(, iwqueue) iwqhead;
+extern struct iwqueue *iwq, *iwq0, *iwq1;
+
 
 /*
  * LABEL_COUNT - count the labels and return that number
@@ -6747,4 +6758,147 @@ nowrap_dec(u_int val, u_int dec)
 		return 0;
 	else 
 		return (ret);
+}
+
+ddDB *
+ddd_read_manna(ddDB *db, struct imsgbuf *ibuf, struct cfg *cfg)
+{
+	struct imsg imsg;
+	struct iwantmanna iw;
+	size_t n;
+
+	/* grab the fd from imsg (so) */
+	if (((n = imsg_read(ibuf)) == -1 && errno != EAGAIN) || n == 0) {
+		dolog(LOG_INFO, "got error from TCP accept child, it likely died, exit\n");
+		ddd_shutdown();
+		exit(1);
+	}
+
+	for (;;) {
+		if ((n = imsg_get(ibuf, &imsg)) == -1) {
+			break;
+		}
+		if (n == 0) {
+			break;
+		}
+
+		switch(imsg.hdr.type) {
+		case IMSG_IHAVEMANNA_MESSAGE:
+			dolog(LOG_INFO, "asking for the zonefile \"%s\" via cortex\n", imsg.data);
+			strlcpy(iw.zone, imsg.data, sizeof(iw.zone));
+			iw.pid = getpid();
+
+			imsg_compose(ibuf, IMSG_IWANTMANNA_MESSAGE,
+				0, 0, -1, &iw, sizeof(iw));
+
+			msgbuf_write(&ibuf->w);
+			break;
+	
+		case IMSG_HEREISMANNA_MESSAGE:
+			/* XXX no length checks? */
+			memcpy(&iw, imsg.data, sizeof(iw));
+			iwqueue_add(&iw, imsg.fd);
+			imsg_free(&imsg);
+
+			if (iwqueue_count() >= 64) {
+				dolog(LOG_INFO, "over 64 mannas in the queue, rebuilding database now\n");
+
+				return (rebuild_db(cfg));
+			}
+				
+
+			return NULL;
+
+			break;
+		default:
+			dolog(LOG_INFO, "unknown imsg hdr type %d received, but we wanted MANNA!\n", imsg.hdr.type);
+			break;
+		}
+
+		imsg_free(&imsg);
+	}
+
+	return (NULL);
+}
+
+void
+iwqueue_add(struct iwantmanna *iw, int fd)
+{
+	int zonenamelen;
+	char *zonename;
+
+	zonename = dns_label(iw->zone, &zonenamelen);
+	if (zonename == NULL) {
+		close(fd);
+		dolog(LOG_INFO, "dns_label in zonefile failed\n");
+		return;
+	}
+		
+	iwq = (struct iwqueue *)calloc(1, sizeof(struct iwqueue));
+	if (iwq == NULL) {
+		free(zonename);
+		close(fd);
+		dolog(LOG_INFO, "iwqueue: %s\n", strerror(errno));
+		return;
+	}
+
+	iwq->fd = fd;
+	memcpy(&iwq->zonename, zonename, zonenamelen);
+	iwq->zonenamelen = zonenamelen;
+	strlcpy(iwq->humanname, iw->zone, sizeof(iwq->humanname));
+	iwq->time = time(NULL);
+		
+	TAILQ_INSERT_TAIL(&iwqhead, iwq, entries);
+
+	free(zonename);
+}
+
+ddDB *
+rebuild_db(struct cfg *cfg)
+{
+	ddDB *newdb = NULL;
+
+	/* move to another function */
+	newdb = dddbopen();
+	if (newdb == NULL) {
+		return NULL;
+	}
+
+	TAILQ_FOREACH_SAFE(iwq, &iwqhead, entries, iwq1) {
+
+		delete_zone(iwq->zonename, iwq->zonenamelen);
+
+		if (parse_file(newdb, NULL, PARSEFILE_FLAG_ZONEFD, iwq->fd) < 0) {
+			dolog(LOG_INFO, "parsing the new zonefile \"%s\" failed\n", iwq->humanname);
+			/* clean it up a little */
+
+			close(iwq->fd);
+			TAILQ_REMOVE(&iwqhead, iwq, entries);
+			free(iwq);
+			continue;
+		}
+
+		close(iwq->fd);
+	}
+
+	(void)merge_db(cfg->db, newdb);
+
+	TAILQ_FOREACH_SAFE(iwq, &iwqhead, entries, iwq1) {
+		TAILQ_REMOVE(&iwqhead, iwq, entries);
+		free(iwq);
+	}
+
+	return (newdb);
+}
+
+int
+iwqueue_count(void)
+{
+	int count = 0;
+
+	TAILQ_FOREACH(iwq0, &iwqhead, entries) {
+		count++;
+	}	
+
+	return (count);
 }

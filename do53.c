@@ -129,11 +129,15 @@ extern void 		parseloop(struct cfg *, struct imsgbuf *, int);
 extern void 		tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 extern void		tlsloop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 extern void 		unpack(char *, char *, int);
-extern int 		merge_db(ddDB *, ddDB *, char *, int);
+extern int 		merge_db(ddDB *, ddDB *);
 extern int		dddbclose(ddDB *db);
-extern void 		delete_zone(char *name, int len, uint32_t);
+extern void 		delete_zone(char *name, int len);
 extern int		init_entlist(ddDB *);
 extern int		determine_glue(ddDB *db);
+extern ddDB *		ddd_read_manna(ddDB *, struct imsgbuf *, struct cfg *);
+extern int		iwqueue_count(void);
+extern ddDB *		rebuild_db(struct cfg *);
+extern void		iwqueue_add(struct iwantmanna *, int);
 
 
 int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, char *, uint16_t *, uint16_t *, uint16_t *);
@@ -144,7 +148,9 @@ int			intcmp(struct csnode *, struct csnode *);
 int			same_refused(u_char *, void *, int, void *, int);
 
 void			mainloop(struct cfg *, struct imsgbuf *);
-ddDB *			ddd_read_manna(ddDB *, struct imsgbuf *);
+
+
+struct iwqueue *iwq, *iwq0, *iwq1;
 
 extern struct reply_logic rlogic[];
 
@@ -153,6 +159,9 @@ extern struct reply_logic rlogic[];
 RB_HEAD(qctree, csnode) qchead = RB_INITIALIZER(&qchead);
 RB_PROTOTYPE(qctree, csnode, entry, intcmp)
 RB_GENERATE(qctree, csnode, entry, intcmp)
+
+/* queues */
+extern TAILQ_HEAD(, iwqueue) iwqhead;
 
 extern char *__progname;
 extern int axfrport;
@@ -280,6 +289,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	DDD_EVP_MD *md;
 	u_char rdigest[MD5_DIGEST_LENGTH];
 	time_t refusedtime = 0;
+	time_t now, then;
 	uint16_t crc;
 	struct csnode *ni;
 	struct csentry *ei;
@@ -513,6 +523,39 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 	for (;;) {
 		maxso = 0;
 
+		iwq = TAILQ_FIRST(&iwqhead);
+		if (iwq != NULL) {
+			now = time(NULL);
+			then = iwq->time;
+
+			if (difftime(now, then) >= 10) {
+				ddDB *newdb = NULL;
+
+				newdb = rebuild_db(cfg);
+				if (newdb == NULL) {
+					dolog(LOG_INFO, "rebuild_db failed, retrying in up to 30 seconds\n");
+					iwq->time = now + 30;
+					continue;
+				}
+				dddbclose(cfg->db);
+				cfg->db = newdb;
+				dolog(LOG_INFO, "a new database was merged\n");
+				invalidate_cache();
+				dolog(LOG_INFO, "cache is invalidated\n");
+				if (zonecount && determine_glue(cfg->db) < 0) {
+					dolog(LOG_INFO, "determine_glue() failed\n");
+					ddd_shutdown();
+					exit(1);
+				}
+
+				if (zonecount && init_entlist(cfg->db) < 0) {
+					dolog(LOG_INFO, "creating entlist failed\n");
+					ddd_shutdown();
+					exit(1);
+				}
+			}
+		}
+
 		FD_ZERO(&rset);
 		for (i = 0; i < cfg->sockcount; i++)  {
 			if (maxso < cfg->udp[i])
@@ -560,7 +603,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		if (FD_ISSET(udp_ibuf->fd, &rset)) {
 			ddDB *newdb;
 
-			newdb = ddd_read_manna(cfg->db, udp_ibuf);
+			newdb = ddd_read_manna(cfg->db, udp_ibuf, cfg);
 			if (newdb != NULL) {
 				dddbclose(cfg->db);
 				cfg->db = newdb;
@@ -1574,90 +1617,4 @@ same_refused(u_char *old_digest, void *buf, int len, void *address, int addrlen)
 		return (1);
 
 	return (0);
-}
-
-ddDB *
-ddd_read_manna(ddDB *db, struct imsgbuf *ibuf)
-{
-	ddDB *newdb;
-	struct imsg imsg;
-	size_t n;
-	struct iwantmanna {
-		pid_t pid;
-		char zone[DNS_MAXNAME + 1];
-	} iw;
-	char *zonename = NULL;
-	int zonenamelen;
-
-	/* grab the fd from imsg (so) */
-	if (((n = imsg_read(ibuf)) == -1 && errno != EAGAIN) || n == 0) {
-		dolog(LOG_INFO, "got error from TCP accept child, it likely died, exit\n");
-		ddd_shutdown();
-		exit(1);
-	}
-
-	for (;;) {
-		if ((n = imsg_get(ibuf, &imsg)) == -1) {
-			break;
-		}
-		if (n == 0) {
-			break;
-		}
-
-		switch(imsg.hdr.type) {
-		case IMSG_IHAVEMANNA_MESSAGE:
-			dolog(LOG_INFO, "asking for the zonefile \"%s\" via cortex\n", imsg.data);
-			strlcpy(iw.zone, imsg.data, sizeof(iw.zone));
-			iw.pid = getpid();
-
-			imsg_compose(ibuf, IMSG_IWANTMANNA_MESSAGE,
-				0, 0, -1, &iw, sizeof(iw));
-
-			msgbuf_write(&ibuf->w);
-			break;
-	
-		case IMSG_HEREISMANNA_MESSAGE:
-			/* XXX no length checks? */
-			memcpy(&iw, imsg.data, sizeof(iw));
-			dolog(LOG_INFO, "got fd for zone \"%s\", closing it now...\n", iw.zone);
-			newdb = dddbopen();
-			if (newdb == NULL) {
-				close(imsg.fd);
-				return NULL;
-			}
-
-			zonename = dns_label(iw.zone, &zonenamelen);
-			if (zonename == NULL) {
-				close(imsg.fd);
-				dddbclose(newdb);
-				dolog(LOG_INFO, "dns_label in zonefile failed\n");
-				return NULL;
-			}
-
-			delete_zone(zonename, zonenamelen, zonenumber - 1);
-
-			if (parse_file(newdb, NULL, PARSEFILE_FLAG_ZONEFD, imsg.fd) < 0) {
-				close(imsg.fd);
-				dddbclose(newdb);
-				dolog(LOG_INFO, "parsing the new zonefile failed\n");
-				return NULL;
-			}
-
-
-			(void)merge_db(db, newdb, zonename, zonenamelen);
-				
-			close(imsg.fd);
-			imsg_free(&imsg);
-			free(zonename);
-			return (newdb);
-			break;
-		default:
-			dolog(LOG_INFO, "unknown imsg hdr type %d received, but we wanted MANNA!\n", imsg.hdr.type);
-			break;
-		}
-
-		imsg_free(&imsg);
-	}
-
-	return (NULL);
 }

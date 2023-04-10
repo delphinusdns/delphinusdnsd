@@ -124,19 +124,25 @@ extern void 		pack32(char *, uint32_t);
 extern void 		pack8(char *, uint8_t);
 extern void 		parseloop(struct cfg *, struct imsgbuf *, int);
 extern void 		unpack(char *, char *, int);
-extern ddDB *		ddd_read_manna(ddDB *, struct imsgbuf *);
+extern ddDB *		ddd_read_manna(ddDB *, struct imsgbuf *, struct cfg *);
 extern int		dddbclose(ddDB *);
 extern int              init_entlist(ddDB *);
 extern int              determine_glue(ddDB *db);
+extern int		iwqueue_count(void);
+extern ddDB *		rebuild_db(struct cfg *);
+extern void		iwqueue_add(struct iwantmanna *, int);
 
 
 void 			tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 int			acceptloop(struct cfg *, struct imsgbuf *, int *);
 
 extern struct reply_logic rlogic[];
+extern struct iwqueue *iwq, *iwq0, *iwq1;
+
+/* queues */
+extern TAILQ_HEAD(, iwqueue) iwqhead;
 
 TAILQ_HEAD(, tcpentry) tcphead;
-
 struct tcpentry {
 	int intidx;
 	uint bytes_read;
@@ -231,6 +237,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 	uint conncnt = 0;
 	int tcpflags;
 	pid_t pid;
+	time_t now, then;
 
 	uint8_t aregion;			/* region where the address comes from */
 
@@ -398,6 +405,37 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 
 
 	for (;;) {
+		iwq = TAILQ_FIRST(&iwqhead);
+		if (iwq != NULL) {
+			now = time(NULL);
+			then = iwq->time;
+
+			if (difftime(now, then) >= 10) {
+				ddDB *newdb = NULL;
+
+				newdb = rebuild_db(cfg);
+				if (newdb == NULL) {
+					dolog(LOG_INFO, "rebuild_db failed, retrying in up to 30 seconds\n");
+					iwq->time = now + 30;
+					continue;
+				}
+				dddbclose(cfg->db);
+				cfg->db = newdb;
+				dolog(LOG_INFO, "a new database was merged\n");
+				if (zonecount && determine_glue(cfg->db) < 0) {
+					dolog(LOG_INFO, "determine_glue() failed\n");
+					ddd_shutdown();
+					exit(1);
+				}
+
+				if (zonecount && init_entlist(cfg->db) < 0) {
+					dolog(LOG_INFO, "creating entlist failed\n");
+					ddd_shutdown();
+					exit(1);
+				}
+			}
+		}
+
 		FD_ZERO(&rset);
 		FD_SET(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1], &rset);
 		maxso = cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1];
@@ -442,11 +480,11 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		if (FD_ISSET(ibuf->fd, &rset)) {
 			ddDB *newdb;
 
-			newdb = ddd_read_manna(cfg->db, ibuf);
+			newdb = ddd_read_manna(cfg->db, ibuf, cfg);
 			if (newdb != NULL) {
 				dddbclose(cfg->db);
 				cfg->db = newdb;
-				dolog(LOG_INFO, "a new TCP database was merged\n");
+				dolog(LOG_INFO, "a new database was merged\n");
 				if (zonecount && determine_glue(cfg->db) < 0) {
 					dolog(LOG_INFO, "determine_glue() failed\n");
 					ddd_shutdown();

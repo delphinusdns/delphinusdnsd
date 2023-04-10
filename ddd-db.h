@@ -779,5 +779,23 @@ struct nb {
 	struct in6_addr addr6;
 };
 
+
+
+/* I want manna */
+struct iwantmanna {
+	pid_t pid;
+	char zone[DNS_MAXNAME + 1];
+};
+
+
+struct iwqueue {
+	time_t time;
+	char humanname[DNS_MAXNAME + 1];
+	char zonename[DNS_MAXNAME];
+	int zonenamelen;
+	int fd;
+	TAILQ_ENTRY(iwqueue) entries;
+};
+
 	
 #endif /* _DB_H */

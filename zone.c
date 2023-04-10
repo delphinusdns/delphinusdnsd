@@ -54,7 +54,7 @@ int have_zone(char *zonename, int zonelen);
 void populate_zone(ddDB *db);
 int zonecmp(struct zoneentry *, struct zoneentry *);
 struct zoneentry * zone_findzone(struct rbtree *);
-void delete_zone(char *name, int len, uint32_t);
+void delete_zone(char *name, int len);
 
 extern void 		dolog(int, char *, ...);
 extern char * dns_label(char *, int *);
@@ -72,7 +72,7 @@ struct walkentry *we1, *wep;
 
 
 void
-delete_zone(char *name, int len, uint32_t zonenumber)
+delete_zone(char *name, int len)
 {
 	struct zoneentry *res, find;
 
