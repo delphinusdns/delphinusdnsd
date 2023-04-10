@@ -2025,7 +2025,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 
 
 #if __OpenBSD__
-	if (pledge("stdio wpath rpath cpath inet", NULL) < 0) {
+	if (pledge("stdio wpath rpath cpath inet sendfd", NULL) < 0) {
 		perror("pledge");
 		exit(1);
 	}
