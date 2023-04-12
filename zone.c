@@ -115,7 +115,6 @@ insert_zone(char *zonename)
 	find.namelen = len;
 
 	if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
-		res->zonenumber = zonenumber;	/* recalc zonenumber */
 		return 0;
 	}
 
