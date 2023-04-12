@@ -531,7 +531,7 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 				olddb = cfg->db;
 				cfg->db = newdb;
 
-				expire_db(olddb, 1);
+				//expire_db(olddb, 1);
 				dddbclose(olddb);
 
 				dolog(LOG_INFO, "a new database was merged\n");
@@ -656,7 +656,7 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 				olddb = cfg->db;
 				cfg->db = newdb;
 
-				expire_db(olddb, 1);
+				//expire_db(olddb, 1);
 				dddbclose(olddb);
 
 				dolog(LOG_INFO, "a new database was merged\n");

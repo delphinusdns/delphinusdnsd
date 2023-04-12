@@ -346,7 +346,7 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				olddb = cfg->db;
 				cfg->db = newdb;
 
-				expire_db(olddb, 1);
+				//expire_db(olddb, 1);
 				dddbclose(olddb);
 
 				dolog(LOG_INFO, "a new database was merged\n");
@@ -424,7 +424,7 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				olddb = cfg->db;
 				cfg->db = newdb;
 
-				expire_db(olddb, 1);
+				//expire_db(olddb, 1);
 				dddbclose(olddb);
 
 				dolog(LOG_INFO, "a new database was merged\n");

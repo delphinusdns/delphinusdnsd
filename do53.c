@@ -540,7 +540,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				olddb = cfg->db;
 				cfg->db = newdb;
 
-				expire_db(olddb, 1);
+				//expire_db(olddb, 1);
 				dddbclose(olddb);
 
 				dolog(LOG_INFO, "a new database was merged\n");
@@ -613,7 +613,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				olddb = cfg->db;
 				cfg->db = newdb;
 
-				expire_db(olddb, 1);
+				//expire_db(olddb, 1);
 				dddbclose(olddb);
 
 				dolog(LOG_INFO, "a new database was merged\n");
