@@ -56,6 +56,7 @@ void repopulate_zone(ddDB *db, char *zonename, int zonelen);
 int zonecmp(struct zoneentry *, struct zoneentry *);
 struct zoneentry * zone_findzone(struct rbtree *);
 void delete_zone(char *name, int len);
+int recurse_match_zonenumber(struct rbtree *, uint32_t);
 
 extern void 		dolog(int, char *, ...);
 extern char * dns_label(char *, int *);
@@ -299,8 +300,8 @@ repopulate_zone(ddDB *db, char *zonename, int zonelen)
 	struct rbtree *rbt = NULL;
 	struct rrset *rrset = NULL;
 	struct rr *rr = NULL;
-	char *p;
-	int plen;
+	char *p = zonename;
+	int plen = zonelen;
 	uint32_t zoneno;
 
 	rbt = find_rrset(db, zonename, zonelen);
@@ -320,6 +321,13 @@ repopulate_zone(ddDB *db, char *zonename, int zonelen)
 		return;
 	}
 
+	memcpy(find.name, p, plen);
+	find.namelen = plen;
+	if ((res = RB_FIND(zonetree, &zonehead, &find)) == NULL) {
+		dolog(LOG_INFO, "this zone doesn't exist in zonehead\n");
+		return;
+	}
+
 	zoneno = rr->zonenumber;
 
 	RB_FOREACH(walk, domaintree, &db->head) {
@@ -328,28 +336,9 @@ repopulate_zone(ddDB *db, char *zonename, int zonelen)
 			continue;
 		}
 
-		res = NULL;
-		for (plen = rbt->zonelen, p = rbt->zone; plen > 0; 
-								p++, plen--) {
-			memcpy(find.name, p, plen);
-			find.namelen = plen;
-			if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
-				break;
-			}
-
-			plen -= *p;
-			p += *p;
-		}
-
-		if (res == NULL)
+		if (! recurse_match_zonenumber(rbt, zoneno))
 			continue;
 
-#if 0
-		if (! dn_contains(rbt->zone, rbt->zonelen, zonename, zonelen))
-			continue;
-#endif
-		if (res->zonenumber != zoneno)
-			continue;
 
 		TAILQ_FOREACH(wep, &res->walkhead, walk_entry) {
 			if (wep->rbt == rbt)
@@ -370,44 +359,21 @@ repopulate_zone(ddDB *db, char *zonename, int zonelen)
 		/* wep->zonenumber = res->zonenumber; */
 		TAILQ_INSERT_TAIL(&res->walkhead, wep, walk_entry);
 
-		/* there is a parent zone that has another entry */
-		if (match_zoneglue(rbt)) {
-			res = NULL;
+	}
+}
 
-			plen -= *p;	/* advance to higher parent */
-			p += *p;
+int
+recurse_match_zonenumber(struct rbtree *rbt, uint32_t zoneno)
+{
+	struct rrset *rp, *rp0;
+	struct rr *rt1, *rt2;
 
-			for (p++, plen--; plen > 0; p++, plen--) {
-				memcpy(find.name, p, plen);
-				find.namelen = plen;
-				if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
-					break;
-				}
-
-				plen -= *p;
-				p += *p;
-			}
-
-			if (res == NULL)
-				continue;
-
-			TAILQ_FOREACH(wep, &res->walkhead, walk_entry) {
-				if (wep->rbt == rbt)
-					break;
-			}
-
-			if (wep)
-				continue;
-
-			if ((wep = malloc(sizeof(struct walkentry))) == NULL) {
-				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
-				ddd_shutdown();
-				sleep(10);
-				exit(1);
-			}
-				
-			wep->rbt = rbt;
-			TAILQ_INSERT_TAIL(&res->walkhead, wep, walk_entry);
+	TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
+		TAILQ_FOREACH_SAFE(rt1, &rp->rr_head, entries, rt2) {
+			if (rt1->zonenumber == zoneno)
+				return 1;
 		}
 	}
+
+	return 0;
 }

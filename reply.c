@@ -69,7 +69,7 @@ extern int 		additional_nsec3(char *, int, int, struct rbtree *, char *, int, in
 extern int 		additional_a(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_aaaa(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
-extern int 		additional_ds(char *, int, struct rbtree *, char *, int, int, int *);
+extern int 		additional_ds(char *, int, struct rbtree *, char *, int, int, int *, uint32_t *);
 extern int 		additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t, uint16_t);
 extern int 		additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
@@ -2265,7 +2265,7 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *rbt = sreply->rbt1, *trbt = NULL;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -2276,8 +2276,28 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
+	char *p;
+	int plen;
 
 	zonenumberx = determine_zone(rbt);
+
+	if (rrtype == DNS_TYPE_DS) {
+#if 0
+		p = rbt->zone;
+		plen = rbt->zonelen;
+
+		for (; *p ; p++, plen--) {
+			plen -= *p;
+			p += *p;
+			break;
+		}
+
+		trbt = find_rrset(db, p, plen);
+		if (trbt != NULL)
+			zonenumberx = determine_zone(trbt);
+#endif
+	}
+
 	now = time(NULL);
 
 	if ((rrset = find_rr(rbt, rrtype)) == NULL)
@@ -2317,8 +2337,10 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 	a_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+#if 0
 		if (rrp->zonenumber != zonenumberx)
 			continue;
+#endif
 		if ((outlen + sizeof(struct answer) + 
 			((struct ds *)rrp->rdata)->digestlen) > replysize) {
 			NTOHS(odh->query);
@@ -2372,7 +2394,7 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, rrtype, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, rrtype, rbt, reply, replysize, outlen, &retcount, q->aa, -2);
 		
 		if (tmplen == 0) {
 
@@ -4103,7 +4125,8 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 		}
 
 		if (delegation) {
-			tmplen = additional_ds(rbt1->zone, rbt1->zonelen, rbt1, reply, replysize, outlen, &addcount);
+			uint32_t newzoneno;
+			tmplen = additional_ds(rbt1->zone, rbt1->zonelen, rbt1, reply, replysize, outlen, &addcount, &newzoneno);
 			if (tmplen != 0) {
 				outlen = tmplen;
 
@@ -4111,7 +4134,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 				odh->nsrr += addcount;
 				HTONS(odh->nsrr);
 
-				tmplen = additional_rrsig(rbt1->zone, rbt1->zonelen, DNS_TYPE_DS, rbt1, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
+				tmplen = additional_rrsig(rbt1->zone, rbt1->zonelen, DNS_TYPE_DS, rbt1, reply, replysize, outlen, &retcount, q->aa, newzoneno);
 
 				if (tmplen == 0) {
 					/* we're forwarding and had no RRSIG return with -1 */
@@ -8040,12 +8063,18 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) != NULL) {
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-			if (rrp->zonenumber != zonenumberx)
+			if (!soa && (rrp->zonenumber != zonenumberx))
 				continue;
 
-			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen,
-				-1, rbt, reply, rlen, offset, &rrsig_count, 
-				q->aa, zonenumberx);
+			if (soa) {
+				tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen,
+					-1, rbt, reply, rlen, offset, &rrsig_count, 
+					q->aa, -2);
+			} else {
+				tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen,
+					-1, rbt, reply, rlen, offset, &rrsig_count, 
+					q->aa, zonenumberx);
+			}
 
 			if (tmplen == 0)
 				goto truncate;
@@ -8565,8 +8594,10 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		ds_count = 0;
 
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+#if 0
 			if (rrp->zonenumber != zonenumberx)
 				continue;
+#endif
 			if (offset + q->hdr->namelen > rlen)
 				goto truncate;
 

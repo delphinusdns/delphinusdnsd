@@ -61,7 +61,7 @@
 int additional_a(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_aaaa(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
-int additional_ds(char *, int, struct rbtree *, char *, int, int, int *);
+int additional_ds(char *, int, struct rbtree *, char *, int, int, int *, uint32_t *);
 int additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t, uint16_t);
 int additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int, uint32_t);
@@ -878,10 +878,10 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-		if (rrp->zonenumber != zoneno)
+		if (inttype != -1 && inttype != ((struct rrsig *)rrp->rdata)->type_covered)
 			continue;
 
-		if (inttype != -1 && inttype != ((struct rrsig *)rrp->rdata)->type_covered)
+		if (zoneno != (uint32_t)-2 && rrp->zonenumber != zoneno)
 			continue;
 
 		/* check if we go over our return length */
@@ -1145,7 +1145,7 @@ out:
  */
 
 int 
-additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
+additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount, uint32_t *newzoneno)
 {
 	int ds_count = 0;
 	int tmplen;
@@ -1214,6 +1214,7 @@ additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 		offset += ((struct ds *)rrp->rdata)->digestlen;
 
 		answer->rdlength = htons(((struct ds *)rrp->rdata)->digestlen + sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t));
+		*newzoneno = rrp->zonenumber;
 
 
 		tmpcount++;
