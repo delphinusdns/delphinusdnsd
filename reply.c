@@ -2265,7 +2265,7 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 	char *buf = sreply->buf;
 	int len = sreply->len;
 	struct question *q = sreply->q;
-	struct rbtree *rbt = sreply->rbt1, *trbt = NULL;
+	struct rbtree *rbt = sreply->rbt1;
 	struct rbtree *authority;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
@@ -2276,8 +2276,6 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 	uint16_t rollback;
 	time_t now;
 	uint32_t zonenumberx;
-	char *p;
-	int plen;
 
 	zonenumberx = determine_zone(rbt);
 

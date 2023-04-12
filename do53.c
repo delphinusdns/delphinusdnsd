@@ -179,6 +179,7 @@ extern char *rptr;
 extern int ratelimit_backlog;
 extern DDD_EVP_MD *md5_md;
 
+extern int axfrbackoff;
 extern int debug;
 extern int verbose;
 extern int bflag;
@@ -527,7 +528,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 			now = time(NULL);
 			then = iwq->time;
 
-			if (difftime(now, then) >= 10) {
+			if (difftime(now, then) >= (5 + axfrbackoff)) {
 				ddDB *newdb = NULL, *olddb;
 
 				newdb = rebuild_db(cfg);

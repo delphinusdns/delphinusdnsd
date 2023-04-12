@@ -188,6 +188,7 @@ extern uint8_t rdomain;
 extern uint8_t forward_rdomain;
 extern int cookies;
 
+extern int axfrbackoff;
 extern int debug;
 extern int verbose;
 extern int bflag;
@@ -410,7 +411,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 			now = time(NULL);
 			then = iwq->time;
 
-			if (difftime(now, then) >= 10) {
+			if (difftime(now, then) >= (5 + axfrbackoff)) {
 				ddDB *newdb = NULL, *olddb;
 
 				newdb = rebuild_db(cfg);

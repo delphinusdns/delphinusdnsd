@@ -132,6 +132,7 @@ extern void		iwqueue_add(struct iwantmanna *, int);
 
 int notify = 0;				/* do not notify when set to 0 */
 
+extern int axfrbackoff;
 extern int debug, verbose;
 extern time_t time_changed;
 extern int tsig;
@@ -517,7 +518,7 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 			now0 = time(NULL);
 			then = iwq->time;
 
-			if (difftime(now0, then) >= 10) {
+			if (difftime(now0, then) >= (5 + axfrbackoff)) {
 				ddDB *newdb = NULL, *olddb;
 
 				cfg->db = db;

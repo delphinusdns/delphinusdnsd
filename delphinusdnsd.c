@@ -290,6 +290,7 @@ DDD_EVP_MD *md5_md;
 char *rptr = NULL;
 int ratelimit_backlog;
 
+int axfrbackoff = 5;
 int debug = 0;
 int verbose = 0;
 int bflag = 0;
@@ -624,6 +625,7 @@ main(int argc, char *argv[], char *environ[])
 	init_dnssec();
 	init_tsig();
 	TAILQ_INIT(&iwqhead);
+	axfrbackoff = arc4random_uniform(5);
 
 	if (parse_file(db, conffile, 0, -1) < 0) {
 		dolog(LOG_INFO, "parsing config file failed\n");
