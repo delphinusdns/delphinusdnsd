@@ -6671,6 +6671,8 @@ input_sanitize(char *fmt)
 	int len;
 
 	len = strlen(fmt);
+	if (len == 0)
+		len = 1;
 	len *= 5;
 
 	buf = malloc(len);
