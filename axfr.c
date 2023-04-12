@@ -127,7 +127,6 @@ extern int              determine_glue(ddDB *db);
 extern int		iwqueue_count(void);
 extern ddDB *		rebuild_db(struct cfg *);
 extern void		iwqueue_add(struct iwantmanna *, int);
-extern int		expire_db(ddDB *, int);
 
 
 
@@ -531,7 +530,6 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 				olddb = cfg->db;
 				cfg->db = newdb;
 
-				//expire_db(olddb, 1);
 				dddbclose(olddb);
 
 				dolog(LOG_INFO, "a new database was merged\n");
@@ -656,7 +654,6 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 				olddb = cfg->db;
 				cfg->db = newdb;
 
-				//expire_db(olddb, 1);
 				dddbclose(olddb);
 
 				dolog(LOG_INFO, "a new database was merged\n");

@@ -138,7 +138,6 @@ extern ddDB *		ddd_read_manna(ddDB *, struct imsgbuf *, struct cfg *);
 extern int		iwqueue_count(void);
 extern ddDB *		rebuild_db(struct cfg *);
 extern void		iwqueue_add(struct iwantmanna *, int);
-extern int		expire_db(ddDB *, int);
 
 
 int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, char *, uint16_t *, uint16_t *, uint16_t *);
@@ -540,7 +539,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				olddb = cfg->db;
 				cfg->db = newdb;
 
-				//expire_db(olddb, 1);
 				dddbclose(olddb);
 
 				dolog(LOG_INFO, "a new database was merged\n");
@@ -613,7 +611,6 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 				olddb = cfg->db;
 				cfg->db = newdb;
 
-				//expire_db(olddb, 1);
 				dddbclose(olddb);
 
 				dolog(LOG_INFO, "a new database was merged\n");

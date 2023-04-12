@@ -133,7 +133,6 @@ extern int              determine_glue(ddDB *db);
 extern int		iwqueue_count(void);
 extern ddDB *		rebuild_db(struct cfg *);
 extern void		iwqueue_add(struct iwantmanna *, int);
-extern int		expire_db(ddDB *, int);
 
 void 			tlsloop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 
@@ -346,7 +345,6 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				olddb = cfg->db;
 				cfg->db = newdb;
 
-				//expire_db(olddb, 1);
 				dddbclose(olddb);
 
 				dolog(LOG_INFO, "a new database was merged\n");
@@ -424,7 +422,6 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				olddb = cfg->db;
 				cfg->db = newdb;
 
-				//expire_db(olddb, 1);
 				dddbclose(olddb);
 
 				dolog(LOG_INFO, "a new database was merged\n");

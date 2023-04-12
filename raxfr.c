@@ -2169,7 +2169,9 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 							 * grab the pid of the process and give them the
 							 * filedescriptor
 							 */
+#if DEBUG
 							dolog(LOG_INFO, "ok one manna for zone \"%s\" going to pid %d!\n", iw.zone, iw.pid);
+#endif
 
 							SLIST_FOREACH(lrz, &rzones, rzone_entry) {
 								if (lrz->zonename == NULL)

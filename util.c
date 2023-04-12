@@ -6785,7 +6785,9 @@ ddd_read_manna(ddDB *db, struct imsgbuf *ibuf, struct cfg *cfg)
 
 		switch(imsg.hdr.type) {
 		case IMSG_IHAVEMANNA_MESSAGE:
+#if DEBUG
 			dolog(LOG_INFO, "asking for the zonefile \"%s\" via cortex\n", imsg.data);
+#endif
 			strlcpy(iw.zone, imsg.data, sizeof(iw.zone));
 			iw.pid = getpid();
 
@@ -6802,7 +6804,7 @@ ddd_read_manna(ddDB *db, struct imsgbuf *ibuf, struct cfg *cfg)
 			imsg_free(&imsg);
 
 			if (iwqueue_count() >= 64) {
-				dolog(LOG_INFO, "over 64 mannas in the queue, rebuilding database now\n");
+				dolog(LOG_INFO, "over 64 zone updates in the queue, rebuilding database now\n");
 
 				return (rebuild_db(cfg));
 			}
