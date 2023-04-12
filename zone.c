@@ -292,21 +292,10 @@ void
 repopulate_zone(ddDB *db, char *zonename, int zonelen)
 {
 	struct node *walk;
-	struct zoneentry find, *res, *zres;
+	struct zoneentry find, *res;
 	struct rbtree *rbt = NULL;
 	char *p;
 	int plen;
-	uint32_t zoneno;
-
-#if 0
-	memcpy(find.name, zonename, zonelen);
-	find.namelen = zonelen;
-	if ((zres = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
-		return;
-	}
-
-	zoneno = zres->zonenumber;
-#endif
 
 	RB_FOREACH(walk, domaintree, &db->head) {
 		rbt = (struct rbtree *)walk->data;	
