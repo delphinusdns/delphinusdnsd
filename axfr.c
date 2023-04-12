@@ -127,6 +127,7 @@ extern int              determine_glue(ddDB *db);
 extern int		iwqueue_count(void);
 extern ddDB *		rebuild_db(struct cfg *);
 extern void		iwqueue_add(struct iwantmanna *, int);
+extern int		expire_db(ddDB *, int);
 
 
 
@@ -518,7 +519,7 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 			then = iwq->time;
 
 			if (difftime(now0, then) >= 10) {
-				ddDB *newdb = NULL;
+				ddDB *newdb = NULL, *olddb;
 
 				cfg->db = db;
 				newdb = rebuild_db(cfg);
@@ -527,8 +528,12 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 					iwq->time = now + 30;
 					continue;
 				}
-				dddbclose(cfg->db);
+				olddb = cfg->db;
 				cfg->db = newdb;
+
+				expire_db(olddb, 1);
+				dddbclose(olddb);
+
 				dolog(LOG_INFO, "a new database was merged\n");
 				if (zonecount && determine_glue(cfg->db) < 0) {
 					dolog(LOG_INFO, "determine_glue() failed\n");
@@ -643,13 +648,17 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 		}
 
 		if (FD_ISSET(ibuf->fd, &rset)) {
-			ddDB *newdb;
+			ddDB *newdb, *olddb;
 			
 			cfg->db = db;
 			newdb = ddd_read_manna(db, ibuf, cfg);
 			if (newdb != NULL) {
-				dddbclose(cfg->db);
+				olddb = cfg->db;
 				cfg->db = newdb;
+
+				expire_db(olddb, 1);
+				dddbclose(olddb);
+
 				dolog(LOG_INFO, "a new database was merged\n");
 				if (zonecount && determine_glue(cfg->db) < 0) {
 					dolog(LOG_INFO, "determine_glue() failed\n");
@@ -1048,7 +1057,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 
 		reply = calloc(1, 0xffff + 2);	
 		if (reply == NULL) {
-			dolog(LOG_INFO, "internal error: %s\n", strerror(errno));
+			dolog(LOG_INFO, "internal error 1: %s\n", strerror(errno));
 			goto drop;
 		}
 
@@ -1067,7 +1076,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		if (rbt == NULL) {
 			rbt2 = get_soa(db, question);
 			if (rbt2 == NULL) {
-				dolog(LOG_INFO, "internal error: %s\n", strerror(errno));
+				dolog(LOG_INFO, "internal error 2: %s\n", strerror(errno));
 				goto drop;
 			}
 			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, rbt2, NULL, 0xff, 1, 0, replybuf);
@@ -1083,7 +1092,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 		if ((rrset = find_rr(rbt, DNS_TYPE_SOA)) == NULL) {
 			rbt2 = get_soa(db, question);
 			if (rbt2 == NULL) {
-				dolog(LOG_INFO, "internal error: %s\n", strerror(errno));
+				dolog(LOG_INFO, "internal error 3: %s\n", strerror(errno));
 				goto drop;
 			}
 			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, rbt2, NULL, 0xff, 1, 0, replybuf);

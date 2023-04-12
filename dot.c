@@ -133,6 +133,7 @@ extern int              determine_glue(ddDB *db);
 extern int		iwqueue_count(void);
 extern ddDB *		rebuild_db(struct cfg *);
 extern void		iwqueue_add(struct iwantmanna *, int);
+extern int		expire_db(ddDB *, int);
 
 void 			tlsloop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
 
@@ -334,7 +335,7 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 			then = iwq->time;
 
 			if (difftime(now, then) >= 10) {
-				ddDB *newdb = NULL;
+				ddDB *newdb = NULL, *olddb;
 
 				newdb = rebuild_db(cfg);
 				if (newdb == NULL) {
@@ -342,8 +343,12 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					iwq->time = now + 30;
 					continue;
 				}
-				dddbclose(cfg->db);
+				olddb = cfg->db;
 				cfg->db = newdb;
+
+				expire_db(olddb, 1);
+				dddbclose(olddb);
+
 				dolog(LOG_INFO, "a new database was merged\n");
 				if (zonecount && determine_glue(cfg->db) < 0) {
 					dolog(LOG_INFO, "determine_glue() failed\n");
@@ -412,12 +417,16 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		}
 
 		if (FD_ISSET(ibuf->fd, &rset)) {
-			ddDB *newdb;
+			ddDB *newdb, *olddb;
 
 			newdb = ddd_read_manna(cfg->db, ibuf, cfg);
 			if (newdb != NULL) {
-				dddbclose(cfg->db);
+				olddb = cfg->db;
 				cfg->db = newdb;
+
+				expire_db(olddb, 1);
+				dddbclose(olddb);
+
 				dolog(LOG_INFO, "a new database was merged\n");
 				if (zonecount && determine_glue(cfg->db) < 0) {
 					dolog(LOG_INFO, "determine_glue() failed\n");

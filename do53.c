@@ -138,6 +138,7 @@ extern ddDB *		ddd_read_manna(ddDB *, struct imsgbuf *, struct cfg *);
 extern int		iwqueue_count(void);
 extern ddDB *		rebuild_db(struct cfg *);
 extern void		iwqueue_add(struct iwantmanna *, int);
+extern int		expire_db(ddDB *, int);
 
 
 int			reply_cache(int, struct sockaddr *, int, struct querycache *, char *, int, char *, uint16_t *, uint16_t *, uint16_t *);
@@ -528,7 +529,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 			then = iwq->time;
 
 			if (difftime(now, then) >= 10) {
-				ddDB *newdb = NULL;
+				ddDB *newdb = NULL, *olddb;
 
 				newdb = rebuild_db(cfg);
 				if (newdb == NULL) {
@@ -536,9 +537,14 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 					iwq->time = now + 30;
 					continue;
 				}
-				dddbclose(cfg->db);
+				olddb = cfg->db;
 				cfg->db = newdb;
+
+				expire_db(olddb, 1);
+				dddbclose(olddb);
+
 				dolog(LOG_INFO, "a new database was merged\n");
+
 				invalidate_cache();
 				dolog(LOG_INFO, "cache is invalidated\n");
 				if (zonecount && determine_glue(cfg->db) < 0) {
@@ -600,12 +606,16 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		}
 
 		if (FD_ISSET(udp_ibuf->fd, &rset)) {
-			ddDB *newdb;
+			ddDB *newdb, *olddb;
 
 			newdb = ddd_read_manna(cfg->db, udp_ibuf, cfg);
 			if (newdb != NULL) {
-				dddbclose(cfg->db);
+				olddb = cfg->db;
 				cfg->db = newdb;
+
+				expire_db(olddb, 1);
+				dddbclose(olddb);
+
 				dolog(LOG_INFO, "a new database was merged\n");
 				invalidate_cache();
 				dolog(LOG_INFO, "cache is invalidated\n");
