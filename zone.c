@@ -52,6 +52,7 @@ void	init_zone(void);
 int	insert_zone(char *);
 int have_zone(char *zonename, int zonelen);
 void populate_zone(ddDB *db);
+void repopulate_zone(ddDB *db, char *zonename, int zonelen);
 int zonecmp(struct zoneentry *, struct zoneentry *);
 struct zoneentry * zone_findzone(struct rbtree *);
 void delete_zone(char *name, int len);
@@ -285,4 +286,110 @@ zone_findzone(struct rbtree *rbt)
 	}
 
 	return (NULL);
+}
+
+void
+repopulate_zone(ddDB *db, char *zonename, int zonelen)
+{
+	struct node *walk;
+	struct zoneentry find, *res, *zres;
+	struct rbtree *rbt = NULL;
+	char *p;
+	int plen;
+	uint32_t zoneno;
+
+#if 0
+	memcpy(find.name, zonename, zonelen);
+	find.namelen = zonelen;
+	if ((zres = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
+		return;
+	}
+
+	zoneno = zres->zonenumber;
+#endif
+
+	RB_FOREACH(walk, domaintree, &db->head) {
+		rbt = (struct rbtree *)walk->data;	
+		if (rbt == NULL) {
+			continue;
+		}
+
+		res = NULL;
+		for (plen = rbt->zonelen, p = rbt->zone; plen > 0; 
+								p++, plen--) {
+			memcpy(find.name, p, plen);
+			find.namelen = plen;
+			if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
+				break;
+			}
+
+			plen -= *p;
+			p += *p;
+		}
+
+		if (res == NULL)
+			continue;
+
+		if (! dn_contains(rbt->zone, rbt->zonelen, zonename, zonelen))
+			continue;
+
+		TAILQ_FOREACH(wep, &res->walkhead, walk_entry) {
+			if (wep->rbt == rbt)
+				break;
+		}
+
+		if (wep)
+			continue;
+
+		if ((wep = malloc(sizeof(struct walkentry))) == NULL) {
+			dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+			ddd_shutdown();
+			sleep(10);
+			exit(1);
+		}
+			
+		wep->rbt = rbt;
+		/* wep->zonenumber = res->zonenumber; */
+		TAILQ_INSERT_TAIL(&res->walkhead, wep, walk_entry);
+
+		/* there is a parent zone that has another entry */
+		if (match_zoneglue(rbt)) {
+			res = NULL;
+
+			plen -= *p;	/* advance to higher parent */
+			p += *p;
+
+			for (p++, plen--; plen > 0; p++, plen--) {
+				memcpy(find.name, p, plen);
+				find.namelen = plen;
+				if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
+					break;
+				}
+
+				plen -= *p;
+				p += *p;
+			}
+
+			if (res == NULL)
+				continue;
+
+			TAILQ_FOREACH(wep, &res->walkhead, walk_entry) {
+				if (wep->rbt == rbt)
+					break;
+			}
+
+			if (wep)
+				continue;
+
+			if ((wep = malloc(sizeof(struct walkentry))) == NULL) {
+				dolog(LOG_INFO, "malloc: %s\n", strerror(errno));
+				ddd_shutdown();
+				sleep(10);
+				exit(1);
+			}
+				
+			wep->rbt = rbt;
+			TAILQ_INSERT_TAIL(&res->walkhead, wep, walk_entry);
+		}
+	}
 }

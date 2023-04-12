@@ -2242,6 +2242,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 
 												msgbuf_write(&ibuf->w);
 										}
+										lrz->soa.serial = serial;
 
 									} /* else serial ... */
 							} else {
@@ -2296,6 +2297,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 
 							/* schedule restart */
 							schedule_restart(lrz->zonename, now + rand_restarttime());
+							lrz->soa.serial = serial;
 							endspurt = 1;
 
 							imsg_compose(ibuf, IMSG_IHAVEMANNA_MESSAGE,
@@ -2342,6 +2344,8 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 
 							/* schedule restart */
 							schedule_restart(lrz->zonename, now + rand_restarttime());
+							lrz->soa.serial = serial;
+
 							endspurt = 1;
 
 							imsg_compose(ibuf, IMSG_IHAVEMANNA_MESSAGE,

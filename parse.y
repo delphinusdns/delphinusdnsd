@@ -2175,7 +2175,6 @@ parse_file(ddDB *db, char *filename, uint32_t flags, int fd)
 	if (dnssec)
 		finalize_nsec3();
 
-	dolog(LOG_INFO, "cleaning files\n");
 	cleanup_files();
 
 #if DEBUG

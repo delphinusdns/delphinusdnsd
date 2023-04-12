@@ -120,8 +120,13 @@ extern struct rrset *   find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern uint8_t          find_region(struct sockaddr_storage *, int);
 extern struct imsgbuf *        register_cortex(struct imsgbuf *, int);
 extern size_t		plength(void *, void *);
-extern void		ddd_read_manna(struct imsgbuf *);
-
+extern ddDB *		ddd_read_manna(ddDB *, struct imsgbuf *, struct cfg *);
+extern int		dddbclose(ddDB *);
+extern int              init_entlist(ddDB *);
+extern int              determine_glue(ddDB *db);
+extern int		iwqueue_count(void);
+extern ddDB *		rebuild_db(struct cfg *);
+extern void		iwqueue_add(struct iwantmanna *, int);
 
 
 
@@ -138,6 +143,12 @@ extern int strictaxfr;
 extern char *identstring;
 extern uint16_t axfrport;
 extern struct nb notifybind;
+extern int zonecount;
+
+extern struct iwqueue *iwq, *iwq0, *iwq1;
+
+/* queues */
+extern TAILQ_HEAD(, iwqueue) iwqhead;
 
 SLIST_HEAD(, axfrentry) axfrhead;
 
@@ -416,6 +427,7 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 	char buf0[512];
 	
 	time_t now;
+	time_t now0, then;
 	pid_t pid;
 
 	char address[INET6_ADDRSTRLEN];
@@ -500,6 +512,39 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 
 
 	for (;;) {
+		iwq = TAILQ_FIRST(&iwqhead);
+		if (iwq != NULL) {
+			now0 = time(NULL);
+			then = iwq->time;
+
+			if (difftime(now0, then) >= 10) {
+				ddDB *newdb = NULL;
+
+				cfg->db = db;
+				newdb = rebuild_db(cfg);
+				if (newdb == NULL) {
+					dolog(LOG_INFO, "rebuild_db failed, retrying in up to 30 seconds\n");
+					iwq->time = now + 30;
+					continue;
+				}
+				dddbclose(cfg->db);
+				cfg->db = newdb;
+				dolog(LOG_INFO, "a new database was merged\n");
+				if (zonecount && determine_glue(cfg->db) < 0) {
+					dolog(LOG_INFO, "determine_glue() failed\n");
+					ddd_shutdown();
+					exit(1);
+				}
+
+				if (zonecount && init_entlist(cfg->db) < 0) {
+					dolog(LOG_INFO, "creating entlist failed\n");
+					ddd_shutdown();
+					exit(1);
+				}
+
+				db = cfg->db;
+			}
+		}
 
 		FD_ZERO(&rset);
 		maxso = 0;
@@ -598,7 +643,28 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 		}
 
 		if (FD_ISSET(ibuf->fd, &rset)) {
-			ddd_read_manna(ibuf);
+			ddDB *newdb;
+			
+			cfg->db = db;
+			newdb = ddd_read_manna(db, ibuf, cfg);
+			if (newdb != NULL) {
+				dddbclose(cfg->db);
+				cfg->db = newdb;
+				dolog(LOG_INFO, "a new database was merged\n");
+				if (zonecount && determine_glue(cfg->db) < 0) {
+					dolog(LOG_INFO, "determine_glue() failed\n");
+					ddd_shutdown();
+					exit(1);
+				}
+
+				if (zonecount && init_entlist(cfg->db) < 0) {
+					dolog(LOG_INFO, "creating entlist failed\n");
+					ddd_shutdown();
+					exit(1);
+				}
+				
+				db = cfg->db;
+			}
 		}
 
 		if (FD_ISSET(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1], &rset)) {

@@ -105,6 +105,7 @@ int insert_forward(struct sockaddr_storage *, uint16_t, char *);
 int insert_zone(char *);
 int insert_tsigpassname(char *, int);
 void delete_zone(char *, int);
+void repopulate_zone(ddDB *, char *, int);
 
 int illdestination;
 int *ptr = &illdestination;
@@ -214,6 +215,13 @@ main(int argc, char *argv[])
 
 	usage(argc, argv);
 	exit(1);
+}
+
+
+void
+repopulate_zone(ddDB *db, char *name, int len)
+{
+	return;
 }
 
 void 

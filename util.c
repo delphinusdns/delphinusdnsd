@@ -215,7 +215,8 @@ extern int raxfr_soa(FILE *, u_char *, u_char *, u_char *, struct soa *, int, ui
 extern int raxfr_peek(FILE *, u_char *, u_char *, u_char *, int *, int, uint16_t *, uint32_t, DDD_HMAC_CTX *, char *, int, int);
 extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *, char *, int);
 extern char *convert_name(char *, int);
-extern int	dddbclose(ddDB *db);
+extern int	dddbclose(ddDB *);
+extern void 	repopulate_zone(ddDB *db, char *zonename, int zonelen);
 
 
 /* internals */
@@ -6875,9 +6876,11 @@ rebuild_db(struct cfg *cfg)
 			close(iwq->fd);
 			TAILQ_REMOVE(&iwqhead, iwq, entries);
 			free(iwq);
+			iwq = NULL;
 			continue;
 		}
 
+		repopulate_zone(newdb, iwq->zonename, iwq->zonenamelen);
 		close(iwq->fd);
 	}
 
