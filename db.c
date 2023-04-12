@@ -62,7 +62,7 @@ uint32_t match_zoneglue(struct rbtree *);
 int rr_duplicate(ddDB *, char *, int, uint16_t, char *);
 int domaincmp(struct node *, struct node *);
 int merge_db(ddDB *, ddDB *);
-struct rbtree * create_rr_ex(ddDB *, char *, int, int, void *, uint32_t, uint16_t, int);
+struct rbtree * create_rr_ex(ddDB *, char *, int, int, void *, uint32_t, uint16_t, uint32_t);
 
 extern void	dolog(int, char *, ...);
 extern char *	convert_name(char *, int);
@@ -178,11 +178,11 @@ dddbclose(ddDB *db)
 struct rbtree *
 create_rr(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, uint16_t rdlen)
 {
-	return (create_rr_ex(db, name, len, type, rdata, ttl, rdlen, -1));
+	return (create_rr_ex(db, name, len, type, rdata, ttl, rdlen, -2));
 }
 
 struct rbtree *
-create_rr_ex(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, uint16_t rdlen, int zoneno)
+create_rr_ex(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl, uint16_t rdlen, uint32_t zoneno)
 {
 	ddDBT key, data;
 	struct rbtree *rbt = NULL;
@@ -278,7 +278,7 @@ create_rr_ex(ddDB *db, char *name, int len, int type, void *rdata, uint32_t ttl,
 	}
 	myrr->changed = time(NULL);
 	myrr->rdlen = rdlen;
-	if (zoneno == (uint32_t)-1)
+	if (zoneno == (uint32_t)-2)
 		myrr->zonenumber = zonenumber - 1; /* needed for glued ns */
 	else
 		myrr->zonenumber = zoneno;
@@ -759,7 +759,7 @@ merge_db(ddDB *db, ddDB *db_dest)
 					if (rt1->zonenumber == zones[i])
 						goto nextrbt;
 				}
-				create_rr(db_dest, rbt->zone, rbt->zonelen, rp->rrtype, rt1->rdata, rp->ttl, rt1->rdlen);
+				create_rr_ex(db_dest, rbt->zone, rbt->zonelen, rp->rrtype, rt1->rdata, rp->ttl, rt1->rdlen, rt1->zonenumber);
 			}
 
 		}

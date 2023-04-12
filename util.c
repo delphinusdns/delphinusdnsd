@@ -157,8 +157,6 @@ void safe_fprintf(FILE *, char *, ...);
 size_t plength(void *, void *);
 size_t plenmax(void *, void *, size_t);
 u_int nowrap_dec(u_int, u_int);
-int 		merge_db(ddDB *, ddDB *);
-void 		delete_zone(char *name, int len);
 
 int bytes_received;
 
@@ -217,6 +215,8 @@ extern int raxfr_tsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16
 extern char *convert_name(char *, int);
 extern int	dddbclose(ddDB *);
 extern void 	repopulate_zone(ddDB *db, char *zonename, int zonelen);
+extern int 	merge_db(ddDB *, ddDB *);
+extern void 	delete_zone(char *name, int len);
 
 
 /* internals */

@@ -62,6 +62,8 @@ extern char * dns_label(char *, int *);
 extern void ddd_shutdown(void);
 extern int dn_contains(char *name, int len, char *anchorname, int alen);
 extern uint32_t match_zoneglue(struct rbtree *);
+extern struct rrset * find_rr(struct rbtree *, uint16_t);
+extern struct rbtree * find_rrset(ddDB *, char *, int);
 
 extern int debug, verbose;
 extern uint32_t zonenumber;
@@ -100,6 +102,8 @@ insert_zone(char *zonename)
 	struct zoneentry *zep, *res, find;
 	int len;
 	char *tmp;
+
+	dolog(LOG_INFO, "inserting \"%s\" on zonenumber %d\n", zonename, zonenumber);
 
 	if (strlen(zonename) > DNS_MAXNAME) {
 		dolog(LOG_INFO, "zonename too long\n");
@@ -293,8 +297,30 @@ repopulate_zone(ddDB *db, char *zonename, int zonelen)
 	struct node *walk;
 	struct zoneentry find, *res;
 	struct rbtree *rbt = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rr = NULL;
 	char *p;
 	int plen;
+	uint32_t zoneno;
+
+	rbt = find_rrset(db, zonename, zonelen);
+	if (rbt == NULL) {
+		dolog(LOG_INFO, "get soa (find_rrset) failed\n");
+		return;
+	}
+	rrset = find_rr(rbt, DNS_TYPE_SOA);
+	if (rrset == NULL) {
+		dolog(LOG_INFO, "get soa (find_rr) failed\n");
+		return;
+	}
+
+	rr = TAILQ_FIRST(&rrset->rr_head);
+	if (rr == NULL) {
+		dolog(LOG_INFO, "impossible!  no soa found in zone\n");
+		return;
+	}
+
+	zoneno = rr->zonenumber;
 
 	RB_FOREACH(walk, domaintree, &db->head) {
 		rbt = (struct rbtree *)walk->data;	
@@ -318,7 +344,11 @@ repopulate_zone(ddDB *db, char *zonename, int zonelen)
 		if (res == NULL)
 			continue;
 
+#if 0
 		if (! dn_contains(rbt->zone, rbt->zonelen, zonename, zonelen))
+			continue;
+#endif
+		if (res->zonenumber != zoneno)
 			continue;
 
 		TAILQ_FOREACH(wep, &res->walkhead, walk_entry) {

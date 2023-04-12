@@ -64,11 +64,13 @@ int additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_ds(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t, uint16_t);
 int additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
-int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int);
+int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int, uint32_t);
+#if 0
 int additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int *, int);
-int additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *, int);
+#endif
+int additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *, int, uint32_t);
 int additional_tsig(struct question *, char *, int, int, int, int, DDD_HMAC_CTX *, uint16_t);
-int additional_wildcard(char *, int, struct rbtree *, char *, int, int, int *, ddDB *);
+int additional_wildcard(char *, int, struct rbtree *, char *, int, int, int *, ddDB *, uint32_t);
 
 extern void 	pack(char *, char *, int);
 extern void 	pack32(char *, uint32_t);
@@ -845,7 +847,7 @@ out:
  */
 
 int 
-additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count, int authoritative)
+additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count, int authoritative, uint32_t zoneno)
 {
 	struct answer {
 		uint16_t type;
@@ -876,6 +878,9 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zoneno)
+			continue;
+
 		if (inttype != -1 && inttype != ((struct rrsig *)rrp->rdata)->type_covered)
 			continue;
 
@@ -939,6 +944,7 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 	return (offset);
 }
 
+#if 0
 /*
  * ADDITIONAL_NSEC - tag on an additional NSEC with RRSIG to the answer
  * 		type passed must be a DNS_TYPE!
@@ -1023,6 +1029,7 @@ out:
 	return (offset);
 
 }
+#endif
 
 /*
  * ADDITIONAL_NSEC3 - tag on an additional NSEC3 with RRSIG to the answer
@@ -1030,7 +1037,7 @@ out:
  */
 
 int 
-additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count, int authoritative)
+additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count, int authoritative, uint32_t zoneno)
 {
 	struct answer {
 		uint16_t type;
@@ -1117,7 +1124,7 @@ additional_nsec3(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 			((struct nsec3 *)rrp->rdata)->bitmap_len);
 	offset += ((struct nsec3 *)rrp->rdata)->bitmap_len;
 
-	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, rbt, reply, replylen, offset, &retcount, authoritative);
+	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, rbt, reply, replylen, offset, &retcount, authoritative, zoneno);
 
 	if (tmplen == 0) {
 		return 0;
@@ -1224,7 +1231,7 @@ additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
  */
 
 int 
-additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *reply, int replylen, int offset, int *count, ddDB *db)
+additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *reply, int replylen, int offset, int *count, ddDB *db, uint32_t zoneno)
 {
         struct answer_ns {
                 uint16_t type;
@@ -1325,7 +1332,7 @@ additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *r
 	/* tag on an additional rrsig to this */
 
 	tmplen = additional_rrsig(authority->zone, authority->zonelen, DNS_TYPE_NS
-		, authority, reply, replylen, offset, &retcount, 1);
+		, authority, reply, replylen, offset, &retcount, 1, zoneno);
 
 	if (tmplen != 0)
 		offset = tmplen;
@@ -1404,7 +1411,7 @@ additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *r
 
 	(*count)++;
 
-	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, rbt0, reply, replylen, offset, &retcount, 1);
+	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC3, rbt0, reply, replylen, offset, &retcount, 1, zoneno);
 
 	if (tmplen == 0) {
 		return 0;

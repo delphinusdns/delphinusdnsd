@@ -64,8 +64,8 @@ extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
 
 extern int     		checklabel(ddDB *, struct rbtree *, struct rbtree *, struct question *);
-extern int		additional_wildcard(char *, int, struct rbtree *, char *, int, int, int *, ddDB *);
-extern int 		additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *, int);
+extern int		additional_wildcard(char *, int, struct rbtree *, char *, int, int, int *, ddDB *, uint32_t);
+extern int 		additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *, int, uint32_t);
 extern int 		additional_a(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_aaaa(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
@@ -73,7 +73,7 @@ extern int 		additional_ds(char *, int, struct rbtree *, char *, int, int, int *
 extern int 		additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t, uint16_t);
 extern int 		additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
-extern int 		additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int);
+extern int 		additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int, uint32_t);
 extern int 		additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int);
 extern struct question 	*build_fake_question(char *, int, uint16_t, char *, int);
 extern int 		compress_label(u_char *, int, int);
@@ -299,7 +299,7 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_A, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_A, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -337,7 +337,7 @@ reply_a(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -506,7 +506,7 @@ reply_eui48(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_EUI48, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_EUI48, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -544,7 +544,7 @@ reply_eui48(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -714,7 +714,7 @@ reply_eui64(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_EUI64, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_EUI64, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -752,7 +752,7 @@ reply_eui64(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -831,6 +831,9 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 	int saltlen;
 	
 	time_t now;
+	uint32_t zonenumberx;
+
+	zonenumberx = determine_zone(rbt);
 
 	now = time(NULL);
 
@@ -932,7 +935,7 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC3PARAM, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC3PARAM, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 		
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -969,7 +972,7 @@ reply_nsec3param(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -1040,6 +1043,9 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 	int bitmaplen, saltlen, nextlen;
 
 	time_t now;
+	uint32_t zonenumberx;
+
+	zonenumberx = determine_zone(rbt);
 
 	now = time(NULL);
 
@@ -1160,7 +1166,7 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC3, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC3, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 		
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -1197,7 +1203,7 @@ reply_nsec3(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -1364,7 +1370,7 @@ reply_zonemd(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_ZONEMD, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_ZONEMD, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 		
 		if (tmplen == 0) {
 
@@ -1402,7 +1408,7 @@ reply_zonemd(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -1564,7 +1570,7 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_CAA, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_CAA, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 		
 		if (tmplen == 0) {
 
@@ -1602,7 +1608,7 @@ reply_caa(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -1759,7 +1765,7 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_HINFO, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_HINFO, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 		
 		if (tmplen == 0) {
 
@@ -1797,7 +1803,7 @@ reply_hinfo(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -1952,7 +1958,7 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_RP, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_RP, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 		
 		if (tmplen == 0) {
 
@@ -1990,7 +1996,7 @@ reply_rp(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -2056,6 +2062,9 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 	time_t now;
 
 	now = time(NULL);
+	uint32_t zonenumberx;
+
+	zonenumberx = determine_zone(rbt);
 
 	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == NULL)
 		return -1;
@@ -2150,7 +2159,7 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 		
 		if (tmplen == 0) {
 
@@ -2188,7 +2197,7 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -2363,7 +2372,7 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, rrtype, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, rrtype, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 		
 		if (tmplen == 0) {
 
@@ -2404,7 +2413,7 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -2586,7 +2595,7 @@ reply_generic_dnskey(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrt
 		int tmplen = 0;
 		int origlen = outlen;
 	
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, rrtype, rbt, reply, replysize, outlen, &rrsig_count, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, rrtype, rbt, reply, replysize, outlen, &rrsig_count, q->aa, zonenumberx);
 		
 		if (tmplen == 0) {
 
@@ -2626,7 +2635,7 @@ reply_generic_dnskey(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrt
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -2811,7 +2820,7 @@ reply_ipseckey(struct sreply *sreply, int *sretlen, ddDB *db)
 		int tmplen = 0;
 		int origlen = outlen;
 	
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_IPSECKEY, rbt, reply, replysize, outlen, &rrsig_count, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_IPSECKEY, rbt, reply, replysize, outlen, &rrsig_count, q->aa, zonenumberx);
 		
 		if (tmplen == 0) {
 
@@ -2851,7 +2860,7 @@ reply_ipseckey(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -2912,6 +2921,9 @@ reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	int tmplen = 0;
 	uint16_t rollback;
+	uint32_t zonenumberx;
+
+	zonenumberx = determine_zone(rbt);
 
 	if ((find_rr(rbt, DNS_TYPE_RRSIG)) == NULL)
 		return -1;
@@ -2943,7 +2955,7 @@ reply_rrsig(struct sreply *sreply, int *sretlen, ddDB *db)
 	odh->nsrr = 0;
 	odh->additional = 0;
 
-	tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, -1, rbt, reply, replysize, outlen, &a_count, q->aa);
+	tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, -1, rbt, reply, replysize, outlen, &a_count, q->aa, zonenumberx);
 	if (tmplen == 0) {
 		/* we're forwarding and had no RRSIG return with -1 */
 		if (q->aa != 1)
@@ -3092,7 +3104,7 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_AAAA, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_AAAA, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 
@@ -3130,7 +3142,7 @@ reply_aaaa(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -3322,7 +3334,7 @@ reply_kx(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_KX, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_KX, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 		if (tmplen == 0) {
 
@@ -3360,7 +3372,7 @@ reply_kx(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -3399,7 +3411,7 @@ reply_kx(struct sreply *sreply, int *sretlen, ddDB *db)
 			if (dnssec && q->dnssecok && (rbt0->flags & RBT_DNSSEC)) {
 				int retcount;
 
-				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_AAAA, rbt0, reply, replysize, outlen, &retcount, q->aa);
+				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_AAAA, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 				if (tmplen == 0) {
 					/* we're forwarding and had no RRSIG return with -1 */
@@ -3450,7 +3462,7 @@ reply_kx(struct sreply *sreply, int *sretlen, ddDB *db)
 			if (dnssec && q->dnssecok && (rbt0->flags & RBT_DNSSEC)) {
 				int retcount;
 
-				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_A, rbt0, reply, replysize, outlen, &retcount, q->aa);
+				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_A, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 				if (tmplen == 0) {
 					/* we're forwarding and had no RRSIG return with -1 */
@@ -3488,7 +3500,7 @@ reply_kx(struct sreply *sreply, int *sretlen, ddDB *db)
 						outlen = rollback;
 						goto out;
 					}
-					tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+					tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 					if (tmplen != 0) {
 						outlen = tmplen;
 						odh->nsrr = htons(retcount);	
@@ -3691,7 +3703,7 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_MX, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_MX, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 		if (tmplen == 0) {
 
@@ -3729,7 +3741,7 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -3768,7 +3780,7 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 			if (dnssec && q->dnssecok && (rbt0->flags & RBT_DNSSEC)) {
 				int retcount;
 
-				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_AAAA, rbt0, reply, replysize, outlen, &retcount, q->aa);
+				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_AAAA, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 				if (tmplen == 0) {
 					/* we're forwarding and had no RRSIG return with -1 */
@@ -3819,7 +3831,7 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 			if (dnssec && q->dnssecok && (rbt0->flags & RBT_DNSSEC)) {
 				int retcount;
 
-				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_A, rbt0, reply, replysize, outlen, &retcount, q->aa);
+				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_A, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 				if (tmplen == 0) {
 					/* we're forwarding and had no RRSIG return with -1 */
@@ -3857,7 +3869,7 @@ reply_mx(struct sreply *sreply, int *sretlen, ddDB *db)
 						outlen = rollback;
 						goto out;
 					}
-					tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+					tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 					if (tmplen != 0) {
 						outlen = tmplen;
 						odh->nsrr = htons(retcount);	
@@ -4065,7 +4077,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(rbt1->zone, rbt1->zonelen, DNS_TYPE_NS, rbt1, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(rbt1->zone, rbt1->zonelen, DNS_TYPE_NS, rbt1, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -4099,7 +4111,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 				odh->nsrr += addcount;
 				HTONS(odh->nsrr);
 
-				tmplen = additional_rrsig(rbt1->zone, rbt1->zonelen, DNS_TYPE_DS, rbt1, reply, replysize, outlen, &retcount, q->aa);
+				tmplen = additional_rrsig(rbt1->zone, rbt1->zonelen, DNS_TYPE_DS, rbt1, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 				if (tmplen == 0) {
 					/* we're forwarding and had no RRSIG return with -1 */
@@ -4130,7 +4142,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 
 				nrbt = find_nsec3_match_qname(rbt1->zone, rbt1->zonelen, rbt0, db);
 				if (nrbt != NULL) {
-					tmplen = additional_nsec3(nrbt->zone, nrbt->zonelen, DNS_TYPE_NSEC3, nrbt, reply, replysize, outlen, &retcount, q->aa);
+					tmplen = additional_nsec3(nrbt->zone, nrbt->zonelen, DNS_TYPE_NSEC3, nrbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 					if (tmplen == 0) {
 						NTOHS(odh->query);
@@ -4181,7 +4193,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 
 			/* additional RRSIG for the additional AAAA */
 			if (dnssec && q->dnssecok && (rbt0->flags & RBT_DNSSEC)) {
-				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_AAAA, rbt0, reply, replysize, outlen, &retcount, q->aa);
+				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_AAAA, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 				if (tmplen == 0) {
 					/* we're forwarding and had no RRSIG return with -1 */
@@ -4233,7 +4245,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 			if (dnssec && q->dnssecok && (rbt0->flags & RBT_DNSSEC)) {
 				int retcount;
 
-				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_A, rbt0, reply, replysize, outlen, &retcount, q->aa);
+				tmplen = additional_rrsig(ad0->name, ad0->namelen, DNS_TYPE_A, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 				if (tmplen == 0) {
 					/* we're forwarding and had no RRSIG return with -1 */
@@ -4275,7 +4287,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -4345,6 +4357,9 @@ reply_cname(struct sreply *sreply, int *sretlen, ddDB *db)
 	time_t now;
 	int origtype = q->hdr->qtype;
 	int retcount;
+	uint32_t zonenumberx;
+
+	zonenumberx = determine_zone(rbt);
 
 	now = time(NULL);
 
@@ -4489,7 +4504,7 @@ again:
 
 	if (dnssec && q->dnssecok && (rbt->flags & RBT_DNSSEC)) {
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_CNAME, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_CNAME, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -4527,7 +4542,7 @@ again:
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -4595,6 +4610,9 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	uint16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+
+	zonenumberx = determine_zone(rbt);
 
 	now = time(NULL);
 	if ((rrset = find_rr(rbt, DNS_TYPE_PTR)) == NULL)
@@ -4678,7 +4696,7 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	if (dnssec && q->dnssecok && (rbt->flags & RBT_DNSSEC)) {
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_PTR, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_PTR, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -4715,7 +4733,7 @@ reply_ptr(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -4784,6 +4802,9 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 	int retlen = -1;
 	uint16_t rollback;
 	time_t now;
+	uint32_t zonenumberx;
+
+	zonenumberx = determine_zone(rbt);
 
 	now = time(NULL);
 
@@ -4926,7 +4947,7 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 	
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_SOA, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_SOA, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -4966,7 +4987,7 @@ reply_soa(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -5142,7 +5163,7 @@ reply_https(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_HTTPS, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_HTTPS, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -5182,7 +5203,7 @@ reply_https(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -5356,7 +5377,7 @@ reply_svcb(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_SVCB, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_SVCB, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -5396,7 +5417,7 @@ reply_svcb(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -5563,7 +5584,7 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_TXT, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_TXT, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -5603,7 +5624,7 @@ reply_txt(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -5848,7 +5869,7 @@ reply_loc(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_LOC, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_LOC, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -5885,7 +5906,7 @@ reply_loc(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -6044,7 +6065,7 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_TLSA, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_TLSA, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -6081,7 +6102,7 @@ reply_tlsa(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -6239,7 +6260,7 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_SSHFP, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_SSHFP, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -6276,7 +6297,7 @@ reply_sshfp(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -6470,7 +6491,7 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NAPTR, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_NAPTR, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -6507,7 +6528,7 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -6666,7 +6687,7 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_SRV, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_SRV, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -6703,7 +6724,7 @@ reply_srv(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -6822,6 +6843,9 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 	} uniq[3];
 		
 	int rruniq = 0;
+	uint32_t zonenumberx;
+
+	zonenumberx = determine_zone(rbt);
 
 	if (istcp) {
 		replysize = 65535;
@@ -6985,7 +7009,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(rbt->zone, rbt->zonelen, DNS_TYPE_SOA, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(rbt->zone, rbt->zonelen, DNS_TYPE_SOA, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -7019,7 +7043,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 			memcpy(&uniq[rruniq].name, rbt0->zone, rbt0->zonelen);
 			uniq[rruniq++].len = rbt0->zonelen;
 			
-			tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa);
+			tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 			if (tmplen == 0) {
 				NTOHS(odh->query);
@@ -7050,7 +7074,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 			uniq[rruniq++].len = rbt0->zonelen;
 
 			if (memcmp(uniq[0].name, uniq[1].name, uniq[1].len) != 0) {
-				tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa);
+				tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 				addrec = 1;
 			}
 
@@ -7085,7 +7109,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 
 			if (memcmp(uniq[0].name, uniq[2].name, uniq[2].len) != 0&&
 				memcmp(uniq[1].name, uniq[2].name, uniq[2].len) != 0) {
-				tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa);
+				tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 				addrec = 1;
 			}
 			
@@ -7413,6 +7437,10 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 		
 	int rruniq = 0;
 
+	uint32_t zonenumberx;
+
+	zonenumberx = determine_zone(rbt);
+
 	if (istcp) {
 		replysize = 65535;
 	}
@@ -7562,7 +7590,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(rbt->zone, rbt->zonelen, DNS_TYPE_SOA, rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(rbt->zone, rbt->zonelen, DNS_TYPE_SOA, rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -7588,7 +7616,9 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (find_rr(rbt, DNS_TYPE_NSEC)) {
 			rbt0 = Lookup_zone(db, q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, 0);
 			if (rbt0 != NULL) {
+#if 0
 				tmplen = additional_nsec(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, rbt0, reply, replysize, outlen, q->aa);
+#endif
 			}
 		} else if (find_rr(rbt, DNS_TYPE_NSEC3PARAM)) {
 			rbt0 = find_nsec3_match_qname(q->hdr->name, q->hdr->namelen, rbt, db);
@@ -7598,7 +7628,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 			memcpy(&uniq[rruniq].name, rbt0->zone, rbt0->zonelen);
 			uniq[rruniq++].len = rbt0->zonelen;
 
-			tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa);
+			tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 		}
 
 		if (tmplen == 0) {
@@ -7631,7 +7661,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 				goto out;
 			}
 
-			tmplen = additional_nsec3(ncn->zone, ncn->zonelen, DNS_TYPE_NSEC3, ncn, reply, replysize, outlen, &retcount, q->aa);
+			tmplen = additional_nsec3(ncn->zone, ncn->zonelen, DNS_TYPE_NSEC3, ncn, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 			if (tmplen == 0) {
 				NTOHS(odh->query);
@@ -7656,7 +7686,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 			if (rbt1 == NULL)
 				goto out;
 
-			tmplen = additional_nsec3(rbt1->zone, rbt1->zonelen, DNS_TYPE_NSEC3, rbt1, reply, replysize, outlen, &retcount, q->aa);
+			tmplen = additional_nsec3(rbt1->zone, rbt1->zonelen, DNS_TYPE_NSEC3, rbt1, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
 			if (tmplen == 0) {
 				NTOHS(odh->query);
@@ -7807,7 +7837,7 @@ reply_any(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto skip;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, res->zonenumber);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
@@ -7884,7 +7914,7 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	time_t now;
 
 	now = time(NULL);
-	if (soa && (rrset = find_rr(rbt, DNS_TYPE_SOA)) != 0) {
+	if (soa && ((rrset = find_rr(rbt, DNS_TYPE_SOA)) != NULL)) {
 		NTOHS(odh->answer);
 		odh->answer++;
 		HTONS(odh->answer);
@@ -8008,9 +8038,14 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 	}
-	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) != 0) {
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen,
-			-1, rbt, reply, rlen, offset, &rrsig_count, q->aa);
+	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) != NULL) {
+		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
+
+			tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen,
+				-1, rbt, reply, rlen, offset, &rrsig_count, 
+				q->aa, zonenumberx);
 
 			if (tmplen == 0)
 				goto truncate;
@@ -8020,6 +8055,9 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			NTOHS(odh->answer);
 			odh->answer += rrsig_count;
 			HTONS(odh->answer);
+
+			break;
+		}
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_IPSECKEY)) != 0) {
 		ipseckey_count = 0;
@@ -8674,67 +8712,69 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		if (rrp == NULL)
 			return -1;
 
-		if (offset + q->hdr->namelen > rlen)
-			goto truncate;
+		if (rrp->zonenumber == zonenumberx) {
+			if (offset + q->hdr->namelen > rlen)
+				goto truncate;
 
-		memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
-		offset += q->hdr->namelen;
+			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
+			offset += q->hdr->namelen;
 
-		if (compress) {
-			if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
-				offset = tmplen;
-			} 
-		}
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
 
-		answer = (struct answer *)&reply[offset];
+			answer = (struct answer *)&reply[offset];
 
-		answer->type = htons(DNS_TYPE_NSEC3PARAM);
-		answer->class = htons(DNS_CLASS_IN);
+			answer->type = htons(DNS_TYPE_NSEC3PARAM);
+			answer->class = htons(DNS_CLASS_IN);
 
-		if (q->aa)
-			answer->ttl = htonl(rrset->ttl);
-		else
-			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+			if (q->aa)
+				answer->ttl = htonl(rrset->ttl);
+			else
+				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-		answer->rdlength = htons(namelen);
+			answer->rdlength = htons(namelen);
 
-		offset += 10;		/* struct answer */
+			offset += 10;		/* struct answer */
 
-		if (offset + sizeof(((struct nsec3param *)rrp->rdata)->algorithm)
-			+ sizeof(((struct nsec3param *)rrp->rdata)->flags) 
-			+ sizeof(((struct nsec3param *)rrp->rdata)->iterations)
-			+ sizeof(((struct nsec3param *)rrp->rdata)->saltlen) > rlen)
-			goto truncate;
+			if (offset + sizeof(((struct nsec3param *)rrp->rdata)->algorithm)
+				+ sizeof(((struct nsec3param *)rrp->rdata)->flags) 
+				+ sizeof(((struct nsec3param *)rrp->rdata)->iterations)
+				+ sizeof(((struct nsec3param *)rrp->rdata)->saltlen) > rlen)
+				goto truncate;
 
-		nsec3param_alg = (uint8_t *)&reply[offset];
-		*nsec3param_alg = ((struct nsec3param *)rrp->rdata)->algorithm;
+			nsec3param_alg = (uint8_t *)&reply[offset];
+			*nsec3param_alg = ((struct nsec3param *)rrp->rdata)->algorithm;
 
-		offset++;
+			offset++;
 
-		nsec3param_flags = (uint8_t *)&reply[offset];
-		*nsec3param_flags = ((struct nsec3param *)rrp->rdata)->flags;
+			nsec3param_flags = (uint8_t *)&reply[offset];
+			*nsec3param_flags = ((struct nsec3param *)rrp->rdata)->flags;
 
-		offset++;
+			offset++;
 
-		pack16(&reply[offset], htons(((struct nsec3param *)rrp->rdata)->iterations));
-		offset += sizeof(uint16_t);
+			pack16(&reply[offset], htons(((struct nsec3param *)rrp->rdata)->iterations));
+			offset += sizeof(uint16_t);
 
-		nsec3param_saltlen = (uint8_t *)&reply[offset];
-		*nsec3param_saltlen = ((struct nsec3param *)rrp->rdata)->saltlen;
+			nsec3param_saltlen = (uint8_t *)&reply[offset];
+			*nsec3param_saltlen = ((struct nsec3param *)rrp->rdata)->saltlen;
 
-		offset++;
-	
-		memcpy(&reply[offset], &((struct nsec3param *)rrp->rdata)->salt,
-			((struct nsec3param *)rrp->rdata)->saltlen);	
+			offset++;
 		
-		offset += ((struct nsec3param *)rrp->rdata)->saltlen;
+			memcpy(&reply[offset], &((struct nsec3param *)rrp->rdata)->salt,
+				((struct nsec3param *)rrp->rdata)->saltlen);	
+			
+			offset += ((struct nsec3param *)rrp->rdata)->saltlen;
 
-		answer->rdlength = htons(plength(&reply[offset], answer->rdata));
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
 
-		NTOHS(odh->answer);
-		odh->answer += 1;
-		HTONS(odh->answer);
+			NTOHS(odh->answer);
+			odh->answer += 1;
+			HTONS(odh->answer);
+		}
 
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) != 0) {
@@ -9992,7 +10032,7 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 		int origlen = outlen;
 		int retcount;
 
-		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, ntohs(q->hdr->qtype), rbt, reply, replysize, outlen, &retcount, q->aa);
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, ntohs(q->hdr->qtype), rbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 	
 		if (tmplen == 0) {
 			/* we're forwarding and had no RRSIG return with -1 */
@@ -10029,7 +10069,7 @@ reply_generic(struct sreply *sreply, int *sretlen, ddDB *db)
 				outlen = rollback;
 				goto out;
 			}
-			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db);
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
 			if (tmplen != 0) {
 				outlen = tmplen;
 				odh->nsrr = htons(retcount);	
