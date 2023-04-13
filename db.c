@@ -729,17 +729,21 @@ merge_db(ddDB *db, ddDB *db_dest)
 	TAILQ_FOREACH(iwq, &iwqhead, entries) {
 		rbt = find_rrset(db, iwq->zonename, iwq->zonenamelen);
 		if (rbt == NULL) {
+			free(zones);
 			return -1;	
 		}
 
 		rp = find_rr(rbt, DNS_TYPE_SOA);
 		if (rp == NULL) {
+			free(zones);
 			return -1;
 		}
 
 		rt1 = TAILQ_FIRST(&rp->rr_head);
-		if (rt1 == NULL)
+		if (rt1 == NULL) {
+			free(zones);
 			return -1;
+		}
 
 		zones[i++] = rt1->zonenumber;
 	}
@@ -752,21 +756,22 @@ merge_db(ddDB *db, ddDB *db_dest)
 		TAILQ_FOREACH_SAFE(rp, &rbt->rrset_head, entries, rp0) {
 			rp2 = find_rr(rbt, rp->rrtype);
 			if (rp2 == NULL) {
-				goto nextrbt;
+				goto nextrrset;
 			}
 			TAILQ_FOREACH_SAFE(rt1, &rp2->rr_head, entries, rt2) {
 				for (i = 0; i < count; i++) {
 					if (rt1->zonenumber == zones[i])
-						goto nextrbt;
+						goto nextrrset;
 				}
 				create_rr_ex(db_dest, rbt->zone, rbt->zonelen, rp->rrtype, rt1->rdata, rp->ttl, rt1->rdlen, rt1->zonenumber);
 			}
 
-		}
+nextrrset:
+			continue;
 
-nextrbt:
-		continue;
+		}
 	}
 
+	free(zones);
 	return 0;
 }

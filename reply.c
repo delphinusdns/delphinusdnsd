@@ -8235,7 +8235,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		dnskey_count = 0;
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 			if (rrp->zonenumber != zonenumberx) {
-				dolog(LOG_INFO, "rrp zonenumber %lu vs. %lu\n", rrp->zonenumber, zonenumberx);
 				continue;
 			}
 			if (offset + q->hdr->namelen > rlen)
