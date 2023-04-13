@@ -16,7 +16,7 @@ For 1.8.0 release
   to have replicant compatibility for NSEC
 - filter input to dddctl query for escape codes.	[DONE]
 - make delphinusdnsd not restart the entire daemon upon axfr, just merge or
-internally build a new database and switch them.
+internally build a new database and switch them.	[DONE]
 - partially rewrite AXFR code.
 - fix the TXT RR problem (DNSSEC) 			[DONE]
 - make a forked tcp accept process for TCP engine which should allow us 
