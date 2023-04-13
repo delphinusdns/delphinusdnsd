@@ -761,9 +761,11 @@ merge_db(ddDB *db, ddDB *db_dest)
 			TAILQ_FOREACH_SAFE(rt1, &rp2->rr_head, entries, rt2) {
 				for (i = 0; i < count; i++) {
 					if (rt1->zonenumber == zones[i])
-						goto nextrrset;
+						goto nextrr;
 				}
 				create_rr_ex(db_dest, rbt->zone, rbt->zonelen, rp->rrtype, rt1->rdata, rp->ttl, rt1->rdlen, rt1->zonenumber);
+nextrr:
+				continue;
 			}
 
 nextrrset:
