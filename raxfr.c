@@ -2228,7 +2228,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 						if (lrz != NULL) {
 								dolog(LOG_DEBUG, "zone %s is being notified now\n", lrz->zonename);
 								if ((serial = get_remote_soa(lrz)) == MY_SOCK_TIMEOUT) {
-										dolog(LOG_INFO, "timeout upon notify, dropping\n");
+										dolog(LOG_INFO, "timeout (or tsig failure) upon notify, dropping\n");
 								} else if (serial > lrz->soa.serial) {
 										/* initiate AXFR and update zone */
 										dolog(LOG_INFO, "zone %s new higher serial detected (%lld vs. %d)\n", lrz->zonename, serial, lrz->soa.serial);
@@ -2492,6 +2492,7 @@ get_remote_soa(struct rzone *rzone)
 	FILE *f = NULL;
 	int format = 0;
 	int dotsig = 1;
+	int seen_tsig = 0;
 	time_t now;
 	
 	char shabuf[32];
@@ -2842,6 +2843,8 @@ get_remote_soa(struct rzone *rzone)
 				return(MY_SOCK_TIMEOUT);
 			}
 
+			seen_tsig = 1;
+
 			p = (estart + len);
 		} else {
 			for (sr = supported; sr->rrtype != 0; sr++) {
@@ -2877,6 +2880,9 @@ get_remote_soa(struct rzone *rzone)
 	if (dotsig) {
 		delphinusdns_HMAC_CTX_free(ctx);
 	}
+
+	if (dotsig && seen_tsig != 1)
+		return(MY_SOCK_TIMEOUT);
 
 	return ((int64_t)ntohl(mysoa.serial));
 }

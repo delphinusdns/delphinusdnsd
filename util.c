@@ -1843,6 +1843,9 @@ optskip:
 int
 free_question(struct question *q)
 {
+	if (q == NULL)
+		return 0;
+
 	free(q->hdr->name);
 	free(q->hdr->original_name);
 	free(q->hdr);
@@ -2183,7 +2186,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	char shabuf[DNS_HMAC_SHA256_SIZE];
 	char *reply;
 	struct timeval tv, savetv;
-	struct question *q;
+	struct question *q = NULL;
 	struct whole_header {
 		uint16_t len;
 		struct dns_header dh;
@@ -2198,6 +2201,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	int segmentcount = 0;
 	int count = 0;
 	int have_question = 1;
+	int seen_tsig = 0;
 	uint16_t rdlen, *plen;
 	uint16_t tcplen;
 	
@@ -2547,6 +2551,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 		
 				p = (estart + len);
 
+				seen_tsig = 1;
+
 				if ((len = mybase64_decode(tsigpass, (u_char *)pseudo_packet, SECRET_PSEUDO_PACKET_SIZE)) < 0) {
 					dolog(LOG_INFO, "bad base64 password\n");
 					goto cleanup;
@@ -2644,9 +2650,15 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 	if ((len = recv(so, reply, 0xffff, 0)) > 0) {	
 		dolog(LOG_INFO, "RAXFR WARN: received %d more bytes.\n", len);
+		goto cleanup;
 	}
 
 out:
+
+	if (tsigkey && ! seen_tsig) {
+		dolog(LOG_INFO, "no final tsig RR seen (despite us requesting it), drop\n");
+		goto cleanup;
+	}
 
 #if __OpenBSD__
 	freezero(pseudo_packet, SECRET_PSEUDO_PACKET_SIZE);
@@ -2670,6 +2682,12 @@ cleanup:
 	explicit_bzero(pseudo_packet, SECRET_PSEUDO_PACKET_SIZE);
 	free(pseudo_packet);
 #endif
+	if (tsigkey) {
+		delphinusdns_HMAC_CTX_free(ctx);
+	}
+
+	free_question(q);
+
 	return -1;
 }
 
