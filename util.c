@@ -1824,6 +1824,9 @@ optskip:
 int
 free_question(struct question *q)
 {
+	if (q == NULL)
+		return 0;
+
 	free(q->hdr->name);
 	free(q->hdr->original_name);
 	free(q->hdr);
@@ -2163,7 +2166,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	char shabuf[DNS_HMAC_SHA256_SIZE];
 	char *reply;
 	struct timeval tv, savetv;
-	struct question *q;
+	struct question *q = NULL;
 	struct whole_header {
 		uint16_t len;
 		struct dns_header dh;
@@ -2178,6 +2181,7 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 	int segmentcount = 0;
 	int count = 0;
 	int have_question = 1;
+	int seen_tsig = 0;
 	uint16_t rdlen, *plen;
 	uint16_t tcplen;
 	
@@ -2504,6 +2508,8 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 					fprintf(stderr, "error with TSIG record\n");
 					return -1;
 				}
+
+				seen_tsig = 1;
 		
 				p = (estart + len);
 
@@ -2604,12 +2610,14 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 	if ((len = recv(so, reply, 0xffff, 0)) > 0) {	
 		fprintf(stderr, ";; WARN: received %d more bytes.\n", len);
+		goto cleanup;
 	}
 
 out:
 
-	if (tsigkey) {
-		delphinusdns_HMAC_CTX_free(ctx);	
+	if (tsigkey && ! seen_tsig) {
+		dolog(LOG_INFO, "no final tsig RR seen (despite us requesting it), drop\n");
+		goto cleanup;
 	}
 
 #if 0
@@ -2623,6 +2631,21 @@ out:
 
 	return 0;
 
+cleanup:
+
+#if __OpenBSD__
+	freezero(pseudo_packet, 512);
+#else
+	explicit_bzero(pseudo_packet, 512);
+	free(pseudo_packet);
+#endif
+	if (tsigkey) {
+		delphinusdns_HMAC_CTX_free(ctx);
+	}
+
+	free_question(q);
+
+	return -1;
 }
 
 /* 
