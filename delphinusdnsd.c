@@ -183,10 +183,8 @@ void 			primary_reload(int);
 void 			primary_shutdown(int);
 void 			setup_primary(ddDB *, char **, char *, struct imsgbuf *);
 void 			setup_unixsocket(char *, struct imsgbuf *);
-#if notyet
 int			enc_cpy(u_char *, u_char *, int, uint64_t);
 int			dec_cpy(u_char *, u_char *, int, uint64_t);
-#endif
 
 /* aliases */
 
@@ -1923,14 +1921,12 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 					incoming_offset = (key & 0xffff);
 					incoming0 = (struct pkt_imsg *)&cfg->shm[SM_INCOMING].shptr[0];
 					incoming0 += incoming_offset;
-					datalen = unpack32((char *)&incoming0->u.i.buflen);
-					memcpy((char *)packet,
-						(char *)&incoming0->u.i.buf, datalen);
-#if notyet
+					datalen = unpack32((char *)&incoming0->u.i.bufclen);
+					if (dec_cpy((char *)packet,
+						(char *)&incoming0->u.i.buf, datalen, key) == 0) {
 						dolog(LOG_INFO, "internal SHAREDMEM3 decrypt failed\n");
 						goto out;
 					}
-#endif
 	
 					datalen = unpack32((char *)&incoming0->u.i.buflen);
 
@@ -1953,7 +1949,11 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
 							if (unpack32((char *)&pq0->u.s.read) == 1) {
 								key = ((key & 0xffffffffffff0000ULL) + i);
-								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD);
+								clen = enc_cpy((char *)&pq0->pqi_pq,
+									(char *)&pq,
+									sizeof(struct parsequestion) - PQ_PAD, 
+									key);
+								/* XXX no checking for clen? */
 								pack32((char *)&pq0->pqi_clen, clen);
 								pack32((char *)&pq0->u.s.read, 0);
 								break;
@@ -1981,7 +1981,11 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
 							if (unpack32((char *)&pq0->u.s.read) == 1) {
 								key = ((key & 0xffffffffffff0000ULL) + i);
-								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD);
+								clen = enc_cpy((char *)&pq0->pqi_pq, 
+										(char *)&pq, 
+										sizeof(struct parsequestion) - PQ_PAD,
+										key);
+
 								pack32((char *)&pq0->pqi_clen, clen);
 								pack32((char *)&pq0->u.s.read, 0);
 								break;
@@ -2011,7 +2015,11 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
 							if (unpack32((char *)&pq0->u.s.read) == 1) {
 								key = ((key & 0xffffffffffff0000ULL) + i);
-								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD);
+								clen = enc_cpy((char *)&pq0->pqi_pq,
+										(char *)&pq,
+										sizeof(struct parsequestion) - PQ_PAD,
+										key);
+
 								pack32((char *)&pq0->pqi_clen, clen);
 								pack32((char *)&pq0->u.s.read, 0);
 								break;
@@ -2043,7 +2051,11 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
 							if (unpack32((char *)&pq0->u.s.read) == 1) {
 								key = ((key & 0xffffffffffff0000ULL) + i);
-								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD);
+								clen = enc_cpy((char *)&pq0->pqi_pq,
+										(char *)&pq,
+										sizeof(struct parsequestion) - PQ_PAD,
+										key);
+
 								pack32((char *)&pq0->pqi_clen, clen);
 								pack32((char *)&pq0->u.s.read, 0);
 								break;
@@ -2071,7 +2083,11 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 						for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
 							if (unpack32((char *)&pq0->u.s.read) == 1) {
 								key = ((key & 0xffffffffffff0000ULL) + i);
-								memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD);
+								clen = enc_cpy((char *)&pq0->pqi_pq,
+										(char *)&pq,
+										sizeof(struct parsequestion) - PQ_PAD,
+										key);
+
 								pack32((char *)&pq0->pqi_clen, clen);
 								pack32((char *)&pq0->u.s.read, 0);
 								break;
@@ -2129,7 +2145,11 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 					for (i = 0; i < SHAREDMEMSIZE; i++, pq0++) {
 						if (unpack32((char *)&pq0->u.s.read) == 1) {
 							key = ((key & 0xffffffffffff0000ULL) + i);
-							memcpy((char *)&pq0->pqi_pq, (char *)&pq, sizeof(struct parsequestion) - PQ_PAD);
+							clen = enc_cpy((char *)&pq0->pqi_pq,
+									(char *)&pq,
+									sizeof(struct parsequestion) - PQ_PAD,
+									key);
+
 							pack32((char *)&pq0->pqi_clen, clen);
 							pack32((char *)&pq0->u.s.read, 0);
 							break;
@@ -3152,16 +3172,16 @@ send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struc
 	for (i = 0; i < SHAREDMEMSIZE3; i++, incoming++) {
 		if (unpack32((char *)&incoming->u.i.read) == 1) {
 			key = ((key & 0xffffffffffff0000ULL) + i);
-			memcpy((char *)&incoming->u.i.buf, (char *)buf, 
+			clen = enc_cpy((char *)&incoming->u.i.buf, (char *)buf, 
 					MIN(len, (sizeof(incoming->u.buf) - \
-					sizeof(incoming->u.i) - 16)));
-#if notyet
+					sizeof(incoming->u.i) - 16)), key);
+
 			if (clen == 0) {
 				sm_unlock(cfg->shm[SM_INCOMING].shptr, 
 					cfg->shm[SM_INCOMING].shptrsize);
 				return (-1);
 			}
-#endif
+
 			pack32((char *)&incoming->u.i.buflen, len);
 			pack32((char *)&incoming->u.i.bufclen, clen);
 			pack32((char *)&incoming->u.i.read, 0);
@@ -3235,14 +3255,12 @@ send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struc
 				pq0 = (struct pq_imsg *)&cfg->shm[SM_PARSEQUESTION].shptr[0];
 				pq0 += pq_offset;
 
-				len = unpack32((char *)&pq0->pqi_len);
-				/* pjp */
-				memcpy((char *)pq, (char *)&pq0->pqi_pq, sizeof(struct parsequestion) - PQ_PAD);
-#if notyet
+				clen = unpack32((char *)&pq0->pqi_clen);
+
+				if (dec_cpy((char *)pq, (char *)&pq0->pqi_pq, clen, key) == 0) {
 					dolog(LOG_ERR, "decryption of parsequestion failed\n"); 
 					return (-1);
 				}
-#endif
 
 				sm_lock(cfg->shm[SM_PARSEQUESTION].shptr, 
 						cfg->shm[SM_PARSEQUESTION].shptrsize);
@@ -3279,7 +3297,6 @@ send_to_parser(struct cfg *cfg, struct imsgbuf *pibuf, char *buf, int len, struc
 	return PARSE_RETURN_ACK;
 }
 
-#if notyet
 
 int
 enc_cpy(u_char *outbuf, u_char *inbuf, int len, uint64_t key)
@@ -3383,4 +3400,3 @@ err:
 	EVP_CIPHER_CTX_free(ctx);
 	return (0);	
 }
-#endif /* not yet */
