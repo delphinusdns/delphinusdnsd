@@ -16,6 +16,8 @@ keep a minimal pledge of "stdio recvfd ..."
   on valid nameservers.
 - add a version output in dddctl, also add a tsig output for creating 32 byte
   random tsig keys.
+- AXFR transfers are fixed to require TSIG records when configured to use them
+  This fixes a MITM/security problem.
 
 
 [2022] Changes in RELEASE_1_7 from RELEASE_1_6
