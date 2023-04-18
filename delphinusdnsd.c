@@ -523,6 +523,13 @@ main(int argc, char *argv[], char *environ[])
 		exit(1);
 	}
 
+#if __OpenBSD__
+	if (mimmutable(ptr, sizeof(pid_t)) == -1) {
+		dolog(LOG_ERR, "mimmutable: %s\n", strerror(errno));
+		exit(1);
+	}
+#endif
+
 	*ptr = 0;
 	
 	/* open internal database */
@@ -3105,6 +3112,15 @@ sm_zebra(char *shmptr, size_t members, size_t size_member)
 			exit(1);
 		}
 	}
+
+#if __OpenBSD__
+
+	if (mimmutable(ptr, members * size_member) == -1) {
+		dolog(LOG_ERR, "mimmutable: %s\n", strerror(errno));
+		exit(1);
+	}
+
+#endif
 }
 
 
