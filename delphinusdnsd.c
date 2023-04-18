@@ -3117,6 +3117,7 @@ sm_zebra(char *shmptr, size_t members, size_t size_member)
 
 	if (mimmutable(ptr, members * size_member) == -1) {
 		dolog(LOG_ERR, "mimmutable: %s\n", strerror(errno));
+		ddd_shutdown();
 		exit(1);
 	}
 
