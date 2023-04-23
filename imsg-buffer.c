@@ -140,7 +140,7 @@ ibuf_size(struct ibuf *buf)
 size_t
 ibuf_left(struct ibuf *buf)
 {
-	return (plength(buf->max, buf->wpos));
+	return (buf->max - buf->wpos);
 }
 
 void

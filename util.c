@@ -34,7 +34,6 @@
 #include <unistd.h>
 #include <ctype.h>
 
-#include <vis.h>
 
 #ifdef __linux__
 #include <grp.h>
@@ -43,12 +42,14 @@
 #include <bsd/stdlib.h>
 #include <bsd/string.h>
 #include <bsd/unistd.h>
+#include <bsd/vis.h>
 #include <bsd/sys/queue.h>
 #define __unused
 #include <bsd/sys/tree.h>
 #include <bsd/sys/endian.h>
 #include "imsg.h"
 #else /* not linux */
+#include <vis.h>
 #include <sys/queue.h>
 #include <sys/tree.h>
 #ifdef __FreeBSD__

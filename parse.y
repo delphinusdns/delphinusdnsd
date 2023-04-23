@@ -1351,16 +1351,20 @@ zonestatement:
 					return -1;
 				}
 
+#ifndef __linux__
 				if (debug)
 					printf("%s SVCB -> %llu %s %s\n", $1, $7, $9, $11);
+#endif
 
 			} else if (strcasecmp($3, "https") == 0) {
 				if (fill_https(mydb, $1, $3, $5, $7, $9, $11) < 0) {	
 					return -1;
 				}
 
+#ifndef __linux__
 				if (debug)
 					printf("%s HTTPS -> %llu %s %s\n", $1, $7, $9, $11);
+#endif
 			} else {
 				if (debug)
 					printf("another record I don't know about?");
@@ -2893,7 +2897,7 @@ fill_rrsig(ddDB *db, char *name, char *type, uint32_t myttl, char *typecovered, 
 	rrsig->labels = labels;
 	rrsig->original_ttl = original_ttl;
 
-#if __FreeBSD__ || __NetBSD__
+#if __FreeBSD__ || __NetBSD__ || __linux__
 	snprintf(tmpbuf, sizeof(tmpbuf), "%lu", sig_expiration);
 #else
 	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_expiration);
@@ -2904,7 +2908,7 @@ fill_rrsig(ddDB *db, char *name, char *type, uint32_t myttl, char *typecovered, 
 	}
 	timebuf = timegm(&tmbuf);
 	rrsig->signature_expiration = timebuf;
-#if __FreeBSD__ || __NetBSD__
+#if __FreeBSD__ || __NetBSD__ || __linux__
 	snprintf(tmpbuf, sizeof(tmpbuf), "%lu", sig_inception);
 #else
 	snprintf(tmpbuf, sizeof(tmpbuf), "%llu", sig_inception);

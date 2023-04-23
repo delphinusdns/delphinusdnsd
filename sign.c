@@ -2161,7 +2161,7 @@ sign_soa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -2364,7 +2364,7 @@ sign_https(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		pack32(p, htonl(rrset->ttl));
 		p += sizeof(uint32_t);
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -2600,7 +2600,7 @@ sign_svcb(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		pack32(p, htonl(rrset->ttl));
 		p += sizeof(uint32_t);
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -2832,7 +2832,7 @@ sign_txt(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		pack32(p, htonl(rrset->ttl));
 		p += sizeof(uint32_t);
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -3056,7 +3056,7 @@ sign_aaaa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -3279,7 +3279,7 @@ sign_nsec3(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -3480,7 +3480,7 @@ sign_nsec3param(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int ro
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -3670,7 +3670,7 @@ sign_cname(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -3849,7 +3849,7 @@ sign_ptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -4034,7 +4034,7 @@ sign_naptr(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -4284,7 +4284,7 @@ sign_srv(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -4520,7 +4520,7 @@ sign_sshfp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -4754,7 +4754,7 @@ sign_loc(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -4998,7 +4998,7 @@ sign_tlsa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -5231,7 +5231,7 @@ sign_rp(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -5459,7 +5459,7 @@ sign_zonemd(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -5690,7 +5690,7 @@ sign_hinfo(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -5925,7 +5925,7 @@ sign_caa(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -6148,7 +6148,7 @@ sign_cds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmetho
 			pack32(p, htonl(rrset->ttl));
 			p += 4;
 				
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 			snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 			expiredon2 = timegm(&tm);
@@ -6382,7 +6382,7 @@ sign_ds(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -6613,7 +6613,7 @@ sign_ns(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -6841,7 +6841,7 @@ sign_kx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -7072,7 +7072,7 @@ sign_mx(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -7306,7 +7306,7 @@ sign_ipseckey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int roll
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -7562,7 +7562,7 @@ sign_a(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -7788,7 +7788,7 @@ sign_eui48(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -8014,7 +8014,7 @@ sign_eui64(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -8417,7 +8417,7 @@ sign_cdnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollm
 			pack32(p, htonl(rrset->ttl));
 			p += 4;
 				
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 			snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 			expiredon2 = timegm(&tm);
@@ -8642,7 +8642,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 			pack32(p, htonl(rrset->ttl));
 			p += 4;
 				
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 			snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 			strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 			expiredon2 = timegm(&tm);
@@ -8813,7 +8813,7 @@ sign_dnskey(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollme
 		pack32(p, htonl(rrset->ttl));
 		p += 4;
 			
-#ifdef __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
 		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
 		expiredon2 = timegm(&tm);
@@ -10386,7 +10386,7 @@ print_rbt(FILE *of, struct rbtree *rbt)
 			len = mybase64_encode((const u_char *)((struct rrsig *)rrp2->rdata)->signature, ((struct rrsig *)rrp2->rdata)->signature_len, buf, sizeof(buf));
 			buf[len] = '\0';
 
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%lu,%lu,%d,%s,\"%s\"\n", 
 #else
 			fprintf(of, "  %s,rrsig,%d,%s,%d,%d,%d,%llu,%llu,%d,%s,\"%s\"\n", 

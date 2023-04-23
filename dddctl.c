@@ -1620,7 +1620,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			len = mybase64_encode((u_char *)((struct rrsig *)rrp2->rdata)->signature, ((struct rrsig *)rrp2->rdata)->signature_len, buf, sizeof(buf));
 			buf[len] = '\0';
 
-#if __FreeBSD__
+#if defined __FreeBSD__ || defined __linux__
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %lu %lu %d %s %s)\n", 
 #else
 			fprintf(of, "%s %d IN RRSIG (%s %d %d %d %llu %llu %d %s %s)\n", 

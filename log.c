@@ -28,7 +28,6 @@
 #include <ctype.h>
 
 #include <syslog.h>
-#include <vis.h>
 
 #ifdef __linux__
 #include <grp.h>
@@ -36,6 +35,7 @@
 #include <endian.h>
 #include <bsd/stdlib.h>
 #include <bsd/string.h>
+#include <bsd/vis.h>
 #include <bsd/sys/queue.h>
 #define __unused
 #include <bsd/sys/tree.h>
@@ -43,6 +43,7 @@
 #else /* not linux */
 #include <sys/queue.h>
 #include <sys/tree.h>
+#include <vis.h>
 #endif /* __linux__ */
 
 

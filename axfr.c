@@ -462,7 +462,9 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 		imsg_init(&accept_ibuf, cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[0]);
 		close(cfg->my_imsg[MY_IMSG_NOTIFY].imsg_fds[1]);
 		imsg_init(&notify_ibuf, cfg->my_imsg[MY_IMSG_NOTIFY].imsg_fds[0]);
+#ifndef __linux__
 		setproctitle("AXFR accept engine on port %d", axfrport);
+#endif
 		axfr_acceptloop(cfg, &accept_ibuf, &notify_ibuf, ibuf);
 		/* NOTREACHED */
 		exit(1);
