@@ -714,7 +714,7 @@ rr_duplicate(ddDB *db, char *name, int len, uint16_t type, char *data)
 int
 merge_db(ddDB *db, ddDB *db_dest)
 {
-	struct rbtree *rbt = NULL;
+	struct rbtree *rbt = NULL, *dest_rbt = NULL;
 	struct rrset *rp, *rp0, *rp2;
 	struct rr *rt1 = NULL, *rt2 = NULL;
 	struct node *walk, *walk0;
@@ -763,7 +763,9 @@ merge_db(ddDB *db, ddDB *db_dest)
 					if (rt1->zonenumber == zones[i])
 						goto nextrr;
 				}
-				create_rr_ex(db_dest, rbt->zone, rbt->zonelen, rp->rrtype, rt1->rdata, rp->ttl, rt1->rdlen, rt1->zonenumber);
+				dest_rbt = create_rr_ex(db_dest, rbt->zone, rbt->zonelen, rp->rrtype, rt1->rdata, rp->ttl, rt1->rdlen, rt1->zonenumber);
+				if (dest_rbt != NULL && rp->rrtype == DNS_TYPE_RRSIG)
+					flag_rr(dest_rbt, RBT_DNSSEC);
 nextrr:
 				continue;
 			}
