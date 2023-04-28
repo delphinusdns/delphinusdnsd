@@ -763,9 +763,12 @@ merge_db(ddDB *db, ddDB *db_dest)
 					if (rt1->zonenumber == zones[i])
 						goto nextrr;
 				}
-				dest_rbt = create_rr_ex(db_dest, rbt->zone, rbt->zonelen, rp->rrtype, rt1->rdata, rp->ttl, rt1->rdlen, rt1->zonenumber);
-				if (dest_rbt != NULL && rp->rrtype == DNS_TYPE_RRSIG)
+				if (rp->rrtype == DNS_TYPE_RRSIG) {
+					struct rrsig *rrsig_t = (struct rrsig *)rt1->rdata;
+					dest_rbt = create_rr_ex(db_dest, rbt->zone, rbt->zonelen, rp->rrtype, rt1->rdata, rrsig_t->original_ttl, rt1->rdlen, rt1->zonenumber);
 					flag_rr(dest_rbt, RBT_DNSSEC);
+				} else
+					create_rr_ex(db_dest, rbt->zone, rbt->zonelen, rp->rrtype, rt1->rdata, rp->ttl, rt1->rdlen, rt1->zonenumber);
 nextrr:
 				continue;
 			}
