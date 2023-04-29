@@ -2204,6 +2204,7 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 									0, 0, fd, &iw, sizeof(iw));
 
 							msgbuf_write(&ibuf->w);
+							endspurt = 0;
 
 							
 							break;
