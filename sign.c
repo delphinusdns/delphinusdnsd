@@ -299,6 +299,7 @@ extern int tsig;
 #define ALGORITHM_RSASHA256		8	/* rfc 5702 */
 #define ALGORITHM_RSASHA512		10	/* rfc 5702 */
 #define ALGORITHM_ECDSAP256SHA256	13	/* rfc 6605 */
+#define ALGORITHM_ECDSAP384SHA384	14	/* rfc 6605 */
 #define ALGORITHM_ED25519		15	/* rfc 8080 */
 
 #define DDD_RSA_F5			0x100000001
@@ -1237,6 +1238,7 @@ create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t
 		return (create_key_rsa(zonename, ttl, flags, algorithm, bits, pid));
 		break;
 	case ALGORITHM_ECDSAP256SHA256:
+	case ALGORITHM_ECDSAP384SHA384:
 		return (create_key_ec(zonename, ttl, flags, algorithm, bits, pid));
 		break;
 	case ALGORITHM_ED25519:
@@ -1274,8 +1276,13 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 	time_t now;
 	struct tm *tm;
 
-	if (algorithm != ALGORITHM_ECDSAP256SHA256) {
+	switch (algorithm) {
+	case ALGORITHM_ECDSAP256SHA256:
+	case ALGORITHM_ECDSAP384SHA384:
+		break;
+	default:
 		return NULL;	
+		break;
 	}
 
 	eckey = delphinusdns_EC_KEY_new();
@@ -1284,7 +1291,15 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 		return NULL;
 	}
 
-	ecgroup = delphinusdns_EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+	switch (algorithm) {
+	case ALGORITHM_ECDSAP256SHA256:
+		ecgroup = delphinusdns_EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+		break;
+	default:
+		ecgroup = delphinusdns_EC_GROUP_new_by_curve_name(NID_secp384r1);
+		break;
+	}
+
 	if (ecgroup == NULL) {
 		dolog(LOG_ERR, "EC_GROUP_new_by_curve_name(): %s\n", strerror(errno));
 		delphinusdns_EC_KEY_free(eckey);
@@ -1296,7 +1311,6 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 		goto out;
 	}
 
-	/* XXX create EC key here */
 	if (delphinusdns_EC_KEY_generate_key(eckey) == 0) {
 		dolog(LOG_ERR, "EC_KEY_generate_key(): %s\n", strerror(errno));	
 		goto out;
@@ -1572,6 +1586,9 @@ create_key_ed25519(char *zonename, int ttl, int flags, int algorithm, int bits, 
 
 	fclose(f);
 
+	explicit_bzero((u_char *)&ed_private, DDD_ED25519_PRIVATE_KEY_LENGTH);
+	explicit_bzero((u_char *)&b64, sizeof(b64));
+
 	return (retval);
 
 out:
@@ -1708,7 +1725,7 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	
 	switch (algorithm) {
 	case ALGORITHM_RSASHA256:
-		break;
+		/* FALLTHROUGH */
 	case ALGORITHM_RSASHA512:
 		break;
 	default:
@@ -1933,6 +1950,9 @@ alg_to_name(int algorithm)
 		break;
 	case ALGORITHM_ECDSAP256SHA256:
 		return ("ECDSAP256SHA256");
+		break;
+	case ALGORITHM_ECDSAP384SHA384:
+		return ("ECDSAP384SHA384");
 		break;
 	case ALGORITHM_ED25519:
 		return ("ED25519");
@@ -9244,7 +9264,18 @@ get_private_key_ec(struct keysentry *kn)
 	}
 
 
-	ecgroup = delphinusdns_EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+	ecgroup = NULL;
+
+	switch (kn->algorithm) {
+	case ALGORITHM_ECDSAP256SHA256:
+		ecgroup = delphinusdns_EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+		break;
+	case ALGORITHM_ECDSAP384SHA384:
+
+		ecgroup = delphinusdns_EC_GROUP_new_by_curve_name(NID_secp384r1);
+		break;
+	}
+
 	if (ecgroup == NULL) {
 		dolog(LOG_ERR, "EC_GROUP_new_by_curve_name(): %s\n", strerror(errno));
 		goto out;
@@ -9407,6 +9438,7 @@ store_private_key(struct keysentry *kn, char *zonename, int keyid, int algorithm
 
 			switch (algorithm) {
 			case ALGORITHM_ECDSAP256SHA256:
+			case ALGORITHM_ECDSAP384SHA384:
 				keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
 				if ((kn->ecprivate = delphinusdns_BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
 					dolog(LOG_INFO, "delphinusdns_BN_bin2bn failed\n");
@@ -10743,6 +10775,7 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 	DDD_EC_KEY *eckey;
 
 	DDD_SHA256_CTX sha256;
+	DDD_SHA384_CTX sha384;
 	DDD_SHA512_CTX sha512;
 
 	char shabuf[64];
@@ -10756,10 +10789,16 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 	uint8_t *ed_public;
 
 	char buf[512];
-	int buflen;
+	int buflen = 0;
 	
 	/* digest */
 	switch (algorithm) {
+	case ALGORITHM_ECDSAP384SHA384:
+		SHA384_Init(&sha384);
+		SHA384_Update(&sha384, key, keylen);
+		SHA384_Final((u_char *)shabuf, &sha384);
+		bufsize = 48;
+		break;
 	case ALGORITHM_ECDSAP256SHA256:
 		/* FALLTHROUGH */
 	case ALGORITHM_RSASHA256:	
@@ -10812,6 +10851,8 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 		break;
 
 	case ALGORITHM_ECDSAP256SHA256:
+		/* FALLTHROUGH */
+	case ALGORITHM_ECDSAP384SHA384:
 		eckey = get_private_key_ec(key_entry);
 		if (eckey == NULL) {
 			dolog(LOG_INFO, "reading EC private key failed\n");
@@ -10842,14 +10883,29 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 
 		memset(signature, 0, *siglen);
 
-		/* XXX what?!! */
 		buflen = delphinusdns_BN_bn2bin(r, (u_char*)buf);
-		memcpy((char *)&signature[32 - buflen], buf, buflen);
 
-		/* XXX what?!! */
+		switch (algorithm) {
+		case ALGORITHM_ECDSAP256SHA256:
+			memcpy((char *)&signature[32 - buflen], buf, buflen);
+			break;
+		default:
+			memcpy((char *)&signature[48 - buflen], buf, buflen);
+			break;
+		}
+
 		buflen = delphinusdns_BN_bn2bin(s, (u_char*)buf);
-		memcpy((char *)&signature[64 - buflen], buf, buflen);
-		*siglen = 64;
+
+		switch (algorithm) {
+		case ALGORITHM_ECDSAP256SHA256:
+			memcpy((char *)&signature[64 - buflen], buf, buflen);
+			*siglen = (32 * 2);
+			break;
+		default:
+			memcpy((char *)&signature[96 - buflen], buf, buflen);
+			*siglen = (48 * 2);
+			break;
+		}
 
 		delphinusdns_ECDSA_SIG_free(tmpsig);
 		delphinusdns_EC_KEY_free(eckey);

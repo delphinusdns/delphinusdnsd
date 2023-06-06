@@ -32,6 +32,7 @@
 #include <openssl/rsa.h>
 
 typedef SHA512_CTX 	DDD_SHA512_CTX;
+typedef SHA512_CTX	DDD_SHA384_CTX;
 typedef SHA256_CTX	DDD_SHA256_CTX;
 typedef SHA_CTX		DDD_SHA_CTX;
 
@@ -74,6 +75,8 @@ typedef ECDSA_SIG	DDD_ECDSA_SIG;
 typedef void  	DDD_SHA512_CTX;
 typedef SHA256_CTX	DDD_SHA256_CTX;
 typedef SHA_CTX		DDD_SHA_CTX;
+
+typedef SHA384_CTX	DDD_SHA512_CTX;
 
 typedef BIGNUM 		DDD_BIGNUM;
 typedef BN_CTX		DDD_BN_CTX;
