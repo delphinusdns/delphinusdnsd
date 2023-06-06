@@ -99,6 +99,10 @@ static struct keysentry {
 
 	BIGNUM *ecprivate;
 
+	/* private and public keys for ED25519 */
+	uint8_t ed_private[DDD_ED25519_PRIVATE_KEY_LENGTH];
+	uint8_t ed_public[DDD_ED25519_PUBLIC_KEY_LENGTH];
+
         SLIST_ENTRY(keysentry) keys_entry;
 } *kn, *knp;
 
@@ -114,7 +118,9 @@ char *  get_key(struct keysentry *,uint32_t *, uint16_t *, uint8_t *, uint8_t *,
 char *	create_key(char *, int, int, int, int, uint32_t *);
 char *	create_key_rsa(char *, int, int, int, int, uint32_t *);
 char *	create_key_ec(char *, int, int, int, int, uint32_t *);
+char *  create_key_ed25519(char *, int, int, int, int, uint32_t *);
 int	create_key_ec_getpid(DDD_EC_KEY *, DDD_EC_GROUP *, DDD_EC_POINT *, int, int);
+int	create_key_ed_getpid(uint8_t *, int, int);
 
 char * 	alg_to_name(int);
 int 	alg_to_rsa(int);
@@ -160,6 +166,8 @@ u_int 		dnskey_keytag(struct dnskey *dnskey);
 void		free_private_key(struct keysentry *);
 DDD_RSA * 	get_private_key_rsa(struct keysentry *);
 DDD_EC_KEY *	get_private_key_ec(struct keysentry *);
+uint8_t *	get_private_key_ed25519(struct keysentry *);
+uint8_t *	get_public_key_ed25519(struct keysentry *);
 int		store_private_key(struct keysentry *, char *, int, int);
 int 		print_rbt(FILE *, struct rbtree *);
 int 		print_rbt_bind(FILE *, struct rbtree *);
@@ -288,10 +296,10 @@ extern int tsig;
 #define SCHEME_YYYY	1
 #define SCHEME_TSTAMP	2
 
-#define ALGORITHM_RSASHA1_NSEC3_SHA1 	7 	/* rfc 5155 */
 #define ALGORITHM_RSASHA256		8	/* rfc 5702 */
 #define ALGORITHM_RSASHA512		10	/* rfc 5702 */
 #define ALGORITHM_ECDSAP256SHA256	13	/* rfc 6605 */
+#define ALGORITHM_ED25519		15	/* rfc 8080 */
 
 #define DDD_RSA_F5			0x100000001
 
@@ -1224,13 +1232,15 @@ char *
 create_key(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t *pid)
 {
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
 	case ALGORITHM_RSASHA256:
 	case ALGORITHM_RSASHA512:
 		return (create_key_rsa(zonename, ttl, flags, algorithm, bits, pid));
 		break;
 	case ALGORITHM_ECDSAP256SHA256:
 		return (create_key_ec(zonename, ttl, flags, algorithm, bits, pid));
+		break;
+	case ALGORITHM_ED25519:
+		return (create_key_ed25519(zonename, ttl, flags, algorithm, bits, pid));
 		break;
 	default:
 		dolog(LOG_INFO, "invalid algorithm in key\n");
@@ -1332,7 +1342,7 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 		dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
 		goto out;
 	}
-		
+
 	snprintf(buf, sizeof(buf), "%s.private", retval);
 
 	savemask = umask(077);
@@ -1342,7 +1352,7 @@ create_key_ec(char *zonename, int ttl, int flags, int algorithm, int bits, uint3
 		perror("lstat");
 		goto out;
 	}
-	
+
 	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
 		dolog(LOG_INFO, "%s is not a file!\n", buf);
 		goto out;
@@ -1434,6 +1444,161 @@ out:
 	delphinusdns_EC_KEY_free(eckey);
 	
 	return NULL;
+}
+
+char *
+create_key_ed25519(char *zonename, int ttl, int flags, int algorithm, int bits, uint32_t *pid)
+{
+	FILE *f;
+	uint8_t ed_private[DDD_ED25519_PRIVATE_KEY_LENGTH];
+	uint8_t ed_public[DDD_ED25519_PUBLIC_KEY_LENGTH];
+
+	struct stat sb;
+
+	char bin[4096];
+	char b64[4096];
+	char buf[512];
+	char *retval;
+
+	mode_t savemask;
+	time_t now;
+	struct tm *tm;
+
+	if (algorithm != ALGORITHM_ED25519) {
+		return NULL;
+	}
+
+	/* XXX create Ed keys here */
+	delphinusdns_ED25519_keypair((uint8_t *)&ed_public, (uint8_t *)&ed_private);
+
+	/* insert keys here */
+	*pid = create_key_ed_getpid((uint8_t *)&ed_public, algorithm, flags);
+	if (*pid == -1) {
+		dolog(LOG_ERR, "create_key_ed_getpid(): %s\n", strerror(errno));
+		goto out;
+	}
+
+	/* check for collisions, XXX should be rare */
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if (knp->pid == *pid)
+			break;
+	}
+
+	if (knp != NULL) {
+		dolog(LOG_INFO, "create_key: collision with existing pid %d\n", *pid);
+		return (create_key_ed25519(zonename, ttl, flags, algorithm, bits, pid));
+	}
+
+	snprintf(buf, sizeof(buf), "K%s%s+%03d+%d", zonename,
+		(zonename[strlen(zonename) - 1] == '.') ? "" : ".",
+		algorithm, *pid);
+
+	retval = strdup(buf);
+	if (retval == NULL) {
+		dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+		goto out;
+	}
+		
+	snprintf(buf, sizeof(buf), "%s.private", retval);
+
+	savemask = umask(077);
+
+	errno = 0;
+	if (lstat(buf, &sb) < 0 && errno != ENOENT) {
+		perror("lstat");
+		goto out;
+	}
+	
+	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
+		dolog(LOG_INFO, "%s is not a file!\n", buf);
+		goto out;
+	}
+	
+	f = fopen(buf, "w+");
+	if (f == NULL) {
+		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
+		goto out;
+	}
+
+	fprintf(f, "Private-key-format: v1.3\n");
+	fprintf(f, "Algorithm: %d (%s)\n", algorithm, alg_to_name(algorithm));
+	/* PrivateKey */
+	mybase64_encode((const u_char *)&ed_private, DDD_ED25519_PRIVATE_KEY_LENGTH, b64, sizeof(b64));
+	fprintf(f, "PrivateKey: %s\n", b64);
+
+	now = time(NULL);
+	tm = gmtime(&now);
+	
+	strftime(buf, sizeof(buf), "%Y%m%d%H%M%S", tm);
+	fprintf(f, "Created: %s\n", buf);
+	fprintf(f, "Publish: %s\n", buf);
+	fprintf(f, "Activate: %s\n", buf);
+	fclose(f);
+
+	/* now for the ED25519 public key */
+
+	snprintf(buf, sizeof(buf), "%s.key", retval);
+	umask(savemask);
+
+	errno = 0;
+	if (lstat(buf, &sb) < 0 && errno != ENOENT) {
+		perror("lstat");
+		goto out;
+	}
+
+	if (errno != ENOENT && ! S_ISREG(sb.st_mode)) {
+		dolog(LOG_INFO, "%s is not a file!\n", buf);
+		goto out;
+	}
+
+	f = fopen(buf, "w+");
+	if (f == NULL) {
+		dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
+		snprintf(buf, sizeof(buf), "%s.private", retval);
+		unlink(buf);
+		goto out;
+	}
+	
+	fprintf(f, "; This is a %s key, keyid %u, for %s%s\n", (flags == 257) ? "key-signing" : "zone-signing", *pid, zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".");
+
+	strftime(buf, sizeof(buf), "%Y%m%d%H%M%S", tm);
+	strftime(bin, sizeof(bin), "%c", tm);
+	fprintf(f, "; Created: %s (%s)\n", buf, bin);
+	fprintf(f, "; Publish: %s (%s)\n", buf, bin);
+	fprintf(f, "; Activate: %s (%s)\n", buf, bin);
+
+	mybase64_encode((const u_char *)&ed_public, DDD_ED25519_PUBLIC_KEY_LENGTH, b64, sizeof(b64));
+	fprintf(f, "%s%s %d IN DNSKEY %d 3 %d %s\n", zonename, (zonename[strlen(zonename) - 1] == '.') ? "" : ".", ttl, flags, algorithm, b64);
+
+	fclose(f);
+
+	return (retval);
+
+out:
+	return NULL;
+}
+
+int
+create_key_ed_getpid(uint8_t *public_key, int algorithm, int flags)
+{
+	int binlen;
+	char bin[4096];
+	char *p;
+
+	p = &bin[0];
+	pack16(p, htons(flags));
+	p += 2;
+	pack8(p, 3);	/* protocol always 3 */
+	p++;
+ 	pack8(p, algorithm);
+	p++;
+
+	pack(p, public_key, DDD_ED25519_PUBLIC_KEY_LENGTH);
+	p += DDD_ED25519_PUBLIC_KEY_LENGTH;
+
+	binlen = (plength(p, &bin[0]));
+
+	return (keytag((u_char *)bin, binlen));
 }
 
 int
@@ -1542,8 +1707,6 @@ create_key_rsa(char *zonename, int ttl, int flags, int algorithm, int bits, uint
 	BN_GENCB_set_old(cb, NULL, NULL);
 	
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		break;
 	case ALGORITHM_RSASHA256:
 		break;
 	case ALGORITHM_RSASHA512:
@@ -1762,9 +1925,6 @@ alg_to_name(int algorithm)
 {
 	
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1: 
-		return ("RSASHA1_NSEC3_SHA1");
-		break;
 	case ALGORITHM_RSASHA256:
 		return ("RSASHA256");
 		break;
@@ -1774,6 +1934,8 @@ alg_to_name(int algorithm)
 	case ALGORITHM_ECDSAP256SHA256:
 		return ("ECDSAP256SHA256");
 		break;
+	case ALGORITHM_ED25519:
+		return ("ED25519");
 	}
 
 	return (NULL);
@@ -1784,9 +1946,6 @@ alg_to_rsa(int algorithm)
 {
 	
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		return (NID_sha1);
-		break;
 	case ALGORITHM_RSASHA256:
 		return (NID_sha256);
 		break;
@@ -8989,9 +9148,12 @@ free_private_key(struct keysentry *kn)
 		delphinusdns_BN_clear_free(kn->rsadmp1);
 		delphinusdns_BN_clear_free(kn->rsadmq1);
 		delphinusdns_BN_clear_free(kn->rsaiqmp);
-	} else {
+	} else if (kn->algorithm == 13) {
 		/* EC */
 		delphinusdns_BN_clear_free(kn->ecprivate);
+	} else {
+		/* ED25519 */
+		explicit_bzero(kn->ed_private, DDD_ED25519_PRIVATE_KEY_LENGTH);
 	}
 
 	return;
@@ -9037,6 +9199,26 @@ get_private_key_rsa(struct keysentry *kn)
 	}
 
 	return (rsa);
+}
+
+uint8_t *
+get_private_key_ed25519(struct keysentry *kn)
+{
+	static uint8_t key[DDD_ED25519_PRIVATE_KEY_LENGTH];
+
+	memcpy(key, kn->ed_private, DDD_ED25519_PRIVATE_KEY_LENGTH);
+
+	return (key);
+}
+
+uint8_t *
+get_public_key_ed25519(struct keysentry *kn)
+{
+	static uint8_t key[DDD_ED25519_PUBLIC_KEY_LENGTH];
+
+	memcpy(key, kn->ed_public, DDD_ED25519_PUBLIC_KEY_LENGTH);
+
+	return (key);
 }
 
 DDD_EC_KEY *
@@ -9109,7 +9291,7 @@ out:
 int
 store_private_key(struct keysentry *kn, char *zonename, int keyid, int algorithm)
 {
-	FILE *f;
+	FILE *f, *publicf;
 
 	char buf[4096];
 	char key[4096];
@@ -9223,16 +9405,62 @@ store_private_key(struct keysentry *kn, char *zonename, int keyid, int algorithm
 		} else if ((p = strstr(buf, "PrivateKey: ")) != NULL) {
 			p += 12;
 
-			if (algorithm != ALGORITHM_ECDSAP256SHA256) {
+			switch (algorithm) {
+			case ALGORITHM_ECDSAP256SHA256:
+				keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
+				if ((kn->ecprivate = delphinusdns_BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
+					dolog(LOG_INFO, "delphinusdns_BN_bin2bn failed\n");
+					return -1;
+				}
+				break;
+			case ALGORITHM_ED25519:
+
+				keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
+				memcpy((uint8_t *)&kn->ed_private, key, DDD_ED25519_PRIVATE_KEY_LENGTH);
+				/* get the public key */
+				if (kn && kn->keypath != NULL) {
+					snprintf(buf, sizeof(buf), "%s/K%s%s+%03d+%d.key", 
+						kn->keypath, zonename,
+						(zonename[strlen(zonename) - 1] == '.') ? "" : ".",
+						algorithm, keyid);
+				} else {
+					snprintf(buf, sizeof(buf), "K%s%s+%03d+%d.key", 
+						zonename,
+						(zonename[strlen(zonename) - 1] == '.') ? "" : ".",
+						algorithm, keyid);
+				}
+
+				publicf = fopen(buf, "r");
+				if (publicf == NULL) {
+					dolog(LOG_INFO, "fopen: %s\n", strerror(errno));
+					return -1;
+				}
+		
+				while (fgets(buf, sizeof(buf), publicf) != NULL) {
+					p = &buf[0];
+					while (*p && isspace(*p))
+						p++;
+					if (*p == ';')
+						continue;
+		
+					p = strrchr(buf, ' ');
+					if (p == NULL) {
+						break;
+					}
+
+					p++;
+					keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
+					memcpy((uint8_t *)&kn->ed_public, key, DDD_ED25519_PUBLIC_KEY_LENGTH);
+					break;
+				}
+			
+				fclose(publicf);
+				break;
+			default:
 				dolog(LOG_INFO, "got PrivateKey in keyfile, but not on algorithm 13!\n");
 				return -1;
 			}
 
-			keylen = mybase64_decode(p, (u_char *)&key, sizeof(key));
-			if ((kn->ecprivate = delphinusdns_BN_bin2bn((const u_char *)key, keylen, NULL)) == NULL) {
-				dolog(LOG_INFO, "delphinusdns_BN_bin2bn failed\n");
-				return -1;
-			}
 		}
 	
 	} /* fgets */
@@ -10514,7 +10742,6 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 	DDD_RSA *rsa;
 	DDD_EC_KEY *eckey;
 
-	DDD_SHA_CTX sha1;
 	DDD_SHA256_CTX sha256;
 	DDD_SHA512_CTX sha512;
 
@@ -10525,17 +10752,14 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 	DDD_ECDSA_SIG *tmpsig;
 	const DDD_BIGNUM *r = NULL, *s = NULL;
 
+	uint8_t *ed_private;
+	uint8_t *ed_public;
+
 	char buf[512];
 	int buflen;
 	
 	/* digest */
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
-		SHA1_Init(&sha1);
-		SHA1_Update(&sha1, key, keylen);
-		SHA1_Final((u_char *)shabuf, &sha1);
-		bufsize = 20;
-		break;
 	case ALGORITHM_ECDSAP256SHA256:
 		/* FALLTHROUGH */
 	case ALGORITHM_RSASHA256:	
@@ -10550,6 +10774,8 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 		SHA512_Final((u_char *)shabuf, &sha512);
 		bufsize = 64;
 		break;
+	case ALGORITHM_ED25519:
+		break;
 	default:
 		dolog(LOG_INFO, "algorithm not supported\n");
 		return -1;
@@ -10557,7 +10783,6 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 
 	/* sign */
 	switch (algorithm) {
-	case ALGORITHM_RSASHA1_NSEC3_SHA1:
 	case ALGORITHM_RSASHA256:	
 	case ALGORITHM_RSASHA512:
 		rsa = get_private_key_rsa(key_entry);
@@ -10617,9 +10842,11 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 
 		memset(signature, 0, *siglen);
 
+		/* XXX what?!! */
 		buflen = delphinusdns_BN_bn2bin(r, (u_char*)buf);
 		memcpy((char *)&signature[32 - buflen], buf, buflen);
 
+		/* XXX what?!! */
 		buflen = delphinusdns_BN_bn2bin(s, (u_char*)buf);
 		memcpy((char *)&signature[64 - buflen], buf, buflen);
 		*siglen = 64;
@@ -10628,6 +10855,33 @@ sign(int algorithm, char *key, int keylen, struct keysentry *key_entry, char *si
 		delphinusdns_EC_KEY_free(eckey);
 		break;
 
+	case ALGORITHM_ED25519:
+		ed_private = get_private_key_ed25519(key_entry);
+		if (ed_private == NULL) {
+			dolog(LOG_INFO, "reading ED25519 private key failed\n");
+			return -1;
+		}
+
+		ed_public = get_public_key_ed25519(key_entry);
+		if (ed_public == NULL) {
+			dolog(LOG_INFO, "reading ED25519 public key failed\n");
+			return -1;
+		}
+
+		memset(signature, 0, *siglen);
+		if (delphinusdns_ED25519_sign((uint8_t *)signature, key, keylen, ed_public, ed_private) == 0) {
+			dolog(LOG_INFO, "ED25519 memory: %s\n", strerror(errno));
+			return -1;
+		}
+
+		*siglen = DDD_ED25519_SIGNATURE_LENGTH;
+
+		if (delphinusdns_ED25519_verify(key, keylen, signature, ed_public) == 0) {
+			dolog(LOG_INFO, "ED25519 verification failed: %s\n", strerror(errno));
+			return -1;
+		}
+
+		break;
 	default:
 		dolog(LOG_INFO, "algorithm not supported\n");
 		return -1;

@@ -814,3 +814,32 @@ delphinusdns_EC_KEY_generate_key(DDD_EC_KEY *key)
 	return (ret);
 
 }
+
+void
+delphinusdns_ED25519_keypair(uint8_t *out_public_key, uint8_t *out_private_key)
+{
+#ifdef USE_OPENSSL
+	ED25519_keypair(out_public_key, out_private_key);
+#endif
+}
+
+int
+delphinusdns_ED25519_sign(uint8_t *out_sig, const uint8_t *message, size_t message_len, const uint8_t *public_key, const uint8_t *private_key_seed)
+{
+	int ret;
+#ifdef USE_OPENSSL
+	ret = ED25519_sign(out_sig, message, message_len, public_key, private_key_seed);
+#endif
+	return (ret);
+}
+
+int
+delphinusdns_ED25519_verify(const uint8_t *message, size_t message_len, const uint8_t *signature, const uint8_t *public_key)
+{
+	int ret;
+
+#ifdef USE_OPENSSL
+	ret = ED25519_verify(message, message_len, signature, public_key);
+#endif
+	return (ret);
+}

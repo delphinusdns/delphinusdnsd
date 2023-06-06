@@ -22,6 +22,7 @@
 #include <openssl/err.h>
 #include <openssl/ec.h>
 #include <openssl/ecdsa.h>
+#include <openssl/curve25519.h>
 #include <openssl/bn.h>
 
 #include <openssl/evp.h>
@@ -47,6 +48,9 @@ typedef EC_POINT	DDD_EC_POINT;
 
 typedef ECDSA_SIG	DDD_ECDSA_SIG;
 
+#define DDD_ED25519_PUBLIC_KEY_LENGTH	ED25519_PUBLIC_KEY_LENGTH
+#define DDD_ED25519_PRIVATE_KEY_LENGTH	ED25519_PRIVATE_KEY_LENGTH
+#define DDD_ED25519_SIGNATURE_LENGTH	ED25519_SIGNATURE_LENGTH
 
 #endif
 
@@ -203,6 +207,10 @@ const DDD_EC_POINT * delphinusdns_EC_KEY_get0_public_key(const DDD_EC_KEY *);
 const DDD_BIGNUM * delphinusdns_EC_KEY_get0_private_key(const DDD_EC_KEY *);
 
 int delphinusdns_EC_KEY_generate_key(DDD_EC_KEY *);
+
+void delphinusdns_ED25519_keypair(uint8_t *, uint8_t *);
+int delphinusdns_ED25519_sign(uint8_t *, const uint8_t *, size_t, const uint8_t *, const uint8_t *);
+int delphinusdns_ED25519_verify(const uint8_t *, size_t, const uint8_t *, const uint8_t *);
 
 
 #endif /* DDD_CRYPTO_H */
