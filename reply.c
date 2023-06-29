@@ -68,6 +68,8 @@ extern int		additional_wildcard(char *, int, struct rbtree *, char *, int, int, 
 extern int 		additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *, int, uint32_t);
 extern int 		additional_a(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_aaaa(char *, int, struct rbtree *, char *, int, int, int *);
+extern int 		additional_a2(char *, int, struct rbtree *, char *, int, int, int *);
+extern int 		additional_aaaa2(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 extern int 		additional_ds(char *, int, struct rbtree *, char *, int, int, int *, uint32_t *);
 extern int 		additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
@@ -4486,10 +4488,10 @@ again:
 			break;
 		
 		if (ntohs(origtype) == DNS_TYPE_A) {
-			i = additional_a(label, labellen, rbt, reply, \
+			i = additional_a2(label, labellen, rbt, reply, \
 				replysize, outlen, &retcount);
 		} else if (ntohs(origtype) == DNS_TYPE_AAAA) {
-			i = additional_aaaa(label, labellen, rbt, reply, \
+			i = additional_aaaa2(label, labellen, rbt, reply, \
 				replysize, outlen, &retcount);
 		} else if (ntohs(origtype) == DNS_TYPE_PTR) {
 			i = additional_ptr(label, labellen, rbt, reply, \
@@ -4500,10 +4502,11 @@ again:
 		}
 
 		if (i == 0) {
-			return (-1);
+			goto trunc;
 		}
 
 		if (i == outlen) {
+trunc:
 			NTOHS(odh->query);
 			SET_DNS_TRUNCATION(odh);
 			HTONS(odh->query);

@@ -58,8 +58,10 @@
 #include "ddd-crypto.h"
 
 
-int additional_a(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_aaaa(char *, int, struct rbtree *, char *, int, int, int *);
+int additional_aaaa2(char *, int, struct rbtree *, char *, int, int, int *);
+int additional_a(char *, int, struct rbtree *, char *, int, int, int *);
+int additional_a2(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_mx(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_ds(char *, int, struct rbtree *, char *, int, int, int *, uint32_t *);
 int additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t, uint16_t);
@@ -102,6 +104,79 @@ extern int cookiesecret_len;
 extern int dnssec;
 extern int tls;
 
+/*
+ * ADDITIONAL_A2 - tag on an additional set of A records to packet
+ *		unlike additional_a this replies for a truncation
+ */
+
+int 
+additional_a2(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
+{
+	int a_count = 0;
+	int tmplen;
+	int rroffset = offset;
+
+	struct answer {
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		in_addr_t rdata;		/* 16 */
+	} __attribute__((packed));
+
+	struct answer *answer;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	int tmpcount = 0;
+	int aa = (rbt->flags & RBT_CACHE) ? 0 : 1;
+	time_t now = 0;
+
+
+	now = time(NULL);
+	pack32((char *)retcount, 0);
+
+	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == NULL)
+		return 0;
+
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		rroffset = offset;
+		if ((offset + namelen) > replylen)
+			return 0;
+
+		memcpy(&reply[offset], name, namelen);
+		offset += namelen;
+		tmplen = compress_label((u_char*)reply, offset, namelen);
+		
+		if (tmplen != 0) {
+			offset = tmplen;
+		}	
+		if ((offset + sizeof(struct answer)) > replylen) {
+			offset = rroffset;
+			return 0;
+		}
+
+		answer = (struct answer *)&reply[offset];
+		
+		answer->type = htons(DNS_TYPE_A);
+		answer->class = htons(DNS_CLASS_IN);
+		if (aa) 
+			answer->ttl = htonl(rrset->ttl);
+		else
+			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
+		answer->rdlength = htons(sizeof(in_addr_t));
+
+		memcpy((char *)&answer->rdata, (char *)&((struct a *)rrp->rdata)->a, sizeof(in_addr_t));
+		offset += sizeof(struct answer);
+		tmpcount++;
+
+		a_count++;
+	}
+
+	pack32((char *)retcount, tmpcount);
+	return (offset);
+
+}
 
 /*
  * ADDITIONAL_A - tag on an additional set of A records to packet
@@ -172,6 +247,80 @@ additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int reply
 	}
 
 out:
+	pack32((char *)retcount, tmpcount);
+	return (offset);
+
+}
+
+/*
+ * ADDITIONAL_AAAA2 - tag on an additional set of AAAA records to packet
+ *			unlike additional_aaaa this replies for a truncation
+ */
+
+int 
+additional_aaaa2(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
+{
+	int aaaa_count = 0;
+	int tmplen;
+	int rroffset = offset;
+
+	struct answer {
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 
+		struct in6_addr rdata;	
+	} __attribute__((packed));
+
+	struct answer *answer;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	int tmpcount = 0;
+	int aa = (rbt->flags & RBT_CACHE) ? 0 : 1;
+	time_t now = 0;
+
+	now = time(NULL);
+	pack32((char *)retcount, 0);
+
+	if ((rrset = find_rr(rbt, DNS_TYPE_AAAA)) == NULL)
+		return 0;
+
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		rroffset = offset;
+		if ((offset + namelen) > replylen)
+			return 0;
+
+		memcpy(&reply[offset], name, namelen);
+		offset += namelen;
+		tmplen = compress_label((u_char*)reply, offset, namelen);
+		
+		if (tmplen != 0) {
+			offset = tmplen;
+		}	
+
+		if ((offset + sizeof(struct answer)) > replylen) {
+			offset = rroffset;
+			return 0;
+		}
+
+		answer = (struct answer *)&reply[offset];
+		
+		answer->type = htons(DNS_TYPE_AAAA);
+		answer->class = htons(DNS_CLASS_IN);
+		if (aa) 
+			answer->ttl = htonl(rrset->ttl);
+		else
+			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
+		answer->rdlength = htons(sizeof(struct in6_addr));
+
+		memcpy((char *)&answer->rdata, (char *)&((struct aaaa *)rrp->rdata)->aaaa, sizeof(struct in6_addr));
+		offset += sizeof(struct answer);
+		tmpcount++;
+
+		aaaa_count++;
+	}
+
 	pack32((char *)retcount, tmpcount);
 	return (offset);
 
