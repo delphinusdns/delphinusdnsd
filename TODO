@@ -35,6 +35,11 @@ store hacker code.
 - refactor the TLS code
 - implement algorithm 15 (Ed25519) 			[DONE]
 - implement algorithm 16 (Ed448) this is dependant on support by LibreSSL
+- fix negative lookup of riscv64.delphinusdns.org replies SERVFAIL see:
+	https://dnsviz.net/d/riscv64.delphinusdns.org/dnssec/ (jul 26, 2023)
+	yet nonexist.delphinusdns.org (see same dnsviz) works.
+
+
 
 For 1.7.0 release
 
