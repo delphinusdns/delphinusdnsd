@@ -95,7 +95,7 @@ extern struct rbtree * find_nsec3_cover_next_closer(char *name, int namelen, str
 extern struct rbtree * find_nsec3_match_closest(char *name, int namelen, struct rbtree *, ddDB *db);
 extern struct rbtree * find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *, ddDB *db);
 extern struct rbtree * find_nsec3_match_qname(char *name, int namelen, struct rbtree *, ddDB *db);
-extern struct rbtree * find_nsec3_match_qname_wild(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * find_match_qname_wild_nsec3(char *, int, struct rbtree *, ddDB *);
 extern struct rbtree * find_closest_encloser(ddDB *db, char *name, int namelen);
 extern struct rbtree *		get_soa(ddDB *, struct question *);
 extern struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
@@ -7128,6 +7128,9 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 			if (rbt0 == NULL)
 				goto out;
 
+#if DEBUG
+			dolog(LOG_INFO, "should be adding %s\n", rbt0->humanname);
+#endif
 			memcpy(&uniq[rruniq].name, rbt0->zone, rbt0->zonelen);
 			uniq[rruniq++].len = rbt0->zonelen;
 
@@ -7136,6 +7139,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 				tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 				addrec = 1;
 			}
+
 			
 			if (tmplen == 0) {
 				NTOHS(odh->query);
@@ -7705,7 +7709,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 			HTONS(odh->nsrr);
 
 
-			rbt1 = find_nsec3_match_qname_wild(q->hdr->name, q->hdr->namelen, rbt, db);
+			rbt1 = find_match_qname_wild_nsec3(q->hdr->name, q->hdr->namelen, rbt, db);
 
 			if (rbt1 == NULL)
 				goto out;

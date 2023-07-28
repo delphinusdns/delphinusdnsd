@@ -266,7 +266,9 @@ cacheit(u_char *payload, u_char *estart, u_char *end, struct imsgbuf *imsgbuf, s
 	pb += 4;	/* skip type and class */
 
 	for (x = 0; x < ntohs(dh->answer); x++) {
+#if DEBUG
 		printf("%d out of %d\n", x, ntohs(dh->answer));
+#endif
 		elen = 0;
 		memset(&expand, 0, sizeof(expand));
 		pb = (u_char *)expand_compression(pb, estart, end, (u_char *)&expand, &elen, sizeof(expand));
