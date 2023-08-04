@@ -953,9 +953,9 @@ find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *rbt, ddDB *d
 struct rbtree *
 find_nsec3_cover_next_closer(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
-	char *backname;
+	char *backname, *adv_name;
 	char *dname;
-	int backnamelen;
+	int backnamelen, adv_namelen;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
 	char *hashname;
@@ -968,15 +968,17 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct rbtree *rbt, ddDB *
 		return NULL;
 	}
 
+	adv_name = find_next_closer_name(name, namelen, rbt->zone, rbt->zonelen, &adv_namelen);
+	if (adv_name == NULL)
+		return NULL;
+
+
 	/* hash name */
-	hashname = hash_name(name, namelen, (struct nsec3param *)rrp->rdata);
+	hashname = hash_name(adv_name, adv_namelen, (struct nsec3param *)rrp->rdata);
 	if (hashname == NULL) {
 		dolog(LOG_INFO, "unable to get hashname\n");
 		return NULL;
 	}
-
-
-	/* free what we don't need */
 
 	dname = find_next_closer_nsec3(rbt->zone, rbt->zonelen, hashname);
 	if (dname == NULL) {
