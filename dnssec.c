@@ -82,6 +82,7 @@ int finalize_nsec3(void);
 struct rbtree * find_closest_encloser_nsec3(char *, int, struct rbtree *, ddDB *);
 struct rbtree * find_closest_encloser_wild_nsec3(char *, int, struct rbtree *, ddDB *);
 struct rbtree * find_match_qname_wild_nsec3(char *, int, struct rbtree *, ddDB *);
+struct rbtree * find_closest_valid_name(char *, int, struct rbtree *, ddDB *);
 
 extern int              get_record_size(ddDB *, char *, int);
 extern char *           dns_label(char *, int *);
@@ -968,17 +969,24 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct rbtree *rbt, ddDB *
 		return NULL;
 	}
 
-	adv_name = find_next_closer_name(name, namelen, rbt->zone, rbt->zonelen, &adv_namelen);
-	if (adv_name == NULL)
+	rbt0 = find_closest_valid_name(name, namelen, rbt, db);
+	if (rbt0 == NULL)
 		return NULL;
 
+	adv_name = find_next_closer_name(name, namelen, rbt0->zone, rbt0->zonelen, &adv_namelen);
+	if (adv_name != NULL)
+		hashname = hash_name(adv_name, adv_namelen, (struct nsec3param *)rrp->rdata);
+	else
+		hashname = hash_name(name, namelen, (struct nsec3param *)rrp->rdata);
 
 	/* hash name */
-	hashname = hash_name(adv_name, adv_namelen, (struct nsec3param *)rrp->rdata);
 	if (hashname == NULL) {
 		dolog(LOG_INFO, "unable to get hashname\n");
 		return NULL;
 	}
+
+
+	/* free what we don't need */
 
 	dname = find_next_closer_nsec3(rbt->zone, rbt->zonelen, hashname);
 	if (dname == NULL) {
@@ -1411,6 +1419,30 @@ find_match_qname_wild_nsec3(char *name, int namelen, struct rbtree *rbt, ddDB *d
 #ifdef DEBUG
 	dolog(LOG_INFO, "returning %s\n", rbt0->humanname);
 #endif
+
+	return (rbt0);
+}
+
+/* 
+ * FIND_CLOSEST_VALID_NAME - find the closest valid name
+ */
+
+struct rbtree *
+find_closest_valid_name(char *qname, int qnamelen, struct rbtree *rbt, ddDB *db)
+{
+	struct rbtree *rbt0 = NULL;
+	int plen = qnamelen;
+	char *p = qname;
+
+	while (plen > 0) {
+		rbt0 = find_rrset(db, p, plen);
+		if (rbt0 == NULL) {
+			plen -= (*p + 1);
+			p = (p + (*p + 1));
+			continue;
+		}
+		break;
+	}
 
 	return (rbt0);
 }
