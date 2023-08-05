@@ -54,8 +54,9 @@ int tsigpassname_contains(char *origname, int origlen, int *wildcard);
 int pncmp(struct pnentry *, struct pnentry *);
 
 extern void 		dolog(int, char *, ...);
-extern char * dns_label(char *, int *);
-extern void ddd_shutdown(void);
+extern char * 		dns_label(char *, int *);
+extern void 		ddd_shutdown(void);
+extern char *		advance_label(char *, int *);
 
 extern int debug, verbose;
 
@@ -120,11 +121,13 @@ tsigpassname_contains(char *origname, int origlen, int *wildcard)
 	int plen = origlen;
 	struct pnentry *res = NULL;
 
-	for (; *p; plen--, p++) {
+	for (; *p;) {
 		if ((res = have_tsigpassname(p, plen)) != NULL)
 			break;
-		plen -= *p;
-		p += *p;
+
+		p = advance_label(p, &plen);
+		if (p == NULL)
+			break;
 	}
 
 	if (res == NULL)

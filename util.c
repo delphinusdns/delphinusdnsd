@@ -71,48 +71,64 @@
 
 /* prototypes */
 
-void 	pack(char *, char *, int);
-void 	pack32(char *, uint32_t);
-void 	pack16(char *, uint16_t);
-void 	pack8(char *, uint8_t);
-uint32_t unpack32(char *);
-uint16_t unpack16(char *);
-void 	unpack(char *, char *, int);
-int lower_dnsname(char *, int); 
-int randomize_dnsname(char *, int);
+void 			pack(char *, char *, int);
+void 			pack32(char *, uint32_t);
+void 			pack16(char *, uint16_t);
+void 			pack8(char *, uint8_t);
+uint32_t 		unpack32(char *);
+uint16_t 		unpack16(char *);
+void 			unpack(char *, char *, int);
+int 			lower_dnsname(char *, int); 
+int 			randomize_dnsname(char *, int);
 ddDB *			ddd_read_manna(ddDB *, struct imsgbuf *, struct cfg *);
 int			iwqueue_count(void);
 ddDB *			rebuild_db(struct cfg *);
 void			iwqueue_add(struct iwantmanna *, int);
 
-int label_count(char *);
-char * dns_label(char *, int *);
-void ddd_shutdown(void);
-int get_record_size(ddDB *, char *, int);
+int 			label_count(char *);
+char * 			dns_label(char *, int *);
+char * 			advance_label(char *, int *);
+void 			ddd_shutdown(void);
+int 			get_record_size(ddDB *, char *, int);
 struct rbtree * 	get_soa(ddDB *, struct question *);
 struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
 struct rbtree * 	lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
 struct rbtree *		Lookup_zone(ddDB *, char *, uint16_t, uint16_t, int);
-uint16_t check_qtype(struct rbtree *, uint16_t, int, int *);
-struct question		*build_fake_question(char *, int, uint16_t, char *, int);
+uint16_t 		check_qtype(struct rbtree *, uint16_t, int, int *);
+struct question	*	build_fake_question(char *, int, uint16_t, char *, int);
 
-char 			*get_dns_type(int, int);
+char *			get_dns_type(int, int);
 int 			memcasecmp(u_char *, u_char *, int);
 int 			compress_label(u_char *, uint16_t, int);
-struct question		*build_question(char *, int, uint16_t, char *);
+struct question	*	build_question(char *, int, uint16_t, char *);
 int			free_question(struct question *);
-struct rrtab 	*rrlookup(char *);
-char * expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
-void log_diff(char *sha256, char *mac, int len);
-int tsig_pseudoheader(char *, uint16_t, time_t, DDD_HMAC_CTX *);
-char * 	bin2hex(char *, int);
-uint64_t timethuman(time_t);
-char * 	bitmap2human(char *, int);
-int lookup_axfr(FILE *, int, char *, struct soa *, uint32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t, int);
-int dn_contains(char *name, int len, char *anchorname, int alen);
-uint16_t udp_cksum(uint16_t *, uint16_t, struct ip *, struct udphdr *);
-uint16_t udp_cksum6(uint16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
+struct rrtab *		rrlookup(char *);
+char * 			expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
+void 			log_diff(char *sha256, char *mac, int len);
+int 			tsig_pseudoheader(char *, uint16_t, time_t, DDD_HMAC_CTX *);
+char * 			bin2hex(char *, int);
+uint64_t 		timethuman(time_t);
+char * 			bitmap2human(char *, int);
+int 			lookup_axfr(FILE *, int, char *, struct soa *, uint32_t, char *, char *, int *, int *, int *, struct soa_constraints *, uint32_t, int);
+int			dn_contains(char *, int, char *, int);
+uint16_t		udp_cksum(uint16_t *, uint16_t, struct ip *, struct udphdr *);
+uint16_t		udp_cksum6(uint16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
+char *			canonical_sort(char **, int, int *);
+static int 		cs_cmp(const void *, const void *);
+int 			add_cookie(char *, int, int, DDD_BIGNUM *, u_char *, int);
+static uint16_t 	svcb_paramkey(char *);
+char * 			param_tlv2human(char *, int, int);
+int 			param_human2tlv(char *, char *, int *);
+static int 		param_cmp(const void *, const void *);
+static char * 		param_expand(char *, int, int);
+char * 			ipseckey_type(struct ipseckey *);
+char * 			input_sanitize(char *);
+void 			safe_fprintf(FILE *, char *, ...);
+size_t 			plength(void *, void *);
+size_t 			plenmax(void *, void *, size_t);
+u_int 			nowrap_dec(u_int, u_int);
 
+struct zonemd * 	zonemd_hash_zonemd(struct rrset *, struct rbtree *);
 void zonemd_hash_a(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_eui48(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_eui64(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
@@ -142,22 +158,6 @@ void zonemd_hash_cdnskey(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_rrsig(DDD_SHA512_CTX *, struct rrset *, struct rbtree *, int);
 void zonemd_hash_nsec3(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_nsec3param(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
-struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
-
-char *canonical_sort(char **, int, int *);
-static int cs_cmp(const void *, const void *);
-int add_cookie(char *, int, int, DDD_BIGNUM *, u_char *, int);
-static uint16_t svcb_paramkey(char *);
-char * param_tlv2human(char *, int, int);
-int param_human2tlv(char *, char *, int *);
-static int param_cmp(const void *, const void *);
-static char * param_expand(char *, int, int);
-char * ipseckey_type(struct ipseckey *);
-char * input_sanitize(char *);
-void safe_fprintf(FILE *, char *, ...);
-size_t plength(void *, void *);
-size_t plenmax(void *, void *, size_t);
-u_int nowrap_dec(u_int, u_int);
 
 int bytes_received;
 
@@ -510,8 +510,9 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 			while ((rbt0 = find_rrset(db, sp, splen)) == NULL) {
 				if (*sp == 0 && splen == 1)
 					break;
-				splen -= (*sp + 1);
-				sp += (*sp + 1);
+				sp = advance_label(sp, &splen);
+				if (sp == NULL)
+					break;
 			}
 
 			if (rbt0 && rbt0->flags & RBT_GLUE)
@@ -524,8 +525,9 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 				p += (*p + 1);
 
 				while ((rbt0 = find_rrset(db, p, plen)) == NULL) {
-					plen -= (*p + 1);
-					p += (*p + 1);
+					p = advance_label(p, &plen);
+					if (p == NULL)
+						break;
 				}
 
 				if (rbt0->flags & RBT_GLUE) {
@@ -554,8 +556,9 @@ lookup_zone(ddDB *db, struct question *question, int *returnval, int *lzerrno, c
 		 * SOA if not then we return REFUSED 
 		 */
 		while (*p != 0) {
-			plen -= (*p + 1);
-			p = (p + (*p + 1));
+			p = advance_label(p, &plen);
+			if (p == NULL)
+				return NULL;
 
 			/* rbt was NULL */
 			if ((rbt = find_rrset(db, p, plen)) != NULL) {
@@ -626,8 +629,10 @@ get_soa(ddDB *db, struct question *question)
 			if (*p == '\0')
 				return (NULL);
 
-			plen -= (*p + 1);
-			p = (p + (*p + 1));
+			p = advance_label(p, &plen);
+			if (p == NULL)
+				return NULL;
+
 			continue;
 		}
 		
@@ -636,8 +641,9 @@ get_soa(ddDB *db, struct question *question)
 			/* we'll take this one */
 			return (rbt);	
 		} else {
-			plen -= (*p + 1);
-			p = (p + (*p + 1));
+			p = advance_label(p, &plen);
+			if (p == NULL)
+				return NULL;
 		} 
 
 	} while (*p);
@@ -670,8 +676,9 @@ get_ns(ddDB *db, struct rbtree *rbt, int *delegation)
 	while (*p && len > 0) {
 		rbt0 = Lookup_zone(db, p, len, DNS_TYPE_NS, 0);	
 		if (rbt0 == NULL) {
-			p += (*p + 1);
-			len -= (*p + 1);
+			p = advance_label(p, &len);
+			if (p == NULL)
+				return NULL;
 	
 			continue;
 		} else
@@ -2708,8 +2715,9 @@ dn_contains(char *name, int len, char *anchorname, int alen)
 			return 1;
 		}
 
-		plen -= (*p + 1);
-		p += (*p + 1);
+		p = advance_label(p, &plen);
+		if (p == NULL)
+			return 0;
 	}
 
 	return 0;
@@ -3189,147 +3197,6 @@ out:
 
 	return (offset);
 }
-
-/*
- * Copyright (c) 1988, 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)in_cksum.c	8.1 (Berkeley) 6/10/93
- */
-
-/*
- * UDP_CKSUM - compute the ones complement sum of the ones complement of 16 bit 
- * 			  numbers
- */
-
-
-
-/* 
- * UDP_CKSUM - compute the checksum with a pseudo header of the UDP packet
- * 				
- */
-
-uint16_t
-udp_cksum(uint16_t *addr, uint16_t len, struct ip *ip, struct udphdr *uh) 
-{
-	union {
-		struct ph {
-			in_addr_t src;
-			in_addr_t dst;
-			uint8_t pad;
-			uint8_t proto;
-			uint16_t len;
-		} s __attribute__((packed));
-
-		uint16_t i[6];
-	} ph;
-
-	int nleft = len - sizeof(struct udphdr); /* we pass the udp header */
-	int sum = 0;
-	uint16_t *w = &ph.i[0];
-	uint16_t *u = (uint16_t *)uh;
-	uint16_t answer;
-
-	memset(&ph, 0, sizeof(ph));
-	memcpy(&ph.s.src, &ip->ip_src.s_addr, sizeof(in_addr_t));
-	memcpy(&ph.s.dst, &ip->ip_dst.s_addr, sizeof(in_addr_t));
-	ph.s.pad = 0;
-	ph.s.proto = ip->ip_p;
-	ph.s.len = uh->uh_ulen;
-	sum = w[0] + w[1] + w[2] + w[3] + w[4] + w[5] + u[0] + u[1] + u[2];
-	w = addr;
-
-	while (nleft > 1) {
-		sum += *w++;
-		nleft -= 2;
-	}
-	if (nleft == 1) {
-		sum += htons(*(u_char *)w << 8);
-	}
-
-	sum = (sum >> 16) + (sum & 0xffff);
-	sum += (sum >> 16);
-	answer = ~sum;
-	return (answer);
-}
-
-/* 
- * UDP_CKSUM6 - compute the checksum with a pseudo header of the UDP6 packet
- * 			RFC 8200 section 8.1	
- */
-
-uint16_t
-udp_cksum6(uint16_t *addr, uint16_t len, struct ip6_hdr *ip6, struct udphdr *uh) 
-{
-	union {
-		struct ph {
-			struct in6_addr src;
-			struct in6_addr dst;
-			uint32_t len;
-			uint8_t pad[3];
-			uint8_t nxt;
-		} s __attribute__((packed));
-
-		uint16_t i[20];
-	} ph;
-
-	int nleft = len - sizeof(struct udphdr); /* we pass the udp header */
-	int sum;
-	uint16_t *w = &ph.i[0];
-	uint16_t *u = (uint16_t *)uh;
-	uint16_t answer;
-
-	memset(&ph, 0, sizeof(ph));
-	memcpy(&ph.s.src, &ip6->ip6_src, sizeof(struct in6_addr));
-	memcpy(&ph.s.dst, &ip6->ip6_dst, sizeof(struct in6_addr));
-	ph.s.len = htonl(len);
-	ph.s.nxt = ip6->ip6_nxt;
-
-	sum = w[0] + w[1] + w[2] + w[3] + w[4] + w[5] + \
-		w[6] + w[7] + w[8] + w[9] + w[10] + \
-		w[11] + w[12] + w[13] + w[14] + w[15] + \
-		w[16] + w[17] + w[18] + w[19] + u[0] + u[1] + u[2];
-
-	w = addr;
-
-	while (nleft > 1) {
-		sum += *w++;
-		nleft -= 2;
-	}
-	if (nleft == 1) {
-		sum += htons(*(u_char *)w << 8);
-	}
-
-	sum = (sum >> 16) + (sum & 0xffff);
-	sum += (sum >> 16);
-	answer = ~sum;
-	return (answer);
-}
-
 
 void
 zonemd_hash_a(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
@@ -6928,3 +6795,167 @@ iwqueue_count(void)
 
 	return (count);
 }
+
+/*
+ * ADVANCE_LABEL - advance a label in a DNSNAME, return NULL on error
+ */
+
+char *
+advance_label(char *name, int *len)
+{
+	if (name == NULL)
+		return NULL;
+
+	if (*name == '\0')
+		return (name);
+
+	*len -= (*name + 1);
+
+	if (len < 0)
+		return NULL;
+
+	name = (name + (*name + 1));
+
+	return (name);
+}
+
+/*
+ * Copyright (c) 1988, 1992, 1993
+ *	The Regents of the University of California.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	@(#)in_cksum.c	8.1 (Berkeley) 6/10/93
+ */
+
+/*
+ * UDP_CKSUM - compute the ones complement sum of the ones complement of 16 bit 
+ * 			  numbers
+ */
+
+
+
+/* 
+ * UDP_CKSUM - compute the checksum with a pseudo header of the UDP packet
+ * 				
+ */
+
+uint16_t
+udp_cksum(uint16_t *addr, uint16_t len, struct ip *ip, struct udphdr *uh) 
+{
+	union {
+		struct ph {
+			in_addr_t src;
+			in_addr_t dst;
+			uint8_t pad;
+			uint8_t proto;
+			uint16_t len;
+		} s __attribute__((packed));
+
+		uint16_t i[6];
+	} ph;
+
+	int nleft = len - sizeof(struct udphdr); /* we pass the udp header */
+	int sum = 0;
+	uint16_t *w = &ph.i[0];
+	uint16_t *u = (uint16_t *)uh;
+	uint16_t answer;
+
+	memset(&ph, 0, sizeof(ph));
+	memcpy(&ph.s.src, &ip->ip_src.s_addr, sizeof(in_addr_t));
+	memcpy(&ph.s.dst, &ip->ip_dst.s_addr, sizeof(in_addr_t));
+	ph.s.pad = 0;
+	ph.s.proto = ip->ip_p;
+	ph.s.len = uh->uh_ulen;
+	sum = w[0] + w[1] + w[2] + w[3] + w[4] + w[5] + u[0] + u[1] + u[2];
+	w = addr;
+
+	while (nleft > 1) {
+		sum += *w++;
+		nleft -= 2;
+	}
+	if (nleft == 1) {
+		sum += htons(*(u_char *)w << 8);
+	}
+
+	sum = (sum >> 16) + (sum & 0xffff);
+	sum += (sum >> 16);
+	answer = ~sum;
+	return (answer);
+}
+
+/* 
+ * UDP_CKSUM6 - compute the checksum with a pseudo header of the UDP6 packet
+ * 			RFC 8200 section 8.1	
+ */
+
+uint16_t
+udp_cksum6(uint16_t *addr, uint16_t len, struct ip6_hdr *ip6, struct udphdr *uh) 
+{
+	union {
+		struct ph {
+			struct in6_addr src;
+			struct in6_addr dst;
+			uint32_t len;
+			uint8_t pad[3];
+			uint8_t nxt;
+		} s __attribute__((packed));
+
+		uint16_t i[20];
+	} ph;
+
+	int nleft = len - sizeof(struct udphdr); /* we pass the udp header */
+	int sum;
+	uint16_t *w = &ph.i[0];
+	uint16_t *u = (uint16_t *)uh;
+	uint16_t answer;
+
+	memset(&ph, 0, sizeof(ph));
+	memcpy(&ph.s.src, &ip6->ip6_src, sizeof(struct in6_addr));
+	memcpy(&ph.s.dst, &ip6->ip6_dst, sizeof(struct in6_addr));
+	ph.s.len = htonl(len);
+	ph.s.nxt = ip6->ip6_nxt;
+
+	sum = w[0] + w[1] + w[2] + w[3] + w[4] + w[5] + \
+		w[6] + w[7] + w[8] + w[9] + w[10] + \
+		w[11] + w[12] + w[13] + w[14] + w[15] + \
+		w[16] + w[17] + w[18] + w[19] + u[0] + u[1] + u[2];
+
+	w = addr;
+
+	while (nleft > 1) {
+		sum += *w++;
+		nleft -= 2;
+	}
+	if (nleft == 1) {
+		sum += htons(*(u_char *)w << 8);
+	}
+
+	sum = (sum >> 16) + (sum & 0xffff);
+	sum += (sum >> 16);
+	answer = ~sum;
+	return (answer);
+}
+

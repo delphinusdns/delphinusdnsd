@@ -48,23 +48,24 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
-void	init_zone(void);
-int	insert_zone(char *);
-int have_zone(char *zonename, int zonelen);
-void populate_zone(ddDB *db);
-void repopulate_zone(ddDB *db, char *zonename, int zonelen);
-int zonecmp(struct zoneentry *, struct zoneentry *);
-struct zoneentry * zone_findzone(struct rbtree *);
-void delete_zone(char *name, int len);
-int recurse_match_zonenumber(struct rbtree *, uint32_t);
+void			init_zone(void);
+int			insert_zone(char *);
+int 			have_zone(char *zonename, int zonelen);
+void 			populate_zone(ddDB *db);
+void 			repopulate_zone(ddDB *db, char *zonename, int zonelen);
+int 			zonecmp(struct zoneentry *, struct zoneentry *);
+struct zoneentry * 	zone_findzone(struct rbtree *);
+void 			delete_zone(char *name, int len);
+int 			recurse_match_zonenumber(struct rbtree *, uint32_t);
 
 extern void 		dolog(int, char *, ...);
-extern char * dns_label(char *, int *);
-extern void ddd_shutdown(void);
-extern int dn_contains(char *name, int len, char *anchorname, int alen);
-extern uint32_t match_zoneglue(struct rbtree *);
-extern struct rrset * find_rr(struct rbtree *, uint16_t);
-extern struct rbtree * find_rrset(ddDB *, char *, int);
+extern char * 		dns_label(char *, int *);
+extern void 		ddd_shutdown(void);
+extern int 		dn_contains(char *name, int len, char *anchorname, int alen);
+extern uint32_t 	match_zoneglue(struct rbtree *);
+extern struct rrset * 	find_rr(struct rbtree *, uint16_t);
+extern struct rbtree * 	find_rrset(ddDB *, char *, int);
+extern char *		advance_label(char *, int *);
 
 extern int debug, verbose;
 extern uint32_t zonenumber;
@@ -164,16 +165,16 @@ populate_zone(ddDB *db)
 		}
 
 		res = NULL;
-		for (plen = rbt->zonelen, p = rbt->zone; plen > 0; 
-								p++, plen--) {
+		for (plen = rbt->zonelen, p = rbt->zone; plen > 0;) {
 			memcpy(find.name, p, plen);
 			find.namelen = plen;
 			if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
 				break;
 			}
 
-			plen -= *p;
-			p += *p;
+			p = advance_label(p, &plen); 
+			if (p == NULL)
+				break;
 		}
 
 		if (res == NULL)
@@ -202,18 +203,20 @@ populate_zone(ddDB *db)
 		if (match_zoneglue(rbt)) {
 			res = NULL;
 
-			plen -= *p;	/* advance to higher parent */
-			p += *p;
+			p = advance_label(p, &plen);
+			if (p == NULL)
+				continue;
 
-			for (p++, plen--; plen > 0; p++, plen--) {
+			for (; plen > 0;) {
 				memcpy(find.name, p, plen);
 				find.namelen = plen;
 				if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
 					break;
 				}
 
-				plen -= *p;
-				p += *p;
+				p = advance_label(p, &plen);
+				if (p == NULL)
+					break;
 			}
 
 			if (res == NULL)
@@ -278,15 +281,17 @@ zone_findzone(struct rbtree *rbt)
 	int plen;
 
 	/* find the corresponding zone for the zone number */
-	for (plen = rbt->zonelen, p = rbt->zone; plen > 0; p++, plen--) {
+	for (plen = rbt->zonelen, p = rbt->zone; plen > 0;) {
 		memcpy(find.name, p, plen);
 		find.namelen = plen;
 
 		if ((res = RB_FIND(zonetree, &zonehead, &find)) != NULL) {
 			return (res);
 		}
-		plen -= *p;
-		p += *p;
+		
+		p = advance_label(p, &plen); 
+		if (p == NULL)
+			break;
 	}
 
 	return (NULL);

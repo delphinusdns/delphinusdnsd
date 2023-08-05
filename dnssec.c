@@ -84,6 +84,8 @@ struct rbtree * find_closest_encloser_wild_nsec3(char *, int, struct rbtree *, d
 struct rbtree * find_match_qname_wild_nsec3(char *, int, struct rbtree *, ddDB *);
 struct rbtree * find_closest_valid_name(char *, int, struct rbtree *, ddDB *);
 
+/* externs */
+
 extern int              get_record_size(ddDB *, char *, int);
 extern char *           dns_label(char *, int *);
 extern void             dolog(int, char *, ...);
@@ -92,11 +94,12 @@ extern int              free_question(struct question *);
 extern int		check_ent(char *, int);
 extern int 		memcasecmp(u_char *, u_char *, int);
 
-extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
-extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
-extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
-extern int add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata);
-extern size_t plength(void *, void *);
+extern struct rbtree * 	find_rrset(ddDB *db, char *name, int len);
+extern struct rbtree * 	find_rrsetwild(ddDB *db, char *name, int len);
+extern struct rrset * 	find_rr(struct rbtree *rbt, uint16_t rrtype);
+extern int 		add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata);
+extern size_t 		plength(void *, void *);
+extern char *		advance_label(char *, int *);
 
 extern int debug;
 
@@ -537,8 +540,10 @@ convert_name(char *name, int namelen)
 			*p0++ = p[i + 1];
 		}
 		*p0++ = '.';
-        	plen -= (*p + 1);
-                p += (*p + 1);
+
+		p = advance_label(p, &plen);
+		if (p == NULL)
+			return NULL;
 	}
 
 	return (ret);
@@ -627,8 +632,9 @@ find_next_closer_name(char *qname, int qlen, char *closestname, int clen, int *r
 	plen = qlen;
 
 	do {
-		plen -= (*p + 1);
-		p = (p + (*p + 1));
+		p = advance_label(p, &plen);
+		if (p == NULL)
+			return NULL;
 		qcount++;
 	} while (*p);
 
@@ -636,8 +642,9 @@ find_next_closer_name(char *qname, int qlen, char *closestname, int clen, int *r
 	plen = clen;
 
 	do {
-		plen -= (*p + 1);
-		p = (p + (*p + 1));
+		p = advance_label(p, &plen);
+		if (p == NULL)
+			return NULL;
 		ccount++;
 	} while (*p);
 
@@ -650,8 +657,9 @@ find_next_closer_name(char *qname, int qlen, char *closestname, int clen, int *r
 	plen = qlen;
 	
 	while (*p && discard > 0) {
-		plen -= (*p + 1);
-		p = (p + (*p + 1));
+		p = advance_label(p, &plen);
+		if (p == NULL)
+			return NULL;
 		discard--;
 	}
 
@@ -1159,8 +1167,9 @@ find_closest_encloser_nsec3(char *qname, int qnamelen, struct rbtree *rbt, ddDB 
 	plen = qnamelen;
 
 	/* advance one label */
-	plen -= (*p + 1);
-	p = (p + (*p + 1));
+	p = advance_label(p, &plen);
+	if (p == NULL)
+		return NULL;
 
 
 	do {
@@ -1170,14 +1179,16 @@ find_closest_encloser_nsec3(char *qname, int qnamelen, struct rbtree *rbt, ddDB 
 				rbt0 = NULL;
 				goto nsec3;
 			}
-			plen -= (*p + 1);
-			p = (p + (*p + 1));
+			p = advance_label(p, &plen);
+			if (p == NULL)
+				return NULL;
 			continue;
 		}
 		
 		if ((rrset = find_rr(rbt0, DNS_TYPE_NSEC3)) != NULL) {
-			plen -= (*p + 1);
-			p = (p + (*p + 1));
+			p = advance_label(p, &plen);
+			if (p == NULL)
+				return NULL;
 			continue;
 		}
 
@@ -1240,8 +1251,9 @@ find_closest_encloser_wild_nsec3(char *qname, int qnamelen, struct rbtree *rbt, 
 	plen = qnamelen;
 
 	/* advance one label */
-	plen -= (*p + 1);
-	p = (p + (*p + 1));
+	p = advance_label(p, &plen);
+	if (p == NULL)
+		return NULL;
 
 
 	do {
@@ -1251,14 +1263,17 @@ find_closest_encloser_wild_nsec3(char *qname, int qnamelen, struct rbtree *rbt, 
 				rbt0 = NULL;
 				goto nsec3;
 			}
-			plen -= (*p + 1);
-			p = (p + (*p + 1));
+			p = advance_label(p, &plen);
+			if (p == NULL)
+				return NULL;
+
 			continue;
 		}
 		
 		if ((rrset = find_rr(rbt0, DNS_TYPE_NSEC3)) != NULL) {
-			plen -= (*p + 1);
-			p = (p + (*p + 1));
+			p = advance_label(p, &plen);
+			if (p == NULL)
+				return NULL;
 			continue;
 		}
 
@@ -1437,8 +1452,9 @@ find_closest_valid_name(char *qname, int qnamelen, struct rbtree *rbt, ddDB *db)
 	while (plen > 0) {
 		rbt0 = find_rrset(db, p, plen);
 		if (rbt0 == NULL) {
-			plen -= (*p + 1);
-			p = (p + (*p + 1));
+			p = advance_label(p, &plen);
+			if (p == NULL)
+				return NULL;
 			continue;
 		}
 		break;
@@ -1446,3 +1462,4 @@ find_closest_valid_name(char *qname, int qnamelen, struct rbtree *rbt, ddDB *db)
 
 	return (rbt0);
 }
+

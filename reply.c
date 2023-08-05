@@ -2282,20 +2282,7 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 	zonenumberx = determine_zone(rbt);
 
 	if (rrtype == DNS_TYPE_DS) {
-#if 0
-		p = rbt->zone;
-		plen = rbt->zonelen;
-
-		for (; *p ; p++, plen--) {
-			plen -= *p;
-			p += *p;
-			break;
-		}
-
-		trbt = find_rrset(db, p, plen);
-		if (trbt != NULL)
-			zonenumberx = determine_zone(trbt);
-#endif
+		/* here was once dead code */
 	}
 
 	now = time(NULL);
