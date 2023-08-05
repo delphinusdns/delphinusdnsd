@@ -3168,8 +3168,8 @@ fill_nsec(ddDB *db, char *name, char *type, uint32_t myttl, char *domainname, ch
 		return -1;
 	}
 
-	memcpy(nsec->next_domain_name, converted_domainname, converted_domainnamelen);
-	nsec->ndn_len = converted_domainnamelen;
+	memcpy(nsec->next, converted_domainname, converted_domainnamelen);
+	nsec->next_len = converted_domainnamelen;
 
 	create_nsec_bitmap(bitmap, nsec->bitmap, (int *)&nsec->bitmap_len);
 	

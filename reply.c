@@ -2109,7 +2109,7 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 	if (rrp == NULL)
 		return -1;
 	
-	ndnlen = ((struct nsec *)rrp->rdata)->ndn_len;
+	ndnlen = ((struct nsec *)rrp->rdata)->next_len;
 	bitmaplen = ((struct nsec *)rrp->rdata)->bitmap_len;	
 
 	if ((outlen + sizeof(struct answer) + ndnlen + bitmaplen) > replysize) {
@@ -2141,7 +2141,7 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	outlen += sizeof(struct answer);
 
-	memcpy(&reply[outlen], ((struct nsec *)rrp->rdata)->next_domain_name,
+	memcpy(&reply[outlen], ((struct nsec *)rrp->rdata)->next,
 		ndnlen);
 
 	outlen += ndnlen;
@@ -8830,12 +8830,12 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 		offset += 10;		/* struct answer */
 
-		if (offset + ((struct nsec *)rrp->rdata)->ndn_len > rlen)
+		if (offset + ((struct nsec *)rrp->rdata)->next_len > rlen)
 			goto truncate;
 
-		memcpy((char *)&answer->rdata, (char *)((struct nsec *)rrp->rdata)->next_domain_name, ((struct nsec *)rrp->rdata)->ndn_len);
+		memcpy((char *)&answer->rdata, (char *)((struct nsec *)rrp->rdata)->next, ((struct nsec *)rrp->rdata)->next_len);
 
-		offset += ((struct nsec *)rrp->rdata)->ndn_len;
+		offset += ((struct nsec *)rrp->rdata)->next_len;
 
 		if (offset + ((struct nsec *)rrp->rdata)->bitmap_len > rlen)
 			goto truncate;

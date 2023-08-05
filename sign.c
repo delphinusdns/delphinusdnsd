@@ -106,6 +106,52 @@ static struct keysentry {
         SLIST_ENTRY(keysentry) keys_entry;
 } *kn, *knp;
 
+
+struct mynsec {
+		char *name;
+		char *nextname;
+		char *bitmap;
+		RB_ENTRY(mynsec) entries;
+} *n1, *n2, *np;
+
+extern int count_dots(char *name);
+
+static int
+slcmp(void *a, void *b)
+{
+	char aname[DNS_MAXNAME + 1];
+	char bname[DNS_MAXNAME + 1];
+	char *a2name = ((struct mynsec *)a)->name;
+	char *b2name = ((struct mynsec *)b)->name;
+	int dots0, dots1;
+	int ret;
+
+	memset(&aname, 0, sizeof(aname));
+	memset(&bname, 0, sizeof(bname));
+	memcpy(&aname, a2name, sizeof(aname) - 1);
+	memcpy(&bname, b2name, sizeof(bname) - 1);
+
+	/* count the dots we need this for canonical compare */
+
+	dots0 = count_dots(a2name);
+	dots1 = count_dots(b2name);
+
+	if (dots0 > dots1)
+		return 1;
+	else if (dots1 > dots0)
+		return -1;
+
+	ret = strcmp(a2name, b2name);
+
+	return (ret);
+}
+
+
+RB_HEAD(nsectree, mynsec) nsechead = RB_INITIALIZER(&nsechead);
+RB_PROTOTYPE(nsectree, mynsec, entries, slcmp)
+RB_GENERATE(nsectree, mynsec, entries, slcmp)
+
+
 /* prototypes */
 
 int	add_dnskey(ddDB *);
@@ -126,6 +172,7 @@ char * 	alg_to_name(int);
 int 	alg_to_rsa(int);
 
 int 	construct_nsec3(ddDB *, char *, int, char *);
+int	construct_nsec(ddDB *, char *);
 int 	calculate_rrsigs(ddDB *, char *, int, int);
 
 static int	sign_hinfo(ddDB *, char *, int, struct rbtree *, int);
@@ -151,6 +198,7 @@ static int	sign_aaaa(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_ptr(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_nsec3(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_nsec3param(ddDB *, char *, int, struct rbtree *, int);
+static int	sign_nsec(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_naptr(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_sshfp(ddDB *, char *, int, struct rbtree *, int);
 static int	sign_tlsa(ddDB *, char *, int, struct rbtree *, int);
@@ -215,6 +263,7 @@ extern int fill_dnskey(ddDB *,char *, char *, uint32_t, uint16_t, uint8_t, uint8
 extern int fill_rrsig(ddDB *,char *, char *, uint32_t, char *, uint8_t, uint8_t, uint32_t, uint64_t, uint64_t, uint16_t, char *, char *);
 extern int fill_nsec3param(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *);
 extern int fill_nsec3(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *, char *, char *);
+extern int fill_nsec(ddDB *, char *, char *, uint32_t, char *, char *);
 extern int fill_zonemd(ddDB *, char *, char *, int, uint32_t, uint8_t, uint8_t, char *, int);
 extern char * convert_name(char *name, int namelen);
 
@@ -313,6 +362,7 @@ extern int tsig;
 
 #define DEFAULT_TTL				3600
 #define DEFAULT_BITS				3072
+#define DEFAULT_NSEC				3
 
 /* define masks */
 
@@ -451,6 +501,7 @@ signmain(int argc, char *argv[])
 	int ch;
 	int bits = DEFAULT_BITS;
 	int ttl = DEFAULT_TTL;
+	int nsec = DEFAULT_NSEC;
 	int create_zsk = 0;
 	int create_ksk = 0;
 	int rollmethod = ROLLOVER_METHOD_PRE_PUBLICATION;
@@ -496,7 +547,7 @@ signmain(int argc, char *argv[])
 #endif
 
 
-	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:Mm:n:o:R:S:s:t:vXx:Zz:")) != -1) {
+	while ((ch = getopt(argc, argv, "a:B:e:hI:i:Kk:Mm:N:n:o:R:S:s:t:vXx:Zz:")) != -1) {
 		switch (ch) {
 		case 'a':
 			/* algorithm */
@@ -614,6 +665,12 @@ signmain(int argc, char *argv[])
 		case 'm':
 			/* mask */
 			mask = strtoull(optarg, &ep, 16); 
+			break;
+
+		case 'N':
+			//nsec = atoi(optarg);
+			fprintf(stderr, "still programming it,  check later\n");
+			exit(1);
 			break;
 
 		case 'n':
@@ -989,9 +1046,27 @@ signmain(int argc, char *argv[])
 
 	/* second pass construct NSEC3 records, including ENT's */	
 
-	if ((mask & MASK_CONSTRUCT_NSEC3) && construct_nsec3(db, zonename, iterations, salt) < 0) {
-		dolog(LOG_INFO, "construct nsec3 failed\n");
+	switch (nsec) {
+	case DEFAULT_NSEC:			/* NSEC3 is default */
+		if ((mask & MASK_CONSTRUCT_NSEC3) && 
+			construct_nsec3(db, zonename, iterations, salt) < 0) {
+			dolog(LOG_INFO, "construct nsec3 failed\n");
+			exit(1);
+		}
+
+		break;
+	case 1:
+		if ((mask & MASK_CONSTRUCT_NSEC3) &&
+			construct_nsec(db, zonename) < 0) {
+			dolog(LOG_INFO, "construct nsec failed\n");
+			exit(1);
+		}
+
+		break;
+	default:
+		dolog(LOG_INFO, "unknown nsec version %d\n", nsec);
 		exit(1);
+		break;
 	}
 
 	/* third  pass calculate RRSIG's for every RR set */
@@ -2136,6 +2211,12 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 				return -1;
 			}
 		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) != NULL) {
+			if (sign_nsec(db, zonename, expiry, rbt, rollmethod) < 0) {
+				fprintf(stderr, "sign_nsec error\n");
+				return -1;
+			}
+		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) != NULL) {
 			if (sign_cname(db, zonename, expiry, rbt, rollmethod) < 0) {
 				fprintf(stderr, "sign_cname error\n");
@@ -2575,8 +2656,6 @@ sign_https(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 		}
 		
 		csort = 0;
-		
-
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
   			q = tmpkey;
 			pack(q, rbt->zone, rbt->zonelen);
@@ -3354,7 +3433,6 @@ sign_nsec3(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 	char tmp[4096];
 	char signature[4096];
 	char shabuf[64];
-	
 
 	char *dnsname;
 	char *p;
@@ -3540,6 +3618,189 @@ sign_nsec3(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 	return 0;
 }
 
+
+/*
+ * create a RRSIG for an NSEC record
+ */
+
+static int
+sign_nsec(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmethod)
+{
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	struct keysentry **zsk_key;
+
+	char tmp[4096];
+	char signature[4096];
+	char shabuf[64];
+	
+
+	char *dnsname;
+	char *p;
+	char *key;
+	char *zone;
+
+	uint32_t ttl;
+	uint16_t flags;
+	uint8_t protocol;
+	uint8_t algorithm;
+
+	int labellen;
+	int keyid;
+	int len;
+	int keylen, siglen = sizeof(signature);
+	int labels;
+	int nzk = 0;
+
+	char timebuf[32];
+	struct tm tm;
+	uint32_t expiredon2, signedon2;
+
+	memset(&shabuf, 0, sizeof(shabuf));
+
+	key = malloc(10 * 4096);
+	if (key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");
+		return -1;
+	}
+
+	zsk_key = calloc(3, sizeof(struct keysentry *));
+	if (zsk_key == NULL) {
+		dolog(LOG_INFO, "out of memory\n");	
+		return -1;
+	}
+
+	nzk = 0;
+	SLIST_FOREACH(knp, &keyshead, keys_entry) {
+		if ((knp->type == KEYTYPE_ZSK && rollmethod == \
+			ROLLOVER_METHOD_DOUBLE_SIGNATURE) || \
+			(knp->sign == 1 && knp->type == KEYTYPE_ZSK)) {
+				zsk_key[nzk++] = knp;
+		}
+	}
+
+	zsk_key[nzk] = NULL;
+
+	/* get the ZSK */
+	do { 
+		if ((zone = get_key(*zsk_key, &ttl, &flags, &protocol, &algorithm, (char *)&tmp, sizeof(tmp), &keyid)) == NULL) {
+			dolog(LOG_INFO, "get_key %s\n", (*zsk_key)->keyname);
+			return -1;
+		}
+
+		/* check the keytag supplied */
+		p = key;
+		pack16(p, htons(flags));
+		p += 2;
+		pack8(p, protocol);
+		p++;
+		pack8(p, algorithm);
+		p++;
+		keylen = mybase64_decode(tmp, (u_char *)&signature, sizeof(signature));
+		pack(p, signature, keylen);
+		p += keylen;
+		keylen = (plength(p, key));
+		if (keyid != keytag((u_char *)key, keylen)) {
+			dolog(LOG_ERR, "keytag does not match %d vs. %d\n", keyid, keytag((u_char *)key, keylen));
+			return -1;
+		}
+		
+		labels = label_count(rbt->zone);
+		if (labels < 0) {
+			dolog(LOG_INFO, "label_count");
+			return -1;
+		}
+
+		dnsname = dns_label(zonename, &labellen);
+		if (dnsname == NULL)
+			return -1;
+
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) != NULL) {
+			rrp = TAILQ_FIRST(&rrset->rr_head);
+			if (rrp == NULL) {
+				dolog(LOG_INFO, "no NSEC records but have flags!\n");
+				return -1;
+			}
+		} else {
+			dolog(LOG_INFO, "no NSEC records\n");
+			return -1;
+		}
+		
+		p = key;
+
+		pack16(p, htons(DNS_TYPE_NSEC));
+		p += 2;
+		pack8(p, algorithm);
+		p++;
+		pack8(p, labels);
+		p++;
+		pack32(p, htonl(rrset->ttl));
+		p += 4;
+			
+#if defined __FreeBSD__ || defined __linux__
+		snprintf(timebuf, sizeof(timebuf), "%lu", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lu", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+#else
+		snprintf(timebuf, sizeof(timebuf), "%lld", expiredon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		expiredon2 = timegm(&tm);
+		snprintf(timebuf, sizeof(timebuf), "%lld", signedon);
+		strptime(timebuf, "%Y%m%d%H%M%S", &tm);
+		signedon2 = timegm(&tm);
+#endif
+
+		pack32(p, htonl(expiredon2));
+		p += 4;
+		pack32(p, htonl(signedon2));	
+		p += 4;
+		pack16(p, htons(keyid));
+		p += 2;
+		pack(p, dnsname, labellen);
+		p += labellen;
+
+		/* no signature here */	
+		/* XXX this should probably be done on a canonical sorted records */
+		
+		pack(p, rbt->zone, rbt->zonelen);
+		p += rbt->zonelen;
+
+		pack16(p, htons(DNS_TYPE_NSEC));
+		p += 2;
+		pack16(p, htons(DNS_CLASS_IN));
+		p += 2;
+		pack32(p, htonl(rrset->ttl));
+		p += 4;
+		pack16(p, htons(((struct nsec *)rrp->rdata)->next_len + ((struct nsec *)rrp->rdata)->bitmap_len));
+		p += 2;
+		pack(p, ((struct nsec *)rrp->rdata)->next, ((struct nsec *)rrp->rdata)->next_len);
+		p += ((struct nsec *)rrp->rdata)->next_len;
+		if (((struct nsec *)rrp->rdata)->bitmap_len) {
+			pack(p, ((struct nsec *)rrp->rdata)->bitmap, ((struct nsec *)rrp->rdata)->bitmap_len);
+			p += ((struct nsec *)rrp->rdata)->bitmap_len;
+		}
+		
+		keylen = (plength(p, key));	
+
+		if (sign(algorithm, key, keylen, *zsk_key, (char *)&signature, &siglen) < 0) {
+			dolog(LOG_INFO, "signing failed\n");
+			return -1;
+		}
+
+		len = mybase64_encode((const u_char *)signature, siglen, tmp, sizeof(tmp));
+		tmp[len] = '\0';
+
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "NSEC", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+			dolog(LOG_INFO, "fill_rrsig\n");
+			return -1;
+		}
+	} while ((*++zsk_key) != NULL);
+	
+	return 0;
+}
 
 /*
  * create a RRSIG for an NSEC3PARAM record
@@ -9621,6 +9882,9 @@ fixup_zonemd(ddDB *db, char *zonename, int expiry, int rollmethod)
 		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
 			zonemd_hash_nsec3param(&ctx, rrset, rbt);
 		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) != NULL) {
+		//	zonemd_hash_nsec(&ctx, rrset, rbt);
+		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_LOC)) != NULL) {
 			zonemd_hash_loc(&ctx, rrset, rbt);
 		}
@@ -9777,6 +10041,9 @@ add_zonemd(ddDB *db, char *zonename, int check)
 		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3PARAM)) != NULL) {
 			zonemd_hash_nsec3param(&ctx, rrset, rbt);
 		}
+		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) != NULL) {
+			//zonemd_hash_nsec(&ctx, rrset, rbt);
+		}
 		if (check && (rrset = find_rr(rbt, DNS_TYPE_ZONEMD)) != NULL) {
 			if ((zonemd = zonemd_hash_zonemd(rrset, rbt)) == NULL)
 				return -1;
@@ -9845,7 +10112,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 
 	int rs, len, rootlen;
 
-	TAILQ_HEAD(listhead, mynsec3) head;
+	TAILQ_HEAD(, mynsec3) nsec3head;
 
 	struct mynsec3 {
 		char *hashname;
@@ -9854,7 +10121,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 	} *n1, *n2, *np;
 		
 		
-	TAILQ_INIT(&head);
+	TAILQ_INIT(&nsec3head);
 
 	/* fill nsec3param */
 	
@@ -9992,6 +10259,9 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		if (find_rr(rbt, DNS_TYPE_NSEC3PARAM) != NULL)
 			strlcat(bitmap, "NSEC3PARAM ", sizeof(bitmap));	
 
+		if (find_rr(rbt, DNS_TYPE_NSEC) != NULL)
+			strlcat(bitmap, "NSEC ", sizeof(bitmap));	
+
 		if (find_rr(rbt, DNS_TYPE_TLSA) != NULL)
 			strlcat(bitmap, "TLSA ", sizeof(bitmap));	
 
@@ -10018,10 +10288,10 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			return -1;
 		}
 	
-		if (TAILQ_EMPTY(&head))
-			TAILQ_INSERT_TAIL(&head, n1, entries);
+		if (TAILQ_EMPTY(&nsec3head))
+			TAILQ_INSERT_TAIL(&nsec3head, n1, entries);
 		else {
-			TAILQ_FOREACH(n2, &head, entries) {
+			TAILQ_FOREACH(n2, &nsec3head, entries) {
 				if (strcmp(n1->hashname, n2->hashname) < 0)
 					break;
 			}
@@ -10029,7 +10299,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			if (n2 != NULL) 
 				TAILQ_INSERT_BEFORE(n2, n1, entries);
 			else
-				TAILQ_INSERT_TAIL(&head, n1, entries);
+				TAILQ_INSERT_TAIL(&nsec3head, n1, entries);
 		}
 
 	}  /* RB_FOREACH_SAFE */
@@ -10077,10 +10347,10 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 				return -1;
 			}
 		
-			if (TAILQ_EMPTY(&head))
-				TAILQ_INSERT_TAIL(&head, n1, entries);
+			if (TAILQ_EMPTY(&nsec3head))
+				TAILQ_INSERT_TAIL(&nsec3head, n1, entries);
 			else {
-				TAILQ_FOREACH(n2, &head, entries) {
+				TAILQ_FOREACH(n2, &nsec3head, entries) {
 					if (strcmp(n1->hashname, n2->hashname) < 0)
 						break;
 				}
@@ -10088,7 +10358,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 				if (n2 != NULL) 
 					TAILQ_INSERT_BEFORE(n2, n1, entries);
 				else
-					TAILQ_INSERT_TAIL(&head, n1, entries);
+					TAILQ_INSERT_TAIL(&nsec3head, n1, entries);
 			}
 
 		} /* if len > rootlen */
@@ -10097,10 +10367,10 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 	} /* RB_FOREACH_SAFE */
 
 
-	TAILQ_FOREACH(n2, &head, entries) {
+	TAILQ_FOREACH(n2, &nsec3head, entries) {
 		np = TAILQ_NEXT(n2, entries);
 		if (np == NULL)
-			np = TAILQ_FIRST(&head);
+			np = TAILQ_FIRST(&nsec3head);
 
 		/*
 		 * Below can happen for example when 2+ ENT's exist in the
@@ -10121,6 +10391,236 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 	return 0;
 }
 
+
+int
+construct_nsec(ddDB *db, char *zone)
+{
+	struct node *n, *nx;
+
+	struct rbtree *rbt = NULL;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+
+	char bitmap[4096];
+	struct mynext {
+		char *name;
+		char nextname[DNS_MAXNAME + 1];
+		char *bitmap;
+	};
+		
+	char *dnsname;
+	char *p;
+
+	int labellen;
+	uint32_t ttl = 0;
+
+	int rs, len, rootlen;
+	int count = 0;
+
+
+	dnsname = dns_label(zone, &labellen);
+	if (dnsname == NULL)
+		return -1;
+
+	if ((rbt = Lookup_zone(db, dnsname, labellen, DNS_TYPE_SOA, 0)) == NULL) {
+		return -1;
+	}
+
+	/* get the rootzone's len */
+	rootlen = rbt->zonelen;
+
+	rrset = find_rr(rbt, DNS_TYPE_SOA);
+	if (rrset == NULL)
+		return -1;
+	rrp = TAILQ_FIRST(&rrset->rr_head);
+	if (rrp == NULL)
+		return -1;
+
+	/* RFC 5155 page 3 */
+	ttl = rrset->ttl;
+
+	count = 0;
+	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
+		rs = n->datalen;
+		if ((rbt = calloc(1, rs)) == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			exit(1);
+		}
+
+		memcpy((char *)rbt, (char *)n->data, n->datalen);
+
+		/* if we're a glue record, skip */
+		if (! notglue(db, rbt, zone)) {
+			continue;
+		}
+
+		bitmap[0] = '\0';
+		if (find_rr(rbt, DNS_TYPE_A) != NULL)
+			strlcat(bitmap, "A ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_NS) != NULL)
+			strlcat(bitmap, "NS ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_CNAME) != NULL)
+			strlcat(bitmap, "CNAME ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_SOA) != NULL)
+			strlcat(bitmap, "SOA ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_PTR) != NULL)
+			strlcat(bitmap, "PTR ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_HINFO) != NULL)
+			strlcat(bitmap, "HINFO ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_MX) != NULL)
+			strlcat(bitmap, "MX ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_TXT) != NULL)
+			strlcat(bitmap, "TXT ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_RP) != NULL)
+			strlcat(bitmap, "RP ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_AAAA) != NULL)
+			strlcat(bitmap, "AAAA ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_LOC) != NULL)
+			strlcat(bitmap, "LOC ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_SRV) != NULL)
+			strlcat(bitmap, "SRV ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_NAPTR) != NULL)	 /* 35 */
+			strlcat(bitmap, "NAPTR ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_KX) != NULL)
+			strlcat(bitmap, "KX ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_DS) != NULL)		/* 43 */
+			strlcat(bitmap, "DS ", sizeof(bitmap));	
+		if (find_rr(rbt, DNS_TYPE_SSHFP) != NULL)	 /* 44 */
+			strlcat(bitmap, "SSHFP ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_IPSECKEY) != NULL)
+			strlcat(bitmap, "IPSECKEY ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_ZONEMD) != NULL) 	  /* 63 */
+			strlcat(bitmap, "ZONEMD ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_SVCB) != NULL)
+			strlcat(bitmap, "SVCB ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_HTTPS) != NULL)
+			strlcat(bitmap, "HTTPS ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_EUI48) != NULL)	/* 108 */
+			strlcat(bitmap, "EUI48 ", sizeof(bitmap));
+		if (find_rr(rbt, DNS_TYPE_EUI64) != NULL)	/* 109 */
+			strlcat(bitmap, "EUI64 ", sizeof(bitmap));
+
+		if (find_rr(rbt, DNS_TYPE_CAA) != NULL)
+			strlcat(bitmap, "CAA ", sizeof(bitmap));
+
+		if (find_rr(rbt, DNS_TYPE_NS) != NULL) {
+			int isapex;
+
+			if ((isapex = rbt_isapex(rbt, zone)) < 0) {
+				dolog(LOG_INFO, "rbt_isapex failed\n");
+				return -1;
+			}
+
+			if (isapex) {
+				strlcat(bitmap, "RRSIG ", sizeof(bitmap));
+			}
+		} else  {
+			strlcat(bitmap, "RRSIG ", sizeof(bitmap));	
+		}
+
+		if (find_rr(rbt, DNS_TYPE_DNSKEY) != NULL)
+			strlcat(bitmap, "DNSKEY ", sizeof(bitmap));
+
+		if (find_rr(rbt, DNS_TYPE_NSEC3) != NULL) {
+			strlcat(bitmap, "NSEC3 ", sizeof(bitmap));
+		}
+
+		strlcat(bitmap, "NSEC ", sizeof(bitmap));
+
+		if (find_rr(rbt, DNS_TYPE_NSEC3PARAM) != NULL)
+			strlcat(bitmap, "NSEC3PARAM ", sizeof(bitmap));
+
+		if (find_rr(rbt, DNS_TYPE_TLSA) != NULL)
+			strlcat(bitmap, "TLSA ", sizeof(bitmap));
+
+		if (find_rr(rbt, DNS_TYPE_CDS) != NULL)
+			strlcat(bitmap, "CDS ", sizeof(bitmap));
+
+		if (find_rr(rbt, DNS_TYPE_CDNSKEY) != NULL)
+			strlcat(bitmap, "CDNSKEY ", sizeof(bitmap));
+
+		n1 = calloc(1, sizeof(struct mynsec));
+		if (n1 == NULL) {
+			dolog(LOG_INFO, "out of memory");
+			return -1;
+		}
+
+		n1->name = strdup(rbt->humanname);
+		n1->nextname = strdup(rbt->humanname);
+		n1->bitmap = strdup(bitmap);
+		if (n1->nextname == NULL || n1->bitmap == NULL) {
+			dolog(LOG_INFO, "out of memory");
+			return -1;
+		}
+
+		RB_INSERT(nsectree, &nsechead, n1);
+
+		count++;
+	}  /* RB_FOREACH_SAFE */
+
+	/* check ENT's which we'll create */
+	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
+		rs = n->datalen;
+		if ((rbt = calloc(1, rs)) == NULL) {
+			dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+			exit(1);
+		}
+
+		memcpy((char *)rbt, (char *)n->data, n->datalen);
+
+		len = rbt->zonelen;
+		for (p = rbt->zone; *p && len > rootlen; p++, len--) {
+			if (check_ent(p, len))
+				break;
+			
+			len -= *p;
+			p += *p;
+		}
+
+#if 0
+		if (len > rootlen) {
+			bitmap[0] = '\0';
+
+			n1 = calloc(1, sizeof(struct mynsec));
+			if (n1 == NULL) {
+				dolog(LOG_INFO, "out of memory");
+				return -1;
+			}
+			
+			n1->name = strdup(rbt->humanname);
+			n1->nextname = strdup(rbt->humanname);
+			n1->bitmap = strdup(bitmap);	
+			if (n1->nextname == NULL || n1->bitmap == NULL) {
+				dolog(LOG_INFO, "out of memory");
+				return -1;
+			}
+
+			TAILQ_INSERT_TAIL(&nsechead, n1, entries);
+			count++;
+		} /* if len > rootlen */
+#endif
+
+	} /* RB_FOREACH_SAFE */
+
+	count = 0;
+	RB_FOREACH(n2, nsectree, &nsechead) {
+		if (count == 0) {
+			count++;
+			n1 = n2;
+			continue;
+		} else if (count == 1) {
+			fill_nsec(db, n1->name, "nsec", ttl, n2->nextname, n1->bitmap);
+		} else {
+			fill_nsec(db, np->name, "nsec", ttl, n2->nextname, np->bitmap);
+		}
+
+		np = n2;
+		count++;
+	}
+	fill_nsec(db, np->name, "nsec", ttl, n1->nextname, np->bitmap);
+
+	return 0;
+}
 
 int
 print_rbt(FILE *of, struct rbtree *rbt)
@@ -10637,6 +11137,19 @@ print_rbt(FILE *of, struct rbtree *rbt)
 			bitmap2human(((struct nsec3 *)rrp->rdata)->bitmap, ((struct nsec3 *)rrp->rdata)->bitmap_len));
 
 	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no nsec in zone!\n");
+			return -1;
+		}
+		
+		fprintf(of, "  %s,nsec,%d,%s,\"%s\"\n",
+			convert_name(rbt->zone, rbt->zonelen),
+			rrset->ttl,
+			convert_name((u_char *)((struct nsec *)rrp->rdata)->next, ((struct nsec *)rrp->rdata)->next_len),
+			bitmap2human(((struct nsec *)rrp->rdata)->bitmap, ((struct nsec *)rrp->rdata)->bitmap_len));
+
+	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) != NULL) {
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
 			dolog(LOG_INFO, "no naptr in zone!\n");
@@ -11045,3 +11558,4 @@ rbt_isapex(struct rbtree *rbt, char *zonename)
 
 	return (ret);
 }
+

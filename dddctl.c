@@ -1609,6 +1609,17 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 			(((struct nsec3 *)rrp->rdata)->saltlen == 0) ? "-" : bin2hex(((struct nsec3 *)rrp->rdata)->salt, ((struct nsec3 *)rrp->rdata)->saltlen),
 			base32hex_encode((u_char *)((struct nsec3 *)rrp->rdata)->next, ((struct nsec3 *)rrp->rdata)->nextlen),
 			bitmap2human(((struct nsec3 *)rrp->rdata)->bitmap, ((struct nsec3 *)rrp->rdata)->bitmap_len));
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no nsec in zone!\n");
+			return -1;
+		}
+		fprintf(of, "%s %d IN NSEC %s %s\n",
+			convert_name(rbt->zone, rbt->zonelen),
+			rrset->ttl,
+			convert_name((u_char *)((struct nsec *)rrp->rdata)->next, ((struct nsec *)rrp->rdata)->next_len),
+			bitmap2human(((struct nsec *)rrp->rdata)->bitmap, ((struct nsec *)rrp->rdata)->bitmap_len));
 
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_RRSIG)) != NULL) {

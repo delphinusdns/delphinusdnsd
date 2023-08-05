@@ -122,8 +122,8 @@ struct rrsig {
 };
 
 struct nsec {
-	char next_domain_name[DNS_MAXNAME];
-	uint8_t ndn_len;	/* next domain name length */
+	char next[DNS_MAXNAME];
+	uint8_t next_len;	/* next domain name length */
 	char bitmap[8192];
 	uint16_t bitmap_len;
 };

@@ -388,10 +388,10 @@ find_nsec(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 
 	dn = (struct domainnames *)table;
 	strlcpy(dn->name, rbt->humanname, DNS_MAXNAME + 1);
-	nsecname = convert_name(((struct nsec *)rrp->rdata)->next_domain_name, ((struct nsec *)rrp->rdata)->ndn_len);
+	nsecname = convert_name(((struct nsec *)rrp->rdata)->next, ((struct nsec *)rrp->rdata)->next_len);
 	strlcpy(dn->next, nsecname, DNS_MAXNAME + 1);
 	
-	rbt0 = find_rrset(db, ((struct nsec *)rrp->rdata)->next_domain_name, ((struct nsec *)rrp->rdata)->ndn_len);
+	rbt0 = find_rrset(db, ((struct nsec *)rrp->rdata)->next, ((struct nsec *)rrp->rdata)->next_len);
 	if (rbt0 == NULL) {
 		free (nsecname);
 		free (humanname);
@@ -433,11 +433,11 @@ find_nsec(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 		
 		free (nsecname);
 		strlcpy(dn->name, rbt0->humanname, DNS_MAXNAME + 1);
-		nsecname = convert_name(((struct nsec *)rrp->rdata)->next_domain_name, ((struct nsec *)rrp->rdata)->ndn_len);
+		nsecname = convert_name(((struct nsec *)rrp->rdata)->next, ((struct nsec *)rrp->rdata)->next_len);
 		strlcpy(dn->next, nsecname, DNS_MAXNAME + 1);
 		
-		memcpy(tmpname, ((struct nsec *)rrp->rdata)->next_domain_name, ((struct nsec *)rrp->rdata)->ndn_len);
-		tmplen = ((struct nsec *)rrp->rdata)->ndn_len;
+		memcpy(tmpname, ((struct nsec *)rrp->rdata)->next, ((struct nsec *)rrp->rdata)->next_len);
+		tmplen = ((struct nsec *)rrp->rdata)->next_len;
 
 
 		rbt0 = find_rrset(db, tmpname, tmplen);
