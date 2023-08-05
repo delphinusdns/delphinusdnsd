@@ -6811,7 +6811,7 @@ advance_label(char *name, int *len)
 
 	*len -= (*name + 1);
 
-	if (len < 0)
+	if (*len < 0)
 		return NULL;
 
 	name = (name + (*name + 1));
