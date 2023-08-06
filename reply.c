@@ -2068,7 +2068,7 @@ reply_nsec(struct sreply *sreply, int *sretlen, ddDB *db)
 
 	zonenumberx = determine_zone(rbt);
 
-	if ((rrset = find_rr(rbt, DNS_TYPE_A)) == NULL)
+	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) == NULL)
 		return -1;
 
 	if (istcp) {
