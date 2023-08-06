@@ -67,9 +67,7 @@ int additional_ds(char *, int, struct rbtree *, char *, int, int, int *, uint32_
 int additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t, uint16_t);
 int additional_ptr(char *, int, struct rbtree *, char *, int, int, int *);
 int additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int, uint32_t);
-#if 0
-int additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int *, int);
-#endif
+int additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int *, int, uint32_t);
 int additional_nsec3(char *, int, int, struct rbtree *, char *, int, int, int *, int, uint32_t);
 int additional_tsig(struct question *, char *, int, int, int, int, DDD_HMAC_CTX *, uint16_t);
 int additional_wildcard(char *, int, struct rbtree *, char *, int, int, int *, ddDB *, uint32_t);
@@ -1093,14 +1091,13 @@ additional_rrsig(char *name, int namelen, int inttype, struct rbtree *rbt, char 
 	return (offset);
 }
 
-#if 0
 /*
  * ADDITIONAL_NSEC - tag on an additional NSEC with RRSIG to the answer
  * 		type passed must be a DNS_TYPE!
  */
 
 int 
-additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count, int authoritative)
+additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *reply, int replylen, int offset, int *count, int authoritative, uint32_t zoneno)
 {
 	struct answer {
 		uint16_t type;
@@ -1150,21 +1147,21 @@ additional_nsec(char *name, int namelen, int inttype, struct rbtree *rbt, char *
 	else
 		answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
 
-	answer->rdlength = htons(((struct nsec *)rrp->rdata)->ndn_len + 
+	answer->rdlength = htons(((struct nsec *)rrp->rdata)->next_len + 
 			((struct nsec *)rrp->rdata)->bitmap_len);
 	
 	offset += sizeof(*answer);
 
-	memcpy(&reply[offset], ((struct nsec *)rrp->rdata)->next_domain_name,
-                ((struct nsec *)rrp->rdata)->ndn_len);
+	memcpy(&reply[offset], ((struct nsec *)rrp->rdata)->next,
+                ((struct nsec *)rrp->rdata)->next_len);
 
-	offset += ((struct nsec *)rrp->rdata)->ndn_len;
+	offset += ((struct nsec *)rrp->rdata)->next_len;
 
 	memcpy(&reply[offset], ((struct nsec *)rrp->rdata)->bitmap, 
 			((struct nsec *)rrp->rdata)->bitmap_len);
 	offset += ((struct nsec *)rrp->rdata)->bitmap_len;
 
-	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC, rbt, reply, replylen, offset, &retcount, authoritative);
+	tmplen = additional_rrsig(name, namelen, DNS_TYPE_NSEC, rbt, reply, replylen, offset, &retcount, authoritative, zoneno);
 
 	if (tmplen == 0) {
 		goto out;
@@ -1178,7 +1175,6 @@ out:
 	return (offset);
 
 }
-#endif
 
 /*
  * ADDITIONAL_NSEC3 - tag on an additional NSEC3 with RRSIG to the answer

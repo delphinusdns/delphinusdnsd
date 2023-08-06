@@ -76,8 +76,8 @@ extern int 		additional_ptr(char *, int, struct rbtree *, char *, int, int, int 
 extern int 		additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t, uint16_t);
 extern int 		additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
 extern int 		additional_rrsig(char *, int, int, struct rbtree *, char *, int, int, int *, int, uint32_t);
-extern int 		additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int);
-extern struct question 	*build_fake_question(char *, int, uint16_t, char *, int);
+
+extern int		additional_nsec(char *, int, int, struct rbtree *, char *, int, int, int *, int, uint32_t);
 extern int 		compress_label(u_char *, int, int);
 extern void 		dolog(int, char *, ...);
 extern int 		free_question(struct question *);
@@ -7148,7 +7148,10 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 			}
 			addrec = 0;
 
-		} /* if (find_rr(... DNS_TYPE_NSEC3PARAM) */
+		} else {
+			/* we use NSEC here */
+
+		}
 	}
 
 	if (replysize < outlen) {
@@ -7444,6 +7447,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 	int istcp = sreply->istcp;
 	int replysize = 512;
 	int retlen = -1;
+	int n3 = 0;
 
 	struct {
 		char name[DNS_MAXNAME];
@@ -7631,9 +7635,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (find_rr(rbt, DNS_TYPE_NSEC)) {
 			rbt0 = Lookup_zone(db, q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, 0);
 			if (rbt0 != NULL) {
-#if 0
-				tmplen = additional_nsec(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, rbt0, reply, replysize, outlen, q->aa);
-#endif
+				tmplen = additional_nsec(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 			}
 		} else if (find_rr(rbt, DNS_TYPE_NSEC3PARAM)) {
 			rbt0 = find_nsec3_match_qname(q->hdr->name, q->hdr->namelen, rbt, db);
@@ -7644,6 +7646,8 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 			uniq[rruniq++].len = rbt0->zonelen;
 
 			tmplen = additional_nsec3(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC3, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
+
+			n3 = 1;
 		}
 
 		if (tmplen == 0) {
@@ -7671,54 +7675,57 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 		if (rbt0) {
 			struct rbtree *ncn, *rbt1;
 
-			ncn = find_closest_encloser_nsec3(rbt0->zone, rbt0->zonelen, rbt, db);
-			if (ncn == NULL) {
-				goto out;
+			if (n3) {
+				ncn = find_closest_encloser_nsec3(rbt0->zone, rbt0->zonelen, rbt, db);
+				if (ncn == NULL) {
+					goto out;
+				}
+
+				tmplen = additional_nsec3(ncn->zone, ncn->zonelen, DNS_TYPE_NSEC3, ncn, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
+
+				if (tmplen == 0) {
+					NTOHS(odh->query);
+					SET_DNS_TRUNCATION(odh);
+					HTONS(odh->query);
+					odh->answer = 0;
+					odh->nsrr = 0; 
+					odh->additional = 0;
+					outlen = rollback;
+					goto out;
+				}
+
+				outlen = tmplen;
+
+				NTOHS(odh->nsrr);
+				odh->nsrr += retcount;
+				HTONS(odh->nsrr);
+
+				rbt1 = find_match_qname_wild_nsec3(q->hdr->name, q->hdr->namelen, rbt, db);
+
+				if (rbt1 == NULL)
+					goto out;
+
+				tmplen = additional_nsec3(rbt1->zone, rbt1->zonelen, DNS_TYPE_NSEC3, rbt1, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
+
+				if (tmplen == 0) {
+					NTOHS(odh->query);
+					SET_DNS_TRUNCATION(odh);
+					HTONS(odh->query);
+					odh->answer = 0;
+					odh->nsrr = 0; 
+					odh->additional = 0;
+					outlen = rollback;
+					goto out;
+				}
+
+				outlen = tmplen;
+
+				NTOHS(odh->nsrr);
+				odh->nsrr += retcount;
+				HTONS(odh->nsrr);
+			} else {
+				/* nsec(1) additional */
 			}
-
-			tmplen = additional_nsec3(ncn->zone, ncn->zonelen, DNS_TYPE_NSEC3, ncn, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
-
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				odh->answer = 0;
-				odh->nsrr = 0; 
-				odh->additional = 0;
-				outlen = rollback;
-				goto out;
-			}
-
-			outlen = tmplen;
-
-			NTOHS(odh->nsrr);
-			odh->nsrr += retcount;
-			HTONS(odh->nsrr);
-
-
-			rbt1 = find_match_qname_wild_nsec3(q->hdr->name, q->hdr->namelen, rbt, db);
-
-			if (rbt1 == NULL)
-				goto out;
-
-			tmplen = additional_nsec3(rbt1->zone, rbt1->zonelen, DNS_TYPE_NSEC3, rbt1, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
-
-			if (tmplen == 0) {
-				NTOHS(odh->query);
-				SET_DNS_TRUNCATION(odh);
-				HTONS(odh->query);
-				odh->answer = 0;
-				odh->nsrr = 0; 
-				odh->additional = 0;
-				outlen = rollback;
-				goto out;
-			}
-
-			outlen = tmplen;
-
-			NTOHS(odh->nsrr);
-			odh->nsrr += retcount;
-			HTONS(odh->nsrr);
 		}
 	}
 
