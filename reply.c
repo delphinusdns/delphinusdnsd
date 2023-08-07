@@ -91,12 +91,14 @@ extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern int rotate_rr(struct rrset *rrset);
 extern char * find_next_closer_nsec3(char *zonename, int zonelen, char *hashname);
-extern struct rbtree * find_nsec3_cover_next_closer(char *name, int namelen, struct rbtree *, ddDB *db);
-extern struct rbtree * find_nsec3_match_closest(char *name, int namelen, struct rbtree *, ddDB *db);
-extern struct rbtree * find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *, ddDB *db);
-extern struct rbtree * find_nsec3_match_qname(char *name, int namelen, struct rbtree *, ddDB *db);
-extern struct rbtree * find_match_qname_wild_nsec3(char *, int, struct rbtree *, ddDB *);
-extern struct rbtree * find_closest_encloser(ddDB *db, char *name, int namelen);
+extern struct rbtree *	find_nsec_match_closest(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	find_nsec_match_closest_encloser(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	find_nsec3_cover_next_closer(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	find_nsec3_match_closest(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	find_nsec3_wildcard_closest(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	find_nsec3_match_qname(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	find_match_qname_wild_nsec3(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	find_closest_encloser(ddDB *, char *, int);
 extern struct rbtree *		get_soa(ddDB *, struct question *);
 extern struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
 extern struct rbtree *		Lookup_zone(ddDB *, char *, uint16_t, uint16_t, int);
@@ -7151,6 +7153,55 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 		} else {
 			/* we use NSEC here */
 
+			rbt0 = find_nsec_match_closest_encloser(q->hdr->name, q->hdr->namelen, rbt, db);
+			if (rbt0 == NULL)
+				goto out;
+
+			tmplen = additional_nsec(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
+
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+
+			outlen = tmplen;
+
+			if (outlen > origlen) {
+				NTOHS(odh->nsrr);
+				odh->nsrr += retcount;
+				HTONS(odh->nsrr);
+			}
+
+			rbt0 = find_nsec_match_closest(q->hdr->name, q->hdr->namelen, rbt, db);
+			if (rbt0 == NULL)
+				goto out;
+
+			tmplen = additional_nsec(rbt0->zone, rbt0->zonelen, DNS_TYPE_NSEC, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
+
+			if (tmplen == 0) {
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+
+			outlen = tmplen;
+
+			if (outlen > origlen) {
+				NTOHS(odh->nsrr);
+				odh->nsrr += retcount;
+				HTONS(odh->nsrr);
+			}
 		}
 	}
 

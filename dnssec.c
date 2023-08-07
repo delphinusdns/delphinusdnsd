@@ -65,7 +65,8 @@ int insert_nsec3(char *zonename, char *domainname, char *dname, int dnamelen);
 char * find_next_closer_nsec3(char *zonename, int zonelen, char *hashname);
 char * find_match_nsec3(char *zonename, int zonelen, char *hashname);
 char * find_match_nsec3_ent(char *zonename, int zonelen, char *hashname);
-struct rbtree * find_nsec(char *name, int namelen, struct rbtree *rbt, ddDB *db);
+struct rbtree * find_nsec_match_closest(char *, int, struct rbtree *, ddDB *);
+struct rbtree * find_nsec_match_closest_encloser(char *, int, struct rbtree *, ddDB *);
 struct rbtree * find_nsec3_match_qname(char *name, int namelen, struct rbtree *, ddDB *db);
 struct rbtree * find_nsec3_match_closest(char *name, int namelen, struct rbtree *, ddDB *db);
 struct rbtree * find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *, ddDB *db);
@@ -100,6 +101,7 @@ extern struct rrset * 	find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern int 		add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata);
 extern size_t 		plength(void *, void *);
 extern char *		advance_label(char *, int *);
+extern struct zoneentry *      zone_findzone(struct rbtree *);
 
 extern int debug;
 
@@ -343,161 +345,87 @@ find_match_nsec3(char *zonename, int zonelen, char *hashname)
 	return (n3->domainname);
 }
 
+/*
+ * FIND_NSEC_MATCH_CLOSEST_ENCLOSER - find the closest encloser RR to 
+ *					prove non-wildcard
+ */
 
-/* FIND_NSEC  */
-/* finds the right nsec domainname in a zone */
 struct rbtree *
-find_nsec(char *name, int namelen, struct rbtree *rbt, ddDB *db)
+find_nsec_match_closest_encloser(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
-	char *table, *tmp;
-	char *nsecname;
-	struct domainnames {
-		char name[DNS_MAXNAME + 1];
-		char next[DNS_MAXNAME + 1];
-	} *dn;
-
-	struct rbtree *rbt0;
-	struct rrset *rrset = NULL;
+	struct rbtree *rbt0, *rbt1;
+	struct rrset *rp = NULL;
 	struct rr *rrp = NULL;
-	char *humanname;
-	char tmpname[DNS_MAXNAME];
-	int tmplen;
-	char *backname;
-	int backnamelen;
-	int i, names = 100;
-	int j;
-
-	humanname = convert_name(name, namelen);
-
-	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) == NULL) {
-		free (humanname);
-		return (NULL);
-	}
+	struct nsec *nsec;
+	char *hn1;
 	
-	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == NULL) {
-		free(humanname);
-		return (NULL);
-	}
+	//int dots0, dots1, dots2;
 
-	table = calloc(names, sizeof(struct domainnames));	
-	if (table == NULL) {
-		free (humanname);
-		return (NULL);
-	}
+	hn1 = convert_name(name, namelen);
+	if (hn1 == NULL)
+		return NULL;
 
-	dn = (struct domainnames *)table;
-	strlcpy(dn->name, rbt->humanname, DNS_MAXNAME + 1);
-	nsecname = convert_name(((struct nsec *)rrp->rdata)->next, ((struct nsec *)rrp->rdata)->next_len);
-	strlcpy(dn->next, nsecname, DNS_MAXNAME + 1);
-	
-	rbt0 = find_rrset(db, ((struct nsec *)rrp->rdata)->next, ((struct nsec *)rrp->rdata)->next_len);
-	if (rbt0 == NULL) {
-		free (nsecname);
-		free (humanname);
-		free (table);
-		return (NULL);
-	}
+        //dots0 = count_dots(hn1);
 
-	if ((rrset = find_rr(rbt0, DNS_TYPE_NSEC)) == NULL) {
-		free (nsecname);
-		free (humanname);
-		free (table);
-		return (NULL);
-	}
+	/*
+	 *  enumerate the NSEC chain in order to find the next closest 
+	 *  encloser 
+	 */
 
-	rrp = TAILQ_FIRST(&rrset->rr_head);
-	if (rrp == NULL) {
-		free(nsecname);
-		free(humanname);
-		return (NULL);
-	}
+	for (rbt1 = rbt; rbt1 != NULL; rbt1 = rbt0) {
+		rp = find_rr(rbt1, DNS_TYPE_NSEC);
+		if (rp == NULL)
+			goto out;
 
-	i = 1;
-	while (strcasecmp(nsecname, rbt->humanname) != 0) {
-		/* grow our table */
-		if (i == names - 1) {
-			names += 100;
-	
-			tmp = realloc(table, names * sizeof(struct domainnames));
-			if (tmp == NULL) {
-				free (nsecname);
-				free (humanname);
-				free (table);
-				return (NULL);
-			}
-			table = tmp;
-		}
+		if ((rrp = TAILQ_FIRST(&rp->rr_head)) == NULL)
+			goto out;
 
-		dn = ((struct domainnames *)table) + i;
-		
-		free (nsecname);
-		strlcpy(dn->name, rbt0->humanname, DNS_MAXNAME + 1);
-		nsecname = convert_name(((struct nsec *)rrp->rdata)->next, ((struct nsec *)rrp->rdata)->next_len);
-		strlcpy(dn->next, nsecname, DNS_MAXNAME + 1);
-		
-		memcpy(tmpname, ((struct nsec *)rrp->rdata)->next, ((struct nsec *)rrp->rdata)->next_len);
-		tmplen = ((struct nsec *)rrp->rdata)->next_len;
+		nsec = (struct nsec *)rrp->rdata;
+		if (nsec == NULL)
+			goto out;
 
+		rbt0 = find_rrset(db, nsec->next, nsec->next_len);
+		if (rbt0 == NULL)
+			goto out;
 
-		rbt0 = find_rrset(db, tmpname, tmplen);
-		if (rbt0 == NULL) {
-			free (nsecname);
-			free (humanname);
-			free (table);
-			return (NULL);
-		}
+#if 0
+        	dots1 = count_dots(rbt1->humanname);
+		dots2 = count_dots(rbt0->humanname);
 
-		if ((rrset = find_rr(rbt0, DNS_TYPE_NSEC)) == NULL) {
-			free (nsecname);
-			free (humanname);
-			free (table);
-			return (NULL);
-		}
-
-		i++;
-	}
-
-	free (nsecname);
-	dn = ((struct domainnames *)table) + i;
-	strlcpy(dn->next, ".", DNS_MAXNAME + 1);
-	strlcpy(dn->name, humanname, DNS_MAXNAME + 1);
-
-	i++;
-
-	/* now we sort the shebang */
-
-	qsort(table, i, sizeof(struct domainnames), nsec_comp);
-	
-	for (j = 0; j < i; j++) {
-		dn = ((struct domainnames *)table) + j;
-		
-#if DEBUG
-		printf("%s\n", dn->name);
+		if ((dots1 < dots0 && strcmp(rbt1->humanname, hn1) < 0) &&
+			(dots0 <= dots2 && 
+			strcmp(hn1, rbt0->humanname) <= 0)) {
 #endif
 
-		if (strcmp(dn->next, ".") == 0)
+
+
+		if (strcmp(rbt1->humanname, hn1) < 0 &&
+			strcmp(hn1, rbt0->humanname) <= 0) {
+			free(hn1);
+			return (rbt1);
+		}
+
+		/* we are where we started, apparently it can't be found */
+		if (rbt0 == rbt)
 			break;
 	}
 
-	dn = ((struct domainnames *)table) + (j - 1);	
-	
-	/* found it, get it via db after converting it */	
-	
-	/* free what we don't need */
-	free (humanname);
-	
-	backname = dns_label(dn->name, &backnamelen);
-	free (table);
-	
+out:
+	free(hn1);
+	return NULL;
+}
 
-	rbt0 = find_rrset(db, backname, backnamelen);
-	if (rbt0 == NULL) {
-		free (backname);
-		return (NULL);
-	}
-	
-	free (backname);
+/*
+ * FIND_NSEC_MATCH_CLOSEST - find the closest RR to prove non-wildcard
+ *
+ */
+
+struct rbtree *
+find_nsec_match_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
+{
+	struct rbtree *rbt0;
+
+	rbt0 = find_closest_valid_name(name, namelen, rbt, db);
 	return (rbt0);
 }
 
@@ -1452,6 +1380,10 @@ find_closest_valid_name(char *qname, int qnamelen, struct rbtree *rbt, ddDB *db)
 	while (plen > 0) {
 		rbt0 = find_rrset(db, p, plen);
 		if (rbt0 == NULL) {
+			rbt0 = find_rrsetwild(db, p, plen);
+			if (rbt0 != NULL)
+				break;
+
 			p = advance_label(p, &plen);
 			if (p == NULL)
 				return NULL;
@@ -1462,4 +1394,3 @@ find_closest_valid_name(char *qname, int qnamelen, struct rbtree *rbt, ddDB *db)
 
 	return (rbt0);
 }
-
