@@ -357,15 +357,21 @@ find_nsec_match_closest_encloser(char *name, int namelen, struct rbtree *rbt, dd
 	struct rrset *rp = NULL;
 	struct rr *rrp = NULL;
 	struct nsec *nsec;
-	char *hn1;
+	char *hn1, *adv_name;
+	int adv_namelen;
 	
-	//int dots0, dots1, dots2;
+	rbt0 = find_closest_valid_name(name, namelen, rbt, db);
+	if (rbt0 == NULL)
+		return NULL;
 
-	hn1 = convert_name(name, namelen);
+	adv_name = find_next_closer_name(name, namelen, rbt0->zone, rbt0->zonelen, &adv_namelen);
+	if (adv_name == NULL)
+		return NULL;
+
+	hn1 = convert_name(adv_name, adv_namelen);
 	if (hn1 == NULL)
 		return NULL;
 
-        //dots0 = count_dots(hn1);
 
 	/*
 	 *  enumerate the NSEC chain in order to find the next closest 
