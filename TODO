@@ -29,9 +29,6 @@ drop the "inet" pledge.					[DONE]
 - give the raxfr (replicant engine) a forked helper that opens sockets for it
 and once open passes them back to replicant engine.  This allows us to drop
 the "inet" pledge.
-- change the paths for individual chroots for non-pledge systems (linux, freebsd
-and netbsd) which disallows using the filesystem being used as a buffer to
-store hacker code.
 - refactor the TLS code
 - implement algorithm 15 (Ed25519) 			[DONE]
 - implement algorithm 16 (Ed448) this is dependant on support by LibreSSL
