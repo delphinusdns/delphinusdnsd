@@ -320,6 +320,7 @@ extern void zonemd_hash_dnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_cds(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_cdnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_rrsig(SHA512_CTX *, struct rrset *, struct rbtree *, int);
+extern void zonemd_hash_nsec(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_nsec3(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern void zonemd_hash_nsec3param(SHA512_CTX *, struct rrset *, struct rbtree *);
 extern struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
@@ -668,9 +669,7 @@ signmain(int argc, char *argv[])
 			break;
 
 		case 'N':
-			//nsec = atoi(optarg);
-			fprintf(stderr, "still programming it,  check later\n");
-			exit(1);
+			nsec = atoi(optarg);
 			break;
 
 		case 'n':
@@ -9883,7 +9882,7 @@ fixup_zonemd(ddDB *db, char *zonename, int expiry, int rollmethod)
 			zonemd_hash_nsec3param(&ctx, rrset, rbt);
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_NSEC)) != NULL) {
-		//	zonemd_hash_nsec(&ctx, rrset, rbt);
+			zonemd_hash_nsec(&ctx, rrset, rbt);
 		}
 		if ((rrset = find_rr(rbt, DNS_TYPE_LOC)) != NULL) {
 			zonemd_hash_loc(&ctx, rrset, rbt);

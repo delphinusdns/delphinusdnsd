@@ -108,6 +108,7 @@ extern int fill_dnskey(char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, cha
 extern int fill_rrsig(char *, char *, uint32_t, char *, uint8_t, uint8_t, uint32_t, uint64_t, uint64_t, uint16_t, char *, char *);
 extern int fill_nsec3param(char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *);
 extern int fill_nsec3(char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *, char *, char *);
+extern int fill_nsec(char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *, char *, char *);
 extern char * convert_name(char *name, int namelen);
 
 extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
@@ -153,6 +154,7 @@ extern int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uin
 extern int raxfr_rrsig(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_nsec3param(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_nsec3(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_nsec(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_ds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_cds(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -208,6 +210,7 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_HTTPS, 0, raxfr_https },
 	{ DNS_TYPE_KX, 0, raxfr_kx },
 	{ DNS_TYPE_IPSECKEY, 0, raxfr_ipseckey },
+	{ DNS_TYPE_NSEC, 1, raxfr_nsec },
 	/* end new support */
 	{ 0, 0, NULL }
 };

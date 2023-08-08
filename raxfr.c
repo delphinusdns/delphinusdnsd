@@ -95,6 +95,7 @@ int raxfr_rp(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_H
 int raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_nsec(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_kx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_ipseckey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -200,6 +201,7 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_TXT, 0, raxfr_txt },
 	{ DNS_TYPE_DNSKEY, 1, raxfr_dnskey },
 	{ DNS_TYPE_RRSIG, 1, raxfr_rrsig },
+	{ DNS_TYPE_NSEC, 1, raxfr_nsec },
 	{ DNS_TYPE_NSEC3PARAM, 1, raxfr_nsec3param },
 	{ DNS_TYPE_NSEC3, 1, raxfr_nsec3 },
 	{ DNS_TYPE_DS, 1, raxfr_ds },
@@ -994,6 +996,52 @@ raxfr_dnskey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa,
 	return (plength(p, estart));
 }
 
+int 
+raxfr_nsec(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
+{
+	struct nsec n;
+	char *save, *humanname;
+	u_char *q = p;
+	u_char expand[256];
+	int max = sizeof(expand);
+	int elen = 0;
+
+	memset(&expand, 0, sizeof(expand));
+	save = expand_compression(q, estart, end, (u_char *)&expand, &elen, max);
+	if (save == NULL) {
+		safe_fprintf(stderr, "expanding compression failure\n");
+		return -1;
+	} else  {
+		q = (u_char *)save;
+	}
+
+	humanname = convert_name((char *)expand, elen);
+	if (humanname == NULL) {
+		return -1;
+	}
+
+	n.bitmap_len = 	(rdlen - (plength(q, p)));
+	if (n.bitmap_len > sizeof(n.bitmap))
+		return -1;
+
+	memcpy(&n.bitmap, q, n.bitmap_len);
+	q += n.bitmap_len;
+	
+
+	if (f != NULL) {
+		if (*humanname == '\0')
+			safe_fprintf(f, ".,\"%s\"\n", bitmap2human(n.bitmap, n.bitmap_len));
+		else
+			safe_fprintf(f, "%s,\"%s\"\n", humanname, bitmap2human(n.bitmap, n.bitmap_len));
+	}
+
+	free(humanname);
+
+	if (ctx != NULL)
+		delphinusdns_HMAC_Update(ctx, p, plength(q, p));
+
+	return (plength(q, estart));
+}
 
 int 
 raxfr_mx(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
@@ -1134,7 +1182,10 @@ raxfr_nsec3(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, 
 	memcpy(&n.bitmap, p, n.bitmap_len);
 	p += n.bitmap_len;
 	
+#if 0
+	/* XXX why is this here? */
 	bitmap2human(n.bitmap, n.bitmap_len);
+#endif
 
 	if (f != NULL) {
 		safe_fprintf(f, "%u,%u,%u,\"%s\",\"%s\",\"%s\"\n", n.algorithm, 

@@ -19,6 +19,7 @@ keep a minimal pledge of "stdio recvfd ..."
 - AXFR transfers are fixed to require TSIG records when configured to use them
   This fixes a MITM/security problem.
 - implemented algorithm 14 (ECDSAP384SHA384) and algorithm 15 (Ed25519)
+- implemented NSEC support and signing with dddctl
 
 
 [2022] Changes in RELEASE_1_7 from RELEASE_1_6

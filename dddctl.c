@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2022 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2016-2023 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -315,6 +315,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\t-i inputfile\tuse the inputfile of unsigned zone\n");
 		fprintf(stderr, "\t-k KSK\t\tuse provided KSK key-signing keyname\n");
 		fprintf(stderr, "\t-m mask\t\trun the following masked functions\n");
+		fprintf(stderr, "\t-N int\t\tuse NSEC version (default is 3).\n");
 		fprintf(stderr, "\t-n zonename\trun for zonename zone\n");
 		fprintf(stderr, "\t-o output\toutput to file, may be '-' for stdout\n");
 		fprintf(stderr, "\t-R keyword\tSpecify key roll-over method (prep or double)\n");
@@ -347,7 +348,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\thelp [command]\n");
 		fprintf(stderr, "\tquery [-DITZ] [-@ server] [-P port] [-p file] [-Q server]\n\t\t[-y keyname:password] name command\n");
 		fprintf(stderr, "\trestart [-I ident] [-s socket]\n");
-		fprintf(stderr, "\tsign [-KMXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask]\n\t\t[-n zonename] [-o output] [-R keyword] [-S pid] [-s salt]\n\t\t[-t ttl] [-x serial] [-z ZSK]\n");
+		fprintf(stderr, "\tsign [-KMXZ] [-a algorithm] [-B bits] [-e seconds]\n\t\t[-I iterations] [-i inputfile] [-k KSK] [-m mask]\n\t\t[-N int] [-n zonename] [-o output] [-R keyword] [-S pid]\n\t\t[-s salt] [-t ttl] [-x serial] [-z ZSK]\n");
 		fprintf(stderr, "\tsshfp hostname [-k keyfile] [-t ttl]\n");
 		fprintf(stderr, "\tstart [-f configfile] [-I ident] [-s socket]\n");
 		fprintf(stderr, "\tstop [-I ident] [-s socket]\n");

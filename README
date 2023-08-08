@@ -281,7 +281,6 @@ e) DHCID(49) - DHCP identifier
 f) DLV(32769) - DNSSEC Lookaside Validation record
 g) DNAME(39) - Delegation name record
 h) HIP(55) - Host Identity Protocol 
-i) NSEC(47) - has some support which is undefined, we use NSEC3 instead
 j) OPENPGPKEY(61) - OpenPGP public key record
 k) SMIMEA(53) - S/MIME cert association
 l) TA(32768) - DNSSEC trust authorities

@@ -2,7 +2,7 @@
 .\"
 .\"	$OpenBSD: vmctl.8,v 1.39 2018/02/24 13:14:09 jmc Exp $
 .\"
-.\" Copyright (c) 2018-2022 Peter J. Philipp
+.\" Copyright (c) 2018-2023 Peter J. Philipp
 .\" Copyright (c) 2015 Mike Larkin <mlarkin@openbsd.org>
 .\"
 .\" Permission to use, copy, modify, and distribute this software for any
@@ -17,7 +17,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: April 2 2023 $
+.Dd $Mdocdate: August 8 2023 $
 .Dt DDDCTL 8
 .Os
 .Sh NAME
@@ -99,6 +99,7 @@ type is omitted because it's always type 'hmac-sha256'.
 .Op Fl i Ar inputfile
 .Op Fl k Ar KSK
 .Op Fl m Ar mask
+.Op Fl N Ar version
 .Op Fl n Ar zonename
 .Op Fl o Ar output
 .Op Fl R Ar keyword
@@ -134,6 +135,8 @@ use the inputfile of unsigned zone.
 use provided KSK key-signing keyname.
 .It Fl m Ar mask
 run the following masked functions (used for debug).
+.It Fl N Ar version
+specify NSEC version (as an integer) default is version 3.
 .It Fl n Ar zonename
 run for zonename zone.
 .It Fl o Ar output
