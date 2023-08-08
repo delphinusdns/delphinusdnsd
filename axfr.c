@@ -86,6 +86,7 @@ extern void 	pack8(char *, uint8_t);
 extern uint32_t unpack32(char *);
 extern uint16_t unpack16(char *);
 extern void 	unpack(char *, char *, int);
+extern char * 	convert_name(char *, int);
 
 extern int 		get_record_size(ddDB *, char *, int);
 extern in_addr_t 	getmask(int);
@@ -1155,12 +1156,29 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				goto drop;
 			}
 		} else {
+
 			if (strictaxfr) {
+				char *strtsigkey;
+
+				strtsigkey = convert_name(question->tsig.tsigkey, question->tsig.tsigkeylen);
+				if (strtsigkey == NULL) {
+					strtsigkey = strdup("[unknown]");
+					if (strtsigkey == NULL) {
+						dolog(LOG_ERR, "strdup: %s\n",
+							strerror(errno));
+						goto drop;
+					}
+				}
+
 				dolog(LOG_ERR, "%s request for zone \"%s\","\
+					" key %s"
 					" not authenticated, drop\n", \
 					(ntohs(question->hdr->qtype) == \
 						DNS_TYPE_AXFR ? "AXFR" \
-					: "IXFR"), question->converted_name);
+					: "IXFR"), question->converted_name,
+					strtsigkey);
+
+				free(strtsigkey);
 
 				goto drop;
 			}
