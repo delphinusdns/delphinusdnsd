@@ -234,6 +234,7 @@ struct dns_question_hdr {
 #define DNS_TYPE_AXFR	252		/* RFC 5936, page 10 */
 #define DNS_TYPE_ANY	255
 #define DNS_TYPE_CAA	257		/* RFC 8659 */
+#define DNS_TYPE_MAX	258		/* the highest RR in implementation */
 
 /* DNS types 0xff00 -> 0xfffe (private use) RFC 5395, page 8 */
 

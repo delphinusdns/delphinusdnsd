@@ -171,38 +171,39 @@ extern struct rbtree * Lookup_zone(ddDB *, char *, int, int, int);
 extern struct rbtree *  lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
 extern int	cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, struct cfg *);
 
-extern int 	reply_a(struct sreply *, int *, ddDB *);
-extern int 	reply_aaaa(struct sreply *, int *, ddDB *);
-extern int 	reply_any(struct sreply *, int *, ddDB *);
-extern int 	reply_cname(struct sreply *, int *, ddDB *);
-extern int	reply_notify(struct sreply *, int *, ddDB *);
-extern int 	reply_soa(struct sreply *, int *, ddDB *);
-extern int 	reply_mx(struct sreply *, int *, ddDB *);
-extern int 	reply_naptr(struct sreply *, int *, ddDB *);
-extern int 	reply_ns(struct sreply *, int *, ddDB *);
-extern int 	reply_ptr(struct sreply *, int *, ddDB *);
-extern int 	reply_srv(struct sreply *, int *, ddDB *);
-extern int 	reply_sshfp(struct sreply *, int *, ddDB *);
-extern int 	reply_tlsa(struct sreply *,  int *,ddDB *);
-extern int 	reply_txt(struct sreply *, int *, ddDB *);
-extern int      reply_rrsig(struct sreply *, int *, ddDB *);
-extern int	reply_dnskey(struct sreply *, int *, ddDB *);
-extern int	reply_ds(struct sreply *, int *, ddDB *);
-extern int	reply_nsec(struct sreply *, int *, ddDB *);
-extern int	reply_nsec3(struct sreply *, int *, ddDB *);
-extern int	reply_nsec3param(struct sreply *, int *, ddDB *);
-extern int	reply_generic(struct sreply *, int *, ddDB *);
-extern struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
-extern void flag_rr(struct rbtree *rbt, uint32_t);
-extern struct rbtree * find_rrset(ddDB *, char *, int);
-extern int	randomize_dnsname(char *, int);
-extern int	lower_dnsname(char *buf, int len);
-extern void	sm_lock(char *, size_t);
-extern void	sm_unlock(char *, size_t);
-extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
-extern int rr_duplicate(ddDB *, char *, int, uint16_t, char *);
-extern size_t plength(void *, void *);
-extern u_int nowrap_dec(u_int, u_int);
+extern int 		reply_a(struct sreply *, int *, ddDB *);
+extern int 		reply_aaaa(struct sreply *, int *, ddDB *);
+extern int 		reply_any(struct sreply *, int *, ddDB *);
+extern int 		reply_cname(struct sreply *, int *, ddDB *);
+extern int		reply_notify(struct sreply *, int *, ddDB *);
+extern int 		reply_soa(struct sreply *, int *, ddDB *);
+extern int 		reply_mx(struct sreply *, int *, ddDB *);
+extern int 		reply_naptr(struct sreply *, int *, ddDB *);
+extern int 		reply_ns(struct sreply *, int *, ddDB *);
+extern int 		reply_ptr(struct sreply *, int *, ddDB *);
+extern int 		reply_srv(struct sreply *, int *, ddDB *);
+extern int 		reply_sshfp(struct sreply *, int *, ddDB *);
+extern int 		reply_tlsa(struct sreply *,  int *,ddDB *);
+extern int 		reply_txt(struct sreply *, int *, ddDB *);
+extern int      	reply_rrsig(struct sreply *, int *, ddDB *);
+extern int		reply_dnskey(struct sreply *, int *, ddDB *);
+extern int		reply_ds(struct sreply *, int *, ddDB *);
+extern int		reply_nsec(struct sreply *, int *, ddDB *);
+extern int		reply_nsec3(struct sreply *, int *, ddDB *);
+extern int		reply_nsec3param(struct sreply *, int *, ddDB *);
+extern int		reply_generic(struct sreply *, int *, ddDB *);
+extern struct rbtree * 	create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
+extern void 		flag_rr(struct rbtree *rbt, uint32_t);
+extern struct rbtree * 	find_rrset(ddDB *, char *, int);
+extern int		randomize_dnsname(char *, int);
+extern int		lower_dnsname(char *buf, int len);
+extern void		sm_lock(char *, size_t);
+extern void		sm_unlock(char *, size_t);
+extern struct rrset * 	find_rr(struct rbtree *rbt, uint16_t rrtype);
+extern int 		rr_duplicate(ddDB *, char *, int, uint16_t, char *);
+extern size_t 		plength(void *, void *);
+extern u_int 		nowrap_dec(u_int, u_int);
+extern char *		get_dns_type(int, int);
 
 /*
  * XXX everything but txt and naptr, works...
@@ -2748,15 +2749,36 @@ dump_cache(ddDB *db, struct imsgbuf *ibuf)
 {
 	struct node *walk, *walk0;
 	struct rbtree *rbt = NULL;
+	struct rrset *rr;
+	char rrbuf[512];
+	char buf[512];
+	time_t now, ttl;
+	int i;
 	
 	dolog(LOG_INFO, "dumping cache\n");
+	now = time(NULL);
 
 	RB_FOREACH_SAFE(walk, domaintree, &db->head, walk0) {
 		rbt = (struct rbtree *)walk->data;
 		if (rbt == NULL)
 			continue;
 
-		imsg_compose(ibuf, IMSG_DUMP_CACHEREPLY, 0, 0, -1, rbt->humanname, strlen(rbt->humanname) + 1);
+		memset(&rrbuf, 0, sizeof(rrbuf));
+
+		for (i = DNS_TYPE_A; i < DNS_TYPE_MAX; i++) {
+			if ((rr = find_rr(rbt, i)) == NULL)
+				continue;
+			else {
+				snprintf(buf, sizeof(buf), "%s:%llu, "
+					, get_dns_type(rr->rrtype, 1)
+					, (ttl = rr->ttl - (time_t)difftime(now, rr->created)) >= 0 ? ttl : 0);
+
+				strlcat(rrbuf, buf, sizeof(rrbuf));
+			}
+		}
+
+		snprintf(buf, sizeof(buf), "%-32s%s", rbt->humanname, rrbuf);
+		imsg_compose(ibuf, IMSG_DUMP_CACHEREPLY, 0, 0, -1, buf, strlen(buf) + 1);
 		msgbuf_write(&ibuf->w);
 	}
 
