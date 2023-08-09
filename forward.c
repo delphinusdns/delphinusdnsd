@@ -2769,7 +2769,7 @@ dump_cache(ddDB *db, struct imsgbuf *ibuf)
 			if ((rr = find_rr(rbt, i)) == NULL)
 				continue;
 			else {
-				snprintf(buf, sizeof(buf), "%s:%llu, "
+				snprintf(buf, sizeof(buf), " %s:%llu,"
 					, get_dns_type(rr->rrtype, 1)
 					, (ttl = rr->ttl - (time_t)difftime(now, rr->created)) >= 0 ? ttl : 0);
 
