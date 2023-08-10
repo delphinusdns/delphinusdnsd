@@ -1047,8 +1047,6 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 				struct rr *myrr;
 				char ip6buf[INET6_ADDRSTRLEN];
 
-				dolog(LOG_INFO, "boo!\n");
-
 				rrset1 = find_rr(rbt, DNS_TYPE_A);
 				if (rrset1 != NULL) {
 					char ipbuf[INET_ADDRSTRLEN];
@@ -1061,9 +1059,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 							memset(&(((struct aaaa *)myrr->rdata)->aaaa), 0, sizeof(struct in6_addr));
 							inet_pton(AF_INET6, ip6buf, (void *)&(((struct aaaa *)myrr->rdata)->aaaa));
         					}
-					} else {
-						dolog(LOG_INFO, "myrr == NULL\n");
-					}
+					} 
 				}
 			}
 
