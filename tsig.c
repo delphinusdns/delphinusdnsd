@@ -309,8 +309,8 @@ clean_tsig_keys(void)
 		if (!tknp->keynamelen || !tknp->keylen)
 			continue;
 
-		memset((u_char *)tknp->keyname, 0, tknp->keynamelen);
-		memset((u_char *)tknp->key, 0, tknp->keylen);
+		explicit_bzero((u_char *)tknp->keyname, tknp->keynamelen);
+		explicit_bzero((u_char *)tknp->key, tknp->keylen);
 		tknp->keylen = 0;
 		tknp->keynamelen = 0;
 	}

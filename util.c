@@ -1534,7 +1534,7 @@ optskip:
 		uint16_t val16, tsigerror, tsigotherlen;
 		uint16_t fudge;
 		uint32_t val32;
-		int elen, tsignamelen;
+		int elen, tsigkeylen;
 		char *pb;
 		char expand[DNS_MAXNAME + 1];
 		char tsigkey[512];
@@ -1672,7 +1672,7 @@ optskip:
 		 * type, that's why it's delayed...
 		 */
 
-		if ((tsignamelen = find_tsig_key(q->tsig.tsigkey, q->tsig.tsigkeylen, (char *)&tsigkey, sizeof(tsigkey))) < 0) {
+		if ((tsigkeylen = find_tsig_key(q->tsig.tsigkey, q->tsig.tsigkeylen, (char *)&tsigkey, sizeof(tsigkey))) < 0) {
 			/* we don't have the name configured, let it pass */
 			i = rollback;
 			break;
@@ -1780,9 +1780,12 @@ optskip:
 			q->tsig.tsigerrorcode = DNS_BADSIG;
 			break;
 		}
-		delphinusdns_HMAC(md, tsigkey, tsignamelen, (unsigned char *)pseudo_packet, 
+		delphinusdns_HMAC(md, tsigkey, tsigkeylen, (unsigned char *)pseudo_packet, 
 			ppoffset, (unsigned char *)&sha256, &shasize);
 
+
+		/* the tsigkey is not needed anymore, after the HMAC */
+		explicit_bzero(&tsigkey, tsigkeylen);
 
 
 #if __OpenBSD__
