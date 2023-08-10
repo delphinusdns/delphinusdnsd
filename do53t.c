@@ -131,6 +131,7 @@ extern int              determine_glue(ddDB *db);
 extern int		iwqueue_count(void);
 extern ddDB *		rebuild_db(struct cfg *);
 extern void		iwqueue_add(struct iwantmanna *, int);
+extern void		clean_tsig_keys(void);
 
 
 void 			tcploop(struct cfg *, struct imsgbuf *, struct imsgbuf *);
@@ -373,6 +374,8 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		close(pibuf->fd);
 		close(cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[1]);
 		imsg_init(&accept_ibuf, cfg->my_imsg[MY_IMSG_ACCEPT].imsg_fds[0]);
+
+		clean_tsig_keys();
 		setproctitle("TCP accept engine %d [%s]", cfg->pid,
 			(identstring != NULL ? identstring : ""));
 		acceptloop(cfg, &accept_ibuf, cfg->tcp);

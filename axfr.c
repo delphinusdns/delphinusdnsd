@@ -128,6 +128,7 @@ extern int              determine_glue(ddDB *db);
 extern int		iwqueue_count(void);
 extern ddDB *		rebuild_db(struct cfg *);
 extern void		iwqueue_add(struct iwantmanna *, int);
+extern void		clean_tsig_keys(void);
 
 
 
@@ -1924,6 +1925,8 @@ axfr_acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *notify_ib
 		ddd_shutdown();
 		exit(1);
 	}
+
+	clean_tsig_keys();
 
 #if __OpenBSD__
 	if (pledge("stdio inet sendfd recvfd", NULL) == -1) {

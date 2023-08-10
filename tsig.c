@@ -53,6 +53,7 @@ int	insert_tsig(char *, char *);
 int	find_tsig_key(char *, int, char *, int);
 void	init_tsig_key(void);
 int	insert_tsig_key(char *, int, char *, int);
+void	clean_tsig_keys(void);
 
 extern void 		dolog(int, char *, ...);
 extern in_addr_t 	getmask(int);
@@ -299,4 +300,20 @@ find_tsig_key(char *keyname, int keynamelen, char *key, int keylen)
 	} /* SLIST */
 
 	return -1;
+}
+
+void
+clean_tsig_keys(void)
+{
+	SLIST_FOREACH(tknp, &tsigkeyhead, tsig_key_entry) {
+		if (!tknp->keynamelen || !tknp->keylen)
+			continue;
+
+		memset((u_char *)tknp->keyname, 0, tknp->keynamelen);
+		memset((u_char *)tknp->key, 0, tknp->keylen);
+		tknp->keylen = 0;
+		tknp->keynamelen = 0;
+	}
+
+	return;
 }

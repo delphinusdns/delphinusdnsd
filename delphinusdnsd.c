@@ -151,6 +151,7 @@ extern void	 	init_filter(void);
 extern void	 	init_notifyddd(void);
 extern void	 	init_passlist(void);
 extern void	 	init_tsig(void);
+extern void		clean_tsig_keys(void);
 extern void 		axfrloop(struct cfg *, char **, ddDB *, struct imsgbuf *, struct imsgbuf *);
 extern void 		ddd_shutdown(void);
 extern void 		dolog(int, char *, ...);
@@ -556,6 +557,7 @@ main(int argc, char *argv[], char *environ[])
 	case 0:
 		close(cfg->my_imsg[MY_IMSG_CORTEX].imsg_fds[0]);
 		imsg_init(&cortex_ibuf, cfg->my_imsg[MY_IMSG_CORTEX].imsg_fds[1]);
+		clean_tsig_keys();
 		setup_cortex(&cortex_ibuf);
 		/* NOTREACHED */
 		exit(1);
@@ -573,6 +575,8 @@ main(int argc, char *argv[], char *environ[])
 		exit(1);
 	case 0:
 		ibuf = register_cortex(&cortex_ibuf, MY_IMSG_PRIMARY);
+		clean_tsig_keys();
+
 		if (ibuf != NULL) {
 			setup_primary(db, av, socketpath, ibuf);
 		}
@@ -593,6 +597,8 @@ main(int argc, char *argv[], char *environ[])
 			/*
 			 * add signals here too
 			 */
+
+			clean_tsig_keys();
 
 			signal(SIGPIPE, SIG_IGN);
 
