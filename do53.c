@@ -1148,6 +1148,8 @@ forwardudp:
 							sforward->havemac = 0;
 
 						sforward->gotit = time(NULL);
+						sforward->region = aregion;
+
 						memcpy(&sf.sfi_sf, sforward, sizeof(struct sforward));
 						
 						/* wait for lock */

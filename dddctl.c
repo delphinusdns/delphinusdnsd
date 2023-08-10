@@ -63,7 +63,7 @@
 #include "ddd-db.h"
 #include "ddd-config.h"
 
-int wrap6to4 = 0;
+int wrap6to4region = 0xffff;
 int debug = 0;
 int verbose = 0;
 int forward = 0;

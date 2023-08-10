@@ -365,6 +365,7 @@ struct sforward {
 	uint64_t tsigtimefudge;		/* 874 */
 
 	char mac[DNS_HMAC_SHA256_SIZE];	/* 906 */
+	uint8_t region;			/* 907 */
 };
 
 #define STRATEGY_SPRAY			0	/* all forwarders */

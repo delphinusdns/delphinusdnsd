@@ -80,6 +80,7 @@ struct forwardentry {
 	uint16_t destport;
 	char *tsigkey;
 	int active;
+	uint8_t region;
 	TAILQ_ENTRY(forwardentry) forward_entry;
 } *fw2, *fwp;
 
@@ -118,8 +119,14 @@ struct forwardqueue {
 	struct forwardentry *cur_forwardentry;	/* current forwardentry */
 	int dnssecok;				/* DNSSEC in anwers */
 	uint16_t edns0len;			/* EDNS0 length as negotiated */
+	uint8_t region;				/* the region of the request */
 	SLIST_ENTRY(forwardqueue) entries;	/* next entry */
 } *fwq1, *fwq2, *fwq3, *fwqp;
+
+struct offregion {
+	int i;
+	uint8_t region;
+};
 
 
 SLIST_HEAD(, closequeue) closehead;
@@ -132,6 +139,7 @@ struct closequeue {
 } *cq1, *cq2, *cqp;
 
 void			init_forward(void);
+
 int			insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
 void			forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
 void			forwardthis(ddDB *, struct cfg *, int, struct sforward *);
@@ -145,7 +153,7 @@ int 			rawsend(int, char *, uint16_t, struct sockaddr_in *, int, struct cfg *);
 int 			rawsend6(int, char *, uint16_t, struct sockaddr_in6 *, int, struct cfg *);
 void 			dump_cache(ddDB *, struct imsgbuf *);
 void 			parse_lowercase(char *, int);
-void 			wrap64(char *, int);
+void 			wrap64(char *, int, char *);
 
 extern uint16_t		udp_cksum(uint16_t *, uint16_t, struct ip *, struct udphdr *);
 extern uint16_t		udp_cksum6(uint16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
@@ -255,7 +263,7 @@ extern uint32_t zonenumber;
 extern uint16_t fudge_forward;
 
 
-int wrap6to4 = 0;
+uint16_t 	wrap6to4region = 0xffff;
 
 
 /*
@@ -269,55 +277,6 @@ init_forward(void)
 	SLIST_INIT(&fwqhead);
 	SLIST_INIT(&closehead);
 	return;
-}
-
-/*
- * INSERT_FORWARD - insert into the forward slist
- */
-
-int
-insert_forward(int family, struct sockaddr_storage *ip, uint16_t port, char *tsigkey)
-{
-	static int active = 0;
-
-	fw2 = calloc(1, sizeof(struct forwardentry));
-	if (fw2 == NULL) {
-		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
-		return 1;
-	}
-
-	fw2->family = family;
-
-	switch (fw2->family) {
-	case AF_INET:
-		inet_ntop(AF_INET, &((struct sockaddr_in *)ip)->sin_addr, fw2->name, sizeof(fw2->name));
-		break;
-	case AF_INET6:
-		inet_ntop(AF_INET6, &((struct sockaddr_in6 *)ip)->sin6_addr, fw2->name, sizeof(fw2->name));
-		break;
-	}
-
-	memcpy(&fw2->host, ip, sizeof(struct sockaddr_storage));
-	fw2->destport = port;
-
-	if (strcmp(tsigkey, "NOKEY") == 0)
-		fw2->tsigkey = NULL;
-	else {
-		fw2->tsigkey = strdup(tsigkey);
-		if (fw2->tsigkey == NULL) {
-			dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
-			return 1;
-		}
-	}
-
-	if (! active)
-		fw2->active = 1;
-
-	active = 1;
-			
-	TAILQ_INSERT_HEAD(&forwardhead, fw2, forward_entry);
-
-	return (0);
 }
 
 void
@@ -520,10 +479,8 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 					if (len <= 0) 
 						goto drop;
 
-#if 1
 					if (skip)
 						goto drop;
-#endif
 					
 #if DEBUG
 					dolog(LOG_INFO, "fwq1->so %d returnit\n", fwq1->so);
@@ -542,10 +499,8 @@ forwardloop(ddDB *db, struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cor
 						goto drop;
 					}
 
-#if 1
 					if (skip)
 						goto drop;
-#endif
 #if DEBUG
 					dolog(LOG_INFO, "udp fwq1->so %d returnit\n", fwq1->so);
 #endif
@@ -795,7 +750,6 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	struct dns_header *dh;
 	struct rbtree *rbt = NULL;
 	struct dns_header *odh;
-	struct rrset *rrset0, *rrset1;
 
 	char buf[512];
 	char replystring[DNS_MAXNAME + 1];
@@ -805,7 +759,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 
 	int fromlen, returnval, lzerrno;
 	int istcp = (so == -1 ? DDD_IS_UDP : DDD_IS_TCP);
-	int sretlen;
+	int sretlen = 0;
 
 	int on = 1;
 	int found = 0;
@@ -1041,28 +995,6 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 				(struct sockaddr *)from, fromlen, 
 				rbt, NULL, 0xff, istcp, 0, replybuf); 
 
-			if (wrap6to4 && (ntohs(q->hdr->qtype) == DNS_TYPE_AAAA) &&
-				((rrset0 = find_rr(rbt, DNS_TYPE_AAAA))) != NULL) {
-					/* we are wrapping AAAA's to A's */
-				struct rr *myrr;
-				char ip6buf[INET6_ADDRSTRLEN];
-
-				rrset1 = find_rr(rbt, DNS_TYPE_A);
-				if (rrset1 != NULL) {
-					char ipbuf[INET_ADDRSTRLEN];
-
-					myrr = TAILQ_FIRST(&rrset1->rr_head);
-					if (myrr != NULL) {
-						inet_ntop(AF_INET, &((struct a *)myrr->rdata)->a, ipbuf, sizeof(ipbuf));
-						snprintf(ip6buf, sizeof(ip6buf), "::ffff:%s", ipbuf);
-						TAILQ_FOREACH(myrr, &rrset0->rr_head, entries) {
-							memset(&(((struct aaaa *)myrr->rdata)->aaaa), 0, sizeof(struct in6_addr));
-							inet_pton(AF_INET6, ip6buf, (void *)&(((struct aaaa *)myrr->rdata)->aaaa));
-        					}
-					} 
-				}
-			}
-
 			/* are we a CNAME? if not then search our logic */
 			if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
 				slen = reply_cname(&sreply, &sretlen, cfg->db);
@@ -1086,10 +1018,34 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 					break;
 				}
 			} else {
+				/* if we are faking answers with wrap64 */
+				if (wrap6to4region != 0xffff &&
+					sforward->region == \
+						wrap6to4region) {
+					struct rrset *rrset1;
+					struct rr *myrr;
+
+					char ip6buf[INET6_ADDRSTRLEN];
+					char *ip6 = &ip6buf[0];
+
+					strlcpy(ip6buf, "::ffff:127.0.0.1", sizeof(ip6buf));
+
+					rrset1 = find_rr(rbt, DNS_TYPE_A);
+					if (rrset1 != NULL) {
+						char ipbuf[INET_ADDRSTRLEN];
+						myrr = TAILQ_FIRST(&rrset1->rr_head);
+						if (myrr != NULL) {
+							inet_ntop(AF_INET, &((struct a *)myrr->rdata)->a, ipbuf, sizeof(ipbuf));
+							snprintf(ip6buf, sizeof(ip6buf), "::ffff:%s", ipbuf);
+						}
+					}
+
+					wrap64(sreply.replybuf, sretlen, ip6);
+				}
 
 				/* from delphinusdnsd.c */
 				for (rl = &rlogic[0]; rl->rrtype != 0; rl++) {
-				    if (rl->rrtype == ntohs(q->hdr->qtype)) {
+				    if (rl->rrtype == q->hdr->qtype) {
 					slen = (*rl->reply)(&sreply, &sretlen, cfg->db);
 					if (slen < 0) {
 						/*
@@ -1102,6 +1058,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 						free_question(q);
 						goto newqueue;
 					}
+
 					switch (from->ss_family) {
 					case AF_INET:
 						rawsend(cfg->raw[0], sreply.replybuf, sretlen, &sforward->from4, sforward->oldsel, cfg);
@@ -1116,7 +1073,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 
 				if (rl->rrtype == 0) {
 					/* https://en.wikipedia.org/wiki/List_of_DNS_record_types */
-					switch (ntohs(q->hdr->qtype)) {
+					switch (q->hdr->qtype) {
 						/* FALLTHROUGH for all listed */
 					case 18: /* AFSDB */ case 42: /* APL */ case 257: /* CAA */
 					case 60: /* CDNSKEY */ case 59: /* CDS */ case 37: /* CERT */
@@ -1206,6 +1163,7 @@ newqueue:
 			fwq1->oldid = sforward->header.id;
 			fwq1->type = sforward->type;
 			fwq1->edns0len = sforward->edns0len;
+			fwq1->region = sforward->region;
 
 			fwq1->port = fw2->destport;
 			fwq1->cur_forwardentry = fw2;
@@ -1471,6 +1429,7 @@ sendit(struct forwardqueue *fwq, struct sforward *sforward)
 		q->dnssecok = 1;
 	}
 
+
 	if (sforward->edns0len) {
 		outlen = additional_opt(q, packet, 0xffff, len, NULL, 0, 0);
 		if (outlen > len) {
@@ -1532,6 +1491,7 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 	static struct pkt_imsg *pi = NULL;
 	struct pkt_imsg *pi0;
 	struct imsg imsg;
+	struct offregion offr;
 
 	static char *buf = NULL;
 	char *p;
@@ -1652,7 +1612,10 @@ returnit(ddDB *db, struct cfg *cfg, struct forwardqueue *fwq, char *rbuf, int rl
 
 	sm_unlock(cfg->shm[SM_PACKET].shptr, cfg->shm[SM_PACKET].shptrsize);
 
-	if (imsg_compose(ibuf, IMSG_PARSE_MESSAGE, 0, 0, (fwq->istcp == DDD_IS_TCP) ? fwq->so : -1, &i, sizeof(i)) < 0) {
+	offr.i = i;
+	offr.region = fwq->region;
+
+	if (imsg_compose(ibuf, IMSG_PARSE_MESSAGE, 0, 0, (fwq->istcp == DDD_IS_TCP) ? fwq->so : -1, &offr, sizeof(struct offregion)) < 0) {
 			dolog(LOG_INFO, "imsg_compose: %s\n", strerror(errno));
 			return (-1);
 	}
@@ -1810,6 +1773,38 @@ endimsg:
 
 	/* restore any possible 0x20 caseings, must be after TSIG checks  */
 	memcpy((char *)&dh[1], fwq->orig_dnsname, fwq->dnsnamelen);
+
+	/*
+	 * if the region matches return a v4 mapped v6 address
+	 */
+
+	if (wrap6to4region != 0xffff && 
+		fwq->region == (uint8_t)wrap6to4region) {
+		struct rbtree *rbt;
+		struct rrset *rrset1 = NULL;
+		struct rr *myrr;
+
+		char ip6buf[INET6_ADDRSTRLEN];
+		char *ip6 = ip6buf;
+
+		strlcpy(ip6buf, "::ffff:127.0.0.1", sizeof(ip6buf));
+
+		rbt = find_rrset(db, fwq->orig_dnsname, fwq->dnsnamelen);
+
+		if (rbt != NULL)
+			rrset1 = find_rr(rbt, DNS_TYPE_A);
+
+		if (rrset1 != NULL) {
+			char ipbuf[INET_ADDRSTRLEN];
+			myrr = TAILQ_FIRST(&rrset1->rr_head);
+			if (myrr != NULL) {
+				inet_ntop(AF_INET, &((struct a *)myrr->rdata)->a, ipbuf, sizeof(ipbuf));
+				snprintf(ip6buf, sizeof(ip6buf), "::ffff:%s", ipbuf);
+			}
+		}
+
+		wrap64(fwq->istcp == DDD_IS_UDP ? buf: &buf[2], rlen, ip6);
+	}
 
 	if (fwq->istcp == DDD_IS_UDP && rlen > (fwq->edns0len ? fwq->edns0len : 512)) {
 		SET_DNS_TRUNCATION(dh);
@@ -2371,6 +2366,7 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 	char mac[DNS_HMAC_SHA256_SIZE * 5];
 	char *packet = NULL;
+	char *q = NULL;
 	u_char *end, *estart;
 	fd_set rset;
 	ssize_t n, datalen;
@@ -2456,15 +2452,15 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 
 				switch (imsg.hdr.type) {
 				case IMSG_PARSE_MESSAGE:
-					/* XXX magic numbers */
-					if (datalen != sizeof(int)) {
+					if (datalen != sizeof(struct offregion)) {
 						rc = PARSE_RETURN_NAK;
 						imsg_compose(ibuf, IMSG_PARSEERROR_MESSAGE, 0, 0, imsg.fd, &rc, sizeof(int));
 						msgbuf_write(&ibuf->w);
 						break;
 					}
 					
-					memcpy(&i, imsg.data, datalen);
+					q = imsg.data;
+					i = unpack32(q);
 
 					/* lock */
 					sm_lock(cfg->shm[SM_PACKET].shptr, 
@@ -2582,13 +2578,6 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					 */
 
 					parse_lowercase(packet, rlen);
-					/*
-					 * if we wrap IPv6 to IPv4, modify it
-					 *
-					 */
-					if (wrap6to4) {
-						wrap64(packet, rlen);
-					}
 
 					/* check for cache */
 					if (unpack32((char *)&pi->pkt_s.cache)) {
@@ -2600,6 +2589,17 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 								dolog(LOG_INFO, "cacheit failed\n");
 							}
 					}
+
+#if 0
+					/*
+					 * if we wrap IPv6 to IPv4, modify it
+					 *
+					 */
+					if ((wrap6to4region != 0xffff) &&
+						region == (uint8_t)wrap6to4region) {
+						wrap64(packet, rlen, "::ffff:1.2.3.4");
+					}
+#endif
 
 
 					pack32((char *)&pi->pkt_s.rc, PARSE_RETURN_ACK);
@@ -2919,7 +2919,7 @@ out:
 }
 
 void
-wrap64(char *packet, int len)
+wrap64(char *packet, int len, char *alternative)
 {
 	struct dns_header *dh = NULL;
 	struct aaaa *sqa;
@@ -2930,6 +2930,9 @@ wrap64(char *packet, int len)
 	int countrr = 0;
 
 	uint16_t val16;
+
+	if (packet == NULL)
+		return;
 
 	begin = p = packet;
 	end = packet + len;
@@ -2989,7 +2992,11 @@ wrap64(char *packet, int len)
 
 			i += 2;
 			sqa = (struct aaaa *)&p[i];
-			inet_pton(AF_INET6, "::ffff:127.0.0.1", (void *)&sqa->aaaa);
+			if (alternative) {
+				inet_pton(AF_INET6, alternative, (void *)&sqa->aaaa);
+			} else {
+				inet_pton(AF_INET6, "::ffff:127.0.0.1", (void *)&sqa->aaaa);
+			}
 			i += (ntohs(val16));		/* rdata contents */
 
 			break;
@@ -3010,4 +3017,53 @@ wrap64(char *packet, int len)
 	}
 out:
 	return;
+}
+
+/*
+ * INSERT_FORWARD - insert into the forward slist
+ */
+
+int
+insert_forward(int family, struct sockaddr_storage *ip, uint16_t port, char *tsigkey)
+{
+	static int active = 0;
+
+	fw2 = calloc(1, sizeof(struct forwardentry));
+	if (fw2 == NULL) {
+		dolog(LOG_INFO, "calloc: %s\n", strerror(errno));
+		return 1;
+	}
+
+	fw2->family = family;
+
+	switch (fw2->family) {
+	case AF_INET:
+		inet_ntop(AF_INET, &((struct sockaddr_in *)ip)->sin_addr, fw2->name, sizeof(fw2->name));
+		break;
+	case AF_INET6:
+		inet_ntop(AF_INET6, &((struct sockaddr_in6 *)ip)->sin6_addr, fw2->name, sizeof(fw2->name));
+		break;
+	}
+
+	memcpy(&fw2->host, ip, sizeof(struct sockaddr_storage));
+	fw2->destport = port;
+
+	if (strcmp(tsigkey, "NOKEY") == 0)
+		fw2->tsigkey = NULL;
+	else {
+		fw2->tsigkey = strdup(tsigkey);
+		if (fw2->tsigkey == NULL) {
+			dolog(LOG_INFO, "strdup: %s\n", strerror(errno));
+			return 1;
+		}
+	}
+
+	if (! active)
+		fw2->active = 1;
+
+	active = 1;
+			
+	TAILQ_INSERT_HEAD(&forwardhead, fw2, forward_entry);
+
+	return (0);
 }

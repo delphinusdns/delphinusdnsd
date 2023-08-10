@@ -123,7 +123,7 @@ extern int forward;
 extern int forwardtsig;
 extern int strictx20i;
 extern int forwardstrategy;
-extern int wrap6to4;
+extern uint16_t wrap6to4region;
 extern int cache;
 extern int zonecount;
 extern int verbose;
@@ -315,7 +315,7 @@ int		add_txt(char *, int);
 %token TSIG NOTIFYDEST NOTIFYBIND PORT FORWARD
 %token INCOMINGTSIG DESTINATION CACHE STRICTX20
 %token BYTELIMIT FUDGE TSIGPASSNAME RDOMAIN
-%token FORWARDSTRATEGY TXT WRAP64
+%token FORWARDSTRATEGY TXT WRAP64REGION
 
 %token <v.string> POUND
 %token <v.string> SEMICOLON
@@ -1897,12 +1897,9 @@ forwardstatement	:	INCOMINGTSIG STRING SEMICOLON CRLF
 
 				free($2);
 			}
-			| WRAP64 STRING SEMICOLON CRLF
+			| WRAP64REGION NUMBER SEMICOLON CRLF
 			{
-				if (strcmp($2, "yes") == 0)
-					wrap6to4 = 1;
-
-				free ($2);
+				wrap6to4region = $2;
 			}
 			| comment CRLF
 			;	
@@ -2104,7 +2101,7 @@ struct tab cmdtab[] = {
 	{ "tsigpassname", TSIGPASSNAME, 0 },
 	{ "txt", TXT, 0 },
 	{ "wildcard-only-for", WOF, STATE_IP },
-	{ "wrap6to4", WRAP64, 0 },
+	{ "wrap6to4region", WRAP64REGION, 0 },
 	{ "version", VERSION, 0 },
 	{ "zinclude", ZINCLUDE, 0 },
 	{ "zone", ZONE, 0 },
