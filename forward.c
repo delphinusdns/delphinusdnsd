@@ -131,45 +131,45 @@ struct closequeue {
 	SLIST_ENTRY(closequeue) entries;	/* next entry */
 } *cq1, *cq2, *cqp;
 
+void			init_forward(void);
+int			insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
+void			forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
+void			forwardthis(ddDB *, struct cfg *, int, struct sforward *);
+int			sendit(struct forwardqueue *, struct sforward *);
+int			returnit(ddDB *, struct cfg *, struct forwardqueue *, char *, int, struct imsgbuf *);
+struct tsig * 		check_tsig(char *, int, char *);
+void			fwdparseloop(struct imsgbuf *, struct imsgbuf *, struct cfg *);
+void			changeforwarder(struct forwardqueue *);
+void 			stirforwarders(void);
+int 			rawsend(int, char *, uint16_t, struct sockaddr_in *, int, struct cfg *);
+int 			rawsend6(int, char *, uint16_t, struct sockaddr_in6 *, int, struct cfg *);
+void 			dump_cache(ddDB *, struct imsgbuf *);
+void 			parse_lowercase(char *, int);
+void 			wrap64(char *, int);
 
-void	init_forward(void);
-int	insert_forward(int, struct sockaddr_storage *, uint16_t, char *);
-void	forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
-void	forwardthis(ddDB *, struct cfg *, int, struct sforward *);
-int	sendit(struct forwardqueue *, struct sforward *);
-int	returnit(ddDB *, struct cfg *, struct forwardqueue *, char *, int, struct imsgbuf *);
-struct tsig * check_tsig(char *, int, char *);
-void	fwdparseloop(struct imsgbuf *, struct imsgbuf *, struct cfg *);
-void	changeforwarder(struct forwardqueue *);
-void 	stirforwarders(void);
-int rawsend(int, char *, uint16_t, struct sockaddr_in *, int, struct cfg *);
-int rawsend6(int, char *, uint16_t, struct sockaddr_in6 *, int, struct cfg *);
-void dump_cache(ddDB *, struct imsgbuf *);
-void parse_lowercase(char *, int);
-
-extern uint16_t	udp_cksum(uint16_t *, uint16_t, struct ip *, struct udphdr *);
-extern uint16_t	udp_cksum6(uint16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
-extern void 	dolog(int, char *, ...);
-extern void      pack(char *, char *, int);
-extern void     pack16(char *, uint16_t);
-extern void     pack32(char *, uint32_t);
-extern uint16_t unpack16(char *);
-extern uint32_t unpack32(char *);
-extern void     ddd_shutdown(void);
-extern int      additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t, uint16_t);
-extern int      additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
-extern struct question	*build_fake_question(char *, int, uint16_t, char *, int);
-extern int	free_question(struct question *);
-extern char *	dns_label(char *, int *);
-extern int	find_tsig_key(char *, int, char *, int);
-extern int	memcasecmp(u_char *, u_char *, int);
-extern char *	expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
-extern int	expire_rr(ddDB *, char *, int, uint16_t, time_t);
-extern int 	expire_db(ddDB *, int);
-extern void 	build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, uint8_t, int, int, char *);
-extern struct rbtree * Lookup_zone(ddDB *, char *, int, int, int);
-extern struct rbtree *  lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
-extern int	cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, struct cfg *);
+extern uint16_t		udp_cksum(uint16_t *, uint16_t, struct ip *, struct udphdr *);
+extern uint16_t		udp_cksum6(uint16_t *, uint16_t, struct ip6_hdr *, struct udphdr *);
+extern void		dolog(int, char *, ...);
+extern void		pack(char *, char *, int);
+extern void		pack16(char *, uint16_t);
+extern void		pack32(char *, uint32_t);
+extern uint16_t		unpack16(char *);
+extern uint32_t		unpack32(char *);
+extern void		ddd_shutdown(void);
+extern int		additional_opt(struct question *, char *, int, int, struct sockaddr *, socklen_t, uint16_t);
+extern int		additional_tsig(struct question *, char *, int, int, int, int, HMAC_CTX *, uint16_t);
+extern struct question*	build_fake_question(char *, int, uint16_t, char *, int);
+extern int		free_question(struct question *);
+extern char *		dns_label(char *, int *);
+extern int		find_tsig_key(char *, int, char *, int);
+extern int		memcasecmp(u_char *, u_char *, int);
+extern char *		expand_compression(u_char *, u_char *, u_char *, u_char *, int *, int);
+extern int		expire_rr(ddDB *, char *, int, uint16_t, time_t);
+extern int 		expire_db(ddDB *, int);
+extern void 		build_reply(struct sreply *, int, char *, int, struct question *, struct sockaddr *, socklen_t, struct rbtree *, struct rbtree *, uint8_t, int, int, char *);
+extern struct rbtree *	Lookup_zone(ddDB *, char *, int, int, int);
+extern struct rbtree *	lookup_zone(ddDB *, struct question *, int *, int *, char *, int);
+extern int		cacheit(u_char *, u_char *, u_char *, struct imsgbuf *, struct imsgbuf *, struct cfg *);
 
 extern int 		reply_a(struct sreply *, int *, ddDB *);
 extern int 		reply_aaaa(struct sreply *, int *, ddDB *);
@@ -253,6 +253,10 @@ extern int forwardstrategy;
 extern char *identstring;
 extern uint32_t zonenumber;
 extern uint16_t fudge_forward;
+
+
+int wrap6to4 = 0;
+
 
 /*
  * INIT_FORWARD - initialize the forward linked lists
@@ -791,6 +795,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 	struct dns_header *dh;
 	struct rbtree *rbt = NULL;
 	struct dns_header *odh;
+	struct rrset *rrset0, *rrset1;
 
 	char buf[512];
 	char replystring[DNS_MAXNAME + 1];
@@ -1036,6 +1041,32 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 				(struct sockaddr *)from, fromlen, 
 				rbt, NULL, 0xff, istcp, 0, replybuf); 
 
+			if (wrap6to4 && (ntohs(q->hdr->qtype) == DNS_TYPE_AAAA) &&
+				((rrset0 = find_rr(rbt, DNS_TYPE_AAAA))) != NULL) {
+					/* we are wrapping AAAA's to A's */
+				struct rr *myrr;
+				char ip6buf[INET6_ADDRSTRLEN];
+
+				dolog(LOG_INFO, "boo!\n");
+
+				rrset1 = find_rr(rbt, DNS_TYPE_A);
+				if (rrset1 != NULL) {
+					char ipbuf[INET_ADDRSTRLEN];
+
+					myrr = TAILQ_FIRST(&rrset1->rr_head);
+					if (myrr != NULL) {
+						inet_ntop(AF_INET, &((struct a *)myrr->rdata)->a, ipbuf, sizeof(ipbuf));
+						snprintf(ip6buf, sizeof(ip6buf), "::ffff:%s", ipbuf);
+						TAILQ_FOREACH(myrr, &rrset0->rr_head, entries) {
+							memset(&(((struct aaaa *)myrr->rdata)->aaaa), 0, sizeof(struct in6_addr));
+							inet_pton(AF_INET6, ip6buf, (void *)&(((struct aaaa *)myrr->rdata)->aaaa));
+        					}
+					} else {
+						dolog(LOG_INFO, "myrr == NULL\n");
+					}
+				}
+			}
+
 			/* are we a CNAME? if not then search our logic */
 			if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
 				slen = reply_cname(&sreply, &sretlen, cfg->db);
@@ -1062,7 +1093,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 
 				/* from delphinusdnsd.c */
 				for (rl = &rlogic[0]; rl->rrtype != 0; rl++) {
-				    if (rl->rrtype == q->hdr->qtype) {
+				    if (rl->rrtype == ntohs(q->hdr->qtype)) {
 					slen = (*rl->reply)(&sreply, &sretlen, cfg->db);
 					if (slen < 0) {
 						/*
@@ -1089,7 +1120,7 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 
 				if (rl->rrtype == 0) {
 					/* https://en.wikipedia.org/wiki/List_of_DNS_record_types */
-					switch (q->hdr->qtype) {
+					switch (ntohs(q->hdr->qtype)) {
 						/* FALLTHROUGH for all listed */
 					case 18: /* AFSDB */ case 42: /* APL */ case 257: /* CAA */
 					case 60: /* CDNSKEY */ case 59: /* CDS */ case 37: /* CERT */
@@ -1750,7 +1781,7 @@ endimsg:
 			break;	
 		}
 
-		dolog(LOG_INFO, "FORWARD returnit, TSIG didn't check out error code = %d from %s port %u (ID: %x)\n", unpack32((char *)&pi->pkt_s.tsig.tsigerrorcode), ipdest, fwq->port, fwq->id);
+		dolog(LOG_ERR, "FORWARD returnit, TSIG didn't check out error code = %d from %s port %u (ID: %x)\n", unpack32((char *)&pi->pkt_s.tsig.tsigerrorcode), ipdest, fwq->port, fwq->id);
 		return (-1);
 	}
 
@@ -2555,6 +2586,13 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 					 */
 
 					parse_lowercase(packet, rlen);
+					/*
+					 * if we wrap IPv6 to IPv4, modify it
+					 *
+					 */
+					if (wrap6to4) {
+						wrap64(packet, rlen);
+					}
 
 					/* check for cache */
 					if (unpack32((char *)&pi->pkt_s.cache)) {
@@ -2796,6 +2834,10 @@ parse_lowercase(char *packet, int len)
 	int tmplen;
 	uint16_t val16;
 	
+
+	if (len < sizeof(struct dns_header))
+		return;
+
 	i = sizeof(struct dns_header);
         elen = 0;
         memset(&expand, 0, sizeof(expand));
@@ -2877,5 +2919,99 @@ parse_lowercase(char *packet, int len)
 
 out:
 	/* we're done here just return */
+	return;
+}
+
+void
+wrap64(char *packet, int len)
+{
+	struct dns_header *dh = NULL;
+	struct aaaa *sqa;
+	u_char expand[DNS_MAXNAME + 1];
+	char *end_name;
+	char *p, *begin, *end;
+	int rlen, elen = 0;
+	int countrr = 0;
+
+	uint16_t val16;
+
+	begin = p = packet;
+	end = packet + len;
+
+	if (len < sizeof(struct dns_header))
+		return;
+
+	dh = (struct dns_header *)p;
+
+	countrr = ntohs(dh->answer) + ntohs(dh->nsrr) + ntohs(dh->additional);
+
+	p += sizeof(struct dns_header);
+	len -= sizeof(struct dns_header);	
+	
+        elen = 0;
+        memset(&expand, 0, sizeof(expand));
+        end_name = expand_compression((u_char *)p, (u_char *)packet, (u_char *)end, (u_char *)&expand, &elen, sizeof(expand));
+        if (end_name == NULL) {
+                dolog(LOG_ERR, "expand_compression() failed 1, bad formatted question name\n");
+                return;
+        }
+
+	rlen = (plength(end_name, (void *)p));
+        if (rlen == elen) {
+		p += rlen;
+		len -= rlen;
+	}
+	
+	p += (sizeof(uint16_t) + sizeof(uint16_t)); 	/* skip class,type */
+	len -= (sizeof(uint16_t) + sizeof(uint16_t));
+	
+	for (int j = 0, i = 0; (i <= len) && (j < countrr); j++) {
+		elen = 0;
+		memset(&expand, 0, sizeof(expand));
+		end_name = expand_compression((u_char *)&p[i], (u_char *)\
+			begin, (u_char *)end, (u_char *)&expand, \
+			&elen, sizeof(expand));
+        	if (end_name == NULL) {
+                	dolog(LOG_ERR, "expand_compression() failed 2, bad formatted name\n");
+                	return;
+        	}
+		rlen = (plength(end_name, (void *)&p[i]));
+		i += rlen;
+		
+		val16 = unpack16((char *)&p[i]);
+		switch (ntohs(val16)) {
+		case DNS_TYPE_AAAA:
+			if ((i + 8) > len)
+				goto out;
+
+			i += 8;		/* type, class, ttl */
+			val16 = unpack16((char *)&p[i]);
+
+			if ((2 + i + ntohs(val16)) > len)
+				goto out;
+
+
+			i += 2;
+			sqa = (struct aaaa *)&p[i];
+			inet_pton(AF_INET6, "::ffff:127.0.0.1", (void *)&sqa->aaaa);
+			i += (ntohs(val16));		/* rdata contents */
+
+			break;
+
+		default:
+			if ((i + 8) > len)
+				goto out;
+
+			i += 8;		/* type, class, ttl */
+			val16 = unpack16((char *)&p[i]);
+
+			if ((2 + i + ntohs(val16)) > len)
+				goto out;
+
+			i += (2 + ntohs(val16));		/* rdlen + rdlen contents */
+			break;	
+		}
+	}
+out:
 	return;
 }
