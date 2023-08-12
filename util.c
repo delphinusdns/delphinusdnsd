@@ -1954,9 +1954,11 @@ expand_compression(u_char *p, u_char *estart, u_char *end, u_char *expand, int *
 	if (save == NULL) {
 		p++;
 		(*elen)++;
+
 		return ((char *)p);
 	} else {
 		(*elen)++;
+
 		return ((char *)save);
 	}
 }
@@ -2832,11 +2834,13 @@ lower_dnsname(char *buf, int len)
 	char *p, *q;
 	char save[DNS_MAXNAME];
 	uint offset, labellen;
-	int i;
+	int i, len0 = len;
 	char ch;
 
-	if (len > sizeof(save))
+	if (len > sizeof(save)) {
+		dolog(LOG_INFO, "lower_dnsname: len too long (%d)\n", len);
 		return (-1);
+	}
 
 	if (len == 1 && buf[0] == '\0')
 		return (0);
@@ -2844,11 +2848,12 @@ lower_dnsname(char *buf, int len)
 	memcpy(save, buf, len);
 
 	q = &buf[0];
-	for (p = q, offset = 0; offset <= len && *p != 0; offset += (*p + 1), p += (*p + 1)) {
+	for (p = q, offset = 0; *p != 0;) {
 		labellen = *p;
 		/* we found compression in this name, just exit */
 		if (*p & 0xC0)
 			break;
+
 		if (labellen > DNS_MAXLABEL)
 			goto err;	
 
@@ -2856,10 +2861,14 @@ lower_dnsname(char *buf, int len)
 			ch = tolower(q[offset + i]);
 			q[offset + i] = ch;
 		}
-	}
 
-	if (offset > len)
-		goto err;
+		offset += (*p + 1);
+
+		if ((p = advance_label(p, &len0)) == NULL) {
+			dolog(LOG_INFO, "advance_label failed\n");
+			goto err;
+		}
+	}
 
 	return (0);
 
@@ -6893,12 +6902,15 @@ advance_label(char *name, int *len)
 	if (*name == '\0')
 		return (name);
 
+	if (*len == 0)
+		return (name);
+
 	*len -= (*name + 1);
 
 	if (*len < 0)
 		return NULL;
 
-	name = (name + (*name + 1));
+	name += (*name + 1);
 
 	return (name);
 }
@@ -7042,4 +7054,3 @@ udp_cksum6(uint16_t *addr, uint16_t len, struct ip6_hdr *ip6, struct udphdr *uh)
 	answer = ~sum;
 	return (answer);
 }
-
