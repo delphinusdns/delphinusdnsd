@@ -464,8 +464,8 @@ tsigf(int argc, char *argv[])
 	char b64buf[1024];
 	int len;
 
-	arc4random_buf(&buf, 32);
-	len = mybase64_encode(buf, 32, b64buf, sizeof(b64buf));
+	arc4random_buf(&buf, 64);
+	len = mybase64_encode(buf, 64, b64buf, sizeof(b64buf));
 	b64buf[len] = '\0';
 	printf("%s\n", b64buf);
 
