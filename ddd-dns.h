@@ -206,6 +206,7 @@ struct dns_question_hdr {
 #define DNS_TYPE_SRV	33		/* RFC 2782, page 8 */
 #define DNS_TYPE_NAPTR	35		/* RFC 2915, page 3 */
 #define DNS_TYPE_KX	36		/* RFC 2230, page 8 */
+#define DNS_TYPE_CERT	37		/* RFC 4398, section 2 */
 #define DNS_TYPE_OPT	41		/* RFC 6891, page 7 */
 #define DNS_TYPE_DS	43		/* RFC 4034, section 5 */
 #define DNS_TYPE_SSHFP	44		/* RFC 4255 */
@@ -216,10 +217,12 @@ struct dns_question_hdr {
 
 #define DNS_TYPE_NSEC3	50		/* RFC 5155, section 3 */
 #define DNS_TYPE_NSEC3PARAM	51	/* RFC 5155, section 4 */
-#define DNS_TYPE_TLSA	52		/* RFC 6698, section 7.1 */
+#define DNS_TYPE_TLSA		52	/* RFC 6698, section 7.1 */
+#define DNS_TYPE_SMIMEA		53	/* RFC 8162 */
 
 #define DNS_TYPE_CDS		59	/* RFC 7344, RFC 8078 */
 #define DNS_TYPE_CDNSKEY	60	/* RFC 7344, RFC 8078 */
+#define DNS_TYPE_OPENPGPKEY	61	/* RFC 7929 */
 
 #define DNS_TYPE_ZONEMD	63		/* RFC 8976 */
 #define DNS_TYPE_SVCB	64		/* draft-ietf-dnsop-svcb-https */
