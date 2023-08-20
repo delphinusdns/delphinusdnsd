@@ -9,6 +9,7 @@ be led by other people.  Peter will go on to do another project.
 will mmap the shared memory 200x or however many slots there is.  This 
 simplifies and is more secure, but there is coding overhead.  Every year
 delphinusdnsd gets a little better.
+- TKEY (RFC 2930) support
 
 For 1.8.0 release
 
