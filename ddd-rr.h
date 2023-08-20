@@ -17,20 +17,6 @@
 #ifndef _DDD_RR_H
 #define _DDD_RR_H
 
-#if __NetBSD__
-#include <machine/vmparam.h>
-#elif __linux__
-#define PAGE_SIZE DDD_PAGE_SIZE
-#else
-#include <machine/param.h>
-#endif
-#include <sys/types.h>
-#include <limits.h>
-
-#include "ddd-crypto.h"
-#include "ddd-config.h"
-
-
 #define DIGEST_LENGTH		4096	/* crypt or digest length maximally */
 #define BITMAP_LENGTH		8192	/* full bitmap covering 65536 bits */
 
