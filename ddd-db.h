@@ -234,16 +234,7 @@ struct cfg {
 	ddDB *db;			/* database */
 };
 
-	
-ddDB * dddbopen(void);
-int dddbget(ddDB *, ddDBT *, ddDBT *);
-int dddbput(ddDB *, ddDBT *, ddDBT *);
-int dddbclose(ddDB *);
-
 #define DDDB_NOTFOUND 	(-1)
-
-int parse_file(ddDB *db, char *, uint32_t, int);
-ddDB * opendatabase(ddDB *);
 
 /* dig stuff */
 

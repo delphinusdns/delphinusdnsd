@@ -47,6 +47,12 @@
 #include "ddd-dns.h"
 #include "ddd-db.h"
 
+ddDB * dddbopen(void);
+ddDB * opendatabase(ddDB *);
+int dddbget(ddDB *, ddDBT *, ddDBT *);
+int dddbput(ddDB *, ddDBT *, ddDBT *);
+int dddbclose(ddDB *);
+
 struct rbtree * create_rr(ddDB *, char *, int, int, void *, uint32_t, uint16_t);
 struct rbtree * find_rrset(ddDB *, char *, int);
 struct rbtree * find_rrsetwild(ddDB *, char *, int);

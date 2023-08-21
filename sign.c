@@ -114,7 +114,7 @@ struct mynsec {
 		RB_ENTRY(mynsec) entries;
 } *n1, *n2, *np;
 
-extern int count_dots(char *name);
+extern	int 		count_dots(char *name);
 
 static int
 slcmp(void *a, void *b)
@@ -228,6 +228,7 @@ int 		dump_db(ddDB *, FILE *, char *);
 int		notglue(ddDB *, struct rbtree *, char *);
 static int 	rbt_isapex(struct rbtree *, char *);
 
+/* externs */
 
 extern int debug;
 extern int verbose;
@@ -247,91 +248,86 @@ extern int icount;
 extern int vslen;
 extern char *versionstring;
 extern uint64_t expiredon, signedon;
-
-/* externs */
-
-extern void	dolog(int pri, char *fmt, ...);
-extern uint32_t unpack32(char *);
-extern uint16_t unpack16(char *);
-extern void 	unpack(char *, char *, int);
-
-extern void 	pack(char *, char *, int);
-extern void 	pack32(char *, uint32_t);
-extern void 	pack16(char *, uint16_t);
-extern void 	pack8(char *, uint8_t);
-extern int fill_dnskey(ddDB *,char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, char *, uint16_t);
-extern int fill_rrsig(ddDB *,char *, char *, uint32_t, char *, uint8_t, uint8_t, uint32_t, uint64_t, uint64_t, uint16_t, char *, char *);
-extern int fill_nsec3param(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *);
-extern int fill_nsec3(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *, char *, char *);
-extern int fill_nsec(ddDB *, char *, char *, uint32_t, char *, char *);
-extern int fill_zonemd(ddDB *, char *, char *, int, uint32_t, uint8_t, uint8_t, char *, int);
-extern char * convert_name(char *name, int namelen);
-
-extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
-extern int      mybase64_decode(char const *, u_char *, size_t);
-extern struct rbtree *         Lookup_zone(ddDB *, char *, int, int, int);
-extern struct question         *build_fake_question(char *, int, uint16_t, char *, int);
-extern char * dns_label(char *, int *);
-extern int label_count(char *);
-extern char *get_dns_type(int, int);
-extern char * hash_name(char *, int, struct nsec3param *);
-extern char * base32hex_encode(u_char *input, int len);
-extern int  	init_entlist(ddDB *);
-extern int	check_ent(char *, int);
-struct rrtab    *rrlookup(char *);
-
-extern struct rbtree * find_rrset(ddDB *db, char *name, int len);
-extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
-extern int add_rr(struct rbtree *rbt, char *name, int len, uint16_t rrtype, void *rdata);
-extern char * 	bin2hex(char *, int);
-extern uint64_t timethuman(time_t);
-extern char * 	bitmap2human(char *, int);
-extern int                      memcasecmp(u_char *, u_char *, int);
-
-extern int insert_axfr(char *, char *);
-extern int insert_filter(char *, char *);
-extern int insert_passlist(char *, char *);
-extern int insert_notifyddd(char *, char *);
-
-extern void zonemd_hash_a(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_eui48(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_eui64(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_aaaa(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_loc(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_soa(SHA512_CTX *, struct rrset *, struct rbtree *, uint32_t *);
-extern void zonemd_hash_ns(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_cname(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_ptr(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_txt(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_svcb(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_https(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_rp(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_hinfo(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_srv(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_naptr(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_caa(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_mx(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_kx(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_ipseckey(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_tlsa(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_sshfp(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_ds(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_dnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_cds(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_cdnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_rrsig(SHA512_CTX *, struct rrset *, struct rbtree *, int);
-extern void zonemd_hash_nsec(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_nsec3(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern void zonemd_hash_nsec3param(SHA512_CTX *, struct rrset *, struct rbtree *);
-extern struct zonemd * zonemd_hash_zonemd(struct rrset *, struct rbtree *);
-
-extern char *		canonical_sort(char **, int, int *);
-extern char * 		param_tlv2human(char *, int, int);
-extern char * 		ipseckey_type(struct ipseckey *);
-extern size_t		plength(void *, void *);
-
 extern int dnssec;
 extern int tsig;
+
+
+extern char *			canonical_sort(char **, int, int *);
+extern char *			ipseckey_type(struct ipseckey *);
+extern char *			param_tlv2human(char *, int, int);
+extern char *			bin2hex(char *, int);
+extern char *			bitmap2human(char *, int);
+extern char *			base32hex_encode(u_char *, int);
+extern char *			convert_name(char *, int);
+extern char *			dns_label(char *, int *);
+extern char *			hash_name(char *, int, struct nsec3param *);
+extern char *			get_dns_type(int, int);
+extern ddDB *			dddbopen(void);
+extern ddDB *			opendatabase(ddDB *);
+extern int			check_ent(char *, int);
+extern int			init_entlist(ddDB *);
+extern int			memcasecmp(u_char *, u_char *, int);
+extern int			mybase64_decode(char const *, u_char *, size_t);
+extern int			mybase64_encode(u_char const *, size_t, char *, size_t);
+extern int			add_rr(struct rbtree *, char *, int, uint16_t, void *);
+extern int			fill_dnskey(ddDB *,char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, char *, uint16_t);
+extern int			fill_nsec(ddDB *, char *, char *, uint32_t, char *, char *);
+extern int			fill_nsec3(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *, char *, char *);
+extern int			fill_nsec3param(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *);
+extern int			fill_rrsig(ddDB *,char *, char *, uint32_t, char *, uint8_t, uint8_t, uint32_t, uint64_t, uint64_t, uint16_t, char *, char *);
+extern int			fill_zonemd(ddDB *, char *, char *, int, uint32_t, uint8_t, uint8_t, char *, int);
+extern int			insert_axfr(char *, char *);
+extern int			insert_filter(char *, char *);
+extern int			insert_notifyddd(char *, char *);
+extern int			insert_passlist(char *, char *);
+extern int			label_count(char *);
+extern int			parse_file(ddDB *, char *, uint32_t, int);
+extern size_t			plength(void *, void *);
+extern struct question *	build_fake_question(char *, int, uint16_t, char *, int);
+extern struct rbtree *		Lookup_zone(ddDB *, char *, int, int, int);
+extern struct rbtree *		find_rrset(ddDB *, char *, int);
+extern struct rrset *		find_rr(struct rbtree *, uint16_t);
+extern struct zonemd *		zonemd_hash_zonemd(struct rrset *, struct rbtree *);
+extern uint16_t			unpack16(char *);
+extern uint32_t			unpack32(char *);
+extern uint64_t			timethuman(time_t);
+extern void			dolog(int, char *, ...);
+extern void			pack(char *, char *, int);
+extern void			pack16(char *, uint16_t);
+extern void			pack32(char *, uint32_t);
+extern void			pack8(char *, uint8_t);
+extern void			unpack(char *, char *, int);
+extern void			zonemd_hash_a(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_aaaa(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_caa(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_cdnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_cds(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_cname(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_dnskey(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_ds(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_eui48(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_eui64(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_hinfo(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_https(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_ipseckey(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_kx(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_loc(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_mx(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_naptr(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_ns(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_nsec(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_nsec3(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_nsec3param(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_ptr(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_rp(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_rrsig(SHA512_CTX *, struct rrset *, struct rbtree *, int);
+extern void			zonemd_hash_soa(SHA512_CTX *, struct rrset *, struct rbtree *, uint32_t *);
+extern void			zonemd_hash_srv(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_sshfp(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_svcb(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_tlsa(SHA512_CTX *, struct rrset *, struct rbtree *);
+extern void			zonemd_hash_txt(SHA512_CTX *, struct rrset *, struct rbtree *);
+
 
 /* Aliases */
 

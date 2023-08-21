@@ -75,8 +75,6 @@ int cache = 0;
 int tsigpassname = 0;
 char *versionstring = DD_VERSION;
 
-extern int dnssec;
-extern int bytes_received;
 
 /* prototypes */
 
@@ -120,7 +118,6 @@ int bflag = 0;
 int ratelimit_packets_per_second = 0;
 int ratelimit = 0;
 int ratelimit_cidr = 0, ratelimit_cidr6 = 0;
-extern uint16_t port;
 int nflag = 0;
 int iflag = 0;
 int lflag = 0;
@@ -135,43 +132,44 @@ char *tls_keyfile = NULL;
 char *tls_protocols = NULL;
 char *tls_ciphers = NULL;
 
-extern TAILQ_HEAD(, iwqueue) iwqhead;
-extern struct iwqueue *iwq, *iwq0, *iwq1;
-
-
 /* externs */
 
-extern int	dig(int argc, char *argv[]);
-extern int	signmain(int argc, char *argv[]);
-extern int	zonemd(int argc, char *argv[]);
-extern uint32_t unpack32(char *);
-extern uint16_t unpack16(char *);
-extern void 	unpack(char *, char *, int);
+extern uint16_t 		port;
+extern TAILQ_HEAD(, iwqueue)	iwqhead;
+extern struct iwqueue		*iwq, *iwq0, *iwq1;
+extern int			dnssec;
+extern int			bytes_received;
 
-extern void 	pack(char *, char *, int);
-extern void 	pack32(char *, uint32_t);
-extern void 	pack16(char *, uint16_t);
-extern void 	pack8(char *, uint8_t);
-extern char * convert_name(char *name, int namelen);
-
-extern int      mybase64_encode(u_char const *, size_t, char *, size_t);
-extern int      mybase64_decode(char const *, u_char *, size_t);
-
-extern char * 	bin2hex(char *, int);
-extern uint64_t timethuman(time_t);
-extern char * 	bitmap2human(char *, int);
-extern char * dns_label(char *, int *);
-extern struct rbtree *         Lookup_zone(ddDB *, char *, int, int, int);
-extern struct question         *build_fake_question(char *, int, uint16_t, char *, int);
-extern int                      memcasecmp(u_char *, u_char *, int);
-extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
-extern char * dns_label(char *, int *);
-extern int label_count(char *);
-extern char *get_dns_type(int, int);
-extern char * hash_name(char *, int, struct nsec3param *);
-extern char * base32hex_encode(u_char *input, int len);
-extern char * param_tlv2human(char *, int, int);
-extern char * ipseckey_type(struct ipseckey *);
+extern char *			bin2hex(char *, int);
+extern char *			bitmap2human(char *, int);
+extern char *			base32hex_encode(u_char *, int);
+extern char *			convert_name(char *, int);
+extern char *			dns_label(char *, int *);
+extern char *			hash_name(char *, int, struct nsec3param *);
+extern char *			ipseckey_type(struct ipseckey *);
+extern char *			param_tlv2human(char *, int, int);
+extern char *			get_dns_type(int, int);
+extern ddDB *			dddbopen(void);
+extern int			dig(int, char *argv[]);
+extern int			signmain(int, char *argv[]);
+extern int			zonemd(int, char *argv[]);
+extern int			parse_file(ddDB *, char *, uint32_t, int);
+extern int			memcasecmp(u_char *, u_char *, int);
+extern int			mybase64_decode(char const *, u_char *, size_t);
+extern int			mybase64_encode(u_char const *, size_t, char *, size_t);
+extern int			dddbclose(ddDB *);
+extern int			label_count(char *);
+extern struct question *	build_fake_question(char *, int, uint16_t, char *, int);
+extern struct rbtree *		Lookup_zone(ddDB *, char *, int, int, int);
+extern struct rrset *		find_rr(struct rbtree *, uint16_t);
+extern uint16_t			unpack16(char *);
+extern uint32_t			unpack32(char *);
+extern uint64_t			timethuman(time_t);
+extern void			pack(char *, char *, int);
+extern void			pack16(char *, uint16_t);
+extern void			pack32(char *, uint32_t);
+extern void			pack8(char *, uint8_t);
+extern void			unpack(char *, char *, int);
 
 
 

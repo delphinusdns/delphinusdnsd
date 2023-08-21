@@ -86,84 +86,6 @@
 
 /* prototypes */
 
-extern char 		*rrlimit_setup(int);
-extern int		free_question(struct question *);
-extern int		init_entlist(ddDB *);
-extern int		reply_caa(struct sreply *, int *, ddDB *);
-extern int		reply_cdnskey(struct sreply *, int *, ddDB *);
-extern int		reply_cds(struct sreply *, int *, ddDB *);
-extern int		reply_dnskey(struct sreply *, int *, ddDB *);
-extern int		reply_ds(struct sreply *, int *, ddDB *);
-extern int		reply_hinfo(struct sreply *, int *, ddDB *);
-extern int		reply_https(struct sreply *, int *, ddDB *);
-extern int		reply_loc(struct sreply *, int *, ddDB *);
-extern int		reply_nodata(struct sreply *, int *, ddDB *);
-extern int		reply_notify(struct sreply *, int *, ddDB *);
-extern int		reply_nsec(struct sreply *, int *, ddDB *);
-extern int		reply_nsec3(struct sreply *, int *, ddDB *);
-extern int		reply_nsec3param(struct sreply *, int *, ddDB *);
-extern int		reply_rp(struct sreply *, int *, ddDB *);
-extern int		reply_svcb(struct sreply *, int *, ddDB *);
-extern int 		check_ent(char *, int);
-extern int 		display_rr(struct rrset *rrset);
-extern int 		drop_privs(char *, struct passwd *);
-extern int 		find_filter(struct sockaddr_storage *, int);
-extern int 		find_passlist(struct sockaddr_storage *, int);
-extern int 		get_record_size(ddDB *, char *, int);
-extern int 		memcasecmp(u_char *, u_char *, int);
-extern int 		notifysource(struct question *, struct sockaddr_storage *);
-extern int 		reply_a(struct sreply *, int *, ddDB *);
-extern int 		reply_aaaa(struct sreply *, int *, ddDB *);
-extern int 		reply_any(struct sreply *, int *, ddDB *);
-extern int 		reply_badvers(struct sreply *, int *, ddDB *);
-extern int 		reply_cname(struct sreply *, int *, ddDB *);
-extern int 		reply_eui48(struct sreply *, int *, ddDB *);
-extern int 		reply_eui64(struct sreply *, int *, ddDB *);
-extern int 		reply_fmterror(struct sreply *, int *, ddDB *);
-extern int 		reply_ipseckey(struct sreply *, int *, ddDB *);
-extern int 		reply_kx(struct sreply *, int *, ddDB *);
-extern int 		reply_mx(struct sreply *, int *, ddDB *);
-extern int 		reply_naptr(struct sreply *, int *, ddDB *);
-extern int 		reply_noerror(struct sreply *, int *, ddDB *);
-extern int 		reply_notauth(struct sreply *, int *, ddDB *);
-extern int 		reply_notimpl(struct sreply *, int *, ddDB *);
-extern int 		reply_ns(struct sreply *, int *, ddDB *);
-extern int 		reply_nxdomain(struct sreply *, int *, ddDB *);
-extern int 		reply_ptr(struct sreply *, int *, ddDB *);
-extern int 		reply_refused(struct sreply *, int *, ddDB *, int);
-extern int 		reply_soa(struct sreply *, int *, ddDB *);
-extern int 		reply_srv(struct sreply *, int *, ddDB *);
-extern int 		reply_sshfp(struct sreply *, int *, ddDB *);
-extern int 		reply_tlsa(struct sreply *, int *, ddDB *);
-extern int 		reply_txt(struct sreply *, int *, ddDB *);
-extern int 		reply_version(struct sreply *, int *, ddDB *);
-extern int 		reply_zonemd(struct sreply *, int *, ddDB *);
-extern int      	reply_rrsig(struct sreply *, int *, ddDB *);
-extern struct question	*build_question(char *, int, uint16_t, char *);
-extern struct rbtree * 	find_rrset(ddDB *db, char *name, int len);
-extern struct rrset * 	find_rr(struct rbtree *rbt, uint16_t rrtype);
-extern uint16_t 	unpack16(char *);
-extern uint32_t 	unpack32(char *);
-extern void		forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
-extern void		mainloop(struct cfg *, struct imsgbuf *);
-extern void		replicantloop(ddDB *, struct imsgbuf *);
-extern void	 	init_filter(void);
-extern void	 	init_notifyddd(void);
-extern void	 	init_passlist(void);
-extern void	 	init_tsig(void);
-extern void		clean_tsig_keys(void);
-extern void 		axfrloop(struct cfg *, char **, ddDB *, struct imsgbuf *, struct imsgbuf *);
-extern void 		ddd_shutdown(void);
-extern void 		dolog(int, char *, ...);
-extern void 		init_dnssec(void);
-extern void 		init_region(void);
-extern void 		pack(char *, char *, int);
-extern void 		pack16(char *, uint16_t);
-extern void 		pack32(char *, uint32_t);
-extern void 		pack8(char *, uint8_t);
-extern void 		populate_zone(ddDB *db);
-extern void 		unpack(char *, char *, int);
-
 char *			sm_init(size_t, size_t);
 int			bind_this_pifap(struct ifaddrs *, int, int);
 int			bind_this_res(struct addrinfo *, int);
@@ -186,10 +108,161 @@ void 			setup_primary(ddDB *, char **, char *, struct imsgbuf *);
 void 			setup_unixsocket(char *, struct imsgbuf *);
 int			enc_cpy(u_char *, u_char *, int, uint64_t);
 int			dec_cpy(u_char *, u_char *, int, uint64_t);
+int 			parse_file(ddDB *, char *, uint32_t, int);
+extern ddDB * 		dddbopen(void);
 
 /* aliases */
 
 #define MYDB_PATH "/var/db/delphinusdns"
+
+/* global variables */
+
+int reload = 0;
+int mshutdown = 0;
+int msig;
+
+DDD_EVP_MD *md5_md;
+char *rptr = NULL;
+int ratelimit_backlog;
+
+int axfrbackoff = 5;
+int debug = 0;
+int verbose = 0;
+int bflag = 0;
+int iflag = 0;
+int lflag = 0;
+int nflag = 0;
+int bcount = 0;
+int icount = 0;
+int forward = 0;
+int forwardtsig = 0;
+int strictx20i = 1;
+int forwardstrategy = STRATEGY_SPRAY;
+int zonecount = 0;
+int tsigpassname = 0;
+int cache = 0;
+uint16_t port = 53;
+uint32_t cachesize = 0;
+char *bind_list[255];
+char *interface_list[255];
+char *identstring = NULL;
+
+#ifndef DD_VERSION
+char *versionstring = "delphinusdnsd-1.7";
+uint8_t vslen = 17;
+#else
+char *versionstring = DD_VERSION;
+uint8_t vslen = DD_VERSION_LEN;
+#endif
+
+
+pid_t *ptr = 0;
+long glob_time_offset = 0;
+
+int tls = 0;
+uint16_t tls_port = 853;
+char *tls_certfile = NULL;
+char *tls_keyfile = NULL;
+char *tls_protocols = NULL;
+char *tls_ciphers = NULL;
+
+static char iv[16];
+static char encryptkey[16];
+
+/* externs */
+
+extern char *			__progname;
+extern int			axfrport;
+extern int			ratelimit;
+extern int			ratelimit_packets_per_second;
+extern int			passlist;
+extern int			tsig;
+extern int			dnssec;
+extern int			raxfrflag;
+extern u_int			max_udp_payload;
+extern uint8_t			rdomain;
+extern uint8_t			forward_rdomain;
+extern int			cookies;
+extern TAILQ_HEAD(, iwqueue) 	iwqhead;
+
+extern char *			rrlimit_setup(int);
+extern ddDB * 			dddbopen(void);
+extern int			free_question(struct question *);
+extern int			init_entlist(ddDB *);
+extern int			reply_caa(struct sreply *, int *, ddDB *);
+extern int			reply_cdnskey(struct sreply *, int *, ddDB *);
+extern int			reply_cds(struct sreply *, int *, ddDB *);
+extern int			reply_dnskey(struct sreply *, int *, ddDB *);
+extern int			reply_ds(struct sreply *, int *, ddDB *);
+extern int			reply_hinfo(struct sreply *, int *, ddDB *);
+extern int			reply_https(struct sreply *, int *, ddDB *);
+extern int			reply_loc(struct sreply *, int *, ddDB *);
+extern int			reply_nodata(struct sreply *, int *, ddDB *);
+extern int			reply_notify(struct sreply *, int *, ddDB *);
+extern int			reply_nsec(struct sreply *, int *, ddDB *);
+extern int			reply_nsec3(struct sreply *, int *, ddDB *);
+extern int			reply_nsec3param(struct sreply *, int *, ddDB *);
+extern int			reply_rp(struct sreply *, int *, ddDB *);
+extern int			reply_svcb(struct sreply *, int *, ddDB *);
+extern int 			check_ent(char *, int);
+extern int 			display_rr(struct rrset *);
+extern int 			drop_privs(char *, struct passwd *);
+extern int 			find_filter(struct sockaddr_storage *, int);
+extern int 			find_passlist(struct sockaddr_storage *, int);
+extern int 			get_record_size(ddDB *, char *, int);
+extern int 			memcasecmp(u_char *, u_char *, int);
+extern int 			notifysource(struct question *, struct sockaddr_storage *);
+extern int 			reply_a(struct sreply *, int *, ddDB *);
+extern int 			reply_aaaa(struct sreply *, int *, ddDB *);
+extern int 			reply_any(struct sreply *, int *, ddDB *);
+extern int 			reply_badvers(struct sreply *, int *, ddDB *);
+extern int 			reply_cname(struct sreply *, int *, ddDB *);
+extern int 			reply_eui48(struct sreply *, int *, ddDB *);
+extern int 			reply_eui64(struct sreply *, int *, ddDB *);
+extern int 			reply_fmterror(struct sreply *, int *, ddDB *);
+extern int 			reply_ipseckey(struct sreply *, int *, ddDB *);
+extern int 			reply_kx(struct sreply *, int *, ddDB *);
+extern int 			reply_mx(struct sreply *, int *, ddDB *);
+extern int 			reply_naptr(struct sreply *, int *, ddDB *);
+extern int 			reply_noerror(struct sreply *, int *, ddDB *);
+extern int 			reply_notauth(struct sreply *, int *, ddDB *);
+extern int 			reply_notimpl(struct sreply *, int *, ddDB *);
+extern int 			reply_ns(struct sreply *, int *, ddDB *);
+extern int 			reply_nxdomain(struct sreply *, int *, ddDB *);
+extern int			reply_ptr(struct sreply *, int *, ddDB *);
+extern int			reply_refused(struct sreply *, int *, ddDB *, int);
+extern int			reply_soa(struct sreply *, int *, ddDB *);
+extern int			reply_srv(struct sreply *, int *, ddDB *);
+extern int			reply_sshfp(struct sreply *, int *, ddDB *);
+extern int			reply_tlsa(struct sreply *, int *, ddDB *);
+extern int			reply_txt(struct sreply *, int *, ddDB *);
+extern int			reply_version(struct sreply *, int *, ddDB *);
+extern int			reply_zonemd(struct sreply *, int *, ddDB *);
+extern int	     		reply_rrsig(struct sreply *, int *, ddDB *);
+extern struct question *	build_question(char *, int, uint16_t, char *);
+extern struct rbtree *		find_rrset(ddDB *, char *, int);
+extern struct rrset *		find_rr(struct rbtree *, uint16_t);
+extern uint16_t			unpack16(char *);
+extern uint32_t			unpack32(char *);
+extern void			clean_tsig_keys(void);
+extern void			forwardloop(ddDB *, struct cfg *, struct imsgbuf *, struct imsgbuf *);
+extern void			mainloop(struct cfg *, struct imsgbuf *);
+extern void			replicantloop(ddDB *, struct imsgbuf *);
+extern void			init_filter(void);
+extern void			init_notifyddd(void);
+extern void			init_passlist(void);
+extern void			init_tsig(void);
+extern void			axfrloop(struct cfg *, char **, ddDB *, struct imsgbuf *, struct imsgbuf *);
+extern void			ddd_shutdown(void);
+extern void			dolog(int, char *, ...);
+extern void			init_dnssec(void);
+extern void			init_region(void);
+extern void			pack(char *, char *, int);
+extern void			pack16(char *, uint16_t);
+extern void			pack32(char *, uint32_t);
+extern void			pack8(char *, uint8_t);
+extern void			populate_zone(ddDB *db);
+extern void			unpack(char *, char *, int);
 
 /* structs */
 
@@ -266,72 +339,6 @@ struct reply_logic rlogic[] = {
 	{ 0, 0, 0, NULL }
 };
 
-/* global variables */
-
-extern char *__progname;
-extern int axfrport;
-extern int ratelimit;
-extern int ratelimit_packets_per_second;
-extern int passlist;
-extern int tsig;
-extern int dnssec;
-extern int raxfrflag;
-extern u_int max_udp_payload;
-extern uint8_t rdomain;
-extern uint8_t forward_rdomain;
-extern int cookies;
-
-int reload = 0;
-int mshutdown = 0;
-int msig;
-
-DDD_EVP_MD *md5_md;
-char *rptr = NULL;
-int ratelimit_backlog;
-
-int axfrbackoff = 5;
-int debug = 0;
-int verbose = 0;
-int bflag = 0;
-int iflag = 0;
-int lflag = 0;
-int nflag = 0;
-int bcount = 0;
-int icount = 0;
-int forward = 0;
-int forwardtsig = 0;
-int strictx20i = 1;
-int forwardstrategy = STRATEGY_SPRAY;
-int zonecount = 0;
-int tsigpassname = 0;
-int cache = 0;
-uint16_t port = 53;
-uint32_t cachesize = 0;
-char *bind_list[255];
-char *interface_list[255];
-char *identstring = NULL;
-#ifndef DD_VERSION
-char *versionstring = "delphinusdnsd-1.7";
-uint8_t vslen = 17;
-#else
-char *versionstring = DD_VERSION;
-uint8_t vslen = DD_VERSION_LEN;
-#endif
-pid_t *ptr = 0;
-long glob_time_offset = 0;
-
-int tls = 0;
-uint16_t tls_port = 853;
-char *tls_certfile = NULL;
-char *tls_keyfile = NULL;
-char *tls_protocols = NULL;
-char *tls_ciphers = NULL;
-
-static char iv[16];
-static char encryptkey[16];
-
-
-extern TAILQ_HEAD(, iwqueue) iwqhead;
 
 /* 
  * MAIN - set up arguments, set up database, set up sockets, call mainloop
