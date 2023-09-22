@@ -20,6 +20,8 @@ keep a minimal pledge of "stdio recvfd ..."
   This fixes a MITM/security problem.
 - implemented algorithm 14 (ECDSAP384SHA384) and algorithm 15 (Ed25519)
 - implemented NSEC support and signing with dddctl
+- change the algorithm for ratelimit minutely saving 15 MB or 30% memory
+  footprint on a setup with a ratelimit of 23.
 
 
 [2022] Changes in RELEASE_1_7 from RELEASE_1_6
