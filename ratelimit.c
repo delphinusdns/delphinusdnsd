@@ -76,7 +76,7 @@ rrlimit_setup(int size)
 	if (size > 255)
 		return NULL;	
 
-	size = 65536 * ((size * (sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t))) + sizeof(uint8_t));
+	size = 65536 * ((size * (sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t))) + sizeof(uint32_t));
 
 	ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED |\
 		MAP_ANON, -1, 0);
@@ -150,7 +150,7 @@ check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr, uint8_t ttl
 		hash = hash_rrlimit((uint16_t *)&ia6, sizeip);
 	}
 		
-	tmp = rrlimit_ptr + (hash * ((size * (sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t))) + sizeof(uint8_t)));
+	tmp = rrlimit_ptr + (hash * ((size * (sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t))) + sizeof(uint32_t)));
 	rl = (struct rrlimit *)tmp;
 	
 	offset = rl->pointer;
@@ -238,7 +238,7 @@ add_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr, uint8_t ttl)
 		hash = hash_rrlimit((uint16_t *)&ia6, sizeip);
 	}
 
-	tmp = rrlimit_ptr + (hash * ((size * (sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t))) + sizeof(uint8_t)));
+	tmp = rrlimit_ptr + (hash * ((size * (sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t))) + sizeof(uint32_t)));
 	rl = (struct rrlimit *)tmp;
 	
 	offset = rl->pointer;
