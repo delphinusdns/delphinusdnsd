@@ -54,10 +54,11 @@ static uint16_t 	hash_rrlimit(uint16_t *, int);
 char 			*rrlimit_setup(int);
 
 struct rrlimit {
-	uint8_t pointer;
+	uint32_t pointer;
 	struct {
 		uint8_t ttl;
-		time_t times;
+		uint8_t pad;
+		uint16_t times;
 	} ttl_times[256];
 } __attribute__((packed));
 
@@ -75,7 +76,7 @@ rrlimit_setup(int size)
 	if (size > 255)
 		return NULL;	
 
-	size = 65536 * ((size * (sizeof(time_t) + sizeof(uint8_t))) + sizeof(uint8_t));
+	size = 65536 * ((size * (sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t))) + sizeof(uint8_t));
 
 	ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED |\
 		MAP_ANON, -1, 0);
@@ -98,8 +99,9 @@ check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr, uint8_t ttl
 	in_addr_t ia, netmask;
 	uint16_t hash = 0;
 	int count = 0, i;
-	uint8_t offset;
-	time_t now;
+	const int timeshift = 16;
+	uint32_t offset;
+	time_t now, now_hi;
 	char *tmp;
 
 	if (sizeip == 4) {
@@ -148,12 +150,13 @@ check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr, uint8_t ttl
 		hash = hash_rrlimit((uint16_t *)&ia6, sizeip);
 	}
 		
-	tmp = rrlimit_ptr + (hash * ((size * (sizeof(time_t) + sizeof(uint8_t))) + sizeof(uint8_t)));
+	tmp = rrlimit_ptr + (hash * ((size * (sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t))) + sizeof(uint8_t)));
 	rl = (struct rrlimit *)tmp;
 	
 	offset = rl->pointer;
 	
 	now = time(NULL);
+	now_hi = now >> timeshift;
 
 	for (i = 0; i < size; i++) {
 
@@ -162,7 +165,8 @@ check_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr, uint8_t ttl
 		 * spoofing) add the count.
 		 */
 
-		if (difftime(now, rl->ttl_times[(offset + i) % size].times) \
+		if (difftime(now, (now_hi << timeshift) | \
+			(rl->ttl_times[(offset + i) % size].times)) \
 			<= 1 && ttl == rl->ttl_times[(offset + i) % size].ttl)
 			count++;
 		else
@@ -234,7 +238,7 @@ add_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr, uint8_t ttl)
 		hash = hash_rrlimit((uint16_t *)&ia6, sizeip);
 	}
 
-	tmp = rrlimit_ptr + (hash * ((size * (sizeof(time_t) + sizeof(uint8_t))) + sizeof(uint8_t)));
+	tmp = rrlimit_ptr + (hash * ((size * (sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t))) + sizeof(uint8_t)));
 	rl = (struct rrlimit *)tmp;
 	
 	offset = rl->pointer;
@@ -245,7 +249,7 @@ add_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr, uint8_t ttl)
 
 	now = time(NULL);
 
-	rl->ttl_times[offset].times = now;
+	rl->ttl_times[offset].times = (now & 0xffff);
 	rl->ttl_times[offset].ttl = ttl;
 	rl->pointer = offset;	/* XXX race */
 	
