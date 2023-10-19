@@ -327,5 +327,30 @@ struct zonemd {
 	uint16_t		hashlen;		/* length of hash */
 };	
 
+/* CERT RR - RFC 4398 */
+
+struct cert {
+	uint16_t		type;			/* type */
+#define CERT_PKIX	1
+#define CERT_SPKI	2
+#define CERT_PGP	3
+#define CERT_IPKIX	4
+#define CERT_ISPKI	5
+#define CERT_IPGP	6
+#define CERT_ACPKIX	7
+#define CERT_IACPKIX	8
+/* 9-252 available for IANA assignment */
+#define CERT_URI	253
+#define CERT_OID	254
+#define CERT_RESERVED1	255
+/* 256-65279 available for IANA assignment */
+/* 65280-65534 experimental */
+#define CERT_RESERVED2	65535
+	uint16_t		keytag;			/* key tag */
+	uint8_t			algorithm;		/* alg */
+	char			cert[DIGEST_LENGTH];	/* certificate / CRL */
+	uint16_t		certlen;		/* length of cert */
+};
+
 
 #endif /* _DDD_RR_H */

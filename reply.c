@@ -121,6 +121,7 @@ int		reply_nsec3(struct sreply *, int *, ddDB *);
 int		reply_nsec3param(struct sreply *, int *, ddDB *);
 int		reply_nsec(struct sreply *, int *,  ddDB *);
 int		reply_dnskey(struct sreply *, int *, ddDB *);
+int		reply_cert(struct sreply *, int *, ddDB *);
 int		reply_ipseckey(struct sreply *, int *, ddDB *);
 int		reply_cdnskey(struct sreply *, int *, ddDB *);
 int		reply_ds(struct sreply *, int *, ddDB *);
@@ -2673,6 +2674,207 @@ out:
 	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
 
+int
+reply_cert(struct sreply *sreply, int *sretlen, ddDB *db)
+{
+	char *reply = sreply->replybuf;
+	struct dns_header *odh;
+	uint16_t outlen = 0;
+	int cert_count;
+
+	struct answer {
+		char name[2];
+		uint16_t type;
+		uint16_t class;
+		uint32_t ttl;
+		uint16_t rdlength;	 /* 12 */
+		char rdata[0];
+	} __attribute__((packed));
+
+	struct answer *answer;
+
+	char *buf = sreply->buf;
+	int len = sreply->len;
+	struct question *q = sreply->q;
+	struct rbtree *rbt = sreply->rbt1;
+	struct rbtree *authority;
+	struct rrset *rrset = NULL;
+	struct rr *rrp = NULL;
+	
+	int istcp = sreply->istcp;
+	int replysize = 512;
+	int retlen = -1;
+	int rrsig_count = 0;
+	uint16_t rollback;
+	time_t now;
+	uint32_t zonenumberx;
+
+	zonenumberx = determine_zone(rbt);
+	now = time(NULL);
+
+	if ((rrset = find_rr(rbt, DNS_TYPE_CERT)) == NULL)
+		return -1;
+
+	if (istcp) {
+		replysize = 65535;
+	}
+	
+	if ((istcp == DDD_IS_UDP) && (q->edns0len))
+		replysize = MIN(q->edns0len, max_udp_payload);
+
+	odh = (struct dns_header *)&reply[0];
+
+	outlen = sizeof(struct dns_header);
+
+	if (len > replysize) {
+		return (retlen);
+	}
+
+	memcpy(reply, buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+
+	outlen += (q->hdr->namelen + 4);
+	rollback = outlen;
+
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
+	set_reply_flags(rbt, odh, q);
+
+	odh->question = htons(1);
+	odh->answer = htons(0);
+	odh->nsrr = 0;
+	odh->additional = 0;
+
+	/* skip dns header, question name, qtype and qclass */
+	answer = (struct answer *)(&reply[0] + sizeof(struct dns_header) + 
+		q->hdr->namelen + 4);
+
+	cert_count = 0;
+
+	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+		if (rrp->zonenumber != zonenumberx)
+			continue;
+
+		if ((outlen + sizeof(struct answer) + 5 + 
+			((struct cert *)rrp->rdata)->certlen) > replysize) {
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
+			goto out;
+		}
+
+		/*
+		 * answer->name is a pointer to the request (0xc00c) 
+		 */
+
+		answer->name[0] = 0xc0;				/* 1 byte */
+		answer->name[1] = 0x0c;				/* 2 bytes */
+		answer->type = q->hdr->qtype;			/* 4 bytes */	
+		answer->class = q->hdr->qclass;			/* 6 bytes */
+
+		if (q->aa)
+			answer->ttl = htonl(rrset->ttl);
+		else
+			answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+		
+
+		answer->rdlength = htons(((struct cert *)rrp->rdata)->certlen + 5);
+
+		outlen += sizeof(struct answer); /* XXX ? */
+
+		pack16(&reply[outlen], htons(((struct cert *)rrp->rdata)->type));
+		outlen += 2;
+
+		pack16(&reply[outlen], htons(((struct cert *)rrp->rdata)->keytag));
+		outlen += 2;
+		
+		pack8(&reply[outlen], ((struct cert *)rrp->rdata)->algorithm);
+		outlen++;
+		
+		if (((struct cert *)rrp->rdata)->certlen) {
+			memcpy(&reply[outlen], (char *)&((struct cert *)rrp->rdata)->cert, ((struct cert *)rrp->rdata)->certlen);
+			outlen += ((struct cert *)rrp->rdata)->certlen;
+		}
+		
+		cert_count++;
+		/* set new offset for answer */
+		answer = (struct answer *)&reply[outlen];
+	} 
+
+	odh->answer = htons(cert_count);
+
+	if (dnssec && q->dnssecok && (rbt->flags & RBT_DNSSEC)) {
+		int tmplen = 0;
+		int origlen = outlen;
+	
+		tmplen = additional_rrsig(q->hdr->name, q->hdr->namelen, DNS_TYPE_CERT, rbt, reply, replysize, outlen, &rrsig_count, q->aa, zonenumberx);
+		
+		if (tmplen == 0) {
+
+			/* we're forwarding and had no RRSIG return with -1 */
+			if (q->aa != 1)
+				return -1;
+
+			NTOHS(odh->query);
+			SET_DNS_TRUNCATION(odh);
+			HTONS(odh->query);
+			odh->answer = 0;
+			odh->nsrr = 0; 
+			odh->additional = 0;
+			outlen = rollback;
+			goto out;
+		}
+
+		outlen = tmplen;
+
+		if (outlen > origlen)
+			odh->answer = htons(cert_count + rrsig_count);	
+
+		if (rbt->flags & RBT_WILDCARD) {
+			int retcount;
+
+			authority = get_soa(db, q);
+			if (authority == NULL) {
+				if (q->aa != 1)
+					return -1;
+
+				NTOHS(odh->query);
+				SET_DNS_TRUNCATION(odh);
+				HTONS(odh->query);
+				odh->answer = 0;
+				odh->nsrr = 0; 
+				odh->additional = 0;
+				outlen = rollback;
+				goto out;
+			}
+			tmplen = additional_wildcard(q->hdr->name, q->hdr->namelen, authority, reply, replysize, outlen, &retcount, db, zonenumberx);
+			if (tmplen != 0) {
+				outlen = tmplen;
+				odh->nsrr = htons(retcount);	
+			}
+		}
+			
+	}
+
+out:
+	 if (q->edns0len) {
+		/* tag on edns0 opt record */
+		odh->additional = htons(1);
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
+	}
+
+	if (q->tsig.tsigverified == 1) {
+		outlen = additional_tsig(q, reply, replysize, outlen, 0, 0, NULL, DEFAULT_TSIG_FUDGE);
+
+		NTOHS(odh->additional);	
+		odh->additional++;
+		HTONS(odh->additional);
+	}
+
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
+}
 
 int
 reply_ipseckey(struct sreply *sreply, int *sretlen, ddDB *db)
@@ -7949,7 +8151,7 @@ uint16_t
 create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int soa, uint32_t zonenumberx, uint compress)
 {
 	int a_count, aaaa_count, ns_count, mx_count, srv_count, sshfp_count;
-	int txt_count, kx_count, ipseckey_count;
+	int txt_count, kx_count, ipseckey_count, cert_count;
 	int tlsa_count, typelen, zonemd_count;
 	int ds_count, dnskey_count;
 	int naptr_count, rrsig_count;
@@ -8137,6 +8339,67 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			break;
 		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_CERT)) != 0) {
+		cert_count = 0;
+		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
+			if (rrp->zonenumber != zonenumberx)
+				continue;
+			if (offset + q->hdr->namelen > rlen)
+				goto truncate;
+
+			memcpy(&reply[offset], q->hdr->name, q->hdr->namelen);
+			offset += q->hdr->namelen;
+
+			if (compress) {
+				if ((tmplen = compress_label((u_char*)reply, offset, q->hdr->namelen)) > 0) {
+					offset = tmplen;
+				} 
+			}
+
+			answer = (struct answer *)&reply[offset];
+
+			answer->type = htons(DNS_TYPE_CERT);
+			answer->class = htons(DNS_CLASS_IN);
+		
+			if (q->aa)
+				answer->ttl = htonl(rrset->ttl);
+			else
+				answer->ttl = htonl(rrset->ttl - (MIN(rrset->ttl, difftime(now, rrset->created))));
+
+
+			answer->rdlength = htons(5 + ((struct cert *)rrp->rdata)->certlen);
+
+			offset += 10;		/* struct answer */
+
+			if ((offset + 5 + ((struct cert *)rrp->rdata)->certlen) > rlen)
+				goto truncate;
+
+			pack16(&reply[offset], htons(((struct cert *)rrp->rdata)->type));
+			offset += 2;
+
+			pack16(&reply[offset], htons(((struct cert *)rrp->rdata)->keytag));
+			offset += 2;
+			
+			pack8(&reply[offset], ((struct cert *)rrp->rdata)->algorithm);
+			offset++;
+
+			if (((struct cert *)rrp->rdata)->certlen) {
+				memcpy(&reply[offset], 
+					(char *)&((struct cert *)rrp->rdata)->cert,
+					 ((struct cert *)rrp->rdata)->certlen);
+				offset += ((struct cert *)rrp->rdata)->certlen;
+			}
+
+			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
+
+			cert_count++;
+
+		} 
+
+		NTOHS(odh->answer);
+		odh->answer += cert_count;
+		HTONS(odh->answer);
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_IPSECKEY)) != 0) {
 		ipseckey_count = 0;

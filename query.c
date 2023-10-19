@@ -148,6 +148,7 @@ extern int raxfr_ptr(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_
 extern int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_kx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_ipseckey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int raxfr_cert(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -210,6 +211,7 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_HTTPS, 0, raxfr_https },
 	{ DNS_TYPE_KX, 0, raxfr_kx },
 	{ DNS_TYPE_IPSECKEY, 0, raxfr_ipseckey },
+	{ DNS_TYPE_CERT, 0, raxfr_cert },
 	{ DNS_TYPE_NSEC, 1, raxfr_nsec },
 	/* end new support */
 	{ 0, 0, NULL }

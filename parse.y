@@ -275,6 +275,7 @@ int		fill_hinfo(ddDB *, char *, char *, int, char *, char *);
 int		fill_caa(ddDB *, char *, char *, int, uint8_t, char *, char *);
 int 		fill_zonemd(ddDB *, char *, char *, int, uint32_t, uint8_t, uint8_t, char *, int);
 int		fill_ipseckey(ddDB *, char *, char *, int, uint8_t, uint8_t, uint8_t, char *, char *);
+int		fill_cert(ddDB *, char *, char *, int, char *, uint16_t, uint8_t, char *);
 int		fill_https(ddDB *, char *, char *, int, uint16_t, char *, char *);
 int		fill_svcb(ddDB *, char *, char *, int, uint16_t, char *, char *);
 
@@ -977,6 +978,24 @@ zonestatement:
 			free ($3);
 			free ($13);
 			free ($15);
+		}
+		STRING COMMA STRING COMMA NUMBER COMMA STRING COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING CRLF
+		{
+			if (strcasecmp($3, "cert") == 0) { 
+				if (fill_cert(mydb, $1, $3, $5, $7, $9, $11, $13) < 0) {
+					dolog(LOG_ERR, "error in cert\n");
+					return -1;
+				}
+
+			} else {
+				if (debug)
+					printf("another record I don't know about?");
+				return (-1);
+			}
+
+			free ($1);
+			free ($3);
+			free ($13);
 		}
 		| 
 		STRING COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA FLOAT COMMA STRING COMMA NUMBER COMMA NUMBER COMMA FLOAT COMMA STRING COMMA NUMBER COMMA NUMBER COMMA NUMBER COMMA NUMBER CRLF
@@ -2697,6 +2716,84 @@ fill_ipseckey(ddDB *db, char *name, char *type, int myttl, uint8_t precedence, u
 
 
 }
+
+
+int
+fill_cert(ddDB *db, char *name, char *type, int myttl, char *certtype, uint16_t keytag, uint8_t alg, char *certificate)
+{
+	struct rbtree *rbt;
+	struct cert *cert;
+	char *myname, *converted_name;
+	int len, converted_namelen;
+	int i;
+
+	for (i = 0; i < strlen(name); i++) {
+		name[i] = tolower((int)name[i]);
+	}
+
+	converted_name = check_rr(name, type, DNS_TYPE_CERT, &converted_namelen);
+	if (converted_name == NULL) {
+		return -1;
+	}
+
+	if ((cert = calloc(1, sizeof(struct cert))) == NULL) {
+		dolog(LOG_ERR, "calloc: %s\n", strerror(errno));
+		return -1;
+	}
+
+	if (strcasecmp(certtype, "PKIX") == 0) {
+		cert->type = CERT_PKIX;
+	} else if (strcasecmp(certtype, "SPKI") == 0) {
+		cert->type = CERT_SPKI;
+	} else if (strcasecmp(certtype, "PGP") == 0) {
+		cert->type = CERT_PGP;
+	} else if (strcasecmp(certtype, "IPKIX") == 0) {
+		cert->type = CERT_IPKIX;
+	} else if (strcasecmp(certtype, "ISPKI") == 0) {
+		cert->type = CERT_ISPKI;
+	} else if (strcasecmp(certtype, "IPGP") == 0) {
+		cert->type = CERT_IPGP;
+	} else if (strcasecmp(certtype, "ACPKIX") == 0) {
+		cert->type = CERT_ACPKIX;
+	} else if (strcasecmp(certtype, "IACPKIX") == 0) {
+		cert->type = CERT_IACPKIX;
+	} else if (strcasecmp(certtype, "URI") == 0) {
+		cert->type = CERT_URI;
+	} else if (strcasecmp(certtype, "OID") == 0) {
+		cert->type = CERT_OID;
+	} else {
+		cert->type = atoi(certtype);
+	}
+		
+	cert->keytag = keytag;
+	cert->algorithm = alg;
+
+	if (alg != 0) {
+		int ret;
+
+		ret = mybase64_decode(cert, (u_char *)cert->cert, sizeof(cert->cert));
+		if (ret < 0)  {
+			dolog(LOG_INFO, "cert invalid base64\n");
+			return (-1);
+		}
+
+		cert->certlen = ret;
+	} else
+		cert->certlen = 0;
+
+	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_CERT, cert, myttl, 0);
+	if (rbt == NULL) {
+		dolog(LOG_ERR, "create_rr failed\n");
+		return -1;
+	}
+	
+	if (converted_name)
+		free (converted_name);
+
+	
+	return (0);
+}
+
 
 int
 fill_cname(ddDB *db, char *name, char *type, int myttl, char *hostname)

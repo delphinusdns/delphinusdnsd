@@ -122,6 +122,7 @@ int 			param_human2tlv(char *, char *, int *);
 static int 		param_cmp(const void *, const void *);
 static char * 		param_expand(char *, int, int);
 char * 			ipseckey_type(struct ipseckey *);
+char * 			cert_type(struct cert *);
 char * 			input_sanitize(char *);
 void 			safe_fprintf(FILE *, char *, ...);
 size_t 			plength(void *, void *);
@@ -147,6 +148,7 @@ void zonemd_hash_naptr(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_caa(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_mx(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_kx(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
+void zonemd_hash_cert(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_ipseckey(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_tlsa(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
 void zonemd_hash_loc(DDD_SHA512_CTX *, struct rrset *, struct rbtree *);
@@ -193,6 +195,7 @@ extern int		raxfr_eui48(FILE *, u_char *, u_char *, u_char *, struct soa *, uint
 extern int		raxfr_eui64(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int		raxfr_hinfo(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int		raxfr_https(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+extern int		raxfr_cert(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int		raxfr_ipseckey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int		raxfr_kx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 extern int		raxfr_loc(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -259,6 +262,7 @@ struct typetable {
 	{ "HTTPS", DNS_TYPE_HTTPS },
 	{ "KX", DNS_TYPE_KX },
 	{ "IPSECKEY", DNS_TYPE_IPSECKEY },
+	{ "CERT", DNS_TYPE_CERT },
 	{ NULL, 0}
 };
 
@@ -267,6 +271,7 @@ static struct rrtab myrrtab[] =  {
  { "aaaa",      DNS_TYPE_AAAA,		DNS_TYPE_AAAA },
  { "caa",	DNS_TYPE_CAA,		DNS_TYPE_CAA },
  { "cdnskey", 	DNS_TYPE_CDNSKEY,	DNS_TYPE_CDNSKEY },
+ { "cert",	DNS_TYPE_CERT,		DNS_TYPE_CERT },
  { "cds", 	DNS_TYPE_CDS,		DNS_TYPE_CDS },
  { "cname",     DNS_TYPE_CNAME, 	DNS_TYPE_CNAME },
  { "delegate",  DNS_TYPE_NS, 		DNS_TYPE_NS },
@@ -331,6 +336,7 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_KX, 0, raxfr_kx },
 	{ DNS_TYPE_IPSECKEY, 0, raxfr_ipseckey },
 	{ DNS_TYPE_NSEC, 1, raxfr_nsec },
+	{ DNS_TYPE_CERT, 0, raxfr_cert },
 	{ 0, 0, NULL }
 };
 
@@ -4404,6 +4410,88 @@ zonemd_hash_caa(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 }
 
 void
+zonemd_hash_cert(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
+{
+	char *tmpkey;
+        char *q, *r;
+        char **canonsort;
+        struct rr *rrp2 = NULL;
+
+        uint16_t clen;
+        int csort = 0;
+	int i, rlen;
+
+        tmpkey = malloc(10 * 4096);
+        if (tmpkey == NULL) {
+                dolog(LOG_INFO, "tmpkey out of memory\n");
+                return;
+        }
+
+	
+	canonsort = (char **)calloc(MAX_RECORDS_IN_RRSET, sizeof(char *));
+	if (canonsort == NULL) {
+		dolog(LOG_INFO, "canonsort out of memory\n");
+		return;
+	}
+
+	csort = 0;
+
+	TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+		q = tmpkey;
+		pack(q, rbt->zone, rbt->zonelen);
+		q += rbt->zonelen;
+		pack16(q, htons(DNS_TYPE_CERT));
+		q += 2;
+		pack16(q, htons(DNS_CLASS_IN));
+		q += 2;
+		pack32(q, htonl(rrset->ttl));
+		q += 4;
+		pack16(q, htons(5 + ((struct cert *)rrp2->rdata)->certlen));
+		q += 2;
+		pack16(q, htons(((struct cert *)rrp2->rdata)->type));
+		q += 2;
+		pack16(q, htons(((struct cert *)rrp2->rdata)->keytag));
+		q += 2;
+		pack8(q, ((struct cert *)rrp2->rdata)->algorithm);
+		q++;
+
+		if (((struct cert *)rrp2->rdata)->certlen) {
+			memcpy(q, (char *)&((struct cert *)rrp2->rdata)->cert, ((struct cert *)rrp2->rdata)->certlen);
+			q += ((struct cert *)rrp2->rdata)->certlen;
+		}
+
+		r = canonsort[csort] = malloc(68000);
+		if (r == NULL) {
+			dolog(LOG_INFO, "c1 out of memory\n");
+			return;
+		}
+
+		clen = (plength(q, tmpkey));
+		pack16(r, clen);
+		r += 2;
+		pack(r, tmpkey, clen);
+		
+		csort++;
+	}
+
+	r = canonical_sort(canonsort, csort, &rlen);
+	if (r == NULL) {
+		dolog(LOG_INFO, "canonical_sort failed\n");
+		return;
+	}
+
+	delphinusdns_SHA384_Update(ctx, r, rlen);
+
+	free (r);
+	for (i = 0; i < csort; i++) {
+		free(canonsort[i]);
+	}
+
+	free(canonsort);
+	free(tmpkey);
+}
+
+void
 zonemd_hash_ipseckey(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rbt)
 {
 	char *tmpkey;
@@ -6631,6 +6719,50 @@ ipseckey_type(struct ipseckey *ipseckey)
 		convertname = convert_name((char *)&ipseckey->gateway.dnsname,
 					ipseckey->dnsnamelen);
 		strlcpy(ret, convertname, sizeof(ret));
+		break;
+	}
+
+	return (ret);
+}
+
+char *
+cert_type(struct cert *cert)
+{
+	static char ret[DNS_MAXNAME + 1];
+
+	switch (cert->type) {
+	case CERT_PKIX:
+		strlcpy(ret, "PKIX", sizeof(ret));
+		break;
+	case CERT_SPKI:
+		strlcpy(ret, "SPKI", sizeof(ret));
+		break;
+	case CERT_PGP:	
+		strlcpy(ret, "PGP", sizeof(ret));
+		break;
+	case CERT_IPKIX:
+		strlcpy(ret, "IPKIX", sizeof(ret));
+		break;
+	case CERT_ISPKI:
+		strlcpy(ret, "ISPKI", sizeof(ret));
+		break;
+	case CERT_IPGP:
+		strlcpy(ret, "IPGP", sizeof(ret));
+		break;
+	case CERT_ACPKIX:
+		strlcpy(ret, "ACPKIX", sizeof(ret));
+		break;
+	case CERT_IACPKIX:
+		strlcpy(ret, "IACPKIX", sizeof(ret));
+		break;
+	case CERT_URI:
+		strlcpy(ret, "URI", sizeof(ret));
+		break;
+	case CERT_OID:
+		strlcpy(ret, "OID", sizeof(ret));
+		break;
+	default:
+		snprintf(ret, sizeof(ret), "%u", cert->type);
 		break;
 	}
 

@@ -147,6 +147,7 @@ extern char *			convert_name(char *, int);
 extern char *			dns_label(char *, int *);
 extern char *			hash_name(char *, int, struct nsec3param *);
 extern char *			ipseckey_type(struct ipseckey *);
+extern char *			cert_type(struct cert *);
 extern char *			param_tlv2human(char *, int, int);
 extern char *			get_dns_type(int, int);
 extern ddDB *			dddbopen(void);
@@ -1145,6 +1146,23 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 				((struct ipseckey *)rrp2->rdata)->gwtype,
 				((struct ipseckey *)rrp2->rdata)->alg,
 				ipseckey_type((struct ipseckey *)rrp2->rdata),
+				buf);
+		}
+	}
+	if ((rrset = find_rr(rbt, DNS_TYPE_CERT)) != NULL) {
+		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
+			dolog(LOG_INFO, "no cert RR in zone!\n");
+			return -1;
+		}
+		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
+			len = mybase64_encode((const u_char *)((struct cert *)rrp2->rdata)->cert, ((struct cert *)rrp2->rdata)->certlen, buf, sizeof(buf));
+			buf[len] = '\0';
+			fprintf(of, "%s %d IN CERT %s %u %u %s\n", 
+				convert_name(rbt->zone, rbt->zonelen),
+				rrset->ttl, 
+				cert_type((struct cert *)rrp2->rdata),
+				((struct cert *)rrp2->rdata)->keytag,
+				((struct cert *)rrp2->rdata)->algorithm,
 				buf);
 		}
 	}

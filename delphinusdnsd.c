@@ -221,6 +221,7 @@ extern int 			reply_eui48(struct sreply *, int *, ddDB *);
 extern int 			reply_eui64(struct sreply *, int *, ddDB *);
 extern int 			reply_fmterror(struct sreply *, int *, ddDB *);
 extern int 			reply_ipseckey(struct sreply *, int *, ddDB *);
+extern int 			reply_cert(struct sreply *, int *, ddDB *);
 extern int 			reply_kx(struct sreply *, int *, ddDB *);
 extern int 			reply_mx(struct sreply *, int *, ddDB *);
 extern int 			reply_naptr(struct sreply *, int *, ddDB *);
@@ -336,6 +337,8 @@ struct reply_logic rlogic[] = {
 	{ DNS_TYPE_KX, DNS_TYPE_KX, BUILD_OTHER, reply_kx },
 	{ DNS_TYPE_IPSECKEY, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
 	{ DNS_TYPE_IPSECKEY, DNS_TYPE_IPSECKEY, BUILD_OTHER, reply_ipseckey },
+	{ DNS_TYPE_CERT, DNS_TYPE_CNAME, BUILD_CNAME, reply_cname },
+	{ DNS_TYPE_CERT, DNS_TYPE_CERT, BUILD_OTHER, reply_cert },
 	{ 0, 0, 0, NULL }
 };
 

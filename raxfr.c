@@ -98,6 +98,7 @@ int raxfr_mx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_H
 int raxfr_nsec(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_kx(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_ipseckey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
+int raxfr_cert(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_txt(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_dnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
 int raxfr_cdnskey(FILE *, u_char *, u_char *, u_char *, struct soa *, uint16_t, DDD_HMAC_CTX *);
@@ -176,6 +177,7 @@ extern void 	unpack(char *, char *, int);
 extern int		dn_contains(char *, int, char *, int);
 extern char *		param_tlv2human(char *, int, int);
 extern char * 		ipseckey_type(struct ipseckey *);
+extern char * 		cert_type(struct cert *);
 extern void 		safe_fprintf(FILE *, char *, ...);
 extern size_t		plength(void *, void *);
 extern u_int		nowrap_dec(u_int, u_int);
@@ -222,6 +224,7 @@ static struct raxfr_logic supported[] = {
 	{ DNS_TYPE_HTTPS, 0, raxfr_https },
 	{ DNS_TYPE_KX, 0, raxfr_kx },
 	{ DNS_TYPE_IPSECKEY, 0, raxfr_ipseckey },
+	{ DNS_TYPE_CERT, 0, raxfr_cert },
 	{ 0, 0, NULL }
 };
 
@@ -933,6 +936,64 @@ raxfr_ipseckey(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *myso
 	if (f != NULL) {
 		safe_fprintf(f, "%u,%u,%u,\"%s\",\"%s\"\n", ipk.precedence, ipk.gwtype,
 			ipk.alg, ipseckey_type(&ipk), b);
+	}
+
+	free(b);
+
+	if (ctx != NULL)
+		delphinusdns_HMAC_Update(ctx, q, plength(p, q));
+
+	return (plength(p, estart));
+}
+
+int 
+raxfr_cert(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, uint16_t rdlen, DDD_HMAC_CTX *ctx)
+{
+	struct cert certificate;
+	uint16_t tmpshort;
+	char *b;
+	u_char *q = p;
+	int len, remainlen;
+
+	BOUNDS_CHECK((p + 2), q, rdlen, end);
+	tmpshort = unpack16((char *)p);
+	certificate.type = ntohs(tmpshort);
+	p += 2;
+	
+	BOUNDS_CHECK((p + 2), q, rdlen, end);
+	tmpshort = unpack16((char *)p); 
+	certificate.keytag = ntohs(tmpshort);
+	p += 2;
+
+	BOUNDS_CHECK((p + 1), q, rdlen, end);
+	certificate.algorithm = *p++;
+	
+	remainlen = rdlen - (plength(p, q));
+	if (remainlen < 0 || remainlen > sizeof(certificate.cert)) {
+		dolog(LOG_ERR, "cert length out of range\n");
+		return -1;
+	}
+
+	certificate.certlen = remainlen;
+	memcpy(&certificate.cert, p, remainlen);
+	p += remainlen;
+
+	b = malloc(remainlen * 2);
+	if (b == NULL) {
+		return -1;
+	}
+
+	if ((len = mybase64_encode((const u_char *)certificate.cert, 
+		certificate.certlen, b, remainlen * 2)) < 0) {
+		free(b);
+		return -1;
+	}
+
+	b[len] = '\0';
+
+	if (f != NULL) {
+		safe_fprintf(f, "%s,%u,%u,\"%s\"\n", cert_type(&certificate),
+			certificate.keytag, certificate.algorithm, b);
 	}
 
 	free(b);
