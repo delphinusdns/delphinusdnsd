@@ -906,6 +906,17 @@ check_qtype(struct rbtree *rbt, uint16_t type, int nxdomain, int *error)
 
 		*error = -1;
 		return 0;
+	case DNS_TYPE_CERT:
+		if (find_rr(rbt, DNS_TYPE_CERT) != NULL) {
+			returnval = DNS_TYPE_CERT;
+			break;
+		} else if (find_rr(rbt, DNS_TYPE_CNAME) != NULL) {
+			returnval = DNS_TYPE_CERT;
+			break;
+		}
+
+		*error = -1;
+		return 0;
 	case DNS_TYPE_IPSECKEY:
 		if (find_rr(rbt, DNS_TYPE_IPSECKEY) != NULL) {
 			returnval = DNS_TYPE_IPSECKEY;
