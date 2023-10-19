@@ -4530,7 +4530,7 @@ zonemd_hash_ipseckey(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rb
 		q += 2;
 		pack32(q, htonl(rrset->ttl));
 		q += 4;
-		pack16(q, htons(2 + ((struct kx *)rrp2->rdata)->exchangelen));
+		pack16(q, htons(2 + ((struct ipseckey *)rrp2->rdata)->dnsnamelen + ((struct ipseckey *)rrp2->rdata)->keylen));
 		q += 2;
 
 		pack8(q, ((struct ipseckey *)rrp2->rdata)->precedence);
@@ -4561,7 +4561,7 @@ zonemd_hash_ipseckey(DDD_SHA512_CTX *ctx, struct rrset *rrset, struct rbtree *rb
 		}
 
 		memcpy(q, ((struct ipseckey *)rrp2->rdata)->key, ((struct ipseckey *)rrp2->rdata)->keylen);
-		q += ((struct kx *)rrp2->rdata)->exchangelen;
+		q += ((struct ipseckey *)rrp2->rdata)->keylen;
 		
 		r = canonsort[csort] = malloc(68000);
 		if (r == NULL) {
