@@ -979,6 +979,7 @@ zonestatement:
 			free ($13);
 			free ($15);
 		}
+		|
 		STRING COMMA STRING COMMA NUMBER COMMA STRING COMMA NUMBER COMMA NUMBER COMMA QUOTEDSTRING CRLF
 		{
 			if (strcasecmp($3, "cert") == 0) { 
@@ -1042,7 +1043,7 @@ zonestatement:
 #endif
 			} else if (strcasecmp($3, "zonemd") == 0) { 
 				int hexlen;
-				char tmpbuf[4096];
+				char tmpbuf[DIGEST_LENGTH];
 
 				hexlen = hex2bin($13, strlen($13), tmpbuf);
 				if (fill_zonemd(mydb, $1, $3, $5, $7, $9, $11, tmpbuf, hexlen) < 0) {
@@ -2217,7 +2218,7 @@ int
 yylex(void) 
 {
 	struct tab *p;
-	static char buf[4096];
+	static char buf[DIGEST_LENGTH];
 	static char dst[INET6_ADDRSTRLEN];
 	char *cp = NULL;
 	int c, cpos;
@@ -2723,9 +2724,9 @@ fill_cert(ddDB *db, char *name, char *type, int myttl, char *certtype, uint16_t 
 {
 	struct rbtree *rbt;
 	struct cert *cert;
-	char *myname, *converted_name;
-	int len, converted_namelen;
-	int i;
+	char *converted_name;
+	int converted_namelen;
+	int i, ret;
 
 	for (i = 0; i < strlen(name); i++) {
 		name[i] = tolower((int)name[i]);
@@ -2768,18 +2769,13 @@ fill_cert(ddDB *db, char *name, char *type, int myttl, char *certtype, uint16_t 
 	cert->keytag = keytag;
 	cert->algorithm = alg;
 
-	if (alg != 0) {
-		int ret;
+	ret = mybase64_decode(certificate, (u_char *)cert->cert, sizeof(cert->cert));
+	if (ret < 0)  {
+		dolog(LOG_INFO, "cert invalid base64\n");
+		return (-1);
+	}
 
-		ret = mybase64_decode(cert, (u_char *)cert->cert, sizeof(cert->cert));
-		if (ret < 0)  {
-			dolog(LOG_INFO, "cert invalid base64\n");
-			return (-1);
-		}
-
-		cert->certlen = ret;
-	} else
-		cert->certlen = 0;
+	cert->certlen = ret;
 
 	rbt = create_rr(db, converted_name, converted_namelen, DNS_TYPE_CERT, cert, myttl, 0);
 	if (rbt == NULL) {

@@ -1157,7 +1157,7 @@ print_rbt_bind(FILE *of, struct rbtree *rbt)
 		TAILQ_FOREACH(rrp2, &rrset->rr_head, entries) {
 			len = mybase64_encode((const u_char *)((struct cert *)rrp2->rdata)->cert, ((struct cert *)rrp2->rdata)->certlen, buf, sizeof(buf));
 			buf[len] = '\0';
-			fprintf(of, "%s %d IN CERT %s %u %u %s\n", 
+			fprintf(of, "%s %d IN CERT (%s %u %u %s)\n", 
 				convert_name(rbt->zone, rbt->zonelen),
 				rrset->ttl, 
 				cert_type((struct cert *)rrp2->rdata),

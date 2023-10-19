@@ -23,7 +23,7 @@
  * of these structs are usually pack()'ed on the wire buffer and sent out.
  */
 
-#define DIGEST_LENGTH		4096	/* crypt or digest length maximally */
+#define DIGEST_LENGTH		8192	/* crypt or digest length maximally */
 #define BITMAP_LENGTH		8192	/* full bitmap covering 65536 bits */
 
 /* A RR - 	RFC 1035 */

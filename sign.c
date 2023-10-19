@@ -7846,7 +7846,7 @@ sign_cert(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmeth
 		len = mybase64_encode((const u_char *)signature, siglen, tmp, sizeof(tmp));
 		tmp[len] = '\0';
 
-		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "IPSECKEY", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
+		if (fill_rrsig(db, rbt->humanname, "RRSIG", rrset->ttl, "CERT", algorithm, labels, rrset->ttl, expiredon, signedon, keyid, zonename, tmp) < 0) {
 			dolog(LOG_INFO, "fill_rrsig\n");
 			return -1;
 		}
