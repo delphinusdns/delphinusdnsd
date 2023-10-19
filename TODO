@@ -38,7 +38,7 @@ the "inet" pledge.
 	yet nonexist.delphinusdns.org (see same dnsviz) works. [DONE]
 - add OPENPGPKEY RR (RFC 7929 (experimental))
 - add SMIMEA RR (RFC 8162 - (experimental based on TLSA RR))
-- add CERT RR (RFC 4398 (standard))
+- add CERT RR (RFC 4398 (standard))			[DONE]
 
 
 For 1.7.0 release
