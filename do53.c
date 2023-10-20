@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2022-2023 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -100,6 +100,7 @@ extern int 		reply_notimpl(struct sreply *, int *, ddDB *);
 extern int 		reply_ns(struct sreply *, int *, ddDB *);
 extern int 		reply_nxdomain(struct sreply *, int *, ddDB *);
 extern int 		reply_refused(struct sreply *, int *, ddDB *, int);
+extern int 		reply_truncate(struct sreply *, int *, ddDB *, int);
 extern int 		reply_version(struct sreply *, int *, ddDB *);
 extern int 		send_to_parser(struct cfg *, struct imsgbuf *, char *, int, struct parsequestion *);
 extern int 		tsigpassname_contains(char *, int, int *);
@@ -808,8 +809,8 @@ axfrentry:
 				}
 
 				if (ratelimit && rcheck) {
-					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) ratelimit policy dropping packet\n", so, cfg->ident[i], address, received_ttl, aregion);
-					goto drop;
+					dolog(LOG_INFO, "UDP connection refused on descriptor %u interface \"%s\" from %s (ttl=%d, region=%d) ratelimit policy sending truncate\n", so, cfg->ident[i], address, received_ttl, aregion);
+					goto truncate;
 				}
 				/*
 				 * before we parse the message, check our
@@ -1370,9 +1371,9 @@ forwardudp:
 
 			}	/* END ISSET */
 
-		} /* for */
+		}
 
-	drop:
+drop:
 		
 		if (rbt0) {	
 			rbt0 = NULL;
@@ -1383,6 +1384,20 @@ forwardudp:
 		}
 
 		continue;
+
+truncate:
+		build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf, NULL);
+		slen = reply_truncate(&sreply, &sretlen, NULL, 0);
+
+		if (rbt0) {	
+			rbt0 = NULL;
+		}
+
+		if (rbt1) {
+			rbt1 = NULL;
+		}
+		continue;
+
 	}  /* for (;;) */
 
 	/* NOTREACHED */

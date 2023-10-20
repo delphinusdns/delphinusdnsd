@@ -150,6 +150,7 @@ int		reply_loc(struct sreply *, int *, ddDB *);
 int 		reply_cname(struct sreply *, int *, ddDB *);
 int 		reply_any(struct sreply *, int *, ddDB *);
 int 		reply_refused(struct sreply *, int *, ddDB *, int);
+int 		reply_truncate(struct sreply *, int *, ddDB *, int);
 int 		reply_fmterror(struct sreply *, int *, ddDB *);
 int 		reply_notauth(struct sreply *, int *, ddDB *);
 int		reply_notify(struct sreply *, int *, ddDB *);
@@ -7502,6 +7503,74 @@ reply_refused(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
 
 	return (reply_sendpacket(reply, outlen, sreply, sretlen));
 }
+
+/* 
+ * REPLY_TRUNCATE() - replies a DNS question (*q) on socket (so)
+ *
+ */
+
+int
+reply_truncate(struct sreply *sreply, int *sretlen, ddDB *db, int haveq)
+{
+	char *reply = sreply->replybuf;
+	struct dns_header *odh;
+	uint16_t outlen = 0;
+
+	int len = sreply->len;
+	char *buf = sreply->buf;
+	int istcp = sreply->istcp;
+	int replysize = 512;
+	int retlen = -1;
+
+	struct question *q = sreply->q;
+
+	if (istcp) {
+		replysize = 65535;
+	}
+
+	memset(reply, 0, replysize);
+
+	odh = (struct dns_header *)&reply[0];
+
+	if (len > replysize) {
+		return (retlen);
+	}
+
+
+	if (haveq) {
+		memcpy(&reply[0], buf, sizeof(struct dns_header) + q->hdr->namelen + 4);
+		outlen += (sizeof(struct dns_header) + q->hdr->namelen + 4); 
+	} else {
+		memcpy(&reply[0], buf, len);
+		outlen += len;
+	}
+
+	memset((char *)&odh->query, 0, sizeof(uint16_t));
+	NTOHS(odh->query);
+	SET_DNS_TRUNCATION(odh);
+	HTONS(odh->query);
+
+	odh->answer = 0;			/* reset any answers */
+	odh->nsrr = 0;				/* reset any authoritave */
+
+	if (haveq)
+		set_reply_flags(NULL, odh, q);
+	else
+		odh->question = htons(1);
+
+	if (haveq && q->edns0len) {
+		/* tag on edns0 opt record */
+		odh->additional = htons(1);
+
+		if (q->edns0len > 512)
+			replysize = MIN(q->edns0len, max_udp_payload);
+
+		outlen = additional_opt(q, reply, replysize, outlen, sreply->sa, sreply->salen, (sreply->ctx == NULL || 1024 - outlen < 0) ? 0 :  (1024 - outlen));
+	}
+
+	return (reply_sendpacket(reply, outlen, sreply, sretlen));
+}
+
 
 /* 
  * REPLY_NOTAUTH() - replies a DNS question (*q) on socket (so)
