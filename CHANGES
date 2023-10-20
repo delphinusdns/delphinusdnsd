@@ -23,6 +23,8 @@ keep a minimal pledge of "stdio recvfd ..."
 - change the algorithm for ratelimit minutely saving 15 MB or 30% memory
   footprint on a setup with a ratelimit of 23.
 - implemented CERT RR (RFC 4398) support
+- in the UDP engine reply truncate (TC) on ratelimit violation instead of
+  dropping the packet
 
 
 [2022] Changes in RELEASE_1_7 from RELEASE_1_6
