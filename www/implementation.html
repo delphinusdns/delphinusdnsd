@@ -473,8 +473,7 @@ may serialize all operations around the lock.
 This is a sort of cache which skips the entire parsing of packets (copying
 between 2 processes back and forth), deciding on what to answer, and writing
 out the reply via socket.  It will just answer what a similar query did before
-it (up to 10 different times, round-robin).  This is called on wikipedia
-<a href="https://en.wikipedia.org/wiki/Memoization">memoization</a> and we
+it (up to 10 different times, round-robin).  This is called memoization and we
 get speedups of 8-9 times of what it normally takes (on one particular host).
 In the git logs I may have called this the query cache, before being unknowing
 of the memoizatoin term.  ''Also the way that DNS was designed (RFC 1035) it had

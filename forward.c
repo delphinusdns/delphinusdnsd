@@ -1072,7 +1072,6 @@ forwardthis(ddDB *db, struct cfg *cfg, int so, struct sforward *sforward)
 				}
 
 				if (rl->rrtype == 0) {
-					/* https://en.wikipedia.org/wiki/List_of_DNS_record_types */
 					switch (q->hdr->qtype) {
 						/* FALLTHROUGH for all listed */
 					case 18: /* AFSDB */ case 42: /* APL */ case 257: /* CAA */

@@ -61,8 +61,6 @@ program, then you can fork DelphinusDNS and make your own creation, or you
 can send patches to the author who may implement them into the code.  The
 current contact mail address is pbug44@delphinusdns.org.
 
-* https://en.wikipedia.org/wiki/Attack_surface
-
 3. INSTALL HINTS
 ----------------
 
@@ -270,12 +268,10 @@ support the methods described per RFC?
 -----------------------
 
 In terms of RR support there is only a few missing by now from the generally
-acceptable list of RR's (as taken from
-https://en.wikipedia.org/wiki/List_of_DNS_record_types#/media/File:All_active_dns_record_types.png)
+acceptable list of RR's
 
 a) AFSDB(18) - andrew file system db record
 b) APL(42) - Address prefix list record
-c) CERT(37) - certificate record
 d) CSYNC(62) - child to parent synchronization
 e) DHCID(49) - DHCP identifier
 f) DLV(32769) - DNSSEC Lookaside Validation record
