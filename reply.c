@@ -105,7 +105,8 @@ extern struct rbtree *		Lookup_zone(ddDB *, char *, uint16_t, uint16_t, int);
 extern int 			dn_contains(char *, int, char *, int);
 extern struct zoneentry *	zone_findzone(struct rbtree *);
 extern struct rbtree * find_closest_encloser_nsec3(char *, int, struct rbtree *, ddDB *);
-extern size_t plength(void *, void *);
+extern size_t 		plength(void *, void *);
+extern char *		convert_name(char *, int);
 
 
 uint16_t 	create_anyreply(struct sreply *, char *, int, int, int, uint32_t, uint);
@@ -4663,8 +4664,14 @@ again:
 		/* recursive cnames grrr */
 		for (;;) {
 			rbt = find_rrset(db, label, labellen);
-			if (rbt == NULL)
-				break;
+			if (rbt == NULL) {
+				char *tmp;
+
+				tmp = convert_name(label, labellen);
+				dolog(LOG_INFO, "failure in finding \"%s\" in db\n", tmp);
+				free (tmp);
+				return -1;
+			}
 			
 			if ((rrset = find_rr(rbt, DNS_TYPE_CNAME)) == NULL)
 				break;
@@ -4676,8 +4683,10 @@ again:
 			goto again;	/* I know wheee jump all over */
 		};
 
-		if (rbt == NULL)
-			break;
+		if (rbt == NULL) {
+			dolog(LOG_INFO, "%s rbt == NULL\n", __func__);
+			return -1;
+		}
 		
 		if (ntohs(origtype) == DNS_TYPE_A) {
 			i = additional_a2(label, labellen, rbt, reply, \
