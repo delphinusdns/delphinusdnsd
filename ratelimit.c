@@ -86,7 +86,7 @@ rrlimit_setup(int size)
 		exit(1);
 	}
 
-	memset(ptr, 0, size);
+	arc4random_buf(ptr, size);
 
 	return (ptr);
 }
