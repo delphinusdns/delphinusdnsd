@@ -244,7 +244,7 @@ add_rrlimit(int size, uint16_t *ip, int sizeip, char *rrlimit_ptr, uint8_t ttl)
 	offset = rl->pointer;
 
 	offset--;
-	if (offset < 0)
+	if (offset < 0 || offset > size)
 		offset = size - 1;
 
 	now = time(NULL);
