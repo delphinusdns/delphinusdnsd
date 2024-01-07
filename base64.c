@@ -129,11 +129,7 @@ int mybase64_decode(char const *, u_char *, size_t);
    */
 
 int
-mybase64_encode(src, srclength, target, targsize)
-	u_char const *src;
-	size_t srclength;
-	char *target;
-	size_t targsize;
+mybase64_encode(u_char const *src, size_t srclength, char *target, size_t targsize)
 {
 	size_t datalength = 0;
 	u_char input[3];
@@ -193,10 +189,7 @@ mybase64_encode(src, srclength, target, targsize)
  */
 
 int
-mybase64_decode(src, target, targsize)
-	char const *src;
-	u_char *target;
-	size_t targsize;
+mybase64_decode(char const *src, u_char *target, size_t targsize)
 {
 	int tarindex, state, ch;
 	u_char nextbyte;
