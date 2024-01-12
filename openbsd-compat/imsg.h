@@ -19,7 +19,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef __OpenBSD___
 #ifndef _IMSG_H_
 #define _IMSG_H_
 
@@ -157,4 +156,3 @@ int	 imsg_flush(struct imsgbuf *);
 void	 imsg_clear(struct imsgbuf *);
 
 #endif
-#endif /* __OpenBSD___ */
