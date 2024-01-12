@@ -1,6 +1,6 @@
 CC=gcc
 #CFLAGS=-DDEBUG
-CFLAGS=-D_XOPEN_SOURCE -D_DEFAULT_SOURCE -Wno-shift-count-overflow -DUSE_OPENSSL -I /usr/local/include -L /usr/local/lib
+CFLAGS=-D_XOPEN_SOURCE -D_DEFAULT_SOURCE -Wno-shift-count-overflow -DUSE_OPENSSL -I /usr/local/include -L /usr/local/lib -Iopenbsd-compat
 LDADD= -lresolv -lcrypto -lrt -lbsd -ltls
 YACC=bison
 AR=ar
@@ -8,11 +8,11 @@ AR=ar
 
 all: delphinusdnsd dddctl
 
-delphinusdnsd: imsg-buffer.o imsg.o additional.o parse.o delphinusdnsd.o do53.o do53t.o dot.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o crypto.o
-	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o imsg-buffer.o imsg.o delphinusdnsd.o do53.o do53t.o dot.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o crypto.o $(LDADD)
+delphinusdnsd: openbsd-compat/imsg-buffer.o openbsd-compat/imsg.o additional.o parse.o delphinusdnsd.o do53.o do53t.o dot.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o crypto.o
+	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o openbsd-compat/imsg-buffer.o openbsd-compat/imsg.o delphinusdnsd.o do53.o do53t.o dot.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o crypto.o $(LDADD)
 
-dddctl:  dddctl.o util.o dnssec.o parse.o base64.o ent.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o crypto.o
-	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o imsg-buffer.o imsg.o sign.o query.o crypto.o $(LDADD)
+dddctl:  dddctl.o util.o dnssec.o parse.o base64.o ent.o raxfr.o tsig.o region.o openbsd-compat/imsg-buffer.o openbsd-compat/imsg.o sign.o query.o crypto.o
+	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o openbsd-compat/imsg-buffer.o openbsd-compat/imsg.o sign.o query.o crypto.o $(LDADD)
 	
 
 crypto.o: crypto.o
@@ -24,11 +24,11 @@ sign.o: sign.c
 query.o: query.c
 	$(CC) $(CFLAGS) -c query.c
 	
-imsg-buffer.o: imsg-buffer.c
-	$(CC) $(CFLAGS) -c imsg-buffer.c
+imsg-buffer.o: openbsd-compat/imsg-buffer.c
+	$(CC) $(CFLAGS) -c openbsd-compat/imsg-buffer.c
 
-imsg.o: imsg.c
-	$(CC) $(CFLAGS) -c imsg.c
+imsg.o: openbsd-compat/imsg.c
+	$(CC) $(CFLAGS) -c openbsd-compat/imsg.c
 
 db.o: db.c
 	$(CC) $(CFLAGS) -c db.c
