@@ -12,7 +12,7 @@ delphinusdnsd: openbsd-compat/imsg-buffer.o openbsd-compat/imsg.o openbsd-compat
 	$(CC) $(CFLAGS) -o delphinusdnsd/delphinusdnsd additional.o openbsd-compat/imsg-buffer.o openbsd-compat/imsg.o openbsd-compat/getdtablecount.o openbsd-compat/getdtablesize.o delphinusdnsd.o do53.o do53t.o dot.o parse.o reply.o region.o log.o axfr.o filter.o ratelimit.o passname.o passlist.o base64.o dnssec.o util.o ent.o db.o tsig.o raxfr.o forward.o cache.o zone.o siphash.o crypto.o $(LDADD)
 
 dddctl:  dddctl.o util.o dnssec.o parse.o base64.o ent.o raxfr.o tsig.o region.o openbsd-compat/imsg-buffer.o openbsd-compat/imsg.o sign.o query.o crypto.o
-	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o openbsd-compat/imsg-buffer.o openbsd-compat/imsg.o sign.o query.o crypto.o $(LDADD)
+	$(CC) $(CFLAGS) -o dddctl/dddctl dddctl.o util.o dnssec.o base64.o parse.o ent.o db.o raxfr.o tsig.o region.o openbsd-compat/imsg-buffer.o openbsd-compat/imsg.o openbsd-compat/getdtablecount.o openbsd-compat/getdtablesize.o sign.o query.o crypto.o $(LDADD)
 	
 
 crypto.o: crypto.o
@@ -33,7 +33,7 @@ imsg.o: openbsd-compat/imsg.c
 getdtablecount.o: openbsd-compat/getdtablecount.c
 	$(CC) $(CFLAGS) -c openbsd-compat/getdtablecount.c
 
-getdtablesize.o: openbsd-compat/getdtablesizet.c
+getdtablesize.o: openbsd-compat/getdtablesize.c
 	$(CC) $(CFLAGS) -c openbsd-compat/getdtablesize.c
 
 db.o: db.c
