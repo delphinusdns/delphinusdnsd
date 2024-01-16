@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd March 24, 2023
+.Dd January 16, 2024
 .Dt DELPHINUSDNS.ZONE 5
 .Os 
 .Sh NAME
@@ -80,6 +80,11 @@ CDNSKEY Resource Record
 CDS Resource Record
 .Bd -literal
 	delphinusdns.org,cds,86400,59385,13,2,"07B5A3F59E461A075FDA284D431F780909595A9"
+.Ed
+.Pp
+CERT Resource Record
+.Bd -literal
+	cert.delphinusdns.org,cert,86400,PGP,0,0,"AQNRU3mG7TVTO2BkR47usntb102uFJtugbo6BSGvgqt4AQ=="
 .Ed
 .Pp
 CNAME Resource Record
@@ -145,6 +150,11 @@ NAPTR Resource Record
 NS Resource Record
 .Bd -literal
 	delphinusdns.org,ns,86400,ns1.delphinusdns.org
+.Ed
+.Pp
+NSEC Resource Record (usually created with dddctl sign)
+.Bd -literal
+	nsec.delphinusdns.org.,nsec,86400,next.domain.name.,"AAAA RRSIG"
 .Ed
 .Pp
 NSEC3 Resource Record (usually automatically created with dddctl sign)
