@@ -1002,7 +1002,7 @@ sshfp(int argc, char *argv[])
 int
 dump_db_bind(ddDB *db, FILE *of, char *zonename)
 {
-	int j, rs;
+	int rs;
 
         ddDBT key, data;
 	
@@ -1031,7 +1031,6 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 	memset(&key, 0, sizeof(key));   
 	memset(&data, 0, sizeof(data));
 
-	j = 0;
 	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 		rs = n->datalen;
 		if ((rbt0 = calloc(1, rs)) == NULL) {
@@ -1050,14 +1049,7 @@ dump_db_bind(ddDB *db, FILE *of, char *zonename)
 			fprintf(stderr, "print_rbt_bind error\n");
 			return -1;
 		}
-
-
-		j++;
 	} 
-
-#if DEBUG
-	printf("%d records\n", j);
-#endif
 
 	return (0);
 }

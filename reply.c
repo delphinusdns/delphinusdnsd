@@ -8231,9 +8231,8 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	int a_count, aaaa_count, ns_count, mx_count, srv_count, sshfp_count;
 	int txt_count, kx_count, ipseckey_count, cert_count;
 	int tlsa_count, typelen, zonemd_count;
-	int ds_count, dnskey_count;
+	int dnskey_count;
 	int naptr_count, rrsig_count;
-	int caa_count, rp_count, hinfo_count;
 	int eui48_count, eui64_count;
 	int https_count, svcb_count;
 	int tmplen;
@@ -8689,8 +8688,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		HTONS(odh->answer);
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_HINFO)) != 0) {
-		hinfo_count = 0;
-
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 			if (rrp->zonenumber != zonenumberx)
 				continue;
@@ -8737,8 +8734,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
-			hinfo_count++;
-
 			NTOHS(odh->answer);
 			odh->answer += 1;
 			HTONS(odh->answer);
@@ -8746,8 +8741,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		} 
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_LOC)) != 0) {
-		int loc_count = 0;
-
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 			if (rrp->zonenumber != zonenumberx)
 				continue;
@@ -8800,8 +8793,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
-			loc_count++;
-
 			NTOHS(odh->answer);
 			odh->answer += 1;
 			HTONS(odh->answer);
@@ -8809,8 +8800,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		} 
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_RP)) != 0) {
-		rp_count = 0;
-
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 			if (rrp->zonenumber != zonenumberx)
 				continue;
@@ -8854,8 +8843,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
-			rp_count++;
-
 			NTOHS(odh->answer);
 			odh->answer += 1;
 			HTONS(odh->answer);
@@ -8863,8 +8850,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		} 
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_CAA)) != 0) {
-		caa_count = 0;
-
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 			if (rrp->zonenumber != zonenumberx)
 				continue;
@@ -8910,8 +8895,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
-			caa_count++;
-
 			NTOHS(odh->answer);
 			odh->answer += 1;
 			HTONS(odh->answer);
@@ -8919,8 +8902,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		} 
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_CDS)) != 0) {
-		int cds_count = 0;
-
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 			if (rrp->zonenumber != zonenumberx)
 				continue;
@@ -8972,8 +8953,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 
 			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
 
-			cds_count++;
-
 			NTOHS(odh->answer);
 			odh->answer += 1;
 			HTONS(odh->answer);
@@ -8981,8 +8960,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 		} 
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != 0) {
-		ds_count = 0;
-
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
 #if 0
 			if (rrp->zonenumber != zonenumberx)
@@ -9035,8 +9012,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 			offset += ((struct ds *)rrp->rdata)->digestlen;
 
 			answer->rdlength = htons(plength(&reply[offset], answer->rdata));
-
-			ds_count++;
 
 			NTOHS(odh->answer);
 			odh->answer += 1;

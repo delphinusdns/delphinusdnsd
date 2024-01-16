@@ -2472,14 +2472,14 @@ yylex(void)
 int
 get_quotedstring(char *buf, int n)
 {
-	int i, c;
+	int c;
 	int stack = 0;
 	char *cs;
 
 	explicit_bzero(buf, n);
 	cs = buf;
 
-	for (i = 0; --n > 0; ++i) {
+	for (; --n > 0;) {
 		c = lgetc(0);
 		if (c == '\n') {
 			*cs = '\0';
@@ -2513,12 +2513,12 @@ get_quotedstring(char *buf, int n)
 int
 get_string(char *buf, int n)
 {
-	int i, c;
+	int c;
 	char *cs;
 
 	cs = buf;
 
-	for (i = 0; --n > 0; ++i) {
+	for (; --n > 0;) {
 		c = lgetc(0);
 		if (c == '\n' || c == ' ' || c == ',' || c == ';' || ! (isprint(c) || c == '-' || c == '_')) {
 			*cs = '\0';
@@ -2548,12 +2548,12 @@ lookup(struct tab *cmdtab, char *keyword)
 int
 get_ip(char *buf, int n)
 {
-	int i, c;
+	int c;
 	char *cs;
 
 	cs = buf;
 
-	for (i = 0; --n > 0; ++i) {
+	for (; --n > 0;) {
 		c = lgetc(0);
 		if (c == ',' || c == '\n' || ! (isalnum(c) || c == '/' || c == ':' || c == '.')) {
 			*cs = '\0';

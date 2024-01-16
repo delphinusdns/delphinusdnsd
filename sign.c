@@ -520,8 +520,6 @@ signmain(int argc, char *argv[])
 	int ksk_key = 0, zsk_key = 0;
 	int numkeys = 0, search = 0;
 
-	int numksk = 0, numzsk = 0;
-
 	uint32_t pid = -1, newpid;
 
 	char key_key[4096];
@@ -654,8 +652,6 @@ signmain(int argc, char *argv[])
 
 			SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 			numkeys++;
-			numksk++;
-
 			break;
 
 		case 'M':
@@ -820,7 +816,6 @@ signmain(int argc, char *argv[])
 
 			SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 			numkeys++;
-			numzsk++;
 
 			break;
 		}
@@ -883,7 +878,6 @@ signmain(int argc, char *argv[])
 
 		SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 		numkeys++;
-		numksk++;
 	}
 	if (create_zsk) {
 		kn = malloc(sizeof(struct keysentry));
@@ -934,7 +928,6 @@ signmain(int argc, char *argv[])
 
 		SLIST_INSERT_HEAD(&keyshead, kn, keys_entry);
 		numkeys++;
-		numzsk++;
 	}
 
 	if (zonefile == NULL || zonename == NULL) {
@@ -1240,7 +1233,7 @@ parse_keyfile(int fd, uint32_t *ttl, uint16_t *flags, uint8_t *protocol, uint8_t
 int
 dump_db(ddDB *db, FILE *of, char *zonename)
 {
-	int j, rs;
+	int rs;
 
         ddDBT key, data;
 	
@@ -1271,7 +1264,6 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 	memset(&key, 0, sizeof(key));   
 	memset(&data, 0, sizeof(data));
 
-	j = 0;
 	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 		rs = n->datalen;
 		if ((rbt = calloc(1, rs)) == NULL) {
@@ -1291,14 +1283,10 @@ dump_db(ddDB *db, FILE *of, char *zonename)
 			return -1;
 		}
 
-		j++;
 	} 
 
 	fprintf(of, "}\n");
 
-#if DEBUG
-	printf("%d records\n", j);
-#endif
 	return (0);
 }
 
@@ -2056,7 +2044,7 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 	struct node *n, *nx;
 	struct rbtree *rbt;
 	struct rrset *rrset = NULL;
-	int j, rs;
+	int rs;
 
 	time_t now, twoweeksago; 
 	char timebuf[32];
@@ -2078,8 +2066,6 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
         signedon = SIGNEDON;
         expiredon = EXPIREDON;
 #endif
-
-	j = 0;
 
 	RB_FOREACH_SAFE(n, domaintree, &db->head, nx) {
 		rs = n->datalen;
@@ -2299,8 +2285,6 @@ calculate_rrsigs(ddDB *db, char *zonename, int expiry, int rollmethod)
 				return -1;
 			}
 		}
-
-		j++;
 	}
 	
 		

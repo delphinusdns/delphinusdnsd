@@ -110,7 +110,6 @@ extern int tls;
 int 
 additional_a2(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
 {
-	int a_count = 0;
 	int tmplen;
 	int rroffset = offset;
 
@@ -167,8 +166,6 @@ additional_a2(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 		memcpy((char *)&answer->rdata, (char *)&((struct a *)rrp->rdata)->a, sizeof(in_addr_t));
 		offset += sizeof(struct answer);
 		tmpcount++;
-
-		a_count++;
 	}
 
 	pack32((char *)retcount, tmpcount);
@@ -183,7 +180,6 @@ additional_a2(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 int 
 additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
 {
-	int a_count = 0;
 	int tmplen;
 	int rroffset = offset;
 
@@ -240,8 +236,6 @@ additional_a(char *name, int namelen, struct rbtree *rbt, char *reply, int reply
 		memcpy((char *)&answer->rdata, (char *)&((struct a *)rrp->rdata)->a, sizeof(in_addr_t));
 		offset += sizeof(struct answer);
 		tmpcount++;
-
-		a_count++;
 	}
 
 out:
@@ -258,7 +252,6 @@ out:
 int 
 additional_aaaa2(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
 {
-	int aaaa_count = 0;
 	int tmplen;
 	int rroffset = offset;
 
@@ -315,8 +308,6 @@ additional_aaaa2(char *name, int namelen, struct rbtree *rbt, char *reply, int r
 		memcpy((char *)&answer->rdata, (char *)&((struct aaaa *)rrp->rdata)->aaaa, sizeof(struct in6_addr));
 		offset += sizeof(struct answer);
 		tmpcount++;
-
-		aaaa_count++;
 	}
 
 	pack32((char *)retcount, tmpcount);
@@ -331,7 +322,6 @@ additional_aaaa2(char *name, int namelen, struct rbtree *rbt, char *reply, int r
 int 
 additional_aaaa(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
 {
-	int aaaa_count = 0;
 	int tmplen;
 	int rroffset = offset;
 
@@ -388,8 +378,6 @@ additional_aaaa(char *name, int namelen, struct rbtree *rbt, char *reply, int re
 		memcpy((char *)&answer->rdata, (char *)&((struct aaaa *)rrp->rdata)->aaaa, sizeof(struct in6_addr));
 		offset += sizeof(struct answer);
 		tmpcount++;
-
-		aaaa_count++;
 	}
 
 out:
@@ -406,7 +394,6 @@ out:
 int 
 additional_mx(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount)
 {
-	int mx_count = 0;
 	int tmplen;
 	int rroffset = offset;
 
@@ -475,8 +462,6 @@ additional_mx(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 
 
 		tmpcount++;
-
-		mx_count++;
 	}
 	
 	pack32((char *)retcount, tmpcount);
@@ -1292,7 +1277,6 @@ out:
 int 
 additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int replylen, int offset, int *retcount, uint32_t *newzoneno)
 {
-	int ds_count = 0;
 	int tmplen;
 	int rroffset = offset;
 
@@ -1363,8 +1347,6 @@ additional_ds(char *name, int namelen, struct rbtree *rbt, char *reply, int repl
 
 
 		tmpcount++;
-
-		ds_count++;
 	}
 
 	pack32((char *)retcount, tmpcount);
