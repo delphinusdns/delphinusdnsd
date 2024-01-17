@@ -60,6 +60,9 @@ netbsd() {
 	cp Makefile.netbsd Makefile
 	cp delphinusdnsd/Makefile.netbsd delphinusdnsd/Makefile
 	cp dddctl/Makefile.netbsd dddctl/Makefile
+
+	mkdir -p delphinusdnsd/openbsd-compat
+	mkdir -p dddctl/openbsd-compat
 	
 	if [ ! -d /usr/local/bin ] ; then
 		echo WARN: before installing make sure /usr/local/bin exists!
@@ -86,6 +89,8 @@ freebsd() {
 	cp Makefile.freebsd Makefile
 	cp delphinusdnsd/Makefile.freebsd delphinusdnsd/Makefile
 	cp dddctl/Makefile.freebsd dddctl/Makefile
+	mkdir -p delphinusdnsd/openbsd-compat
+	mkdir -p dddctl/openbsd-compat
 }
 
 linux() {
