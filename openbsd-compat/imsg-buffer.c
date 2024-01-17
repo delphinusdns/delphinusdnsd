@@ -31,6 +31,9 @@
 #include <unistd.h>
 
 #include "imsg.h"
+#ifdef __FreeBSD__
+#include "freebsd.h"
+#endif
 
 static int	ibuf_realloc(struct ibuf *, size_t);
 static void	ibuf_enqueue(struct msgbuf *, struct ibuf *);

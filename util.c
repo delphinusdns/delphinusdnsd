@@ -49,14 +49,15 @@
 #include <bsd/sys/endian.h>
 #include "imsg.h"
 #else /* not linux */
-#include <vis.h>
 #include <sys/queue.h>
 #include <sys/tree.h>
 #ifdef __FreeBSD__
 #include <sys/endian.h>
 #include "imsg.h"
+#include "bsd-vis.h"
 #else
 #include <imsg.h>
+#include <vis.h>
 #endif /* __FreeBSD__ */
 #endif /* __linux__ */
 
