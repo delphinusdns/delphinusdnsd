@@ -5,7 +5,6 @@
  3.1 Linux
  3.2 FreeBSD
  3.3 OpenBSD
- 3.4 NetBSD
 4. COMPATIBILITY
 5. EXAMPLES
 6. DNSSEC
@@ -128,26 +127,6 @@ $ make
 $ make install
 ## done, create a config file and start delphinusdnsd
 
-3.4 NetBSD
-----------
-
-The tests for this were done on NetBSD 8.1
-
-## create paths needed
-$ mkdir -p /usr/local/sbin /usr/local/man/man/man5 /usr/local/man/man/man8 /usr/local/man/man/html5/ /usr/local/man/man/html8
-## install libressl from pkgsrc
-$ cd /usr/pkgsrc/security/libressl && make install
-## add libressl to ld.so search path
-$ export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/pkg/libressl/lib
-## configure the platform
-$ ./configure
-## add a privsep user with a chroot directory (as root)
-$ useradd -m _ddd
-## make the program
-$ make
-## install the binary (as root)
-$ make install
-## done, create a config file and start delphinusdnsd
 
 4. COMPATIBILITY
 ----------------
@@ -156,8 +135,6 @@ $ make install
 Operating System  | makes and compiles | responds to queries |
 ------------------+--------------------+---------------------+
 FreeBSD 14.0      |        yes	       |       yes           |
-------------------+--------------------+---------------------+
-NetBSD 10.0       |        n/a         |       n/a           |
 ------------------+--------------------+---------------------+
 OpenBSD 7.4       |        yes         |       yes           |
 ------------------+--------------------+---------------------+
