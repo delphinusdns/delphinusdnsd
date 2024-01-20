@@ -2,8 +2,8 @@
  1.1 AUTHOR(S)
 2. WHY DELPHINUSDNS?
 3. INSTALL HINTS
- 3.1 Linux
- 3.2 FreeBSD
+ 3.1 FreeBSD
+ 3.2 Linux
  3.3 OpenBSD
 4. COMPATIBILITY
 5. EXAMPLES
@@ -76,25 +76,7 @@ option to delphinusdnsd.
 A sample config file exists with the sources.  example7.conf was a real life
 config once. 
 
-3.1 Linux
----------
-
-In Linux MINT you need to apt-get install build-essential.
-
-## configure the platform
-$ ./configure
-## this will install the development programs you'll need (as root)
-$ apt-get install make bison cvs gcc libssl-dev libbsd-dev
-## add a privsep user with a chroot directory (option -m) (as root)
-$ useradd -m _ddd
-## make the program
-$ make
-## install the binary (as root)
-$ make install
-## done, create a config file and start delphinusdnsd
-
-
-3.2 FreeBSD
+3.1 FreeBSD
 -----------
 
 # get the libressl package
@@ -105,6 +87,23 @@ $ ./configure
 $ vipw
 ## or
 $ pw user add _ddd -m
+## make the program
+$ make
+## install the binary (as root)
+$ make install
+## done, create a config file and start delphinusdnsd
+
+3.2 Linux
+---------
+
+In Linux MINT you need to apt-get install build-essential.
+
+## configure the platform
+$ ./configure
+## this will install the development programs you'll need (as root)
+$ apt-get install make bison cvs gcc libssl-dev libbsd-dev
+## add a privsep user with a chroot directory (option -m) (as root)
+$ useradd -m _ddd
 ## make the program
 $ make
 ## install the binary (as root)
@@ -136,9 +135,9 @@ Operating System  | makes and compiles | responds to queries |
 ------------------+--------------------+---------------------+
 FreeBSD 14.0      |        yes	       |       yes           |
 ------------------+--------------------+---------------------+
-OpenBSD 7.4       |        yes         |       yes           |
-------------------+--------------------+---------------------+
 Linux  (devuan)	  |        yes         |       yes           |
+------------------+--------------------+---------------------+
+OpenBSD 7.4       |        yes         |       yes           |
 ------------------+--------------------+---------------------+
 
 
