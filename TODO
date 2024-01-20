@@ -13,6 +13,7 @@ delphinusdnsd gets a little better.
 - clean up the Open Source portion immensely making it easier for porting to
 	the Windows Operating System
 - start the EDWIN project (Windows Operating System port)
+- switch to cmake (for windows even too)
 
 For 1.8.0 release
 
