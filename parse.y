@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2023 Peter J. Philipp.  All rights reserved.
+ * Copyright (c) 2014-2024 Peter J. Philipp.  All rights reserved.
  * Copyright (c) 2008 Gilles Chehade <gilles@poolp.org>
  * Copyright (c) 2008 Pierre-Yves Ritschard <pyr@openbsd.org>
  * Copyright (c) 2002, 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -300,7 +300,6 @@ static struct rzone * add_rzone(void);
 static struct mzone * add_mzone(void);
 static int	pull_remote_zone(struct rzone *);
 int		notifysource(struct question *, struct sockaddr_storage *);
-int 		drop_privs(char *, struct passwd *);
 int		dottedquad(char *);
 void		clean_txt(void);
 int		add_txt(char *, int);
@@ -4955,10 +4954,60 @@ pull_remote_zone(struct rzone *lrz)
 				exit(1);
 			}
 
-			if (drop_privs(DELPHINUS_RZONE_PATH, pw) < 0) {
-				dolog(LOG_INFO, "can't drop privileges\n");
-				exit(1);
+			/* chroot to the drop priv user home directory */
+			if (chroot(DELPHINUS_RZONE_PATH) < 0) {
+				dolog(LOG_INFO, "chroot: %s\n", strerror(errno));
+				return -1;
 			}
+
+#if __OpenBSD__
+			if (unveil("/", "rwc") < 0) {
+				dolog(LOG_INFO, "unveil(1): %s\n", strerror(errno));
+				return -1;
+			}
+
+			if (unveil(NULL, NULL) < 0) {
+				dolog(LOG_INFO, "unveil: %s\n", strerror(errno));
+				return -1;
+			}
+		
+#endif
+
+			if (chdir("/") < 0) {
+				dolog(LOG_INFO, "chdir: %s\n", strerror(errno));
+				return -1;
+			}
+
+			/* set groups */
+
+			if (setgroups(1, &pw->pw_gid) < 0) {
+				dolog(LOG_INFO, "setgroups: %s\n", strerror(errno));
+				return -1;
+			}
+
+#if defined __OpenBSD__ || defined __FreeBSD__
+			if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) < 0) {
+				dolog(LOG_INFO, "setresgid: %s\n", strerror(errno));
+				return -1;
+			}
+
+			if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) < 0) {
+				dolog(LOG_INFO, "setresuid: %s\n", strerror(errno));
+				return -1;
+			}
+
+#else
+			if (setgid(pw->pw_gid) < 0) {
+				dolog(LOG_INFO, "setgid: %s\n", strerror(errno));
+				return -1;
+			}
+
+			if (setuid(pw->pw_uid) < 0) {
+				dolog(LOG_INFO, "setuid: %s\n", strerror(errno));
+				return -1;
+			}
+#endif
+
 
 #if __OpenBSD__
 			if (pledge("stdio rpath wpath cpath chown inet getpw", NULL) < 0) {
@@ -5095,72 +5144,6 @@ notifysource(struct question *q, struct sockaddr_storage *from)
 	} /* SLIST_FOREACH */
 
 	errno = ENOENT;
-
-	return 0;
-}
-
-int
-drop_privs(char *chrootpath, struct passwd *pw)
-{
-	/* chroot to the drop priv user home directory */
-	if (chroot(chrootpath) < 0) {
-		dolog(LOG_INFO, "chroot: %s\n", strerror(errno));
-		return -1;
-	}
-
-#if __OpenBSD__
-	/*
-	 * XXX - further research shows that we should "rwc" in /var/..
-	 * 	 but we don't need this in /home/_ddd if we just created
-	 * 	 the user with useradd -m _ddd for example...  If _ddd
-	 *	 has a $HOME that is right on /var this would cause problems.
-	 */
-	if (strcmp(chrootpath, pw->pw_dir) == 0) {
-		if (unveil("/", "r") < 0) {
-			dolog(LOG_INFO, "unveil: %s\n", strerror(errno));
-			return -1;
-		}
-	} else {
-		if (unveil("/", "rwc") < 0) {
-			dolog(LOG_INFO, "unveil: %s\n", strerror(errno));
-			return -1;
-		}
-	}
-#endif
-
-	if (chdir("/") < 0) {
-		dolog(LOG_INFO, "chdir: %s\n", strerror(errno));
-		return -1;
-	}
-
-	/* set groups */
-
-	if (setgroups(1, &pw->pw_gid) < 0) {
-		dolog(LOG_INFO, "setgroups: %s\n", strerror(errno));
-		return -1;
-	}
-
-#if defined __OpenBSD__ || defined __FreeBSD__
-	if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) < 0) {
-		dolog(LOG_INFO, "setresgid: %s\n", strerror(errno));
-		return -1;
-	}
-
-	if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) < 0) {
-		dolog(LOG_INFO, "setresuid: %s\n", strerror(errno));
-		return -1;
-	}
-
-#else
-	if (setgid(pw->pw_gid) < 0) {
-		dolog(LOG_INFO, "setgid: %s\n", strerror(errno));
-		return -1;
-	}
-	if (setuid(pw->pw_uid) < 0) {
-		dolog(LOG_INFO, "setuid: %s\n", strerror(errno));
-		return -1;
-	}
-#endif
 
 	return 0;
 }

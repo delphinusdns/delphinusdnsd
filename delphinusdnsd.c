@@ -206,7 +206,6 @@ extern int			reply_rp(struct sreply *, int *, ddDB *);
 extern int			reply_svcb(struct sreply *, int *, ddDB *);
 extern int 			check_ent(char *, int);
 extern int 			display_rr(struct rrset *);
-extern int 			drop_privs(char *, struct passwd *);
 extern int 			find_filter(struct sockaddr_storage *, int);
 extern int 			find_passlist(struct sockaddr_storage *, int);
 extern int 			get_record_size(ddDB *, char *, int);
@@ -372,6 +371,7 @@ main(int argc, char *argv[], char *environ[])
 	char buf[PATH_MAX];
 	char **av = NULL;
 	char *socketpath = SOCKPATH;
+	char *location = NULL;
 	
 	struct passwd *pw;
 	struct addrinfo hints, *res0, *res;
@@ -1248,24 +1248,25 @@ main(int argc, char *argv[], char *environ[])
 #endif
 
 #if __OpenBSD__
-	if (unveil(DELPHINUS_RZONE_PATH, "rwc")  < 0) {
+	if (unveil(socketpath, "rwc")  < 0) {
 		perror("unveil");
 		ddd_shutdown();
 		exit(1);
 	}
-	/* XXX pjp */
-	if (strcmp(pw->pw_dir, DELPHINUS_RZONE_PATH) == 0) {
-		if (unveil(pw->pw_dir, "wc") < 0) {
-			perror("unveil");
-			ddd_shutdown();
-			exit(1);
-		}
-	} else {
-		if (unveil(pw->pw_dir, "r") < 0) {
-			perror("unveil");
-			ddd_shutdown();
-			exit(1);
-		}
+	if (unveil("/usr/local/sbin/delphinusdnsd", "rx")  < 0) {
+		perror("unveil");
+		ddd_shutdown();
+		exit(1);
+	}
+
+#ifdef DEFAULT_LOCATION
+	if (unveil(DEFAULT_LOCATION, "r") < 0) {
+#else
+	if (unveil(pw->pw_dir, "r") < 0) {
+#endif
+		perror("unveil");
+		ddd_shutdown();
+		exit(1);
 	}
 #endif
 
@@ -1298,17 +1299,96 @@ main(int argc, char *argv[], char *environ[])
 			}
 
 			/* chroot to the drop priv user home directory */
+
 #ifdef DEFAULT_LOCATION
-			if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
+			location = DEFAULT_LOCATION;
 #else
-			if (drop_privs(pw->pw_dir, pw) < 0) {
+			location = pw->pw_dir;
 #endif
-				dolog(LOG_INFO, "axfr dropping privileges\n", strerror(errno));
+
+#ifndef __OpenBSD__
+			if (chroot(location) == -1) {
+				dolog(LOG_INFO, "AXFR chroot(%s): %s\n", 
+					location, strerror(errno));
 				ddd_shutdown();
 				exit(1);
 			}
+#else
+			if (unveil(location, "") == -1) {
+				dolog(LOG_INFO, "AXFR unveil(%s): %s\n", 
+					location, strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			if (chroot(location) == -1) {
+				dolog(LOG_INFO, "AXFR chroot(%s): %s\n", 
+					location, strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+	
+
+			if (unveil("/", "r") == -1) {
+				dolog(LOG_INFO, "AXFR unveil(%s): %s\n", 
+					location, strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+	
+			if (chdir("/") == -1) {
+				dolog(LOG_INFO, "AXFR chdir(%s): %s\n", 
+					location, strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#endif /* OpenBSD */
+
+			if (setgroups(1, &pw->pw_gid) == -1) {
+				dolog(LOG_INFO, "AXFR setgroups(): %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+#if defined __OpenBSD__ || defined __FreeBSD__
+			if (setresgid(pw->pw_gid,pw->pw_gid,pw->pw_gid) == -1) {
+                		dolog(LOG_INFO, "setresgid: %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			if (setresuid(pw->pw_uid,pw->pw_uid,pw->pw_uid) == -1) {
+                		dolog(LOG_INFO, "setresuid: %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#else /* NetBSD and Linux */
+			if (setgid(pw->pw_gid) == -1) {
+                		dolog(LOG_INFO, "setgid: %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			if (setuid(pw->pw_uid) == -1) {
+                		dolog(LOG_INFO, "setuid: %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#endif
 #if __OpenBSD__
-			if (pledge("stdio inet proc id sendfd recvfd unveil", NULL) < 0) {
+			if (unveil(NULL, NULL) == -1) {
+				dolog(LOG_INFO, "AXFR unveil(%s): %s\n", 
+					"lock", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+			
+			if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
 				perror("pledge");
 				ddd_shutdown();
 				exit(1);
@@ -1348,6 +1428,7 @@ main(int argc, char *argv[], char *environ[])
 			}
 			break;
 		}
+
 	
 	} /* axfrport */
 	
@@ -1365,13 +1446,81 @@ main(int argc, char *argv[], char *environ[])
 				exit(1);
 			}
 
-			/* chroot to the drop priv user home directory */
-			if (drop_privs(DELPHINUS_RZONE_PATH, pw) < 0) {
-				dolog(LOG_INFO, "raxfr dropping privileges failed", strerror(errno));
+#ifdef DELPHINUS_RZONE_PATH
+			location = DELPHINUS_RZONE_PATH;
+#else
+			dolog(LOG_ERR, "no RZONE_PATH defined\n");
+			ddd_shutdown();
+			exit(1);
+#endif
+#if __OpenBSD__
+			if (unveil(location, "r") == -1) {
+				dolog(LOG_INFO, "RAXFR unveil(%s): %s\n", 
+					location, strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#endif
+
+			if (chroot(location) == -1) {
+				dolog(LOG_INFO, "RAXFR chroot(%s): %s\n", 
+					location, strerror(errno));
 				ddd_shutdown();
 				exit(1);
 			}
 
+#if __OpenBSD__
+			if (unveil("/", "r") == -1) {
+				dolog(LOG_INFO, "RAXFR unveil(%s): %s\n", 
+					location, strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			if (chdir("/") == -1) {
+				dolog(LOG_INFO, "RAXFR chdir(%s): %s\n", 
+					location, strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#endif
+
+			if (setgroups(1, &pw->pw_gid) == -1) {
+				dolog(LOG_INFO, "RAXFR setgroups(): %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+#if defined __OpenBSD__ || defined __FreeBSD__
+			if (setresgid(pw->pw_gid,pw->pw_gid,pw->pw_gid) == -1) {
+                		dolog(LOG_INFO, "setresgid: %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			if (setresuid(pw->pw_uid,pw->pw_uid,pw->pw_uid) == -1) {
+                		dolog(LOG_INFO, "setresuid: %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#else /* NetBSD and Linux */
+			if (setgid(pw->pw_gid) == -1) {
+                		dolog(LOG_INFO, "setgid: %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			if (setuid(pw->pw_uid) == -1) {
+                		dolog(LOG_INFO, "setuid: %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#endif
 #if __OpenBSD__
 			if (unveil("/replicant", "rwc") < 0) {
 				perror("unveil");
@@ -1379,7 +1528,13 @@ main(int argc, char *argv[], char *environ[])
 				exit(1);
 			}
 
-			if (pledge("stdio inet proc id sendfd recvfd unveil cpath wpath rpath", NULL) < 0) {
+			if (unveil(NULL, NULL) < 0) {
+				perror("unveil");
+				ddd_shutdown();
+				exit(1);
+			}
+
+			if (pledge("stdio inet proc id sendfd recvfd cpath rpath wpath", NULL) < 0) {
 				perror("pledge");
 				ddd_shutdown();
 				exit(1);
@@ -1463,28 +1618,87 @@ main(int argc, char *argv[], char *environ[])
 			}
 #endif
 
-			/* chroot to the drop priv user home directory */
 #ifdef DEFAULT_LOCATION
-			if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
+			location = DEFAULT_LOCATION;
 #else
-			if (drop_privs(pw->pw_dir, pw) < 0) {
+			location = pw->pw_dir;
 #endif
-				dolog(LOG_INFO, "forward dropping privileges\n", strerror(errno));
+#if __OpenBSD__
+			if (unveil(location, "") == -1) {
+				dolog(LOG_INFO, "AXFR unveil(%s): %s\n", 
+					location, strerror(errno));
 				ddd_shutdown();
 				exit(1);
 			}
-#if __OpenBSD__
-			if (unveil("/", "") < 0) {
-				dolog(LOG_INFO, "unveil locking failed: %s\n", strerror(errno));
+#endif
+
+			if (chroot(location) == -1) {
+				dolog(LOG_INFO, "FORWARD chroot(%s): %s\n", 
+					location, strerror(errno));
 				ddd_shutdown();
 				exit(1);
 			}
 
-			if (unveil(NULL, NULL) < 0) {
-				dolog(LOG_INFO, "unveil locking failed: %s\n", strerror(errno));
+#if __OpenBSD__
+			if (unveil("/", "r") == -1) {
+				dolog(LOG_INFO, "AXFR unveil(%s): %s\n", 
+					location, strerror(errno));
 				ddd_shutdown();
 				exit(1);
 			}
+
+			if (chdir("/") == -1) {
+				dolog(LOG_INFO, "AXFR chdir(%s): %s\n", 
+					location, strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#endif
+
+			if (setgroups(1, &pw->pw_gid) == -1) {
+				dolog(LOG_INFO, "AXFR setgroups(): %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+#if defined __OpenBSD__ || defined __FreeBSD__
+			if (setresgid(pw->pw_gid,pw->pw_gid,pw->pw_gid) == -1) {
+                		dolog(LOG_INFO, "setresgid: %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			if (setresuid(pw->pw_uid,pw->pw_uid,pw->pw_uid) == -1) {
+                		dolog(LOG_INFO, "setresuid: %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#else /* NetBSD and Linux */
+			if (setgid(pw->pw_gid) == -1) {
+                		dolog(LOG_INFO, "setgid: %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
+			if (setuid(pw->pw_uid) == -1) {
+                		dolog(LOG_INFO, "setuid: %s\n", 
+					strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+#endif
+#if __OpenBSD__
+			if (unveil(NULL, NULL) == -1) {
+				dolog(LOG_INFO, "AXFR unveil(%s): %s\n", 
+					"lock", strerror(errno));
+				ddd_shutdown();
+				exit(1);
+			}
+
 			if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
 				perror("pledge");
 				ddd_shutdown();
@@ -1541,20 +1755,76 @@ main(int argc, char *argv[], char *environ[])
 	sm_zebra(shptr, SHAREDMEMSIZE3, sizeof(struct pkt_imsg));
 
 #ifdef DEFAULT_LOCATION
-	if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
+	location = DEFAULT_LOCATION;
 #else
-	if (drop_privs(pw->pw_dir, pw) < 0) {
+	location = pw->pw_dir;
 #endif
-		dolog(LOG_INFO, "dropping privileges failed\n");
-		ddd_shutdown();
-		exit(1);
-	}
 #if __OpenBSD__
-	if (unveil(NULL, NULL) < 0) {
-		dolog(LOG_INFO, "unveil locking failed: %s\n", strerror(errno));
+	if (unveil(location, "") == -1) {
+		dolog(LOG_INFO, "unveil(%s): %s\n", location, strerror(errno));
 		ddd_shutdown();
 		exit(1);
 	}
+#endif
+
+	if (chroot(location) == -1) {
+		dolog(LOG_INFO, "chroot(%s): %s\n", location, strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+#if __OpenBSD__
+	if (unveil("/", "r") == -1) {
+		dolog(LOG_INFO, "unveil(%s): %s\n", location, strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+	if (chdir("/") == -1) {
+		dolog(LOG_INFO, "chdir(%s): %s\n", location, strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
+
+	if (setgroups(1, &pw->pw_gid) == -1) {
+		dolog(LOG_INFO, "setgroups(): %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+#if defined __OpenBSD__ || defined __FreeBSD__
+	if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) == -1) {
+        	dolog(LOG_INFO, "setresgid: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+	if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) == -1) {
+		dolog(LOG_INFO, "setresuid: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#else /* NetBSD and Linux */
+	if (setgid(pw->pw_gid) == -1) {
+		dolog(LOG_INFO, "setgid: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+	
+	if (setuid(pw->pw_uid) == -1) {
+		dolog(LOG_INFO, "setuid: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
+#if __OpenBSD__
+	if (unveil(NULL, NULL) == -1) {
+		dolog(LOG_INFO, "unveil(%s): %s\n", "lock", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+			
 	if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
 		perror("pledge");
 		ddd_shutdown();
@@ -1697,6 +1967,7 @@ setup_primary(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 		ddd_shutdown();
 		exit(1);
 	}
+
 	if (pledge("stdio wpath cpath exec proc", NULL) < 0) {
 		perror("pledge");
 		ddd_shutdown();
@@ -2303,15 +2574,19 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	int datalen;
 	int so, nso;
 	int sel, max;
-	socklen_t slen = sizeof(struct sockaddr_un);
 	int len;
+	socklen_t slen = sizeof(struct sockaddr_un);
+
 	char buf[512];
 	char rbuf[512];
+	char *location = NULL;
+
 	struct imsg imsg;
 	struct sockaddr_un sun, *psun;
 	struct timeval tv;
 	struct dddcomm *dc;
 	struct passwd *pw;
+
 	fd_set rset;
 	pid_t idata;
 #if __OpenBSD__
@@ -2363,19 +2638,77 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	}
 
 #ifdef DEFAULT_LOCATION
-	if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
+	location = DEFAULT_LOCATION;
 #else
-	if (drop_privs(pw->pw_dir, pw) < 0) {
+	location = pw->pw_dir;
 #endif
-		dolog(LOG_INFO, "dropping privileges failed in unix socket\n");
+
+	if (chroot(location) == -1) {
+		dolog(LOG_INFO, "PRIMARY chroot(%s): %s\n", 
+			location, strerror(errno));
 		ddd_shutdown();
 		exit(1);
 	}
 
+#if __OpenBSD__
+	if (unveil("/", "r") == -1) {
+		dolog(LOG_INFO, "PRIMARY unveil(%s): %s\n", 
+			location, strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+	
+	if (chdir("/") == -1) {
+		dolog(LOG_INFO, "PRIMARY chdir(%s): %s\n", 
+			location, strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
+	if (setgroups(1, &pw->pw_gid) == -1) {
+		dolog(LOG_INFO, "PRIMARY setgroups(): %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+#if defined __OpenBSD__ || defined __FreeBSD__
+	if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) == -1) {
+                dolog(LOG_INFO, "setresgid: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+	if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) == -1) {
+                dolog(LOG_INFO, "setresuid: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#else /* NetBSD and Linux */
+	if (setgid(pw->pw_gid) == -1) {
+        	dolog(LOG_INFO, "setgid: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+	if (setuid(pw->pw_uid) == -1) {
+        	dolog(LOG_INFO, "setuid: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
+#if __OpenBSD__
+	if (unveil(NULL, NULL) == -1) {
+		dolog(LOG_INFO, "PRIMARY unveil(%s): %s\n", "lock", 
+			strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
+
 	listen(so, 5);
 
 #if __OpenBSD__
-	if (pledge("stdio rpath wpath cpath unix proc", NULL) < 0) {
+	if (pledge("stdio rpath wpath cpath proc unix", NULL) < 0) {
 		perror("pledge");
 		ddd_shutdown();
 		exit(1);
@@ -2609,6 +2942,7 @@ setup_cortex(struct imsgbuf *ibuf)
 {
 	int max = 0, sel;
 	int datalen, nomore = 0;
+	char *location = NULL;
 
 	ssize_t n;
 	fd_set rset;
@@ -2647,29 +2981,81 @@ setup_cortex(struct imsgbuf *ibuf)
 	}
 
 #ifdef DEFAULT_LOCATION
-	if (drop_privs(DEFAULT_LOCATION, pw) < 0) {
+	location = DEFAULT_LOCATION;
 #else
-	if (drop_privs(pw->pw_dir, pw) < 0) {
+	location = pw->pw_dir;
 #endif
-		dolog(LOG_INFO, "dropping privileges failed in cortex\n");
+#if __OpenBSD__
+	if (unveil(location, "") == -1) {
+		dolog(LOG_INFO, "CORTEX unveil(%s): %s\n", 
+			location, strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
+	
+
+	if (chroot(location) == -1) {
+		dolog(LOG_INFO, "CORTEX chroot(%s): %s\n", 
+			location, strerror(errno));
 		ddd_shutdown();
 		exit(1);
 	}
 
 #if __OpenBSD__
-#if 0
-	if (unveil("/", "") == -1) {
-		dolog(LOG_INFO, "unveil cortex: %s\n", strerror(errno));
-		/* XXX notice no exit here */
+	if (unveil("/", "r") == -1) {
+		dolog(LOG_INFO, "CORTEX unveil(%s): %s\n", 
+			location, strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+	
+	if (chdir("/") == -1) {
+		dolog(LOG_INFO, "CORTEX chdir(%s): %s\n", 
+			location, strerror(errno));
+		ddd_shutdown();
+		exit(1);
 	}
 #endif
-
-	if (unveil(NULL, NULL) == -1) {
-		dolog(LOG_INFO, "unveil cortex: %s\n", strerror(errno));
+	if (setgroups(1, &pw->pw_gid) == -1) {
+		dolog(LOG_INFO, "CORTEX setgroups(): %s\n", strerror(errno));
 		ddd_shutdown();
 		exit(1);
 	}
 
+#if defined __OpenBSD__ || defined __FreeBSD__
+	if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) == -1) {
+                dolog(LOG_INFO, "setresgid: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+	if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) == -1) {
+                dolog(LOG_INFO, "setresuid: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#else /* NetBSD and Linux */
+	if (setgid(pw->pw_gid) == -1) {
+        	dolog(LOG_INFO, "setgid: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+
+	if (setuid(pw->pw_uid) == -1) {
+        	dolog(LOG_INFO, "setuid: %s\n", strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+#endif
+#if __OpenBSD__
+	if (unveil(NULL, NULL) == -1) {
+		dolog(LOG_INFO, "CORTEX unveil(%s): %s\n", "lock", 
+			strerror(errno));
+		ddd_shutdown();
+		exit(1);
+	}
+		
 	if (pledge("stdio sendfd recvfd", NULL) < 0) {
 		perror("pledge");
 		exit(1);

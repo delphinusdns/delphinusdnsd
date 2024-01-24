@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Peter J. Philipp <pjp@delphinusdns.org>
+ * Copyright (c) 2022-2024 Peter J. Philipp <pjp@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -351,7 +351,6 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				strerror(errno));
 		}
 
-#endif
 		if (munmap(cfg->shm[SM_PARSEQUESTION].shptr,
 				cfg->shm[SM_PARSEQUESTION].shptrsize) == -1) {
 			dolog(LOG_INFO, "unmapping shptr(1) failed: %s\n", \
@@ -364,6 +363,7 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 				strerror(errno));
 		}
 
+#endif
 
 		cfg->shm[SM_FORWARD].shptrsize = 0;
 		cfg->shm[SM_INCOMING].shptrsize = 0;
