@@ -117,7 +117,7 @@ $ make install
 ## configure the platform
 $ ./configure
 ## add a privsep user (_ddd) with a chroot directory (as root)
-$ useradd -m _ddd
+$ useradd -m -s /sbin/nologin _ddd
 ## or
 $ adduser
 ## make the program
