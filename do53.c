@@ -499,7 +499,7 @@ mainloop(struct cfg *cfg, struct imsgbuf *ibuf)
 		close(udp_ibuf->fd);
 		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
 		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
-		setproctitle("udp parse engine %d [%s]", cfg->pid, 
+		setproctitle("UDP parse engine %d [%s]", cfg->pid, 
 			(identstring != NULL ? identstring : ""));
 		parseloop(cfg, &parse_ibuf, 0);
 		/* NOTREACHED */

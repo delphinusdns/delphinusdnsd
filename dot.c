@@ -310,7 +310,7 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 		close(cortex->fd);
 		close(cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[1]);
 		imsg_init(&parse_ibuf, cfg->my_imsg[MY_IMSG_PARSER].imsg_fds[0]);
-		setproctitle("tls parse engine %d [%s]", cfg->pid,
+		setproctitle("TLS parse engine %d [%s]", cfg->pid,
 			(identstring != NULL ? identstring : ""));
 		parseloop(cfg, &parse_ibuf, DDD_IS_TLS);
 		/* NOTREACHED */

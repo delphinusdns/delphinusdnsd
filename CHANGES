@@ -1,4 +1,8 @@
-[2023] Changes in RELEASE_1_8 from RELEASE_1_7
+[2025] Changes in RELEASE_1_9 from RELEASE_1_8
+
+None, yet, see updates after February 16, 2024.
+
+[2024] Changes in RELEASE_1_8 from RELEASE_1_7
 
 - make the forwarding process honor requested EDNS0 lengths in long replies.
 - TXT RR's are the first RR that is recursive in parsing, due to the nature
@@ -11,7 +15,7 @@
 - losing the "inet" pledge in a lot of network facing processes.  We made
 helper processes that passed the descriptor to the helper allowing us to
 keep a minimal pledge of "stdio recvfd ..."
-- lose the "inet" pledge in AXFR, TCP.
+- lose the "inet" pledge in AXFR, TCP, TLS.
 - add a version output in dddctl, also add a tsig output for creating 32 byte
   random tsig keys.
 - AXFR transfers are fixed to require TSIG records when configured to use them
@@ -22,6 +26,7 @@ keep a minimal pledge of "stdio recvfd ..."
 - in the UDP engine reply truncate (TC) on ratelimit violation instead of
   dropping the packet
 - redid the ratelimiting algorithm
+- reworked the pledge and unveil'ing to something more proper.
 
 
 [2022] Changes in RELEASE_1_7 from RELEASE_1_6
