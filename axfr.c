@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2023 Peter J. Philipp <pbug44@delphinusdns.org>
+ * Copyright (c) 2011-2024 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -485,8 +485,15 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 	}
 
 #if __OpenBSD__
-        if (pledge("stdio proc sendfd recvfd", NULL) == -1) {
+
+        if (pledge("stdio proc sendfd recvfd unveil", NULL) == -1) {
                 dolog(LOG_ERR, "pledge %s", strerror(errno));
+		ddd_shutdown();
+                exit(1);
+        }
+	if (unveil(NULL, NULL) == -1) {
+                dolog(LOG_ERR, "unveil %s", strerror(errno));
+		ddd_shutdown();
                 exit(1);
         }
 #endif
@@ -603,11 +610,16 @@ axfrloop(struct cfg *cfg, char **ident, ddDB *db, struct imsgbuf *ibuf, struct i
 				 * the pledge losing "sendfd"
 				 */
 #if __OpenBSD__
-				if (pledge("stdio proc recvfd", NULL) == -1) {
+				if (pledge("stdio proc recvfd unveil", NULL) == -1) {
 					dolog(LOG_ERR, "pledge %s", strerror(errno));
 					ddd_shutdown();
 					exit(1);
 				}
+				if (unveil(NULL, NULL) == -1) {
+                			dolog(LOG_ERR, "unveil %s", strerror(errno));
+					ddd_shutdown();
+                			exit(1);
+        			}
 #endif
 
 				notifyfd[0] = -1;	
@@ -1929,8 +1941,13 @@ axfr_acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *notify_ib
 	clean_tsig_keys();
 
 #if __OpenBSD__
-	if (pledge("stdio inet sendfd recvfd", NULL) == -1) {
+	if (pledge("stdio inet sendfd recvfd unveil", NULL) == -1) {
 		perror("pledge");
+		ddd_shutdown();
+		exit(1);
+	}
+	if (unveil(NULL, NULL) == -1) {
+		dolog(LOG_ERR, "unveil %s", strerror(errno));
 		ddd_shutdown();
 		exit(1);
 	}

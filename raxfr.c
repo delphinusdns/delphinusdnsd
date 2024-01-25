@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2023 Peter J. Philipp <pbug44@delphinusdns.org>
+ * Copyright (c) 2019-2024 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -181,6 +181,7 @@ extern char * 		cert_type(struct cert *);
 extern void 		safe_fprintf(FILE *, char *, ...);
 extern size_t		plength(void *, void *);
 extern u_int		nowrap_dec(u_int, u_int);
+extern void		ddd_shutdown(void);
 
 
 /* The following alias helps with bounds checking all input, needed! */
@@ -2139,8 +2140,19 @@ replicantloop(ddDB *db, struct imsgbuf *ibuf)
 
 
 #if __OpenBSD__
-	if (pledge("stdio wpath rpath cpath inet sendfd", NULL) < 0) {
+	if (pledge("stdio wpath rpath cpath inet sendfd unveil", NULL) < 0) {
 		perror("pledge");
+		ddd_shutdown();
+		exit(1);
+	}
+	if (unveil("/", "rwc") == -1) {
+		perror("unveil");
+		ddd_shutdown();
+		exit(1);
+	}
+	if (unveil(NULL, NULL) == -1) {
+		perror("unveil");
+		ddd_shutdown();
 		exit(1);
 	}
 #endif

@@ -1381,14 +1381,7 @@ main(int argc, char *argv[], char *environ[])
 			}
 #endif
 #if __OpenBSD__
-			if (unveil(NULL, NULL) == -1) {
-				dolog(LOG_INFO, "AXFR unveil(%s): %s\n", 
-					"lock", strerror(errno));
-				ddd_shutdown();
-				exit(1);
-			}
-			
-			if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
+			if (pledge("stdio inet proc id sendfd recvfd unveil", NULL) < 0) {
 				perror("pledge");
 				ddd_shutdown();
 				exit(1);
@@ -1521,20 +1514,9 @@ main(int argc, char *argv[], char *environ[])
 				exit(1);
 			}
 #endif
+
 #if __OpenBSD__
-			if (unveil("/replicant", "rwc") < 0) {
-				perror("unveil");
-				ddd_shutdown();
-				exit(1);
-			}
-
-			if (unveil(NULL, NULL) < 0) {
-				perror("unveil");
-				ddd_shutdown();
-				exit(1);
-			}
-
-			if (pledge("stdio inet proc id sendfd recvfd cpath rpath wpath", NULL) < 0) {
+			if (pledge("stdio inet proc id sendfd recvfd cpath rpath wpath unveil", NULL) < 0) {
 				perror("pledge");
 				ddd_shutdown();
 				exit(1);
@@ -1699,7 +1681,7 @@ main(int argc, char *argv[], char *environ[])
 				exit(1);
 			}
 
-			if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
+			if (pledge("stdio inet proc id sendfd recvfd unveil", NULL) < 0) {
 				perror("pledge");
 				ddd_shutdown();
 				exit(1);
@@ -1825,7 +1807,7 @@ main(int argc, char *argv[], char *environ[])
 		exit(1);
 	}
 			
-	if (pledge("stdio inet proc id sendfd recvfd", NULL) < 0) {
+	if (pledge("stdio inet proc id sendfd recvfd unveil", NULL) < 0) {
 		perror("pledge");
 		ddd_shutdown();
 		exit(1);
@@ -1968,7 +1950,7 @@ setup_primary(ddDB *db, char **av, char *socketpath, struct imsgbuf *ibuf)
 		exit(1);
 	}
 
-	if (pledge("stdio wpath cpath exec proc", NULL) < 0) {
+	if (pledge("stdio wpath cpath exec proc unveil", NULL) < 0) {
 		perror("pledge");
 		ddd_shutdown();
 		exit(1);
@@ -2152,8 +2134,14 @@ parseloop(struct cfg *cfg, struct imsgbuf *ibuf, int istcp)
 #endif
 
 #if __OpenBSD__
-	if (pledge("stdio", NULL) < 0) {
+	if (pledge("stdio unveil", NULL) < 0) {
 		perror("pledge");
+		ddd_shutdown();
+		exit(1);
+	}
+
+	if (unveil(NULL, NULL) == -1) {
+		perror("unveil");
 		ddd_shutdown();
 		exit(1);
 	}
@@ -2708,7 +2696,7 @@ setup_unixsocket(char *socketpath, struct imsgbuf *ibuf)
 	listen(so, 5);
 
 #if __OpenBSD__
-	if (pledge("stdio rpath wpath cpath proc unix", NULL) < 0) {
+	if (pledge("stdio rpath wpath cpath proc unix unveil", NULL) < 0) {
 		perror("pledge");
 		ddd_shutdown();
 		exit(1);
@@ -3049,15 +3037,14 @@ setup_cortex(struct imsgbuf *ibuf)
 	}
 #endif
 #if __OpenBSD__
+	if (pledge("stdio sendfd recvfd unveil", NULL) < 0) {
+		perror("pledge");
+		exit(1);
+	}
 	if (unveil(NULL, NULL) == -1) {
 		dolog(LOG_INFO, "CORTEX unveil(%s): %s\n", "lock", 
 			strerror(errno));
 		ddd_shutdown();
-		exit(1);
-	}
-		
-	if (pledge("stdio sendfd recvfd", NULL) < 0) {
-		perror("pledge");
 		exit(1);
 	}
 #endif

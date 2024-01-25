@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2023 Peter J. Philipp <pbug44@delphinusdns.org>
+ * Copyright (c) 2020-2024 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -2388,8 +2388,13 @@ fwdparseloop(struct imsgbuf *ibuf, struct imsgbuf *bibuf, struct cfg *cfg)
 	setlogmask(LOG_UPTO(LOG_ERR));
 
 #if __OpenBSD__
-	if (pledge("stdio sendfd recvfd", NULL) < 0) {
+	if (pledge("stdio sendfd recvfd unveil", NULL) < 0) {
 		perror("pledge");
+		ddd_shutdown();
+		exit(1);
+	}
+	if (unveil(NULL, NULL) == -1) {
+		perror("unveil");
 		ddd_shutdown();
 		exit(1);
 	}
