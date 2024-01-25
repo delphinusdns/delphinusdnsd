@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2023 Peter J. Philipp <pbug44@delphinusdns.org>
+ * Copyright (c) 2002-2024 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -200,7 +200,7 @@ struct dns_question_hdr {
 #define DNS_TYPE_TXT	16		/* end of RFC 1035 */
 #define DNS_TYPE_RP	17		/* RFC 1183 */
 
-#define DNS_TYPE_AAAA	28 		/* quad A - RFC 3596 */
+#define DNS_TYPE_AAAA	28 		/* RFC 3596 */
 #define DNS_TYPE_LOC	29		/* RFC 1876 */
 
 #define DNS_TYPE_SRV	33		/* RFC 2782, page 8 */
@@ -225,8 +225,8 @@ struct dns_question_hdr {
 #define DNS_TYPE_OPENPGPKEY	61	/* RFC 7929 */
 
 #define DNS_TYPE_ZONEMD	63		/* RFC 8976 */
-#define DNS_TYPE_SVCB	64		/* draft-ietf-dnsop-svcb-https */
-#define DNS_TYPE_HTTPS	65		/* draft-ietf-dnsop-svcb-https */
+#define DNS_TYPE_SVCB	64		/* RFC 9460, section 2 */
+#define DNS_TYPE_HTTPS	65		/* RFC 9460, section 9 */
 
 #define DNS_TYPE_EUI48	108		/* RFC 7043 */
 #define DNS_TYPE_EUI64	109		/* RFC 7043 */
