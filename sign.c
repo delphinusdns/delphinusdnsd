@@ -829,9 +829,9 @@ signmain(int argc, char *argv[])
 	}
 
 	if (create_ksk) {
-		kn = malloc(sizeof(struct keysentry));
+		kn = calloc(sizeof(struct keysentry), 1);
 		if (kn == NULL) {
-			perror("malloc");
+			perror("calloc");
 			exit(1);
 		}
 
@@ -880,9 +880,9 @@ signmain(int argc, char *argv[])
 		numkeys++;
 	}
 	if (create_zsk) {
-		kn = malloc(sizeof(struct keysentry));
+		kn = calloc(sizeof(struct keysentry), 1);
 		if (kn == NULL) {
-			perror("malloc");
+			perror("calloc");
 			exit(1);
 		}
 		dolog(LOG_INFO, "creating new ZSK (256) algorithm: %s with %d bits, pid ", alg_to_name(algorithm), bits);
