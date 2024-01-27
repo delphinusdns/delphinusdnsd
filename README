@@ -225,10 +225,12 @@ Here is an example zone entry for ip6.example.com:
 6.5 What algorithms are supported with dddctl sign
 --------------------------------------------------
 
-Currently only 4 algorithms are supported.   There is RSASHA1-NSEC3-SHA1 
-which has algorithm 7, there is RSASHA256 which has algorithm 8, 
-and there is RSASHA512 which has algorithm 10.  Finally the ECDSAP256SHA256
-algorithm (alg 13) (is now default), is supported.
+The following algorithms are supported since version 1.8:
+
+RSASHA256 (alg 8), RSASHA512 (alg 10), ECDSAP256SHA256 (alg 13),
+and ECDSAP384SHA384 (alg 14), lastly ED25519 (alg 15) is supported.
+
+The default algorithm is alg 13 the others have to be specified by number (int).
 
 
 7. WHAT IT CAN'T DO
