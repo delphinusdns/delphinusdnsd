@@ -740,17 +740,21 @@ gawn:
 					dolog(LOG_INFO, "TLS packet on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[tlsnp->intidx], tlsnp->address);
 					goto drop;
 				case PARSE_RETURN_NOQUESTION:
-					dolog(LOG_INFO, "TLS packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[tlsnp->intidx], tlsnp->address);
+					dolog(LOG_INFO, "TLS packet on descriptor %u interface \"%s\" header from %s has no question, replying fmterror\n", so, cfg->ident[tlsnp->intidx], tlsnp->address);
 					/* format error */
 					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istls, 0, replybuf, tlsnp->ctx);
 					slen = reply_fmterror(&sreply, &sretlen, NULL);
 					dolog(LOG_INFO, "TLS question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[tlsnp->intidx], tlsnp->address);
 					goto drop;
 				case PARSE_RETURN_MALFORMED:
-					dolog(LOG_INFO, "TLS packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[tlsnp->intidx], tlsnp->address);
+					dolog(LOG_INFO, "TLS packet on descriptor %u interface \"%s\" malformed question from %s, replying fmterror\n", so, cfg->ident[tlsnp->intidx], tlsnp->address);
+					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istls, 0, replybuf, tlsnp->ctx);
+					slen = reply_fmterror(&sreply, &sretlen, NULL);
 					goto drop;
 				case PARSE_RETURN_NAK:
-					dolog(LOG_INFO, "TLS packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[tlsnp->intidx], tlsnp->address);
+					dolog(LOG_INFO, "TLS packet on descriptor %u interface \"%s\" illegal dns packet length from %s, replying fmterror\n", so, cfg->ident[tlsnp->intidx], tlsnp->address);
+					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istls, 0, replybuf, tlsnp->ctx);
+					slen = reply_fmterror(&sreply, &sretlen, NULL);
 					goto drop;
 				case PARSE_RETURN_NOTAUTH:
 					if (filter && pq.tsig.have_tsig == 0) {

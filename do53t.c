@@ -678,6 +678,8 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					goto drop;
 				case PARSE_RETURN_NOTAQUESTION:
 					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" dns header from %s is not a question, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf, NULL);
+					slen = reply_fmterror(&sreply, &sretlen, NULL);
 					goto drop;
 				case PARSE_RETURN_NOQUESTION:
 					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" header from %s has no question, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
@@ -688,9 +690,13 @@ tcploop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 					goto drop;
 				case PARSE_RETURN_MALFORMED:
 					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf, NULL);
+					slen = reply_fmterror(&sreply, &sretlen, NULL);
 					goto drop;
 				case PARSE_RETURN_NAK:
-					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+					dolog(LOG_INFO, "TCP packet on descriptor %u interface \"%s\" illegal dns packet length from %s, replying fmterror\n", so, cfg->ident[tcpnp->intidx], tcpnp->address);
+					build_reply(&sreply, so, pbuf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf, NULL);
+					slen = reply_fmterror(&sreply, &sretlen, NULL);
 					goto drop;
 				case PARSE_RETURN_NOTAUTH:
 					if (filter && pq.tsig.have_tsig == 0) {

@@ -862,10 +862,14 @@ axfrentry:
 					dolog(LOG_INFO, "question on descriptor %d interface \"%s\" from %s, did not have question of 1 replying format error\n", so, cfg->ident[i], address);
 					goto drop;
 				case PARSE_RETURN_MALFORMED:
-					dolog(LOG_INFO, "on descriptor %u interface \"%s\" malformed question from %s, drop\n", so, cfg->ident[i], address);
+					dolog(LOG_INFO, "on descriptor %u interface \"%s\" malformed question from %s, replying fmterror\n", so, cfg->ident[i], address);
+					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf, NULL);
+					slen = reply_fmterror(&sreply, &sretlen, NULL);
 					goto drop;
 				case PARSE_RETURN_NAK:
-					dolog(LOG_INFO, "on descriptor %u interface \"%s\" illegal dns packet length from %s, drop\n", so, cfg->ident[i], address);
+					dolog(LOG_INFO, "on descriptor %u interface \"%s\" illegal dns packet length from %s, replying fmterror\n", so, cfg->ident[i], address);
+					build_reply(&sreply, so, buf, len, NULL, from, fromlen, NULL, NULL, aregion, istcp, 0, replybuf, NULL);
+					slen = reply_fmterror(&sreply, &sretlen, NULL);
 					goto drop;
 				case PARSE_RETURN_NOTAUTH:
 					if (filter && pq.tsig.have_tsig == 0) {
