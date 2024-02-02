@@ -453,14 +453,16 @@ tlsloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *cortex)
 
                 FD_SET(ibuf->fd, &rset);
 
+		conncnt = 0;
 		TAILQ_FOREACH(tlsnp, &tlshead, tlsentries) {
 			if (maxso < tlsnp->so)
 				maxso = tlsnp->so;
 
 			FD_SET(tlsnp->so, &rset);
+			conncnt++;
 		}
 	
-		tv.tv_sec = 10;
+		tv.tv_sec = 4;
 		tv.tv_usec = 0;
 
 		sel = select(maxso + 1, &rset, NULL, NULL, &tv);
