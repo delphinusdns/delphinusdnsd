@@ -2,7 +2,9 @@
 
 PROG=dddctl
 
-SRCS=dddctl.c parse.y base64.c dnssec.c util.c ent.c db.c raxfr.c tsig.c region.c openbsd-compat/getdtablecount.c openbsd-compat/getdtablesize.c openbsd-compat/imsg-buffer.c openbsd-compat/imsg.c sign.c query.c crypto.c
+OPENBSD_COMPAT=openbsd-compat/getdtablecount.c openbsd-compat/getdtablesize.c openbsd-compat/imsg-buffer.c openbsd-compat/imsg.c openbsd-compat/vis.c
+
+SRCS=dddctl.c parse.y base64.c dnssec.c util.c ent.c db.c raxfr.c tsig.c region.c  sign.c query.c crypto.c ${OPENBSD_COMPAT}
 
 CFLAGS= -Wall -g  -I${.CURDIR}/.. -I/usr/local/include 
 CFLAGS+= -L/usr/local/lib -DUSE_OPENSSL -I$(.CURDIR)/../openbsd-compat/
