@@ -1900,30 +1900,33 @@ accept_from_loop(struct imsgbuf *a_imsgbuf, char *address, int asz, int *ip6, in
 int
 axfr_acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *notify_ibuf, struct imsgbuf *cortex)
 {
-	int maxso;
-	int i = 0, sel, so;
-	int passlist = 0, blocklist = 0;
-	int filter = 0, require_tsig = 0, axfr_acl = 0;
-	int aregion;
 	fd_set rset;
-	char address[INET6_ADDRSTRLEN];
-	struct axfr_acceptmsg *acceptmsg;
-	struct imsg imsg;
 	size_t datalen;
+	size_t n;
 
 	socklen_t fromlen = sizeof(struct sockaddr_storage);
 
+	struct axfr_acceptmsg *acceptmsg;
+	struct imsg imsg;
 	struct sockaddr_storage ss;
 	struct sockaddr *from = (void *)&ss;
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
+	struct timeval tv;
+
 	char *packet;
+	char address[INET6_ADDRSTRLEN];
+
+	int aregion;
 	int packetlen;
 	int tcpflags;
 	int dummy = 42;
 	int nomore_notifies = 0;
+	int maxso;
+	int i = 0, sel, so;
+	int passlist = 0, blocklist = 0;
+	int filter = 0, require_tsig = 0, axfr_acl = 0;
 
-	size_t n;
 
 	packet = calloc(1, 65535 + 3);
 	if (packet == NULL) {
@@ -1998,6 +2001,15 @@ axfr_acceptloop(struct cfg *cfg, struct imsgbuf *ibuf, struct imsgbuf *notify_ib
 					continue;
 				}
 
+				/*
+				 * we select so much in this code, just set
+				 * the receive timeout and be done with it
+				 */
+
+				tv.tv_sec = 10;
+				tv.tv_usec = 0;
+				setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, \
+					&tv, sizeof(struct timeval));
 				SEND_TO_PARENT;
 			}
 		}

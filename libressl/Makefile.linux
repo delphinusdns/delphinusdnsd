@@ -6,7 +6,7 @@ all:
 	apt-get -y install automake autoconf git libtool perl
 	test -d portable/ || git clone https://github.com/libressl/portable.git
 	# currently libressl-portable at 3.8.1
-	cd portable && git checkout b112e37
+	cd portable && git checkout 11c5075c2a062b4d64142419acac86325edac6c8
 
 	cd portable && ./autogen.sh
 	cd portable && ./configure
