@@ -274,7 +274,7 @@ extern int			mybase64_encode(u_char const *, size_t, char *, size_t);
 extern int			add_rr(struct rbtree *, char *, int, uint16_t, void *);
 extern int			fill_dnskey(ddDB *,char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, char *, uint16_t);
 extern int			fill_nsec(ddDB *, char *, char *, uint32_t, char *, char *);
-extern int			fill_nsec3(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *, char *, char *);
+extern int			fill_nsec3(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *, char *, char *, char *);
 extern int			fill_nsec3param(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *);
 extern int			fill_rrsig(ddDB *,char *, char *, uint32_t, char *, uint8_t, uint8_t, uint32_t, uint64_t, uint64_t, uint16_t, char *, char *);
 extern int			fill_zonemd(ddDB *, char *, char *, int, uint32_t, uint8_t, uint8_t, char *, int);
@@ -8727,7 +8727,7 @@ sign_eui64(ddDB *db, char *zonename, int expiry, struct rbtree *rbt, int rollmet
 			pack(q, ((struct eui64 *)rrp2->rdata)->eui64, 8);
 			q += 8;
 
-		        r = canonsort[csort] = calloc(1, 68000);
+			r = canonsort[csort] = calloc(1, 68000);
 			if (r == NULL) {
 				dolog(LOG_INFO, "c1 out of memory\n");
 				return -1;
@@ -10342,6 +10342,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 
 	struct mynsec3 {
 		char *hashname;
+		char *humanname;
 		char *bitmap;
 		TAILQ_ENTRY(mynsec3) entries;
 	} *n1, *n2, *np;
@@ -10508,8 +10509,13 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			dolog(LOG_INFO, "out of memory");
 			return -1;
 		}
-		
+
 		n1->hashname = strdup(hashname);
+		n1->humanname = rbt->humanname;
+		if (n1->humanname == NULL) {
+			n1->humanname = convert_name(rbt->zone, rbt->zonelen);
+		}
+
 		n1->bitmap = strdup(bitmap);	
 		if (n1->hashname == NULL || n1->bitmap == NULL) {
 			dolog(LOG_INFO, "out of memory");
@@ -10569,6 +10575,10 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 			}
 			
 			n1->hashname = strdup(hashname);
+			n1->humanname = convert_name(p, len);
+			if (n1->humanname == NULL) {
+				n1->humanname = n1->hashname;
+			}
 			n1->bitmap = strdup(bitmap);	
 			if (n1->hashname == NULL || n1->bitmap == NULL) {
 				dolog(LOG_INFO, "out of memory");
@@ -10613,7 +10623,7 @@ construct_nsec3(ddDB *db, char *zone, int iterations, char *salt)
 		printf("%s next: %s %s\n", n2->hashname, np->hashname, n2->bitmap);
 #endif
 		snprintf(buf, sizeof(buf), "%s.%s.", n2->hashname, zone);
-		fill_nsec3(db, buf, "nsec3", ttl, n3p.algorithm, n3p.flags, n3p.iterations, salt, np->hashname, n2->bitmap);
+		fill_nsec3(db, buf, "nsec3", ttl, n3p.algorithm, n3p.flags, n3p.iterations, salt, np->hashname, n2->bitmap, n2->humanname);
 	}
 
 	return 0;
@@ -11370,11 +11380,13 @@ print_rbt(FILE *of, struct rbtree *rbt)
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_NSEC3)) != NULL) {
 		if ((rrp = TAILQ_FIRST(&rrset->rr_head)) == NULL) {
-			dolog(LOG_INFO, "no naptr in zone!\n");
+			dolog(LOG_INFO, "no nsec3 in zone!\n");
 			return -1;
 		}
 		
-		fprintf(of, "  %s,nsec3,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\"\n",
+		fprintf(of, "  ; NSEC3 hashed domain name: %s -> %s\n  %s,nsec3,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\"\n",
+			rbt->unhashed_name,
+			convert_name(rbt->zone, rbt->zonelen),
 			convert_name(rbt->zone, rbt->zonelen),
 			rrset->ttl,
 			((struct nsec3 *)rrp->rdata)->algorithm, 

@@ -170,6 +170,7 @@ struct rbtree {
 	char zone[DNS_MAXNAME];
 	int zonelen;
 	char humanname[DNS_MAXNAME + 1];
+	char *unhashed_name;
 	uint32_t flags;			/* 32 bit flags */
 
 #define RBT_DNSSEC		0x1 /* this rbtree entry is of type DNSSEC */

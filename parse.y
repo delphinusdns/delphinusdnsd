@@ -268,7 +268,7 @@ int		fill_dnskey(ddDB *, char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, c
 int		fill_rrsig(ddDB *, char *, char *, uint32_t, char *, uint8_t, uint8_t, uint32_t, uint64_t, uint64_t, uint16_t, char *, char *);
 int 		fill_nsec(ddDB *, char *, char *, uint32_t, char *, char *);
 int		fill_nsec3param(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *);
-int		fill_nsec3(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *, char *, char *);
+int		fill_nsec3(ddDB *, char *, char *, uint32_t, uint8_t, uint8_t, uint16_t, char *, char *, char *, char *);
 int		fill_ds(ddDB *, char *, char *, uint32_t, uint16_t, uint8_t, uint8_t, char *, uint16_t);
 int		fill_rp(ddDB *, char *, char *, int, char *, char *);
 int		fill_hinfo(ddDB *, char *, char *, int, char *, char *);
@@ -1336,7 +1336,7 @@ zonestatement:
 					dolog(LOG_INFO, "WARNING DNSSEC NSEC3 RR but no dnssec enabled!\n");
 				}
 
-				if (fill_nsec3(mydb, $1, $3, $5, $7, $9, $11, $13, $15, $17) < 0) {
+				if (fill_nsec3(mydb, $1, $3, $5, $7, $9, $11, $13, $15, $17, NULL) < 0) {
 					return -1;
 				}
 
@@ -3117,7 +3117,7 @@ fill_ds(ddDB *db, char *name, char *type, uint32_t myttl, uint16_t keytag, uint8
 }
 
 int
-fill_nsec3(ddDB *db, char *name, char *type, uint32_t myttl, uint8_t algorithm, uint8_t flags, uint16_t iterations, char *salt, char *nextname, char *bitmap)
+fill_nsec3(ddDB *db, char *name, char *type, uint32_t myttl, uint8_t algorithm, uint8_t flags, uint16_t iterations, char *salt, char *nextname, char *bitmap, char *unhashed_name)
 {
 	struct nsec3 *nsec3;
 	struct rbtree *rbt;
@@ -3181,6 +3181,11 @@ fill_nsec3(ddDB *db, char *name, char *type, uint32_t myttl, uint8_t algorithm, 
 		dolog(LOG_ERR, "create_rr failed\n");
 		return -1;
 	}
+
+	if (unhashed_name != NULL)
+		rbt->unhashed_name = unhashed_name;
+	else
+		rbt->unhashed_name = NULL;
 
 	if (converted_name)
 		free (converted_name);
