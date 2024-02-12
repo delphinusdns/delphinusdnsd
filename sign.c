@@ -11384,7 +11384,8 @@ print_rbt(FILE *of, struct rbtree *rbt)
 			return -1;
 		}
 		
-		fprintf(of, "  ; NSEC3 hashed domain name: %s -> %s\n  %s,nsec3,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\"\n",
+		fprintf(of, "  ; H(%.*s) = %s\n  %s,nsec3,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\"\n",
+			(strlen(rbt->unhashed_name) <= 40) ? (int)strlen(rbt->unhashed_name) : 40,
 			rbt->unhashed_name,
 			convert_name(rbt->zone, rbt->zonelen),
 			convert_name(rbt->zone, rbt->zonelen),
