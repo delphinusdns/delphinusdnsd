@@ -92,7 +92,7 @@ extern int 		get_record_size(ddDB *, char *, int);
 extern in_addr_t 	getmask(int);
 extern int 		getmask6(int, struct sockaddr_in6 *);
 extern void		reply_fmterror(struct sreply *, ddDB *);
-extern void		reply_nxdomain(struct sreply *, ddDB *);
+extern void		reply_nxdomain(struct sreply *, int *, ddDB *);
 extern struct rbtree *	get_soa(ddDB *, struct question *);
 extern int		compress_label(u_char *, int, int);
 extern uint16_t	create_anyreply(struct sreply *, char *, int, int, int, uint32_t, uint);
@@ -946,6 +946,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 	int rrcount;
 	int envelopcount;
 	int tsigkeylen;
+	int sretlen;
 
 	struct zoneentry find, *res;
 	struct dns_header *dh, *odh;
@@ -1094,7 +1095,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				goto drop;
 			}
 			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, rbt2, NULL, 0xff, 1, 0, replybuf);
-			reply_nxdomain(&sreply, NULL);
+			reply_nxdomain(&sreply, &sretlen, NULL);
 			dolog(LOG_INFO, "AXFR request for zone %s, no db entry, nxdomain -> drop\n", question->converted_name);
 			goto drop;
 		}
@@ -1110,7 +1111,7 @@ axfr_connection(int so, char *address, int is_ipv6, ddDB *db, char *packet, int 
 				goto drop;
 			}
 			build_reply(&sreply, so, (p + 2), dnslen, question, NULL, 0, rbt2, NULL, 0xff, 1, 0, replybuf);
-			reply_nxdomain(&sreply, NULL);
+			reply_nxdomain(&sreply, &sretlen,  NULL);
 			
 			dolog(LOG_INFO, "AXFR request for zone %s, which has no SOA for the zone, nxdomain -> drop\n", question->converted_name);
 			goto drop;
