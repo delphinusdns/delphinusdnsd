@@ -1250,7 +1250,7 @@ nsec3:
 	memset((char *)&ns3, 0, sizeof(ns3));
 	strlcpy(ns3.domainname, hashname, sizeof(ns3.domainname));
 
-	if ((n3 = RB_FIND(nsec3tree, &dnp->tree, n3)) == NULL) {
+	if ((n3 = RB_FIND(nsec3tree, &dnp->tree, &ns3)) == NULL) {
 		TAILQ_FOREACH(n3, &dnp->nsec3head, nsec3_entries) {
 			if (strncasecmp(hashname, n3->domainname, hashlen) <= 0) {
 				break;
