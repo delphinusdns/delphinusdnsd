@@ -90,8 +90,8 @@ extern char * hash_name(char *name, int len, struct nsec3param *n3p);
 extern char * dns_label(char *, int *);
 extern struct rbtree * find_rrsetwild(ddDB *, char *, int);
 extern struct zoneentry * zone_findzone(struct rbtree *);
-extern char * find_next_closer_nsec3(char *, int, char *);
-extern struct rbtree * find_match_qname_wild_nsec3(char *, int, struct rbtree *, ddDB *);
+extern char * nsec3_next_closer(char *, int, char *);
+extern struct rbtree * nsec3_match_qname_wild(char *, int, struct rbtree *, ddDB *);
 
 
 
@@ -1469,7 +1469,7 @@ additional_wildcard(char *qname, int qnamelen, struct rbtree *authority, char *r
 
 	(*count)++;
 
-	rbt0 = find_match_qname_wild_nsec3(qname, qnamelen, authority, db);
+	rbt0 = nsec3_match_qname_wild(qname, qnamelen, authority, db);
 	if (rbt0 == NULL)
 		return 0;
 

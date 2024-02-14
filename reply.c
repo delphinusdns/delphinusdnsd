@@ -90,21 +90,21 @@ extern struct rbtree * find_rrsetwild(ddDB *db, char *name, int len);
 extern struct rrset * find_rr(struct rbtree *rbt, uint16_t rrtype);
 extern int display_rr(struct rrset *rrset);
 extern int rotate_rr(struct rrset *rrset);
-extern char * find_next_closer_nsec3(char *zonename, int zonelen, char *hashname);
-extern struct rbtree *	find_nsec_match_closest(char *, int, struct rbtree *, ddDB *);
-extern struct rbtree * 	find_nsec_match_closest_encloser(char *, int, struct rbtree *, ddDB *);
-extern struct rbtree * 	find_nsec3_cover_next_closer(char *, int, struct rbtree *, ddDB *);
-extern struct rbtree * 	find_nsec3_match_closest(char *, int, struct rbtree *, ddDB *);
-extern struct rbtree * 	find_nsec3_wildcard_closest(char *, int, struct rbtree *, ddDB *);
-extern struct rbtree * 	find_nsec3_match_qname(char *, int, struct rbtree *, ddDB *);
-extern struct rbtree * 	find_match_qname_wild_nsec3(char *, int, struct rbtree *, ddDB *);
+extern char * nsec3_next_closer(char *zonename, int zonelen, char *hashname);
+extern struct rbtree *	nsec_match_closest(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	nsec_match_closest_encloser(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	nsec3_cover_next_closer(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	nsec3_match_closest(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	nsec3_wildcard_closest(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	nsec3_match_qname(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * 	nsec3_match_qname_wild(char *, int, struct rbtree *, ddDB *);
 extern struct rbtree * 	find_closest_encloser(ddDB *, char *, int);
 extern struct rbtree *		get_soa(ddDB *, struct question *);
 extern struct rbtree *		get_ns(ddDB *, struct rbtree *, int *);
 extern struct rbtree *		Lookup_zone(ddDB *, char *, uint16_t, uint16_t, int);
 extern int 			dn_contains(char *, int, char *, int);
 extern struct zoneentry *	zone_findzone(struct rbtree *);
-extern struct rbtree * find_closest_encloser_nsec3(char *, int, struct rbtree *, ddDB *);
+extern struct rbtree * nsec3_closest_encloser(char *, int, struct rbtree *, ddDB *);
 extern size_t 		plength(void *, void *);
 extern char *		convert_name(char *, int);
 
@@ -2329,10 +2329,6 @@ reply_generic_ds(struct sreply *sreply, int *sretlen, ddDB *db, uint16_t rrtype)
 	a_count = 0;
 
 	TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-#if 0
-		if (rrp->zonenumber != zonenumberx)
-			continue;
-#endif
 		if ((outlen + sizeof(struct answer) + 
 			((struct ds *)rrp->rdata)->digestlen) > replysize) {
 			NTOHS(odh->query);
@@ -4356,7 +4352,7 @@ reply_ns(struct sreply *sreply, int *sretlen, ddDB *db)
 					return -1;
 				}
 
-				nrbt = find_nsec3_match_qname(rbt1->zone, rbt1->zonelen, rbt0, db);
+				nrbt = nsec3_match_qname(rbt1->zone, rbt1->zonelen, rbt0, db);
 				if (nrbt != NULL) {
 					tmplen = additional_nsec3(nrbt->zone, nrbt->zonelen, DNS_TYPE_NSEC3, nrbt, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 
@@ -6678,17 +6674,6 @@ reply_naptr(struct sreply *sreply, int *sretlen, ddDB *db)
 	
 		outlen += (12 + 4 + ((struct naptr *)rrp->rdata)->replacementlen);
 
-#if 0
-		/* RFC 2915 section 2 (at end) says that replacement does not
-		 * get compressed, so deadening this code is correct! XXX
-		 */
-		/* compress the label if possible */
-		if ((tmplen = compress_label((u_char*)reply, outlen, namelen)) > 0) {
-			outlen = tmplen;
-		}
-
-#endif
-
 		answer->rdlength = htons(outlen - (savelen + 12));
 
 		/* can we afford to write another header? if no truncate */
@@ -7261,7 +7246,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 
 		origlen = outlen;
 		if (find_rr(rbt, DNS_TYPE_NSEC3PARAM)) {
-			rbt0 = find_nsec3_cover_next_closer(q->hdr->name, q->hdr->namelen, rbt, db);
+			rbt0 = nsec3_cover_next_closer(q->hdr->name, q->hdr->namelen, rbt, db);
 			if (rbt0 == NULL)
 				goto out;
 
@@ -7291,7 +7276,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 
 			origlen = outlen;
 
-			rbt0 = find_nsec3_match_closest(q->hdr->name, q->hdr->namelen, rbt, db);
+			rbt0 = nsec3_match_closest(q->hdr->name, q->hdr->namelen, rbt, db);
 			if (rbt0 == NULL)
 				goto out;
 
@@ -7325,7 +7310,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 			addrec = 0;
 			origlen = outlen;
 
-			rbt0 = find_nsec3_wildcard_closest(q->hdr->name, q->hdr->namelen, rbt, db);
+			rbt0 = nsec3_wildcard_closest(q->hdr->name, q->hdr->namelen, rbt, db);
 			if (rbt0 == NULL)
 				goto out;
 
@@ -7365,7 +7350,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 		} else {
 			/* we use NSEC here */
 
-			rbt0 = find_nsec_match_closest_encloser(q->hdr->name, q->hdr->namelen, rbt, db);
+			rbt0 = nsec_match_closest_encloser(q->hdr->name, q->hdr->namelen, rbt, db);
 			if (rbt0 == NULL)
 				goto out;
 
@@ -7390,7 +7375,7 @@ reply_nxdomain(struct sreply *sreply, int *sretlen, ddDB *db)
 				HTONS(odh->nsrr);
 			}
 
-			rbt0 = find_nsec_match_closest(q->hdr->name, q->hdr->namelen, rbt, db);
+			rbt0 = nsec_match_closest(q->hdr->name, q->hdr->namelen, rbt, db);
 			if (rbt0 == NULL)
 				goto out;
 
@@ -7969,7 +7954,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 				tmplen = additional_nsec(q->hdr->name, q->hdr->namelen, DNS_TYPE_NSEC, rbt0, reply, replysize, outlen, &retcount, q->aa, zonenumberx);
 			}
 		} else if (find_rr(rbt, DNS_TYPE_NSEC3PARAM)) {
-			rbt0 = find_nsec3_match_qname(q->hdr->name, q->hdr->namelen, rbt, db);
+			rbt0 = nsec3_match_qname(q->hdr->name, q->hdr->namelen, rbt, db);
 			if (rbt0 == NULL)
 				goto out;
 
@@ -8007,7 +7992,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 			struct rbtree *ncn, *rbt1;
 
 			if (n3) {
-				ncn = find_closest_encloser_nsec3(rbt0->zone, rbt0->zonelen, rbt, db);
+				ncn = nsec3_closest_encloser(rbt0->zone, rbt0->zonelen, rbt, db);
 				if (ncn == NULL) {
 					goto out;
 				}
@@ -8031,7 +8016,7 @@ reply_noerror(struct sreply *sreply, int *sretlen, ddDB *db)
 				odh->nsrr += retcount;
 				HTONS(odh->nsrr);
 
-				rbt1 = find_match_qname_wild_nsec3(q->hdr->name, q->hdr->namelen, rbt, db);
+				rbt1 = nsec3_match_qname_wild(q->hdr->name, q->hdr->namelen, rbt, db);
 
 				if (rbt1 == NULL)
 					goto out;
@@ -8961,10 +8946,6 @@ create_anyreply(struct sreply *sreply, char *reply, int rlen, int offset, int so
 	}
 	if ((rrset = find_rr(rbt, DNS_TYPE_DS)) != 0) {
 		TAILQ_FOREACH(rrp, &rrset->rr_head, entries) {
-#if 0
-			if (rrp->zonenumber != zonenumberx)
-				continue;
-#endif
 			if (offset + q->hdr->namelen > rlen)
 				goto truncate;
 

@@ -62,28 +62,27 @@
 void init_dnssec(void);
 int insert_apex(char *zonename, char *zone, int zonelen);
 int insert_nsec3(char *zonename, char *domainname, char *dname, int dnamelen);
-char * find_next_closer_nsec3(char *zonename, int zonelen, char *hashname);
-char * find_match_nsec3(char *zonename, int zonelen, char *hashname);
-char * find_match_nsec3_ent(char *zonename, int zonelen, char *hashname);
-struct rbtree * find_nsec_match_closest(char *, int, struct rbtree *, ddDB *);
-struct rbtree * find_nsec_match_closest_encloser(char *, int, struct rbtree *, ddDB *);
-struct rbtree * find_nsec3_match_qname(char *name, int namelen, struct rbtree *, ddDB *db);
-struct rbtree * find_nsec3_match_closest(char *name, int namelen, struct rbtree *, ddDB *db);
-struct rbtree * find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *, ddDB *db);
+struct rbtree * nsec_match_closest(char *, int, struct rbtree *, ddDB *);
+struct rbtree * nsec_match_closest_encloser(char *, int, struct rbtree *, ddDB *);
+char * nsec3_next_closer(char *zonename, int zonelen, char *hashname);
+char * nsec3_match(char *zonename, int zonelen, char *hashname);
+struct rbtree * nsec3_match_qname(char *name, int namelen, struct rbtree *, ddDB *db);
+struct rbtree * nsec3_match_closest(char *name, int namelen, struct rbtree *, ddDB *db);
+struct rbtree * nsec3_wildcard_closest(char *name, int namelen, struct rbtree *, ddDB *db);
 char * convert_name(char *name, int namelen);
 int nsec_comp(const void *a, const void *b);
 int nsec3_comp(const void *a, const void *b);
 int count_dots(char *name);
-char * find_next_closer_name(char *, int, char *, int, int *);
+char * next_closer_name(char *, int, char *, int, int *);
 char * hash_name(char *name, int len, struct nsec3param *n3p);
 char * base32hex_encode(u_char *input, int len);
 int 	base32hex_decode(u_char *, u_char *);
 void 	mysetbit(u_char *, int);
 int finalize_nsec3(void);
-struct rbtree * find_closest_encloser_nsec3(char *, int, struct rbtree *, ddDB *);
-struct rbtree * find_closest_encloser_wild_nsec3(char *, int, struct rbtree *, ddDB *);
-struct rbtree * find_match_qname_wild_nsec3(char *, int, struct rbtree *, ddDB *);
-struct rbtree * find_closest_valid_name(char *, int, struct rbtree *, ddDB *);
+struct rbtree * nsec3_closest_encloser(char *, int, struct rbtree *, ddDB *);
+struct rbtree * nsec3_closest_encloser_wild(char *, int, struct rbtree *, ddDB *);
+struct rbtree * nsec3_match_qname_wild(char *, int, struct rbtree *, ddDB *);
+struct rbtree * closest_valid_name(char *, int, struct rbtree *, ddDB *);
 
 /* externs */
 
@@ -223,7 +222,7 @@ nsec3cmp(struct nsec3entry *a, struct nsec3entry *b)
 }
 
 char * 
-find_next_closer_nsec3(char *zonename, int zonelen, char *hashname)
+nsec3_next_closer(char *zonename, int zonelen, char *hashname)
 {
 	int hashlen;
 
@@ -266,51 +265,8 @@ find_next_closer_nsec3(char *zonename, int zonelen, char *hashname)
 	return (NULL);
 }
 
-#if 0
 char * 
-find_match_nsec3_ent(char *zonename, int zonelen, char *hashname)
-{
-	int hashlen;
-	int count;
-
-	hashlen = strlen(hashname);
-
-	SLIST_FOREACH(dnp, &dnssechead, dnssec_entry) {
-		if (zonelen == dnp->zonelen && 
-			(memcasecmp(dnp->zone, zonename, zonelen) == 0))
-			break;
-	}
-
-	if (dnp == NULL)
-		return NULL;
-
-	/* we have found the zone, now find the next closer hash for nsec3 */
-	count = 0;
-	TAILQ_FOREACH(n3, &dnp->nsec3head, nsec3_entries) {
-		if (strncasecmp(hashname, n3->domainname, hashlen) < 0) {
-			if (count == 0) 
-				n3 = TAILQ_LAST(&dnp->nsec3head, aa);
-			else
-				n3 = TAILQ_PREV(n3,  aa, nsec3_entries);
-			break;
-		} 
-		count++;
-	}
-	
-	if (n3 == NULL) {
-		return NULL;
-	}
-
-#ifdef DEBUG
-	dolog(LOG_INFO, "resolved at %s\n", n3->domainname);
-#endif
-
-	return (n3->domainname);
-}
-#endif
-
-char * 
-find_match_nsec3(char *zonename, int zonelen, char *hashname)
+nsec3_match(char *zonename, int zonelen, char *hashname)
 {
 	int hashlen;
 
@@ -344,12 +300,12 @@ find_match_nsec3(char *zonename, int zonelen, char *hashname)
 }
 
 /*
- * FIND_NSEC_MATCH_CLOSEST_ENCLOSER - find the closest encloser RR to 
+ * NSEC_MATCH_CLOSEST_ENCLOSER - find the closest encloser RR to 
  *					prove non-wildcard
  */
 
 struct rbtree *
-find_nsec_match_closest_encloser(char *name, int namelen, struct rbtree *rbt, ddDB *db)
+nsec_match_closest_encloser(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
 	struct rbtree *rbt0, *rbt1;
 	struct rrset *rp = NULL;
@@ -358,11 +314,11 @@ find_nsec_match_closest_encloser(char *name, int namelen, struct rbtree *rbt, dd
 	char *hn1, *adv_name;
 	int adv_namelen;
 	
-	rbt0 = find_closest_valid_name(name, namelen, rbt, db);
+	rbt0 = closest_valid_name(name, namelen, rbt, db);
 	if (rbt0 == NULL)
 		return NULL;
 
-	adv_name = find_next_closer_name(name, namelen, rbt0->zone, rbt0->zonelen, &adv_namelen);
+	adv_name = next_closer_name(name, namelen, rbt0->zone, rbt0->zonelen, &adv_namelen);
 	if (adv_name == NULL)
 		return NULL;
 
@@ -420,16 +376,16 @@ out:
 }
 
 /*
- * FIND_NSEC_MATCH_CLOSEST - find the closest RR to prove non-wildcard
+ * NSEC_MATCH_CLOSEST - find the closest RR to prove non-wildcard
  *
  */
 
 struct rbtree *
-find_nsec_match_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
+nsec_match_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
 	struct rbtree *rbt0;
 
-	rbt0 = find_closest_valid_name(name, namelen, rbt, db);
+	rbt0 = closest_valid_name(name, namelen, rbt, db);
 	return (rbt0);
 }
 
@@ -545,11 +501,11 @@ count_dots(char *name)
 }
 
 /* 
- * FIND_NEXT_CLOSER - find the next closer name 
+ * NEXT_CLOSER_NAME - find the next closer name 
  */
 
 char *
-find_next_closer_name(char *qname, int qlen, char *closestname, int clen, int *rlen)
+next_closer_name(char *qname, int qlen, char *closestname, int clen, int *rlen)
 {
 	static char save[DNS_MAXNAME];
 
@@ -788,12 +744,12 @@ base32hex_encode(u_char *input, int len)
 }
 
 /*
- * FIND_NSEC3_MATCH_CLOSEST - find the closest matching encloser 
+ * NSEC3_MATCH_CLOSEST - find the closest matching encloser 
  *
  */
 
 struct rbtree *
-find_nsec3_match_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
+nsec3_match_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
 	char *backname;
 	char *dname;
@@ -810,7 +766,7 @@ find_nsec3_match_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 	}
 
 	/* first off find  the next closer record */
-	rbt0 = find_closest_encloser_nsec3(name, namelen, rbt, db);
+	rbt0 = nsec3_closest_encloser(name, namelen, rbt, db);
 	if (rbt0 == NULL) {
 		return NULL;
 	}
@@ -830,7 +786,7 @@ find_nsec3_match_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 #if DEBUG
 	dolog(LOG_INFO, "hashname  = %s\n", rbt0->humanname);
 #endif
-	dname = find_match_nsec3(rbt->zone, rbt->zonelen, rbt0->humanname);
+	dname = nsec3_match(rbt->zone, rbt->zonelen, rbt0->humanname);
 	
 	if (dname == NULL) {
 		return NULL;
@@ -858,11 +814,11 @@ find_nsec3_match_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 }
 
 /*
- * FIND_NSEC3_WILDCARD_CLOSEST - finds the right nsec3 domainname in a zone 
+ * NSEC3_WILDCARD_CLOSEST - finds the right nsec3 domainname in a zone 
  * 
  */
 struct rbtree *
-find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
+nsec3_wildcard_closest(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
 	struct rbtree *rbt0 = NULL;
 	struct rrset *rrset = NULL;
@@ -876,7 +832,7 @@ find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *rbt, ddDB *d
 	}
 
 	/* first off find  the next closer record */
-	rbt0 = find_closest_encloser_wild_nsec3(name, namelen, rbt, db);
+	rbt0 = nsec3_closest_encloser_wild(name, namelen, rbt, db);
 	if (rbt0 == NULL) {
 		return NULL;
 	}
@@ -888,11 +844,11 @@ find_nsec3_wildcard_closest(char *name, int namelen, struct rbtree *rbt, ddDB *d
 }
 
 /*
- * FIND_NSEC3_COVER_NEXT_CLOSER - finds the right nsec3 domainname in a zone 
+ * NSEC3_COVER_NEXT_CLOSER - finds the right nsec3 domainname in a zone 
  * 
  */
 struct rbtree *
-find_nsec3_cover_next_closer(char *name, int namelen, struct rbtree *rbt, ddDB *db)
+nsec3_cover_next_closer(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
 	char *backname, *adv_name;
 	char *dname;
@@ -909,11 +865,11 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct rbtree *rbt, ddDB *
 		return NULL;
 	}
 
-	rbt0 = find_closest_valid_name(name, namelen, rbt, db);
+	rbt0 = closest_valid_name(name, namelen, rbt, db);
 	if (rbt0 == NULL)
 		return NULL;
 
-	adv_name = find_next_closer_name(name, namelen, rbt0->zone, rbt0->zonelen, &adv_namelen);
+	adv_name = next_closer_name(name, namelen, rbt0->zone, rbt0->zonelen, &adv_namelen);
 	if (adv_name != NULL)
 		hashname = hash_name(adv_name, adv_namelen, (struct nsec3param *)rrp->rdata);
 	else
@@ -928,7 +884,7 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct rbtree *rbt, ddDB *
 
 	/* free what we don't need */
 
-	dname = find_next_closer_nsec3(rbt->zone, rbt->zonelen, hashname);
+	dname = nsec3_next_closer(rbt->zone, rbt->zonelen, hashname);
 	if (dname == NULL) {
 		return NULL;
 	}
@@ -955,12 +911,12 @@ find_nsec3_cover_next_closer(char *name, int namelen, struct rbtree *rbt, ddDB *
 }
 
 /*
- * FIND_NSEC3_MATCH_QNAME - find the matching QNAME and return NSEC3
+ * NSEC3_MATCH_QNAME - find the matching QNAME and return NSEC3
  *
  */
 
 struct rbtree *
-find_nsec3_match_qname(char *name, int namelen, struct rbtree *rbt, ddDB *db)
+nsec3_match_qname(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
 	char *hashname;
 	char *backname;
@@ -994,13 +950,7 @@ find_nsec3_match_qname(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 	dolog(LOG_INFO, "hashname  = %s\n", hashname);
 #endif
 
-#if 0
-	if (check_ent(name, namelen)) 
-		dname = find_match_nsec3_ent(rbt->zone, rbt->zonelen, hashname);	
-	else
-#endif
-
-	dname = find_match_nsec3(rbt->zone, rbt->zonelen, hashname);
+	dname = nsec3_match(rbt->zone, rbt->zonelen, hashname);
 	
 	if (dname == NULL) {
 		return NULL;
@@ -1034,7 +984,7 @@ find_nsec3_match_qname(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 }
 
 char * 
-find_match_nsec3_wild(char *zonename, int zonelen, char *hashname)
+nsec3_match_wild(char *zonename, int zonelen, char *hashname)
 {
 	int hashlen;
 
@@ -1078,11 +1028,11 @@ find_match_nsec3_wild(char *zonename, int zonelen, char *hashname)
 }
 
 /* 
- * FIND_CLOSEST_ENCLOSER_NSEC3 - find the closest encloser record
+ * NSEC3_CLOSEST_ENCLOSER - find the closest encloser record
  */
 
 struct rbtree *
-find_closest_encloser_nsec3(char *qname, int qnamelen, struct rbtree *rbt, ddDB *db)
+nsec3_closest_encloser(char *qname, int qnamelen, struct rbtree *rbt, ddDB *db)
 {
 	char nst[DNS_MAXNAME + 1];
 	char *hashname, *name;
@@ -1160,12 +1110,12 @@ nsec3:
 }
 
 /* 
- * FIND_CLOSEST_ENCLOSER_WILD_NSEC3 - find the closest encloser record for
+ * NSEC3_CLOSEST_ENCLOSER_WILD - find the closest encloser record for
  *					wildcards
  */
 
 struct rbtree *
-find_closest_encloser_wild_nsec3(char *qname, int qnamelen, struct rbtree *rbt, ddDB *db)
+nsec3_closest_encloser_wild(char *qname, int qnamelen, struct rbtree *rbt, ddDB *db)
 {
 	char wildcard[DNS_MAXNAME + 1];
 	char *hashname;
@@ -1292,12 +1242,12 @@ nsec3:
 }
 
 /*
- * FIND_MATCH_QNAME_WILD_NSEC3 - find the matching QNAME and return NSEC3
+ * NSEC3_MATCH_QNAME_WILD - find the matching QNAME and return NSEC3
  *
  */
 
 struct rbtree *
-find_match_qname_wild_nsec3(char *name, int namelen, struct rbtree *rbt, ddDB *db)
+nsec3_match_qname_wild(char *name, int namelen, struct rbtree *rbt, ddDB *db)
 {
 	char *hashname;
 	char *backname;
@@ -1330,7 +1280,7 @@ find_match_qname_wild_nsec3(char *name, int namelen, struct rbtree *rbt, ddDB *d
 	dolog(LOG_INFO, "hashname  = %s\n", hashname);
 #endif
 
-	dname = find_match_nsec3_wild(rbt->zone, rbt->zonelen, hashname);
+	dname = nsec3_match_wild(rbt->zone, rbt->zonelen, hashname);
 	
 	if (dname == NULL) {
 		return NULL;
@@ -1364,11 +1314,11 @@ find_match_qname_wild_nsec3(char *name, int namelen, struct rbtree *rbt, ddDB *d
 }
 
 /* 
- * FIND_CLOSEST_VALID_NAME - find the closest valid name
+ * CLOSEST_VALID_NAME - find the closest valid name
  */
 
 struct rbtree *
-find_closest_valid_name(char *qname, int qnamelen, struct rbtree *rbt, ddDB *db)
+closest_valid_name(char *qname, int qnamelen, struct rbtree *rbt, ddDB *db)
 {
 	struct rbtree *rbt0 = NULL;
 	int plen = qnamelen;
