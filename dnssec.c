@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2023 Peter J. Philipp <pbug44@delphinusdns.org>
+ * Copyright (c) 2015-2024 Peter J. Philipp <pbug44@delphinusdns.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -201,6 +201,7 @@ insert_nsec3(char *zonename, char *domainname, char *dname, int dnamelen)
 int
 finalize_nsec3(void)
 {
+	/* this should sort the tree to a tailq'ed list */
 	SLIST_FOREACH(dnp, &dnssechead, dnssec_entry) {
 		RB_FOREACH(n3, nsec3tree, &dnp->tree) {
 			TAILQ_INSERT_TAIL(&dnp->nsec3head, n3, nsec3_entries);
@@ -238,7 +239,6 @@ find_next_closer_nsec3(char *zonename, int zonelen, char *hashname)
 		return NULL;
 
 	/* we have found the zone, now find the next closer hash for nsec3 */
-
 	TAILQ_FOREACH(n3, &dnp->nsec3head, nsec3_entries) {
 		if (strncasecmp(hashname, n3->domainname, hashlen) <= 0) {
 			break;
@@ -285,7 +285,6 @@ find_match_nsec3_ent(char *zonename, int zonelen, char *hashname)
 		return NULL;
 
 	/* we have found the zone, now find the next closer hash for nsec3 */
-
 	count = 0;
 	TAILQ_FOREACH(n3, &dnp->nsec3head, nsec3_entries) {
 		if (strncasecmp(hashname, n3->domainname, hashlen) < 0) {
@@ -327,7 +326,6 @@ find_match_nsec3(char *zonename, int zonelen, char *hashname)
 		return NULL;
 
 	/* we have found the zone, now find the next closer hash for nsec3 */
-
 	TAILQ_FOREACH(n3, &dnp->nsec3head, nsec3_entries) {
 		if (strncasecmp(hashname, n3->domainname, hashlen) == 0) {
 			break;
@@ -1150,7 +1148,6 @@ nsec3:
 
 
 	hashname = hash_name(p, plen, (struct nsec3param *)rrp->rdata);
-
 	if (hashname == NULL)
 		return (NULL);			
 
@@ -1176,6 +1173,7 @@ find_closest_encloser_wild_nsec3(char *qname, int qnamelen, struct rbtree *rbt, 
 	struct rbtree *rbt0 = NULL;
 	struct rrset *rrset = NULL;
 	struct rr *rrp = NULL;
+	struct nsec3entry ns3;
 
 	int plen;
 	
@@ -1242,7 +1240,6 @@ nsec3:
 
 
 	hashname = hash_name(p, plen, (struct nsec3param *)rrp->rdata);
-
 	free(p);
 
 	if (hashname == NULL)
@@ -1250,23 +1247,17 @@ nsec3:
 
 	hashlen = strlen(hashname);
 
-	SLIST_FOREACH(dnp, &dnssechead, dnssec_entry) {
-		if (rbt->zonelen == dnp->zonelen && 
-			(memcmp(dnp->zone, rbt->zone, rbt->zonelen) == 0))
-			break;
+	memset((char *)&ns3, 0, sizeof(ns3));
+	strlcpy(ns3.domainname, hashname, sizeof(ns3.domainname));
+
+	if ((n3 = RB_FIND(nsec3tree, &dnp->tree, n3)) == NULL) {
+		TAILQ_FOREACH(n3, &dnp->nsec3head, nsec3_entries) {
+			if (strncasecmp(hashname, n3->domainname, hashlen) <= 0) {
+				break;
+			}
+		}
 	}
 
-	if (dnp == NULL)
-		return NULL;
-
-	/* we have found the zone, now find the next closer hash for nsec3 */
-
-	TAILQ_FOREACH(n3, &dnp->nsec3head, nsec3_entries) {
-		if (strncasecmp(hashname, n3->domainname, hashlen) <= 0) {
-			break;
-		} 
-	}
-	
 	if (n3 == NULL) {
 		/* returning NULL is not recommended here */
 		ns3p = TAILQ_LAST(&dnp->nsec3head, aa);
@@ -1281,7 +1272,8 @@ nsec3:
 	dolog(LOG_INFO, "resolved wild at %s\n", n3->domainname);
 #endif
 
-	if ((ns3p = TAILQ_PREV(n3, aa, nsec3_entries)) != NULL) {
+	//if ((ns3p = TAILQ_PREV(n3, aa, nsec3_entries)) != NULL) {
+	if ((ns3p = TAILQ_NEXT(n3, nsec3_entries)) != NULL) {
 		rbt0 = find_rrset(db, ns3p->dname, ns3p->dnamelen);
 		if (rbt0 == NULL) {
 			dolog(LOG_INFO, "TAILQ_PREV did not resolve\n");
