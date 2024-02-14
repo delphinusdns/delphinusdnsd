@@ -1272,8 +1272,7 @@ nsec3:
 	dolog(LOG_INFO, "resolved wild at %s\n", n3->domainname);
 #endif
 
-	//if ((ns3p = TAILQ_PREV(n3, aa, nsec3_entries)) != NULL) {
-	if ((ns3p = TAILQ_NEXT(n3, nsec3_entries)) != NULL) {
+	if ((ns3p = TAILQ_PREV(n3, aa, nsec3_entries)) != NULL) {
 		rbt0 = find_rrset(db, ns3p->dname, ns3p->dnamelen);
 		if (rbt0 == NULL) {
 			dolog(LOG_INFO, "TAILQ_PREV did not resolve\n");
