@@ -353,7 +353,7 @@ usage(int argc, char *argv[])
 		fprintf(stderr, "\tstart [-f configfile] [-I ident] [-s socket]\n");
 		fprintf(stderr, "\tstop [-I ident] [-s socket]\n");
 		fprintf(stderr, "\ttsig\n");
-		fprintf(stderr, "\tversion\n");
+		fprintf(stderr, "\tversion [-l]\n");
 		fprintf(stderr, "\tzonemd [-c] [-n zonename] [-o outfile] file\n");
 		retval = 0;
 	}
@@ -474,7 +474,33 @@ tsigf(int argc, char *argv[])
 int
 versionf(int argc, char *argv[])
 {
-	printf("%s\n", versionstring);
+	const struct typetable *t;
+	int print_rr = 0;
+	int ch;
+
+	while ((ch = getopt(argc, argv, "l")) != -1) {
+		switch (ch) {
+		case 'l':
+			print_rr = 1;
+			break;
+		default:
+			break;
+		}
+	}
+
+	printf("Version:  %s\n\n", versionstring);
+
+	if (print_rr) {
+		t = TT;
+
+		printf("Dumping capability:\n\n");
+		while (t->type != NULL) {
+			printf("%-*s(%d)\t\t%-*s\tRFC %d\n", 10, 
+				t->type, t->number, 37, t->longdesc, t->rfc);
+			t++;
+		}
+	}
+
 	return 0;
 }
 

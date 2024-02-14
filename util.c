@@ -227,45 +227,6 @@ extern void		dolog(int, char *, ...);
 extern void		repopulate_zone(ddDB *db, char *zonename, int zonelen);
 
 /* internals */
-struct typetable {
-	char *type;
-	int number;
-} TT[] = {
-	{ "A", DNS_TYPE_A},
-	{ "NS", DNS_TYPE_NS},
-	{ "CNAME", DNS_TYPE_CNAME},
-	{ "SOA", DNS_TYPE_SOA},
-	{ "PTR", DNS_TYPE_PTR},
-	{ "MX", DNS_TYPE_MX},
-	{ "TXT", DNS_TYPE_TXT},
-	{ "AAAA", DNS_TYPE_AAAA},
-	{ "ANY", DNS_TYPE_ANY },
-	{ "SRV", DNS_TYPE_SRV },
-	{ "SSHFP", DNS_TYPE_SSHFP },
-	{ "NAPTR", DNS_TYPE_NAPTR },
-	{ "RRSIG", DNS_TYPE_RRSIG },
-	{ "DNSKEY", DNS_TYPE_DNSKEY },
-	{ "NSEC", DNS_TYPE_NSEC },
-	{ "DS", DNS_TYPE_DS },
-	{ "NSEC3", DNS_TYPE_NSEC3 },
-	{ "NSEC3PARAM", DNS_TYPE_NSEC3PARAM },
-	{ "TLSA", DNS_TYPE_TLSA },
-	{ "RP", DNS_TYPE_RP },
-	{ "HINFO", DNS_TYPE_HINFO },
-	{ "CAA", DNS_TYPE_CAA },
-	{ "ZONEMD", DNS_TYPE_ZONEMD },
-	{ "CDS", DNS_TYPE_CDS },
-	{ "CDNSKEY", DNS_TYPE_CDNSKEY },
-	{ "LOC", DNS_TYPE_LOC },
-	{ "EUI48", DNS_TYPE_EUI48 },
-	{ "EUI64", DNS_TYPE_EUI64 },
-	{ "SVCB", DNS_TYPE_SVCB },
-	{ "HTTPS", DNS_TYPE_HTTPS },
-	{ "KX", DNS_TYPE_KX },
-	{ "IPSECKEY", DNS_TYPE_IPSECKEY },
-	{ "CERT", DNS_TYPE_CERT },
-	{ NULL, 0}
-};
 
 static struct rrtab myrrtab[] =  { 
  { "a",         DNS_TYPE_A, 		DNS_TYPE_A } ,
@@ -1220,7 +1181,7 @@ char *
 get_dns_type(int dnstype, int withbracket)
 {
 	static char type[128];
-	struct typetable *t;
+	const struct typetable *t;
 
 	t = TT;
 

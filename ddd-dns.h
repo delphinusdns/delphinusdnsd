@@ -239,6 +239,48 @@ struct dns_question_hdr {
 #define DNS_TYPE_CAA	257		/* RFC 8659 */
 #define DNS_TYPE_MAX	258		/* the highest RR in implementation */
 
+const static struct typetable {
+	char *type;		/* RR type */
+	char *longdesc;		/* long description */
+	int rfc;		/* RFC number */
+	int number;		/* RR number */
+} TT[] = {
+	{ "A", "A RR for IPv4 IP address", 1035, DNS_TYPE_A},
+	{ "NS", "NS RR for domain servers", 1035, DNS_TYPE_NS},
+	{ "CNAME", "CNAME canonical name pointers", 1035, DNS_TYPE_CNAME},
+	{ "SOA", "SOA RR for Start of Authority records", 1035, DNS_TYPE_SOA},
+	{ "PTR", "PTR RR for reverse delegation pointers", 1035, DNS_TYPE_PTR},
+	{ "MX", "MX RR for Mail Exchange records", 1035, DNS_TYPE_MX},
+	{ "TXT", "TXT RR for text records", 1035, DNS_TYPE_TXT},
+	{ "AAAA", "AAAA RR, quad A records for IPv6", 3596, DNS_TYPE_AAAA},
+	{ "ANY", "ANY shows many RR's in a set", 1035, DNS_TYPE_ANY },
+	{ "SRV", "SRV service records for SIP, etc ...",  2782, DNS_TYPE_SRV },
+	{ "SSHFP", "SSHFP SSH fingerprint records", 4255, DNS_TYPE_SSHFP },
+	{ "NAPTR", "NAPTR NA Pointers for telephony", 2915, DNS_TYPE_NAPTR },
+	{ "RRSIG", "RRSIG DNSSEC signature record", 4034, DNS_TYPE_RRSIG },
+	{ "DNSKEY", "DNSKEY RR public key for DNSSEC", 4034, DNS_TYPE_DNSKEY },
+	{ "NSEC", "NSEC negative denial of existance", 4034, DNS_TYPE_NSEC },
+	{ "DS", "DS RR for delegating DNSSEC zones", 4034, DNS_TYPE_DS },
+	{ "NSEC3", "NSEC3 hashed denial of existance", 5155, DNS_TYPE_NSEC3 },
+	{ "NSEC3PARAM", "NSEC3PARAM for the APEX", 5155, DNS_TYPE_NSEC3PARAM },
+	{ "TLSA", "TLSA RR, for TLS Authentic data", 6698, DNS_TYPE_TLSA },
+	{ "RP", "RP RR, Responsible person", 1035, DNS_TYPE_RP },
+	{ "HINFO", "HINFO RR, for Host Information", 1035, DNS_TYPE_HINFO },
+	{ "CAA", "CAA Certificate Authority Auth", 8659, DNS_TYPE_CAA },
+	{ "ZONEMD", "ZONEMD crypto hashed zones", 8976, DNS_TYPE_ZONEMD },
+	{ "CDS", "CDS for dynamic DS RR's on the fly", 8078, DNS_TYPE_CDS },
+	{ "CDNSKEY", "CDNSKEY also works dynamically", 8078, DNS_TYPE_CDNSKEY },
+	{ "LOC", "LOC for displaying earth location data", 1876, DNS_TYPE_LOC },
+	{ "EUI48", "EUI48 RR, for 48 bit MAC addresses", 7043, DNS_TYPE_EUI48 },
+	{ "EUI64", "EUI64 RR, for 64 bit MAC addresses", 7043, DNS_TYPE_EUI64 },
+	{ "SVCB", "SVCB RR", 9460, DNS_TYPE_SVCB },
+	{ "HTTPS", "HTTPS grants HTTPS on other ports", 9460, DNS_TYPE_HTTPS },
+	{ "KX", "KX RR, for Key eXchange records", 2230, DNS_TYPE_KX },
+	{ "IPSECKEY", "IPSECKEY for IPSEC records", 4025, DNS_TYPE_IPSECKEY },
+	{ "CERT", "CERT for certificates of many kinds", 4398, DNS_TYPE_CERT },
+	{ NULL, NULL, 0}
+};
+
 /* DNS types 0xff00 -> 0xfffe (private use) RFC 5395, page 8 */
 
 #define DNS_TYPE_BALANCE 	0xfffe		/* split horizon dns */
