@@ -2074,7 +2074,7 @@ raxfr_tsig(FILE *f, u_char *p, u_char *estart, u_char *end, struct soa *mysoa, u
 		goto out;
 	}
 
-#if __OpenBSD__
+#if defined __OpenBSD__ || defined __FreeBSD__
 	if (timingsafe_memcmp(sdt->mac, mac, macsize) != 0) {	
 #else
 	if (memcmp(sdt->mac, mac, macsize) != 0) {	

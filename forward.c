@@ -2320,7 +2320,7 @@ check_tsig(char *buf, int len, char *mac)
 					(unsigned char *)pseudo_packet, ppoffset, 
 							(unsigned char *)&sha256, &shasize);
 
-#if __OpenBSD__
+#if defined __OpenBSD__ || defined __FreeBSD__
 			if (timingsafe_memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
 #else
 			if (memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
