@@ -2434,7 +2434,9 @@ lookup_axfr(FILE *f, int so, char *zonename, struct soa *mysoa, uint32_t format,
 
 		len = recv(so, reply, 2, MSG_PEEK | MSG_WAITALL);
 		if (len <= 0) {	
-			dolog(LOG_INFO, "recv failed peeking: %s\n", strerror(errno));
+#if DEBUG
+			dolog(LOG_DEBUG, "recv failed peeking: %s\n", strerror(errno));
+#endif
 			break;
 		}
 
