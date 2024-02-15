@@ -1766,7 +1766,7 @@ optskip:
 		explicit_bzero(&tsigkey, tsigkeylen);
 
 
-#if __OpenBSD__
+#if defined __OpenBSD__ || defined __FreeBSD__
 		if (timingsafe_memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
 #else
 		if (memcmp(sha256, tsigrr->mac, sizeof(sha256)) != 0) {
